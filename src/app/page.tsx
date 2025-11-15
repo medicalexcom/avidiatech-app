@@ -1,14 +1,8 @@
-"use client";
-
-import { useUser } from "@clerk/nextjs";
-
-export default function DashboardPage() {
-  const { user } = useUser();
-
+export default function Home() {
   return (
     <main style={{ padding: "40px" }}>
-      <h1>Dashboard</h1>
-      <p>Welcome! {user?.emailAddresses?.[0]?.emailAddress ?? "Loading..."}</p>
+      <h1>AvidiaTech App</h1>
+      <p>Your Next.js SaaS app is running.</p>
     </main>
   );
 }
