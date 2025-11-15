@@ -1,13 +1,21 @@
-// THIS MUST BE A SERVER COMPONENT (no "use client")
-import { currentUser } from "@clerk/nextjs/server";
+** Begin Patch
+** Delete File: src/app/dashboard/page.tsx
+** End Patch
+** Begin Patch
+** Add File: src/app/dashboard/page.tsx
+// Dashboard page runs on the client so we can use Clerk's useUser hook.
+"use client";
 
-export default async function DashboardPage() {
-  const user = await currentUser();
+import { useUser } from "@clerk/nextjs";
+
+export default function DashboardPage() {
+  const { user } = useUser();
 
   return (
     <div style={{ padding: "40px" }}>
       <h1>Dashboard</h1>
-      <p>Welcome! {user?.emailAddresses?.[0]?.emailAddress}</p>
+      <p>Welcome! {user?.emailAddresses?.[0]?.emailAddress ?? "Loading..."}</p>
     </div>
   );
 }
+** End Patch
