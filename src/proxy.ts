@@ -1,9 +1,10 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+// src/proxy.ts
+import { authMiddleware } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+export default authMiddleware({
+  publicRoutes: ["/", "/sign-in", "/sign-up"],
+});
 
 export const config = {
-  matcher: [
-    "/((?!_next|.*\\..*).*)",
-  ],
+  matcher: ["/((?!_next|.*\\..*).*)"],
 };
