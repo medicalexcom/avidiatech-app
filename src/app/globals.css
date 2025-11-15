@@ -1,0 +1,12 @@
+/* Global styles for AvidiaTech App */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background: #fff;
+  color: #111;
+}
