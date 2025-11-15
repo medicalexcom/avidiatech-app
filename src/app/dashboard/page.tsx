@@ -6,9 +6,9 @@ export default function DashboardPage() {
   const { user } = useUser();
 
   return (
-    <div style={{ padding: "40px" }}>
+    <main style={{ padding: "40px" }}>
       <h1>Dashboard</h1>
       <p>Welcome! {user?.emailAddresses?.[0]?.emailAddress ?? "Loading..."}</p>
-    </div>
+    </main>
   );
 }
