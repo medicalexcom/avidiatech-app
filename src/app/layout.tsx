@@ -1,7 +1,7 @@
 // src/app/layout.tsx
 import './globals.css';
 import type { ReactNode } from 'react';
-import Providers from './providers';  // adjust the path if necessary
+// import Providers from './providers';  // adjust the path if necessary
 
 export const metadata = {
   title: 'Aviatech App',
@@ -11,9 +11,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
+          <body>
+                {children}
+   </body
     </html>
   );
 }
