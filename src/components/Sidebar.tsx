@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-coconst links = [
+const links = [
   { name: 'Dashboard', href: '/dashboard' },
   { name: 'Extract', href: '/dashboard/extract' },
   { name: 'Describe', href: '/dashboard/describe' },
