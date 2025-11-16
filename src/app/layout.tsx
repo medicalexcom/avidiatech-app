@@ -1,9 +1,6 @@
-// src/app/layout.tsx
-// Root layout for Next.js App Router
-
 import './globals.css';
 import type { ReactNode } from 'react';
-// import Providers from './providers';  // adjust the path if necessary
+import Providers from './providers';
 
 export const metadata = {
   title: 'Aviatech App',
@@ -14,7 +11,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
+}
