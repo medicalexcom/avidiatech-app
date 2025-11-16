@@ -26,6 +26,15 @@ const links = [
   { name: 'Translate', href: '/dashboard/translate' },
   { name: 'Cluster', href: '/dashboard/cluster' },
   { name: 'Studio', href: '/dashboard/studio' },
+  // New product pages added from the roadmap
+  { name: 'Images', href: '/dashboard/images' },
+  { name: 'Import', href: '/dashboard/import' },
+  { name: 'Audit', href: '/dashboard/audit' },
+  { name: 'Price', href: '/dashboard/price' },
+  { name: 'Agency', href: '/dashboard/agency' },
+  { name: 'Browser', href: '/dashboard/browser' },
+  { name: 'API Keys', href: '/dashboard/apikeys' },
+  { name: 'Subscription', href: '/dashboard/subscription' },
   { name: 'Visualize', href: '/dashboard/visualize' },
 ];
 
