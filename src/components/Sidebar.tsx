@@ -1,18 +1,22 @@
-'use client';
-
-
+"use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+/**
+ * Sidebar navigation for the dashboard.
+ *
+ * This component renders a vertical list of links corresponding to the
+ * different products offered by AvidiaTech.  The active link is
+ * highlighted based on the current path.
+ */
 const links = [
   { name: 'Dashboard', href: '/dashboard' },
   { name: 'Extract', href: '/dashboard/extract' },
   { name: 'Describe', href: '/dashboard/describe' },
   { name: 'Match', href: '/dashboard/match' },
   { name: 'Validate', href: '/dashboard/validate' },
- 
-    { name: 'Variants', href: '/dashboard/variants' },
+  { name: 'Variants', href: '/dashboard/variants' },
   { name: 'Docs', href: '/dashboard/docs' },
   { name: 'Specs', href: '/dashboard/specs' },
   { name: 'Feeds', href: '/dashboard/feeds' },
@@ -20,15 +24,13 @@ const links = [
   { name: 'API', href: '/dashboard/api' },
   { name: 'SEO', href: '/dashboard/seo' },
   { name: 'Translate', href: '/dashboard/translate' },
-  { name:  { name: 'Cluster', href: '/dashboard/cluster' },
+  { name: 'Cluster', href: '/dashboard/cluster' },
   { name: 'Studio', href: '/dashboard/studio' },
   { name: 'Visualize', href: '/dashboard/visualize' },
-
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-
   return (
     <div className="bg-gray-900 text-white w-64 min-h-screen p-4">
       <div className="text-2xl font-bold mb-6">AvidiaTech</div>
