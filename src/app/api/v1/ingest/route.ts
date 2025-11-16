@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
 const engineUrl = process.env.RENDER_ENGINE_URL || process.env.NEXT_PUBLIC_INGEST_API_URL;
   if (!engineUrl) {
-    return NextResponse.json({ erRENDER_ENGINE_URL or NEXT_PUBLIC_INGEST_API_URL not configured }, { status: 500 });
+       return NextResponse.json({ error: 'RENDER_ENGINE_URL or NEXT_PUBLIC_INGEST_API_URL not configured' }, { status: 500 });
   }
 
   try {
