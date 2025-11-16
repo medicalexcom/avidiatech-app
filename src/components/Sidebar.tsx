@@ -36,6 +36,18 @@ const links = [
   { name: 'API Keys', href: '/dashboard/apikeys' },
   { name: 'Subscription', href: '/dashboard/subscription' },
   { name: 'Visualize', href: '/dashboard/visualize' },
+
+  // Tenant & organization management
+  { name: 'Organization', href: '/dashboard/organization' },
+
+  // Advanced features & UX enhancements
+  { name: 'Analytics', href: '/dashboard/analytics' },
+  { name: 'Notifications', href: '/dashboard/notifications' },
+  { name: 'Bulk Ops', href: '/dashboard/bulk' },
+  { name: 'Description Formats', href: '/dashboard/description-formats' },
+  { name: 'Roles', href: '/dashboard/roles' },
+  { name: 'Versioning', href: '/dashboard/versioning' },
+  { name: 'Assistant', href: '/dashboard/assistant' },
 ];
 
 export default function Sidebar() {
