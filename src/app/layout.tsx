@@ -1,10 +1,13 @@
-import "./globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
-import type { ReactNode } from "react";
+// src/app/layout.tsx
+'use client';
+
+import './globals.css';
+import { ClerkProvider } from '@clerk/nextjs';
+import type { ReactNode } from 'react';
 
 export const metadata = {
-  title: "AvidiaTech App",
-  description: "Product Data Automation SaaS Platform",
+  title: 'Aviatech App',
+  description: 'Product Data Automation SaaS Platform',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
