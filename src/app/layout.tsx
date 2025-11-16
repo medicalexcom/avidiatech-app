@@ -1,4 +1,6 @@
 // src/app/layout.tsx
+// Root layout for Next.js App Router
+
 import './globals.css';
 import type { ReactNode } from 'react';
 // import Providers from './providers';  // adjust the path if necessary
