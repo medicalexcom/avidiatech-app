@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-
-import Sidebar from '../../components/Sidebar';
-import TopNav from '../../components/TopNav';
+// src/app/dashboard/layout.tsx
+import type { ReactNode } from 'react'
+import Sidebar from '../../components/Sidebar'
+import TopNav from '../../components/TopNav'
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
@@ -14,5 +14,5 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
-  );
+  )
 }
