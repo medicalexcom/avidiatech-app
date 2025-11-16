@@ -1,4 +1,3 @@
-// src/app/dashboard/layout.tsx
 import type { ReactNode } from 'react'
 import Sidebar from '../../components/Sidebar'
 import TopNav from '../../components/TopNav'
@@ -8,7 +7,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <TopNav />
       <div className="flex flex-1">
-    <<Sidebar />/>
+  <<Sidebar /> />
         <main className="flex-1 p-6 bg-gray-50">
           {children}
         </main>
