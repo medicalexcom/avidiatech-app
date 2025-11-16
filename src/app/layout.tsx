@@ -1,9 +1,7 @@
 // src/app/layout.tsx
-'use client';
-
 import './globals.css';
-import { ClerkProvider } from '@clerk/nextjs';
 import type { ReactNode } from 'react';
+import Providers from './providers';  // adjust the path if necessary
 
 export const metadata = {
   title: 'Aviatech App',
@@ -12,10 +10,10 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
 }
