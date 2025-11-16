@@ -11,7 +11,19 @@ const links = [
   { name: 'Describe', href: '/dashboard/describe' },
   { name: 'Match', href: '/dashboard/match' },
   { name: 'Validate', href: '/dashboard/validate' },
+ 
+    { name: 'Variants', href: '/dashboard/variants' },
+  { name: 'Docs', href: '/dashboard/docs' },
+  { name: 'Specs', href: '/dashboard/specs' },
+  { name: 'Feeds', href: '/dashboard/feeds' },
+  { name: 'Monitor', href: '/dashboard/monitor' },
+  { name: 'API', href: '/dashboard/api' },
+  { name: 'SEO', href: '/dashboard/seo' },
+  { name: 'Translate', href: '/dashboard/translate' },
+  { name:  { name: 'Cluster', href: '/dashboard/cluster' },
+  { name: 'Studio', href: '/dashboard/studio' },
   { name: 'Visualize', href: '/dashboard/visualize' },
+
 ];
 
 export default function Sidebar() {
