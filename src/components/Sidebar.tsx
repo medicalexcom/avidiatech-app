@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -7,47 +7,33 @@ import { usePathname } from 'next/navigation';
  * Sidebar navigation for the dashboard.
  *
  * This component renders a vertical list of links corresponding to the
- * different products offered by AvidiaTech.  The active link is
+ * core product modules offered by AvidiaTech.  The active link is
  * highlighted based on the current path.
  */
+
 const links = [
-  { name: 'Dashboard', href: '/dashboard' },
+  // AI Extraction & Content
   { name: 'Extract', href: '/dashboard/extract' },
   { name: 'Describe', href: '/dashboard/describe' },
-  { name: 'Match', href: '/dashboard/match' },
-  { name: 'Validate', href: '/dashboard/validate' },
-  { name: 'Variants', href: '/dashboard/variants' },
-  { name: 'Docs', href: '/dashboard/docs' },
-  { name: 'Specs', href: '/dashboard/specs' },
-  { name: 'Feeds', href: '/dashboard/feeds' },
-  { name: 'Monitor', href: '/dashboard/monitor' },
-  { name: 'API', href: '/dashboard/api' },
   { name: 'SEO', href: '/dashboard/seo' },
   { name: 'Translate', href: '/dashboard/translate' },
   { name: 'Cluster', href: '/dashboard/cluster' },
   { name: 'Studio', href: '/dashboard/studio' },
-  // New product pages added from the roadmap
+  // Data Intelligence
+  { name: 'Match', href: '/dashboard/match' },
+  { name: 'Variants', href: '/dashboard/variants' },
+  { name: 'Specs', href: '/dashboard/specs' },
+  { name: 'Docs', href: '/dashboard/docs' },
   { name: 'Images', href: '/dashboard/images' },
+  // Commerce & Automation
   { name: 'Import', href: '/dashboard/import' },
   { name: 'Audit', href: '/dashboard/audit' },
   { name: 'Price', href: '/dashboard/price' },
-  { name: 'Agency', href: '/dashboard/agency' },
+  { name: 'Feeds', href: '/dashboard/feeds' },
+  { name: 'Monitor', href: '/dashboard/monitor' },
+  // Developer Tools
   { name: 'Browser', href: '/dashboard/browser' },
-  { name: 'API Keys', href: '/dashboard/apikeys' },
-  { name: 'Subscription', href: '/dashboard/subscription' },
-  { name: 'Visualize', href: '/dashboard/visualize' },
-
-  // Tenant & organization management
-  { name: 'Organization', href: '/dashboard/organization' },
-
-  // Advanced features & UX enhancements
-  { name: 'Analytics', href: '/dashboard/analytics' },
-  { name: 'Notifications', href: '/dashboard/notifications' },
-  { name: 'Bulk Ops', href: '/dashboard/bulk' },
-  { name: 'Description Formats', href: '/dashboard/description-formats' },
-  { name: 'Roles', href: '/dashboard/roles' },
-  { name: 'Versioning', href: '/dashboard/versioning' },
-  { name: 'Assistant', href: '/dashboard/assistant' },
+  { name: 'API', href: '/dashboard/api' },
 ];
 
 export default function Sidebar() {
