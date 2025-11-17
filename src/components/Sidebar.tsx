@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// Define sections with titles and their respective items
 const sections = [
   {
     title: 'AI Extraction & Content',
@@ -43,29 +44,41 @@ const sections = [
     ],
   },
 ];
-           {section.title}
-            </h2>
-            <ul className="space-y-1">
-              {section.items.map((item) => {
-                const active = pathname === item.href;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={`block px-3 py-2 rounded-lg ${
-                        active ? 'bg-gray-700' : 'hover:bg-gray-800'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-            <hr className="border-gray-700 my-4" />
-          </div>
-        ))}
-      </nav>
-    </div>
+
+export default function Sidebar() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="p-4 space-y-4">
+      {sections.map((section, sectionIndex) => (
+        <div key={section.title}>
+          {sectionIndex > 0 && (
+            <hr className="my-4 border-gray-700/30 dark:border-gray-200/20" />
+          )}
+          <h2 className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+            {section.title}
+          </h2>
+          <ul className="space-y-1">
+            {section.items.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`block px-3 py-2 rounded-lg text-sm font-medium ${
+                      active
+                        ? 'bg-gray-700 text-white'
+                        : 'text-gray-300 hover:bg-gray-700/40'
+                    }`}
+                  >
+                    {item.name}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
   );
 }
