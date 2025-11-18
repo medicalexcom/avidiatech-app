@@ -8,7 +8,14 @@ export default clerkMiddleware((auth, req) => {
     const { userId, redirectToSignIn } = auth();
 
     if (!userId) {
-      return redirectToSignIn({ returnBackUrl: req.url });
+      try {
+        return redirectToSignIn({ returnBackUrl: req.url });
+      } catch (error) {
+        // Fallback redirect for environments where Clerk helper fails (prevents middleware 500s)
+        const signInUrl = new URL('/sign-in', req.url);
+        signInUrl.searchParams.set('redirect_url', req.url);
+        return NextResponse.redirect(signInUrl);
+      }
     }
   }
 
