@@ -1,11 +1,37 @@
 import type { ReactNode } from 'react';
-import Sidebar from '../../components/Sidebar';
-import TopNav from '../../components/TopNav';
+import { redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
+import TopNav from '@/components/TopNav';
+import Sidebar from '@/components/Sidebar';
+import { getTenantContextForUser } from '@/lib/billing';
+import { HttpError } from '@/lib/errors';
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default async function DashboardLayout({ children }: { children: ReactNode }) {
+  const { userId } = auth();
+
+  if (!userId) {
+    redirect('/sign-in?redirect_url=/dashboard');
+  }
+
+  let showSubscriptionBanner = false;
+  try {
+    const context = await getTenantContextForUser({ userId });
+    showSubscriptionBanner = context.role !== 'owner' && !context.subscription.isActive;
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      redirect('/sign-in?redirect_url=/dashboard');
+    }
+    throw error;
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
+      {showSubscriptionBanner && (
+        <div className="bg-amber-100 text-amber-900 px-6 py-3 text-sm border-b border-amber-200">
+          Your subscription is inactive. Please update billing to restore full access.
+        </div>
+      )}
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 p-6 bg-gray-50">
