@@ -80,7 +80,7 @@ export default function ApiKeysPage() {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Key nameapplication/json
+          placeholder="Key name"
           className="border rounded px-2 py-1 mr-2 text-sm"
         />
         <button
