@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { enforceSubscriptionAndTrack, BillingError } from '@/lib/usage';
+import { BillingError, checkUsageAllowance, recordUsage } from '@/lib/usage';
 import { resolveTenantContext } from '@/lib/tenant';
 import { getServiceSupabase } from '@/lib/supabase';
 
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     }
 
     const { tenantId } = await resolveTenantContext();
-    await enforceSubscriptionAndTrack(tenantId, 'ingestion');
+    const allowance = await checkUsageAllowance(tenantId, 'ingestion');
 
     const engineUrl =
       process.env.RENDER_ENGINE_URL || process.env.NEXT_PUBLIC_INGEST_API_URL;
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     const data = await res.json();
 
     if (res.ok) {
+      await recordUsage(allowance);
       try {
         const supabase = getServiceSupabase();
         await supabase.from('product_history').insert({

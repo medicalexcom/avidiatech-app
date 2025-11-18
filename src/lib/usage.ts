@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { PLAN_CONFIG, normalizePlanSlug } from '@/config/plans';
 import { getServiceSupabase } from './supabase';
 
 export type UsageMetric = 'ingestion' | 'description';
@@ -23,33 +23,56 @@ export class BillingError extends Error {
   }
 }
 
-export async function enforceSubscriptionAndTrack(
+export interface UsageAllowance {
+  tenantId: string;
+  metric: UsageMetric;
+  nextUsage: number;
+  quota: number | null;
+  plan: string;
+  status: string;
+  periodStart: string;
+  usageColumn: string;
+  usageRowId?: string;
+}
+
+export function getCurrentPeriodStart(): string {
+  const now = new Date();
+  const key = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 10);
+  return key;
+}
+
+function resolveQuotaForMetric(planName: string | undefined, metric: UsageMetric): number | null {
+  const plan = PLAN_CONFIG[normalizePlanSlug(planName)];
+  return metric === 'ingestion' ? plan.ingestionQuota : plan.descriptionQuota;
+}
+
+/**
+ * Preflight subscription check that validates the tenant's plan and determines whether the next
+ * call is allowed. Throws a BillingError when the quota would be exceeded.
+ */
+export async function checkUsageAllowance(
   tenantId: string,
   metric: UsageMetric,
-): Promise<{ usage: number; quota: number | null; status: string; plan: string } | null> {
+): Promise<UsageAllowance> {
   const supabase = getServiceSupabase();
   const { data: subscription, error: subscriptionError } = await supabase
     .from('tenant_subscriptions')
-    .select(
-      'plan_name, status, current_period_end, ingestion_quota, description_quota'
-    )
+    .select('plan_name, status, ingestion_quota, description_quota')
     .eq('tenant_id', tenantId)
     .maybeSingle();
 
   if (subscriptionError) {
     console.error('Failed to load subscription', subscriptionError);
-    throw new NextResponse('Subscription lookup failed', { status: 500 }) as unknown as Error;
+    throw new Error('Subscription lookup failed');
   }
 
   if (!subscription || subscription.status !== 'active') {
     throw new BillingError('Subscription inactive. Update billing to continue.');
   }
 
-  const periodStart = new Date();
-  const periodKey = new Date(Date.UTC(periodStart.getUTCFullYear(), periodStart.getUTCMonth(), 1))
-    .toISOString()
-    .slice(0, 10);
-
+  const periodStart = getCurrentPeriodStart();
   const usageColumn = columnMap[metric];
   const quotaColumn = quotaMap[metric];
 
@@ -57,35 +80,51 @@ export async function enforceSubscriptionAndTrack(
     .from('usage_counters')
     .select(`id, ${usageColumn}`)
     .eq('tenant_id', tenantId)
-    .eq('period_start', periodKey)
+    .eq('period_start', periodStart)
     .maybeSingle();
 
   if (usageError) {
     console.error('Usage lookup failed', usageError);
-    throw new NextResponse('Usage lookup failed', { status: 500 }) as unknown as Error;
+    throw new Error('Usage lookup failed');
   }
 
   const usageRow = existingUsage as any;
   const currentUsage = usageRow?.[usageColumn] ?? 0;
-  const quota = subscription[quotaColumn] ?? null;
-  const newUsage = currentUsage + 1;
+  const quota = subscription[quotaColumn] ?? resolveQuotaForMetric(subscription.plan_name, metric);
+  const nextUsage = currentUsage + 1;
 
-  if (quota && newUsage > quota) {
+  if (quota && nextUsage > quota) {
     throw new BillingError(`Quota exceeded for ${metric}.`, 402, 'quota_exceeded');
   }
 
-  const payload = {
-    id: usageRow?.id,
-    tenant_id: tenantId,
-    period_start: periodKey,
-    [usageColumn]: newUsage,
-    updated_at: new Date().toISOString(),
+  return {
+    tenantId,
+    metric,
+    nextUsage,
+    quota: quota ?? null,
+    plan: subscription.plan_name,
+    status: subscription.status,
+    periodStart,
+    usageColumn,
+    usageRowId: usageRow?.id,
   };
+}
 
-  const { error: upsertError } = await supabase.from('usage_counters').upsert(payload);
+/**
+ * Persist the usage increment after a successful downstream API call.
+ */
+export async function recordUsage(allowance: UsageAllowance): Promise<void> {
+  const supabase = getServiceSupabase();
+  const { error: upsertError } = await supabase.from('usage_counters').upsert({
+    id: allowance.usageRowId,
+    tenant_id: allowance.tenantId,
+    period_start: allowance.periodStart,
+    [allowance.usageColumn]: allowance.nextUsage,
+    updated_at: new Date().toISOString(),
+  });
+
   if (upsertError) {
     console.error('Failed to update usage', upsertError);
+    throw new Error('Unable to update usage counters');
   }
-
-  return { usage: newUsage, quota, status: subscription.status, plan: subscription.plan_name };
 }

@@ -1,14 +1,25 @@
 import Stripe from 'stripe';
 import { NextResponse } from 'next/server';
 import { resolveTenantContext } from '@/lib/tenant';
+import { PLAN_CONFIG, type PlanSlug, normalizePlanSlug } from '@/config/plans';
 
-export async function POST() {
+export async function POST(req: Request) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
     return NextResponse.json({ error: 'STRIPE_SECRET_KEY not configured' }, { status: 500 });
   }
   try {
     const ctx = await resolveTenantContext();
+    const body = await req.json().catch(() => ({}));
+    const planSlug = normalizePlanSlug((body as { plan?: PlanSlug }).plan);
+    const plan = PLAN_CONFIG[planSlug];
+    const configuredPrice = plan.priceEnv ? process.env[plan.priceEnv] : undefined;
+    const priceId = configuredPrice || process.env.STRIPE_DEFAULT_PRICE_ID || '';
+
+    if (!priceId) {
+      return NextResponse.json({ error: 'Stripe price not configured' }, { status: 500 });
+    }
+
     const stripe = new Stripe(secretKey, { apiVersion: '2023-10-16' });
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -18,7 +29,7 @@ export async function POST() {
       client_reference_id: ctx.tenantId,
       line_items: [
         {
-          price: process.env.STRIPE_DEFAULT_PRICE_ID || '',
+          price: priceId,
           quantity: 1,
         },
       ],

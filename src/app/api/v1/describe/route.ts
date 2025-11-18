@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resolveTenantContext } from '@/lib/tenant';
-import { enforceSubscriptionAndTrack, BillingError } from '@/lib/usage';
+import { BillingError, checkUsageAllowance, recordUsage } from '@/lib/usage';
 import { getServiceSupabase } from '@/lib/supabase';
 
 /**
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     }
 
     const { tenantId } = await resolveTenantContext();
-    await enforceSubscriptionAndTrack(tenantId, 'description');
+    const allowance = await checkUsageAllowance(tenantId, 'description');
 
     const supabase = getServiceSupabase();
     await supabase.from('description_requests').insert({
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
     const data = await res.json();
 
     if (res.ok && data?.description) {
+      await recordUsage(allowance);
       await supabase.from('product_history').insert({
         tenant_id: tenantId,
         product_id: data.product_id || crypto.randomUUID(),
