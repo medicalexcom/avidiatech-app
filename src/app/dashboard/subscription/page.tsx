@@ -1,167 +1,92 @@
-"use client";
+import { redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
+import { getTenantContextForUser } from '@/lib/billing';
+import { HttpError } from '@/lib/errors';
 
-import { useMemo, useState } from "react";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+export const dynamic = 'force-dynamic';
 
-// A simple component that fetches and displays subscription and usage
-// information for a tenant.  This replaces the static bullet list
-// from the original SubscriptionPage.  To use it in your Next.js app,
-// place this file at `src/app/dashboard/subscription/page.tsx` and make
-// sure the environment variables NEXT_PUBLIC_SUPABASE_URL and
-// NEXT_PUBLIC_SUPABASE_ANON_KEY are defined.  You will also need a
-// backend API route to handle Stripe checkout for plan changes.
+export default async function SubscriptionPage() {
+  const { userId } = auth();
 
-interface SubscriptionData {
-  planName: string;
-  status: string;
-  currentPeriodEnd: string;
-  usage: Record<string, { used: number; quota: number }>;
-}
-
-export default function SubscriptionPage() {
-  const [tenantId, setTenantId] = useState("");
-  const [data, setData] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Initialize Supabase client once on the client side.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const supabase = useMemo<SupabaseClient | null>(() => {
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return null;
-    }
-    return createClient(supabaseUrl, supabaseAnonKey);
-  }, [supabaseAnonKey, supabaseUrl]);
-
-  async function fetchSubscription() {
-    if (!tenantId) return;
-    if (!supabase) {
-      setError("Supabase environment variables are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-      setData(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      // Query your `tenant_subscriptions` table (adjust table/column names
-      // according to your schema).  Assume it contains `tenant_id`,
-      // `plan_name`, `status`, `current_period_end`, and usage columns.
-      const { data: rows, error: supabaseError } = await supabase
-        .from("tenant_subscriptions")
-        .select(
-          "plan_name, status, current_period_end, ingestion_used, ingestion_quota, seo_used, seo_quota, variant_used, variant_quota"
-        )
-        .eq("tenant_id", tenantId)
-        .limit(1);
-      if (supabaseError) throw supabaseError;
-      if (!rows || rows.length === 0) {
-        setError("No subscription found for tenant.");
-        setData(null);
-        setLoading(false);
-        return;
-      }
-      const row = rows[0];
-      const usage = {
-        ingestion: {
-          used: row.ingestion_used || 0,
-          quota: row.ingestion_quota || 0,
-        },
-        seo: {
-          used: row.seo_used || 0,
-          quota: row.seo_quota || 0,
-        },
-        variant: {
-          used: row.variant_used || 0,
-          quota: row.variant_quota || 0,
-        },
-      };
-      setData({
-        planName: row.plan_name,
-        status: row.status,
-        currentPeriodEnd: row.current_period_end,
-        usage,
-      });
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch subscription.");
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
+  if (!userId) {
+    redirect('/sign-in?redirect_url=/dashboard/subscription');
   }
 
+  let context;
+  try {
+    context = await getTenantContextForUser({ userId });
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      redirect('/sign-in?redirect_url=/dashboard/subscription');
+    }
+    throw error;
+  }
+
+  const { tenantId, role, subscription, usage } = context;
+  const isOwner = role === 'owner';
+
+  const planLabel = isOwner ? 'Owner Unlimited' : subscription.planName ?? 'No active plan';
+  const statusLabel = isOwner ? 'active (owner bypass)' : subscription.status ?? 'inactive';
+  const activeState = isOwner || subscription.isActive ? 'Active' : 'Inactive';
+
+  const quotaDisplay = [
+    { key: 'ingestion', label: 'Ingestion jobs', used: usage.ingestion_count, quota: subscription.quotas.ingestion },
+    { key: 'seo', label: 'SEO runs', used: usage.seo_count, quota: subscription.quotas.seo },
+    { key: 'variants', label: 'Variants generated', used: usage.variants_count, quota: subscription.quotas.variants },
+    { key: 'match', label: 'Matching jobs', used: usage.match_count, quota: subscription.quotas.match },
+  ];
+
   return (
-    <div className="p-4 space-y-4">
-      <h1 className="text-3xl font-bold">Subscription & Usage</h1>
-      <p>Enter a tenant ID to load subscription details:</p>
-      {!supabase && (
-        <p className="text-sm text-red-600">
-          Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable live subscription data.
-        </p>
-      )}
-      <div className="flex space-x-2">
-        <input
-          type="text"
-          value={tenantId}
-          onChange={(e) => setTenantId(e.target.value)}
-          className="border rounded p-2 flex-1"
-          placeholder="Tenant ID"
-        />
-        <button
-          onClick={fetchSubscription}
-          className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-          disabled={loading || !tenantId || !supabase}
-        >
-          {loading ? "Loading…" : "Load"}
-        </button>
+    <div className="p-6 space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-gray-500">Tenant</p>
+          <p className="font-mono text-gray-900">{tenantId}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-gray-500">Role</p>
+          <p className="font-semibold text-gray-900 capitalize">{role}</p>
+        </div>
       </div>
-      {error && <p className="text-red-600">{error}</p>}
-      {data && (
-        <div className="border rounded p-4">
-          <h2 className="text-xl font-semibold mb-2">Plan Details</h2>
-          <p>
-            <strong>Plan:</strong> {data.planName}
+
+      <div className="bg-white border rounded-lg p-4 shadow-sm space-y-2">
+        <h1 className="text-2xl font-bold">Subscription</h1>
+        <p className="text-gray-700">Plan: {planLabel}</p>
+        <p className="text-gray-700">Status: {statusLabel}</p>
+        <p className="text-gray-700">Overall state: {activeState}</p>
+        {subscription.currentPeriodEnd && !isOwner && (
+          <p className="text-gray-500 text-sm">
+            Current period ends on {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
           </p>
-          <p>
-            <strong>Status:</strong> {data.status}
+        )}
+        {isOwner && (
+          <p className="text-green-700 text-sm">Owners bypass subscription checks but still log usage.</p>
+        )}
+      </div>
+
+      <div className="bg-white border rounded-lg p-4 shadow-sm">
+        <h2 className="text-xl font-semibold mb-3">Usage this period</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {quotaDisplay.map((item) => (
+            <div key={item.key} className="border rounded p-3">
+              <p className="font-medium text-gray-900">{item.label}</p>
+              <p className="text-gray-700">
+                {item.used} / {item.quota !== null ? item.quota : '∞'}
+              </p>
+              {!isOwner && item.quota !== null && item.used >= item.quota && (
+                <p className="text-xs text-red-600">Quota exceeded</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {!subscription.isActive && !isOwner && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4">
+          <h3 className="font-semibold mb-2">Activate your plan</h3>
+          <p className="text-sm">
+            A paid Stripe subscription is required for full access. Please update billing to continue using the platform.
           </p>
-          <p>
-            <strong>Next Renewal:</strong>{" "}
-            {new Date(data.currentPeriodEnd).toLocaleDateString()}
-          </p>
-          <h2 className="text-xl font-semibold mt-4 mb-2">Usage Counters</h2>
-          <ul className="list-disc ml-6 space-y-1">
-            {Object.entries(data.usage).map(([key, { used, quota }]) => (
-              <li key={key}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}: {used} / {quota}
-              </li>
-            ))}
-          </ul>
-          {/* Placeholder for upgrade/downgrade and invoice history */}
-          <div className="mt-4">
-            <button
-              onClick={() => {
-                // TODO: Implement calling your Stripe checkout API route here
-                alert(
-                  "Plan change flow not yet implemented. Implement checkout session call."
-                );
-              }}
-              className="bg-green-500 text-white px-4 py-2 rounded mr-2"
-            >
-              Change Plan
-            </button>
-            <button
-              onClick={() => {
-                // TODO: Redirect to Stripe customer portal or open invoice history
-                alert(
-                  "Invoice history and customer portal not yet implemented."
-                );
-              }}
-              className="bg-gray-500 text-white px-4 py-2 rounded"
-            >
-              Billing Portal
-            </button>
-          </div>
         </div>
       )}
     </div>
