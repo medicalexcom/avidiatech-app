@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useMemo, useState } from "react";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // A simple component that fetches and displays subscription and usage
 // information for a tenant.  This replaces the static bullet list
@@ -25,12 +25,22 @@ export default function SubscriptionPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Initialize Supabase client once on the client side.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabase = useMemo<SupabaseClient | null>(() => {
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return null;
+    }
+    return createClient(supabaseUrl, supabaseAnonKey);
+  }, [supabaseAnonKey, supabaseUrl]);
 
   async function fetchSubscription() {
     if (!tenantId) return;
+    if (!supabase) {
+      setError("Supabase environment variables are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      setData(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -84,6 +94,11 @@ export default function SubscriptionPage() {
     <div className="p-4 space-y-4">
       <h1 className="text-3xl font-bold">Subscription & Usage</h1>
       <p>Enter a tenant ID to load subscription details:</p>
+      {!supabase && (
+        <p className="text-sm text-red-600">
+          Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to enable live subscription data.
+        </p>
+      )}
       <div className="flex space-x-2">
         <input
           type="text"
@@ -95,7 +110,7 @@ export default function SubscriptionPage() {
         <button
           onClick={fetchSubscription}
           className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-          disabled={loading || !tenantId}
+          disabled={loading || !tenantId || !supabase}
         >
           {loading ? "Loading…" : "Load"}
         </button>

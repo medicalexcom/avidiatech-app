@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// Initialize a Supabase client using environment variables.  The service role key
-// must be set in your deployment environment (e.g., SUPABASE_SERVICE_ROLE_KEY).
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+function getServiceClient(): SupabaseClient | NextResponse<{ error: string }> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return NextResponse.json({
+      error: 'Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY) are required.',
+    }, { status: 500 });
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 /**
  * API route for listing, creating and revoking API keys.
@@ -18,6 +25,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
  */
 
 export async function GET(request: Request) {
+  const supabase = getServiceClient();
+  if (supabase instanceof NextResponse) return supabase;
+
   const { searchParams } = new URL(request.url);
   const tenantId = searchParams.get('tenant_id');
   if (!tenantId) {
@@ -37,6 +47,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = getServiceClient();
+  if (supabase instanceof NextResponse) return supabase;
+
   try {
     const body = await request.json();
     const { tenant_id, name } = body as { tenant_id?: string; name?: string };
@@ -69,6 +82,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const supabase = getServiceClient();
+  if (supabase instanceof NextResponse) return supabase;
+
   try {
     const body = await request.json();
     const { id } = body as { id?: string };
