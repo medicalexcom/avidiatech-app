@@ -15,6 +15,8 @@ export default function middleware(req: NextRequest) {
   })(req);
 }
 
+export const runtime = 'nodejs';
+
 export const config = {
   matcher: ['/((?!.*\..*|_next).*)', '/'],
 };
