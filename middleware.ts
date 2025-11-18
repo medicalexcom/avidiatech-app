@@ -1,14 +1,19 @@
 import { authMiddleware } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const publishable = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const secret = process.env.CLERK_SECRET_KEY;
+const isClerkConfigured = Boolean(publishable && secret);
 
-export default publishable && secret
-  ? authMiddleware({
-      publicRoutes: ['/', '/sign-in(.*)', '/sign-up(.*)'],
-    })
-  : (() => NextResponse.next());
+export default function middleware(req: NextRequest) {
+  if (!isClerkConfigured) {
+    return NextResponse.next();
+  }
+
+  return authMiddleware({
+    publicRoutes: ['/', '/sign-in(.*)', '/sign-up(.*)'],
+  })(req);
+}
 
 export const config = {
   matcher: ['/((?!.*\..*|_next).*)', '/'],
