@@ -1,15 +1,31 @@
+import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
 
 /**
- * Endpoint for bulk file uploads.  Accepts multipart/form-data with a single
- * file field named `file`.  This route is a placeholder and should be
+ * Endpoint for bulk file uploads. Accepts multipart/form-data with a single
+ * file field named `file`. This route is a placeholder and should be
  * implemented to handle parsing of CSV/XLSX files and queuing ingestion jobs.
  */
 export async function POST(request: Request) {
-  if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {
-    return NextResponse.json({ error: 'Expected multipart/form-data' }, { status: 400 });
+  const { userId } = auth();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  // For now, simply return a not implemented response.  Implementation
-  // should parse the incoming file, extract rows, and enqueue ingestion jobs.
-  return NextResponse.json({ message: 'Bulk upload endpoint not yet implemented' }, { status: 501 });
+
+  try {
+    await requireSubscriptionAndUsage({
+      userId,
+      requestedTenantId: tenantFromRequest(request),
+      feature: 'variants',
+      increment: 1,
+    });
+
+    if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+      return NextResponse.json({ error: 'Expected multipart/form-data' }, { status: 400 });
+    }
+    return NextResponse.json({ message: 'Bulk upload endpoint not yet implemented' }, { status: 501 });
+  } catch (error) {
+    return handleRouteError(error);
+  }
 }
