@@ -1,154 +1,153 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-// A simple component that fetches and displays subscription and usage
-// information for a tenant.  This replaces the static bullet list
-// from the original SubscriptionPage.  To use it in your Next.js app,
-// place this file at `src/app/dashboard/subscription/page.tsx` and make
-// sure the environment variables NEXT_PUBLIC_SUPABASE_URL and
-// NEXT_PUBLIC_SUPABASE_ANON_KEY are defined.  You will also need a
-// backend API route to handle Stripe checkout for plan changes.
 
 interface SubscriptionData {
-  planName: string;
-  status: string;
-  currentPeriodEnd: string;
-  usage: Record<string, { used: number; quota: number }>;
+  plan_name?: string;
+  status?: string;
+  current_period_end?: string;
+  ingestion_quota?: number | null;
+  description_quota?: number | null;
+}
+
+interface UsageData {
+  ingestion_count?: number;
+  description_count?: number;
+  period_start?: string;
 }
 
 export default function SubscriptionPage() {
-  const [tenantId, setTenantId] = useState("");
-  const [data, setData] = useState<SubscriptionData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
+  const [usage, setUsage] = useState<UsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
 
-  // Initialize Supabase client once on the client side.
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-  async function fetchSubscription() {
-    if (!tenantId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      // Query your `tenant_subscriptions` table (adjust table/column names
-      // according to your schema).  Assume it contains `tenant_id`,
-      // `plan_name`, `status`, `current_period_end`, and usage columns.
-      const { data: rows, error: supabaseError } = await supabase
-        .from("tenant_subscriptions")
-        .select(
-          "plan_name, status, current_period_end, ingestion_used, ingestion_quota, seo_used, seo_quota, variant_used, variant_quota"
-        )
-        .eq("tenant_id", tenantId)
-        .limit(1);
-      if (supabaseError) throw supabaseError;
-      if (!rows || rows.length === 0) {
-        setError("No subscription found for tenant.");
-        setData(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/v1/tenants/me");
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error || "Unable to load subscription");
+          return;
+        }
+        setSubscription(json.subscription);
+        setUsage(json.usage);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
         setLoading(false);
-        return;
       }
-      const row = rows[0];
-      const usage = {
-        ingestion: {
-          used: row.ingestion_used || 0,
-          quota: row.ingestion_quota || 0,
-        },
-        seo: {
-          used: row.seo_used || 0,
-          quota: row.seo_quota || 0,
-        },
-        variant: {
-          used: row.variant_used || 0,
-          quota: row.variant_quota || 0,
-        },
-      };
-      setData({
-        planName: row.plan_name,
-        status: row.status,
-        currentPeriodEnd: row.current_period_end,
-        usage,
-      });
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch subscription.");
-      setData(null);
+    };
+    load();
+  }, []);
+
+  const gotoBillingPortal = async () => {
+    setRedirecting(true);
+    try {
+      const res = await fetch("/api/v1/billing/portal", { method: "POST" });
+      const json = await res.json();
+      if (json.url) {
+        window.location.href = json.url;
+      } else {
+        setError(json.error || "Unable to open billing portal");
+      }
     } finally {
-      setLoading(false);
+      setRedirecting(false);
     }
-  }
+  };
+
+  const startCheckout = async () => {
+    setRedirecting(true);
+    try {
+      const res = await fetch("/api/v1/billing/checkout", { method: "POST" });
+      const json = await res.json();
+      if (json.url) {
+        window.location.href = json.url;
+      } else {
+        setError(json.error || "Unable to start checkout");
+      }
+    } finally {
+      setRedirecting(false);
+    }
+  };
+
+  if (loading) return <p className="p-4">Loading subscription...</p>;
 
   return (
-    <div className="p-4 space-y-4">
-      <h1 className="text-3xl font-bold">Subscription & Usage</h1>
-      <p>Enter a tenant ID to load subscription details:</p>
-      <div className="flex space-x-2">
-        <input
-          type="text"
-          value={tenantId}
-          onChange={(e) => setTenantId(e.target.value)}
-          className="border rounded p-2 flex-1"
-          placeholder="Tenant ID"
-        />
-        <button
-          onClick={fetchSubscription}
-          className="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-          disabled={loading || !tenantId}
-        >
-          {loading ? "Loading…" : "Load"}
-        </button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">Subscription & Usage</h1>
+        <p className="text-gray-700">Stripe-backed billing with quotas enforced before each API call.</p>
       </div>
-      {error && <p className="text-red-600">{error}</p>}
-      {data && (
-        <div className="border rounded p-4">
-          <h2 className="text-xl font-semibold mb-2">Plan Details</h2>
-          <p>
-            <strong>Plan:</strong> {data.planName}
-          </p>
-          <p>
-            <strong>Status:</strong> {data.status}
-          </p>
-          <p>
-            <strong>Next Renewal:</strong>{" "}
-            {new Date(data.currentPeriodEnd).toLocaleDateString()}
-          </p>
-          <h2 className="text-xl font-semibold mt-4 mb-2">Usage Counters</h2>
-          <ul className="list-disc ml-6 space-y-1">
-            {Object.entries(data.usage).map(([key, { used, quota }]) => (
-              <li key={key}>
-                {key.charAt(0).toUpperCase() + key.slice(1)}: {used} / {quota}
-              </li>
-            ))}
-          </ul>
-          {/* Placeholder for upgrade/downgrade and invoice history */}
-          <div className="mt-4">
+
+      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-red-700">{error}</div>}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-xl font-semibold">Plan</h2>
+          <p className="text-sm text-gray-700">{subscription?.plan_name || "Not set"}</p>
+          <p className="text-sm text-gray-500">Status: {subscription?.status || "unknown"}</p>
+          {subscription?.current_period_end && (
+            <p className="text-xs text-gray-500">
+              Renews {new Date(subscription.current_period_end).toLocaleDateString()}
+            </p>
+          )}
+          <div className="mt-4 flex gap-2 text-sm">
             <button
-              onClick={() => {
-                // TODO: Implement calling your Stripe checkout API route here
-                alert(
-                  "Plan change flow not yet implemented. Implement checkout session call."
-                );
-              }}
-              className="bg-green-500 text-white px-4 py-2 rounded mr-2"
+              onClick={startCheckout}
+              disabled={redirecting}
+              className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50"
             >
-              Change Plan
+              {redirecting ? "Redirecting..." : "Change plan"}
             </button>
             <button
-              onClick={() => {
-                // TODO: Redirect to Stripe customer portal or open invoice history
-                alert(
-                  "Invoice history and customer portal not yet implemented."
-                );
-              }}
-              className="bg-gray-500 text-white px-4 py-2 rounded"
+              onClick={gotoBillingPortal}
+              disabled={redirecting}
+              className="rounded border border-gray-300 px-3 py-2 text-gray-800 disabled:opacity-50"
             >
-              Billing Portal
+              Billing portal
             </button>
           </div>
         </div>
-      )}
+
+        <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-xl font-semibold">Usage this period</h2>
+          <div className="space-y-3 text-sm text-gray-800">
+            <UsageBar
+              label="Ingestion"
+              used={usage?.ingestion_count || 0}
+              quota={subscription?.ingestion_quota ?? null}
+            />
+            <UsageBar
+              label="Descriptions"
+              used={usage?.description_count || 0}
+              quota={subscription?.description_quota ?? null}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UsageBar({ label, used, quota }: { label: string; used: number; quota: number | null }) {
+  const percent = quota ? Math.min(100, Math.round((used / quota) * 100)) : null;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-gray-600">
+        <span>{label}</span>
+        <span>
+          {used} / {quota ?? "∞"} {percent !== null ? `(${percent}% )` : ""}
+        </span>
+      </div>
+      <div className="mt-1 h-2 rounded bg-gray-100">
+        <div
+          className="h-2 rounded bg-blue-600"
+          style={{ width: `${percent ?? 100}%` }}
+        />
+      </div>
     </div>
   );
 }

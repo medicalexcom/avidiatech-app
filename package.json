@@ -8,17 +8,19 @@
     "start": "next start"
   },
   "dependencies": {
-    "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.31",
     "@clerk/nextjs": "^5.0.0",
+    "@supabase/supabase-js": "^2.81.1",
+    "autoprefixer": "^10.4.16",
     "next": "latest",
+    "postcss": "^8.4.31",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "stripe": "^14.24.0",
+    "tailwindcss": "^3.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
+    "@types/node": "^20.5.9",
     "@types/react": "^18.2.48",
-    "@types/node": "^20.5.9"
+    "typescript": "^5.3.3"
   }
 }

@@ -1,33 +1,35 @@
 import { NextResponse } from 'next/server';
+import { enforceSubscriptionAndTrack, BillingError } from '@/lib/usage';
+import { resolveTenantContext } from '@/lib/tenant';
+import { getServiceSupabase } from '@/lib/supabase';
 
 /**
- * Proxy endpoint for product ingestion.
- *
- * This route accepts a POST request with a JSON body containing a `url` field.
- * It forwards the request to the Render/Supabase ingestion engine defined by
- * the `RENDER_ENGINE_URL` environment variable.  If that is not set, it falls
- * back to `NEXT_PUBLIC_INGEST_API_URL`.  An optional
- * `RENDER_ENGINE_AUTH_TOKEN` can be provided to authenticate with the engine.
+ * Proxy endpoint for product ingestion with subscription enforcement and
+ * usage tracking. Resolves the caller's tenant via Clerk, ensures an active
+ * subscription, increments usage, and forwards the request to the ingestion
+ * engine configured in the environment.
  */
 export async function POST(req: Request) {
-  const { url } = await req.json();
-  if (!url) {
-    return NextResponse.json({ error: 'Missing URL' }, { status: 400 });
-  }
-
-  const engineUrl =
-    process.env.RENDER_ENGINE_URL || process.env.NEXT_PUBLIC_INGEST_API_URL;
-  if (!engineUrl) {
-    return NextResponse.json(
-      { error: 'RENDER_ENGINE_URL or NEXT_PUBLIC_INGEST_API_URL not configured' },
-      { status: 500 },
-    );
-  }
-
   try {
+    const { url } = await req.json();
+    if (!url) {
+      return NextResponse.json({ error: 'Missing URL' }, { status: 400 });
+    }
+
+    const { tenantId } = await resolveTenantContext();
+    await enforceSubscriptionAndTrack(tenantId, 'ingestion');
+
+    const engineUrl =
+      process.env.RENDER_ENGINE_URL || process.env.NEXT_PUBLIC_INGEST_API_URL;
+    if (!engineUrl) {
+      return NextResponse.json(
+        { error: 'RENDER_ENGINE_URL or NEXT_PUBLIC_INGEST_API_URL not configured' },
+        { status: 500 },
+      );
+    }
+
     const authToken = process.env.RENDER_ENGINE_AUTH_TOKEN;
-    // Build a GET request to the ingestion API with the product URL as a query param.
-    const target = `${engineUrl.replace(/\/$/, '')}/ingest?url=${encodeURIComponent(url)}`;
+    const target = `${engineUrl.replace(/\/$/, '')}/ingest?url=${encodeURIComponent(url)}&tenant_id=${tenantId}`;
     const res = await fetch(target, {
       method: 'get',
       headers: {
@@ -35,8 +37,28 @@ export async function POST(req: Request) {
       },
     });
     const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
+
+    if (res.ok) {
+      try {
+        const supabase = getServiceSupabase();
+        await supabase.from('product_history').insert({
+          tenant_id: tenantId,
+          product_id: data.product_id || crypto.randomUUID(),
+          version: 1,
+          summary: data.summary || `Ingested ${url}`,
+          changed_by: 'ingest-endpoint',
+        });
+      } catch (err) {
+        console.warn('Unable to persist product history', err);
+      }
+    }
+
+    return NextResponse.json({ tenant_id: tenantId, ...data }, { status: res.status });
+  } catch (err: any) {
+    if (err instanceof BillingError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+    }
+    if (err instanceof Response) return err;
     console.error(err);
     return NextResponse.json(
       { error: 'Failed to connect to ingestion engine' },
