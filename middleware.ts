@@ -17,7 +17,7 @@ export default function middleware(req: NextRequest) {
   }
 
   return authMiddleware({
-    publicRoutes: ['/', '/sign-in(.*)', '/sign-up(.*)'],
+    publicRoutes: ['/', '/sign-in(.*)', '/sign-up(.*)', '/api/webhooks/clerk'],
     afterAuth(auth, request) {
       if (!auth.userId && request.nextUrl.pathname.startsWith('/dashboard')) {
         const signInUrl = new URL('/sign-in', request.url);

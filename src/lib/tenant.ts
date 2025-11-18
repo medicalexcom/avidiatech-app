@@ -8,9 +8,20 @@ export interface TenantContext {
   role: string;
 }
 
-export async function ensureTenantForUser(userId: string): Promise<TenantContext> {
-  const supabase = getServiceSupabase();
+interface MembershipRow {
+  tenant_id: string;
+  role: string;
+  tenants?: { name?: string }[];
+}
 
+function tenantNameFromRow(row: MembershipRow): string {
+  return Array.isArray(row.tenants)
+    ? row.tenants[0]?.name ?? 'Workspace'
+    : (row as any).tenants?.name ?? 'Workspace';
+}
+
+async function getActiveMembership(userId: string): Promise<TenantContext | null> {
+  const supabase = getServiceSupabase();
   const existing = await supabase
     .from('tenant_memberships')
     .select('tenant_id, role, tenants(name)')
@@ -25,19 +36,21 @@ export async function ensureTenantForUser(userId: string): Promise<TenantContext
     throw new NextResponse('Failed to resolve tenant', { status: 500 }) as unknown as Error;
   }
 
-  if (existing.data) {
-    return {
-      tenantId: existing.data.tenant_id,
-      tenantName: Array.isArray(existing.data.tenants)
-        ? existing.data.tenants[0]?.name ?? 'Workspace'
-        : (existing.data as any).tenants?.name ?? 'Workspace',
-      role: existing.data.role,
-    };
-  }
+  if (!existing.data) return null;
 
-  const user = await clerkClient.users.getUser(userId);
-  const tenantName = user.fullName || user.primaryEmailAddress?.emailAddress || 'Workspace';
+  return {
+    tenantId: existing.data.tenant_id,
+    tenantName: tenantNameFromRow(existing.data as MembershipRow),
+    role: existing.data.role,
+  };
+}
 
+async function createTenantAndMembership(
+  userId: string,
+  tenantName: string,
+  role: string,
+): Promise<TenantContext> {
+  const supabase = getServiceSupabase();
   const createdTenant = await supabase
     .from('tenants')
     .insert({ name: tenantName })
@@ -51,7 +64,7 @@ export async function ensureTenantForUser(userId: string): Promise<TenantContext
 
   const membership = await supabase
     .from('tenant_memberships')
-    .insert({ tenant_id: createdTenant.data.id, user_id: userId, role: 'owner', is_active: true })
+    .insert({ tenant_id: createdTenant.data.id, user_id: userId, role, is_active: true })
     .select('tenant_id, role')
     .single();
 
@@ -67,35 +80,50 @@ export async function ensureTenantForUser(userId: string): Promise<TenantContext
   };
 }
 
+export async function ensureTenantForUser(userId: string): Promise<TenantContext> {
+  const existing = await getActiveMembership(userId);
+  if (existing) return existing;
+
+  const user = await clerkClient.users.getUser(userId);
+  const tenantName = user.fullName || user.primaryEmailAddress?.emailAddress || 'Workspace';
+
+  return createTenantAndMembership(userId, tenantName, 'owner');
+}
+
+export async function ensureTenantFromProfile(params: {
+  userId: string;
+  fullName?: string | null;
+  email?: string | null;
+  role?: string;
+  active?: boolean;
+}): Promise<TenantContext> {
+  const { userId, fullName, email, role = 'owner', active = true } = params;
+  const existing = await getActiveMembership(userId);
+
+  if (active === false) {
+    if (existing) {
+      const supabase = getServiceSupabase();
+      await supabase.from('tenant_memberships').update({ is_active: false }).eq('user_id', userId);
+    }
+    return existing ?? { tenantId: '', tenantName: '', role };
+  }
+
+  if (existing) return existing;
+
+  const tenantName = fullName?.trim() || email || 'Workspace';
+  return createTenantAndMembership(userId, tenantName, role);
+}
+
 export async function resolveTenantContext(): Promise<TenantContext> {
   const { userId } = auth();
   if (!userId) {
     throw new NextResponse('Unauthorized', { status: 401 }) as unknown as Error;
   }
 
-  const supabase = getServiceSupabase();
-  const { data, error } = await supabase
-    .from('tenant_memberships')
-    .select('tenant_id, role, tenants(name)')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error('Failed to load tenant membership', error);
-    throw new NextResponse('Failed to resolve tenant', { status: 500 }) as unknown as Error;
-  }
-  if (!data) {
+  const existing = await getActiveMembership(userId);
+  if (!existing) {
     return ensureTenantForUser(userId);
   }
 
-  return {
-    tenantId: data.tenant_id,
-    tenantName: Array.isArray(data.tenants)
-      ? data.tenants[0]?.name ?? 'Workspace'
-      : (data as any).tenants?.name ?? 'Workspace',
-    role: data.role,
-  };
+  return existing;
 }

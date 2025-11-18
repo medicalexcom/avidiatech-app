@@ -2,7 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { SignUp } from "@clerk/nextjs";
 
-export default function Page() {
+export default function Page({ searchParams }: { searchParams: { redirect_url?: string } }) {
+  const redirect = searchParams.redirect_url || "/dashboard";
+
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
     return (
       <div style={{ display: "flex", justifyContent: "center", paddingTop: "80px" }}>
@@ -12,7 +14,7 @@ export default function Page() {
   }
   return (
     <div style={{ display:"flex", justifyContent:"center", paddingTop:"80px" }}>
-      <SignUp routing="path" path="/sign-up" />
+      <SignUp routing="path" path="/sign-up" afterSignInUrl={redirect} afterSignUpUrl={redirect} />
     </div>
   );
 }

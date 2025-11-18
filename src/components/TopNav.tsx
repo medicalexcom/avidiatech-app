@@ -23,6 +23,7 @@ export default function TopNav() {
           <Link href="/dashboard/subscription">Subscription</Link>
           <Link href="/dashboard/api-keys">API Keys</Link>
           <Link href="/dashboard/versioning">History</Link>
+          <Link href="/dashboard/account">Account</Link>
         </div>
         <div className="flex space-x-2 border-l border-gray-600 pl-4 items-center">
           {clerkEnabled ? (
