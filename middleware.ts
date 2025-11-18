@@ -7,12 +7,6 @@ const isClerkConfigured = Boolean(publishable && secret);
 
 export default function middleware(req: NextRequest) {
   if (!isClerkConfigured) {
-    if (req.nextUrl.pathname.startsWith('/dashboard')) {
-      return NextResponse.json(
-        { error: 'Clerk is not configured. Add Clerk keys to protect dashboard routes.' },
-        { status: 503 },
-      );
-    }
     return NextResponse.next();
   }
 
