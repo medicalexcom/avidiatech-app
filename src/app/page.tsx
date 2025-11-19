@@ -30,8 +30,7 @@ const capabilities = [
 
 export default async function Home() {
   const { userId } = await auth();
-  const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || '/sign-up';
-  const getStartedHref = userId ? '/dashboard' : signUpUrl;
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
@@ -52,13 +51,13 @@ export default async function Home() {
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <Link
-                href="/dashboard"
+                href={getStartedHref}
                 className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
               >
-                Open Dashboard
+                Get Started
               </Link>
               <Link
-                href={getStartedHref}
+                href="/sign-up"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
                 Get Started
