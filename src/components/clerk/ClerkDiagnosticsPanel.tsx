@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from 'react';
 
+type Props = {
+  publishableKey?: string | null;
+  frontendApi?: string | null;
+  signInUrl?: string;
+  signUpUrl?: string;
+};
+
 const mask = (value: string) => {
   if (value.length <= 10) {
     return value;
@@ -9,30 +16,37 @@ const mask = (value: string) => {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
 };
 
-export default function ClerkDiagnosticsPanel() {
+export default function ClerkDiagnosticsPanel({
+  publishableKey,
+  frontendApi,
+  signInUrl,
+  signUpUrl,
+}: Props) {
   const [origin, setOrigin] = useState<string>('');
 
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
 
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const frontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
-  const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
-  const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || '/sign-up';
+  const resolvedPublishableKey =
+    publishableKey ?? process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? null;
+  const resolvedFrontendApi =
+    frontendApi ?? process.env.NEXT_PUBLIC_CLERK_FRONTEND_API ?? null;
+  const resolvedSignInUrl = signInUrl ?? process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? '/sign-in';
+  const resolvedSignUpUrl = signUpUrl ?? process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? '/sign-up';
 
   const rows = [
     { label: 'Current origin', value: origin || 'Resolving…' },
     {
       label: 'Publishable key',
-      value: publishableKey ? mask(publishableKey) : 'Missing',
+      value: resolvedPublishableKey ? mask(resolvedPublishableKey) : 'Missing',
     },
     {
       label: 'Frontend API',
-      value: frontendApi || 'Missing (Clerk will use the publishable key domain)',
+      value: resolvedFrontendApi || 'Missing (Clerk will use the publishable key domain)',
     },
-    { label: 'Sign-in URL', value: signInUrl },
-    { label: 'Sign-up URL', value: signUpUrl },
+    { label: 'Sign-in URL', value: resolvedSignInUrl },
+    { label: 'Sign-up URL', value: resolvedSignUpUrl },
   ];
 
   return (
@@ -42,8 +56,7 @@ export default function ClerkDiagnosticsPanel() {
         <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Read-only</span>
       </div>
       <p className="mt-1 text-xs text-slate-500">
-        Compare these values with your Clerk dashboard to confirm the deployment is pointed at the
-        correct tenant/domain.
+        Compare these values with your Clerk dashboard to confirm the deployment is pointed at the correct tenant/domain.
       </p>
       <dl className="mt-4 space-y-2">
         {rows.map(({ label, value }) => (

@@ -16,8 +16,7 @@ export default function ClerkSetupAlert({ missingKeys, headline }: Props) {
         {headline || 'Clerk is not configured for this deployment.'}
       </p>
       <p className="mt-2 text-rose-800">
-        Add the following environment variables to your Vercel project and redeploy. The sign-in page
-        stays hidden until these values are present.
+        Add the following environment variables to your Vercel project and redeploy. The sign-in page stays hidden until these values are present.
       </p>
       <ul className="mt-3 list-disc space-y-1 pl-5 font-mono text-xs">
         {missingKeys.map((key) => (
@@ -25,8 +24,7 @@ export default function ClerkSetupAlert({ missingKeys, headline }: Props) {
         ))}
       </ul>
       <p className="mt-4 text-rose-700">
-        Make sure the publishable key comes from the same Clerk instance as the frontend API value so
-        the widget loads correctly on your preferred domain.
+        Make sure the publishable key comes from the same Clerk instance as the frontend API value so the widget loads correctly on your preferred domain.
       </p>
     </section>
   );
