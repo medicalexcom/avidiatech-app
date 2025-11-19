@@ -3,17 +3,16 @@ import { auth } from '@clerk/nextjs/server';
 
 export const dynamic = 'force-dynamic';
 
-// marketing blurbs for the landing page
 const pillars = [
   {
     title: 'Product data intelligence',
     copy:
-      'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO‑ready content.',
+      'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
   },
   {
     title: 'Operational guardrails',
     copy:
-      'Tenant‑aware access, usage metering, and Stripe‑ready subscription states keep teams aligned on limits and rollout.',
+      'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
   },
   {
     title: 'Developer ergonomics',
@@ -24,14 +23,11 @@ const pillars = [
 
 const capabilities = [
   'Centralized dashboard for analytics, imports, feeds, and automation.',
-  'Role‑based access with owner overrides and subscription gating baked in.',
-  'Translation, clustering, and variant workflows that keep catalogues consistent.',
+  'Role-based access with owner overrides and subscription gating baked in.',
+  'Translation, clustering, and variant workflows that keep catalogs consistent.',
   'Usage counters and quotas ready for metered billing and diagnostics.',
 ];
 
-/**
- * Marketing landing page.  Displays feature summaries and call‑to‑action buttons.
- */
 export default async function Home() {
   const { userId } = await auth();
   const getStartedHref = userId ? '/dashboard' : '/sign-up';
@@ -56,23 +52,20 @@ export default async function Home() {
 
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
-              {/* primary call‑to‑action: dynamic link to sign‑up or dashboard */}
               <Link
                 href={getStartedHref}
                 className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
               >
                 Get Started
               </Link>
-              {/* secondary CTA: only show Open Dashboard for signed‑in users */}
-              {userId && (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
-                >
-                  Open Dashboard
-                </Link>
-              )}
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+              >
+                Open Dashboard
+              </Link>
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
@@ -82,6 +75,7 @@ export default async function Home() {
               ))}
             </div>
           </div>
+
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -109,6 +103,7 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
         <section className="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-inner">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl space-y-2">
