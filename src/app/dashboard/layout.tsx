@@ -5,9 +5,10 @@ import TopNav from '@/components/TopNav';
 import Sidebar from '@/components/Sidebar';
 import { getTenantContextForUser } from '@/lib/billing';
 import { HttpError } from '@/lib/errors';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
 
   if (!userId) {
     redirect('/sign-in?redirect_url=/dashboard');
@@ -15,7 +16,8 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   let showSubscriptionBanner = false;
   try {
-    const context = await getTenantContextForUser({ userId });
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
+    const context = await getTenantContextForUser({ userId, userEmail });
     showSubscriptionBanner = context.role !== 'owner' && !context.subscription.isActive;
   } catch (error) {
     if (error instanceof HttpError && error.status === 403) {
