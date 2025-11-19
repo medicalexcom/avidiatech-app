@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 import { getOwnerEmails, normalizeEmail } from '@/lib/owners';
 
-// Routes under these patterns require authentication.
 const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
@@ -33,6 +32,7 @@ export default clerkMiddleware((auth, req) => {
   const ownerEmails = getOwnerEmails();
 
   let response = NextResponse.next();
+
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
