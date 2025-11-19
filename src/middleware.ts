@@ -14,12 +14,20 @@ export default clerkMiddleware((auth, req) => {
   // Protected routes: require authentication
   if (isProtectedRoute(req)) {
     const maybeResponse = authResult.protect({ unauthenticatedUrl: signInUrl });
+  // Call auth() only once
+  const authResult = auth();
+  const { userId, sessionClaims } = authResult;
+
+  // ---- Protected routes ----
+  if (isProtectedRoute(req)) {
+    const maybeResponse = authResult.protect({ unauthenticatedUrl: signInUrl });
+    // If protect() returns a Response, immediately return it
     if (maybeResponse instanceof Response) {
       return maybeResponse;
     }
   }
 
-  // Require tenant context for API calls
+  // ---- Require tenant context for API calls ----
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
     const tenantId = req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
     if (!tenantId) {
@@ -30,11 +38,14 @@ export default clerkMiddleware((auth, req) => {
     }
   }
 
-  // Owner header injection for users listed in OWNER_EMAILS
+  // ---- Owner header injection ----
   const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
   const ownerEmails = getOwnerEmails();
+
+  // Default response
   let response = NextResponse.next();
 
+  // If current user is in the list of owner emails, mark them as owner
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
