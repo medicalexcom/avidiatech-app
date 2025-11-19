@@ -8,10 +8,13 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const clerkPublishableKey =
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY;
+
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers publishableKey={clerkPublishableKey}>{children}</Providers>
       </body>
     </html>
   );
