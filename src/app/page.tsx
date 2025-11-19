@@ -30,8 +30,8 @@ const capabilities = [
 
 export default async function Home() {
   const { userId } = await auth();
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
   const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || '/sign-up';
-  const getStartedHref = userId ? '/dashboard' : signUpUrl;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
