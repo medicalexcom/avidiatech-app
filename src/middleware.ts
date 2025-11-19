@@ -11,7 +11,8 @@ export default clerkMiddleware((auth, req) => {
   const { userId, sessionClaims } = authResult;
 
   if (isProtectedRoute(req)) {
-    authResult.protect({ unauthenticatedUrl: signInUrl });
+    const response = authResult.protect({ unauthenticatedUrl: signInUrl });
+    if (response instanceof Response) return response;
   }
 
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
@@ -23,13 +24,15 @@ export default clerkMiddleware((auth, req) => {
 
   const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
   const ownerEmails = getOwnerEmails();
+
+  let response = NextResponse.next();
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    response = NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  return NextResponse.next();
+  return response;
 });
 
 export const config = {
