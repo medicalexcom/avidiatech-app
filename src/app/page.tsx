@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { auth } from '@clerk/nextjs/server';
+
+export const dynamic = 'force-dynamic';
 
 const pillars = [
   {
@@ -25,7 +28,10 @@ const capabilities = [
   'Usage counters and quotas ready for metered billing and diagnostics.',
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth();
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -43,20 +49,24 @@ export default function Home() {
                 tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
               </p>
             </div>
+
+            {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
               <Link
-                href="/dashboard"
+                href={getStartedHref}
                 className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-              >
-                Open Dashboard
-              </Link>
-              <Link
-                href="/sign-up"
-                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
                 Get Started
               </Link>
+
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+              >
+                Open Dashboard
+              </Link>
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
@@ -66,6 +76,7 @@ export default function Home() {
               ))}
             </div>
           </div>
+
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
