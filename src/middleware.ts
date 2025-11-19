@@ -18,7 +18,10 @@ export default clerkMiddleware((auth, req) => {
 
   // ---- Require tenant context for API calls ----
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
-    const tenantId = req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
+    const tenantId =
+      req.headers.get('x-tenant-id') ||
+      req.nextUrl.searchParams.get('tenant_id');
+
     if (!tenantId) {
       return NextResponse.json(
         { error: 'Missing tenant context. Provide x-tenant-id or tenant_id.' },
@@ -28,7 +31,9 @@ export default clerkMiddleware((auth, req) => {
   }
 
   // ---- Owner header injection ----
-  const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
+  const normalizedEmail = normalizeEmail(
+    extractEmailFromSessionClaims(sessionClaims)
+  );
   const ownerEmails = getOwnerEmails();
 
   let response = NextResponse.next();
@@ -36,7 +41,10 @@ export default clerkMiddleware((auth, req) => {
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
-    response = NextResponse.next({ request: { headers: requestHeaders } });
+
+    response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
   }
 
   return response;
