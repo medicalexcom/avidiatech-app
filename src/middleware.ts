@@ -7,6 +7,13 @@ const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
 export default clerkMiddleware((auth, req) => {
+  // Call auth() only once to obtain user and session claims
+  const authResult = auth();
+  const { userId, sessionClaims } = authResult;
+
+  // Protected routes: require authentication
+  if (isProtectedRoute(req)) {
+    const maybeResponse = authResult.protect({ unauthenticatedUrl: signInUrl });
   // Call auth() only once
   const authResult = auth();
   const { userId, sessionClaims } = authResult;
