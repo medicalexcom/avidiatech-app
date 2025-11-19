@@ -7,20 +7,22 @@ const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
 export default clerkMiddleware((auth, req) => {
+  // Call auth() only once
   const authResult = auth();
   const { userId, sessionClaims } = authResult;
 
-  // ---- Protected Routes ----
+  // ---- Protected routes ----
   if (isProtectedRoute(req)) {
-    const response = authResult.protect({ unauthenticatedUrl: signInUrl });
-    if (response instanceof Response) return response;
+    const maybeResponse = authResult.protect({ unauthenticatedUrl: signInUrl });
+    // If protect() returns a Response, immediately return it
+    if (maybeResponse instanceof Response) {
+      return maybeResponse;
+    }
   }
 
   // ---- Require tenant context for API calls ----
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
-    const tenantId =
-      req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
-
+    const tenantId = req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
     if (!tenantId) {
       return NextResponse.json(
         { error: 'Missing tenant context. Provide x-tenant-id or tenant_id.' },
@@ -30,25 +32,23 @@ export default clerkMiddleware((auth, req) => {
   }
 
   // ---- Owner header injection ----
-  const normalizedEmail = normalizeEmail(
-    extractEmailFromSessionClaims(sessionClaims)
-  );
+  const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
   const ownerEmails = getOwnerEmails();
 
+  // Default response
   let response = NextResponse.next();
 
+  // If current user is in the list of owner emails, mark them as owner
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
-
-    response = NextResponse.next({
-      request: { headers: requestHeaders },
-    });
+    response = NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   return response;
 });
 
+// Exclude static assets from the middleware
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
