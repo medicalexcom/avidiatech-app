@@ -57,10 +57,10 @@ export default async function Home() {
                 Get Started
               </Link>
               <Link
-                href="/dashboard"
+                href="/sign-up"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
-                Open Dashboard
+                Get Started
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
