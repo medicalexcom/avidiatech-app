@@ -2,11 +2,12 @@ import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { getTenantContextForUser } from '@/lib/billing';
 import { HttpError } from '@/lib/errors';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SubscriptionPage() {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
 
   if (!userId) {
     redirect('/sign-in?redirect_url=/dashboard/subscription');
@@ -14,7 +15,8 @@ export default async function SubscriptionPage() {
 
   let context;
   try {
-    context = await getTenantContextForUser({ userId });
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
+    context = await getTenantContextForUser({ userId, userEmail });
   } catch (error) {
     if (error instanceof HttpError && error.status === 403) {
       redirect('/sign-in?redirect_url=/dashboard/subscription');

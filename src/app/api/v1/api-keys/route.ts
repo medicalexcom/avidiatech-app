@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
 import { HttpError } from '@/lib/errors';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 /**
  * API route for listing, creating and revoking API keys. Requires an
@@ -11,15 +12,17 @@ import { HttpError } from '@/lib/errors';
  * membership, optionally filtered by a provided tenant_id or x-tenant-id.
  */
 export async function GET(request: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     const context = await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
+      userEmail,
     });
 
     if (context.role === 'member') {
@@ -44,15 +47,17 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     const context = await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
+      userEmail,
     });
 
     if (context.role !== 'owner') {
@@ -96,15 +101,17 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     const context = await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
+      userEmail,
     });
 
     if (context.role !== 'owner') {
