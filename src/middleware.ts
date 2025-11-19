@@ -19,8 +19,7 @@ export default clerkMiddleware((auth, req) => {
   // ---- Require tenant context for API calls ----
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
     const tenantId =
-      req.headers.get('x-tenant-id') ||
-      req.nextUrl.searchParams.get('tenant_id');
+      req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
 
     if (!tenantId) {
       return NextResponse.json(
