@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { clerkClient } from '@clerk/nextjs/server';
 import { HttpError } from './errors';
+import { getOwnerEmails } from './env';
 import { getServiceSupabaseClient } from './supabase';
 
 export type TenantRole = 'owner' | 'admin' | 'member';
@@ -77,6 +79,22 @@ async function resolveTenantMembership(userId: string, requestedTenantId?: strin
     throw new HttpError(403, 'No tenant membership found for user.');
   }
   return { tenantId: membership.tenant_id, role: membership.role as TenantRole };
+}
+
+async function isOwnerEmail(userId: string): Promise<boolean> {
+  const configuredOwners = getOwnerEmails();
+  if (configuredOwners.length === 0) {
+    return false;
+  }
+
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    const normalizedEmails = user.emailAddresses?.map((item) => item.emailAddress.toLowerCase()) ?? [];
+    return normalizedEmails.some((email) => configuredOwners.includes(email));
+  } catch (error) {
+    console.error('Failed to fetch Clerk user while resolving owner emails', error);
+    return false;
+  }
 }
 
 async function fetchSubscription(tenantId: string): Promise<SubscriptionStatus> {
@@ -190,10 +208,11 @@ export async function getTenantContextForUser({
   const membership = await resolveTenantMembership(userId, requestedTenantId);
   const subscription = await fetchSubscription(membership.tenantId);
   const usage = await getOrCreateUsageRow(membership.tenantId);
+  const envOwner = await isOwnerEmail(userId);
 
   return {
     tenantId: membership.tenantId,
-    role: membership.role,
+    role: envOwner ? 'owner' : membership.role,
     subscription,
     usage,
   };

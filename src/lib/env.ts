@@ -17,3 +17,12 @@ export function getStripeSecretKey(): string | undefined {
 export function getClerkPublishableKey(): string | undefined {
   return readEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
 }
+
+export function getOwnerEmails(): string[] {
+  const raw = readEnv('OWNER_EMAILS');
+  if (!raw) return [];
+  return raw
+    .split(/[\s,]+/)
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+}
