@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 /**
  * Proxy endpoint for product ingestion.
@@ -12,17 +13,19 @@ import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from
  * `RENDER_ENGINE_AUTH_TOKEN` can be provided to authenticate with the engine.
  */
 export async function POST(req: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(req),
       feature: 'ingestion',
       increment: 1,
+      userEmail,
     });
 
     const { url } = await req.json();

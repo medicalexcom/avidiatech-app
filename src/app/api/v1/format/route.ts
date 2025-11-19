@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 /**
  * Endpoint to generate descriptions in different formats. Accepts a POST body
@@ -9,17 +10,19 @@ import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from
  * and returns the formatted description.
  */
 export async function POST(request: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
       feature: 'seo',
       increment: 1,
+      userEmail,
     });
 
     const body = await request.json();

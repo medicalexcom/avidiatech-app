@@ -1,5 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
+import { getOwnerEmails, normalizeEmail } from '@/lib/owners';
 
 const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 
@@ -14,6 +16,17 @@ export default clerkMiddleware((auth, req) => {
       return NextResponse.json({ error: 'Missing tenant context. Provide x-tenant-id or tenant_id.' }, { status: 400 });
     }
   }
+
+  const { userId, sessionClaims } = auth();
+  const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
+  const ownerEmails = getOwnerEmails();
+  if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set('x-avidia-owner', 'true');
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
+
+  return NextResponse.next();
 });
 
 export const config = {

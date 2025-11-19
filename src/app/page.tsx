@@ -51,6 +51,12 @@ export default function Home() {
             >
               Manage API keys
             </Link>
+            <Link
+              href="/sign-in"
+              className="rounded-lg border border-blue-200 px-5 py-3 text-blue-700 hover:bg-white"
+            >
+              Sign in / Sign up
+            </Link>
           </div>
         </section>
 
