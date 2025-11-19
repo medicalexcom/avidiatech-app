@@ -6,18 +6,15 @@ export const dynamic = 'force-dynamic';
 const pillars = [
   {
     title: 'Product data intelligence',
-    copy:
-      'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
+    copy: 'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
   },
   {
     title: 'Operational guardrails',
-    copy:
-      'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
+    copy: 'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
   },
   {
     title: 'Developer ergonomics',
-    copy:
-      'Next.js App Router, Clerk auth, and Supabase migrations ship with API stubs so engineers can plug in services fast.',
+    copy: 'Next.js App Router, Clerk auth, and Supabase migrations ship with API stubs so engineers can plug in services fast.',
   },
 ];
 
@@ -45,13 +42,13 @@ export default async function Home() {
                 AvidiaTech product data automation
               </h1>
               <p className="text-lg text-slate-200">
-                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase
-                tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
+                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
               </p>
             </div>
 
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
+              {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
               <Link
                 href={getStartedHref}
                 className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
@@ -59,6 +56,7 @@ export default async function Home() {
                 Get Started
               </Link>
 
+              {/* Static "Open Dashboard" button */}
               <Link
                 href="/dashboard"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
@@ -69,10 +67,7 @@ export default async function Home() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
-                <div
-                  key={item.title}
-                  className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner"
-                >
+                <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
                   <p className="text-sm font-semibold text-blue-200">{item.title}</p>
                   <p className="mt-2 text-sm text-slate-200">{item.copy}</p>
                 </div>
@@ -84,9 +79,7 @@ export default async function Home() {
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Secure access</span>
-                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
-                  Clerk live
-                </span>
+                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">Clerk live</span>
               </div>
               <div className="mt-4 space-y-3 text-slate-100">
                 <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
@@ -115,16 +108,12 @@ export default async function Home() {
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
               <p className="text-base text-slate-200">
-                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage
-                counters, and subscription checks that guard premium actions while still logging activity.
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage counters, and subscription checks that guard premium actions while still logging activity.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
               {capabilities.map((item) => (
-                <span
-                  key={item}
-                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15"
-                >
+                <span key={item} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15">
                   <span className="h-2 w-2 rounded-full bg-blue-400" />
                   {item}
                 </span>
