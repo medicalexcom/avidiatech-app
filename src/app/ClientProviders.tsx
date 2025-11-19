@@ -20,7 +20,7 @@ export default function ClientProviders({
 }: ClientProvidersProps) {
   const normalizedFrontendApi = frontendApi?.replace(/^https?:\/\//, '');
   const clerkJSUrl = normalizedFrontendApi
-    ? `https://${normalizedFrontendApi}/npm/@clerk/clerk-js@latest/dist/clerk.js`
+    ? `https://${normalizedFrontendApi}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`
     : undefined;
 
   return (
