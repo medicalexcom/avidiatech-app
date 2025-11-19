@@ -9,9 +9,10 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const { userId, sessionClaims } = auth();
+  const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
   if (!userId) {
-    redirect('/sign-in?redirect_url=/dashboard');
+    redirect(`${signInUrl}?redirect_url=/dashboard`);
   }
 
   let showSubscriptionBanner = false;
@@ -21,7 +22,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     showSubscriptionBanner = context.role !== 'owner' && !context.subscription.isActive;
   } catch (error) {
     if (error instanceof HttpError && error.status === 403) {
-      redirect('/sign-in?redirect_url=/dashboard');
+      redirect(`${signInUrl}?redirect_url=/dashboard`);
     }
     throw error;
   }
