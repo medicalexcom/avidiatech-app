@@ -1,6 +1,7 @@
 import './globals.css';
 import type { ReactNode } from 'react';
-import { ClerkProvider } from '@clerk/nextjs';
+import Providers from './providers';
+import { getClerkPublishableKey } from '@/lib/env';
 
 export const metadata = {
   title: 'Aviatech App',
@@ -8,11 +9,13 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const publishableKey = getClerkPublishableKey();
+
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body>
+        <Providers publishableKey={publishableKey}>{children}</Providers>
+      </body>
+    </html>
   );
 }

@@ -15,7 +15,7 @@ export function getStripeSecretKey(): string | undefined {
 }
 
 export function getClerkPublishableKey(): string | undefined {
-  return readEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
+  return readEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY') || readEnv('CLERK_PUBLISHABLE_KEY');
 }
 
 export function getOwnerEmails(): string[] {
