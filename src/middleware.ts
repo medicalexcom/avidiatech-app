@@ -7,25 +7,34 @@ const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
 export default clerkMiddleware((auth, req) => {
+  // Call auth() only once to obtain user and session claims
   const authResult = auth();
   const { userId, sessionClaims } = authResult;
 
+  // Protected routes: require authentication
   if (isProtectedRoute(req)) {
-    const response = authResult.protect({ unauthenticatedUrl: signInUrl });
-    if (response instanceof Response) return response;
-  }
-
-  if (req.nextUrl.pathname.startsWith('/api/v1')) {
-    const tenantId = req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
-    if (!tenantId) {
-      return NextResponse.json({ error: 'Missing tenant context. Provide x-tenant-id or tenant_id.' }, { status: 400 });
+    const maybeResponse = authResult.protect({ unauthenticatedUrl: signInUrl });
+    if (maybeResponse instanceof Response) {
+      return maybeResponse;
     }
   }
 
+  // Require tenant context for API calls
+  if (req.nextUrl.pathname.startsWith('/api/v1')) {
+    const tenantId = req.headers.get('x-tenant-id') || req.nextUrl.searchParams.get('tenant_id');
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: 'Missing tenant context. Provide x-tenant-id or tenant_id.' },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Owner header injection for users listed in OWNER_EMAILS
   const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
   const ownerEmails = getOwnerEmails();
-
   let response = NextResponse.next();
+
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-avidia-owner', 'true');
@@ -35,6 +44,7 @@ export default clerkMiddleware((auth, req) => {
   return response;
 });
 
+// Exclude static assets from the middleware
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
