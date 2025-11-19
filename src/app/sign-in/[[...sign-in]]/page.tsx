@@ -1,7 +1,9 @@
+'use client';
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
-import { SignIn } from '@clerk/nextjs';
+import { ClerkLoaded, ClerkLoading, SignIn } from '@clerk/nextjs';
 
 export default function SignInPage() {
   return (
@@ -22,17 +24,30 @@ export default function SignInPage() {
         </div>
         <div className="flex w-full items-center justify-center bg-white p-6 text-slate-900 md:w-1/2 md:p-10">
           <div className="w-full max-w-md">
-            <SignIn
-              path="/sign-in"
-              routing="path"
-              appearance={{
-                elements: {
-                  card: 'shadow-none',
-                  formButtonPrimary:
-                    'bg-slate-900 hover:bg-slate-800 active:bg-slate-900 text-sm font-medium',
-                },
-              }}
-            />
+            <ClerkLoading>
+              <div className="space-y-3 rounded-2xl border border-slate-200 p-6">
+                <div className="h-6 w-1/2 animate-pulse rounded bg-slate-200" />
+                <div className="space-y-2">
+                  <div className="h-10 w-full animate-pulse rounded bg-slate-200" />
+                  <div className="h-10 w-full animate-pulse rounded bg-slate-200" />
+                  <div className="h-10 w-full animate-pulse rounded bg-slate-200" />
+                </div>
+              </div>
+            </ClerkLoading>
+            <ClerkLoaded>
+              <SignIn
+                path="/sign-in"
+                routing="path"
+                signUpUrl="/sign-up"
+                appearance={{
+                  elements: {
+                    card: 'shadow-none',
+                    formButtonPrimary:
+                      'bg-slate-900 hover:bg-slate-800 active:bg-slate-900 text-sm font-medium',
+                  },
+                }}
+              />
+            </ClerkLoaded>
           </div>
         </div>
       </div>
