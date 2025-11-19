@@ -4,10 +4,14 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 import { getOwnerEmails, normalizeEmail } from '@/lib/owners';
 
 const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
+const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
 export default clerkMiddleware((auth, req) => {
+  const authResult = auth();
+  const { userId, sessionClaims } = authResult;
+
   if (isProtectedRoute(req)) {
-    auth().protect({ unauthenticatedUrl: '/sign-in' });
+    authResult.protect({ unauthenticatedUrl: signInUrl });
   }
 
   if (req.nextUrl.pathname.startsWith('/api/v1')) {
@@ -17,7 +21,6 @@ export default clerkMiddleware((auth, req) => {
     }
   }
 
-  const { userId, sessionClaims } = auth();
   const normalizedEmail = normalizeEmail(extractEmailFromSessionClaims(sessionClaims));
   const ownerEmails = getOwnerEmails();
   if (userId && normalizedEmail && ownerEmails.includes(normalizedEmail)) {

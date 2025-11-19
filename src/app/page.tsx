@@ -1,81 +1,121 @@
-import Link from "next/link";
+import Link from 'next/link';
+import { auth } from '@clerk/nextjs/server';
 
-const featureSections = [
+const pillars = [
   {
-    title: "Product data intelligence",
-    items: [
-      "Centralized dashboard for extraction, descriptions, and SEO formatting",
-      "Variants, specs, and document handling to keep catalogs consistent",
-      "Image insights, clustering, and translation workflows in one place",
-    ],
+    title: 'Product data intelligence',
+    copy:
+      'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
   },
   {
-    title: "Operational readiness",
-    items: [
-      "Bulk import, validation, and feed monitoring for stable releases",
-      "Usage analytics with guardrails for quotas and team visibility",
-      "Role-based access for organization, roles, and API key management",
-    ],
+    title: 'Operational guardrails',
+    copy:
+      'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
   },
   {
-    title: "Developer tooling",
-    items: [
-      "Versioned APIs for formatting and browser automation endpoints",
-      "Proxy and API route stubs ready for service integrations",
-      "Supabase migration scripts for teams, usage counters, and keys",
-    ],
+    title: 'Developer ergonomics',
+    copy:
+      'Next.js App Router, Clerk auth, and Supabase migrations ship with API stubs so engineers can plug in services fast.',
   },
 ];
 
-export default function Home() {
+const capabilities = [
+  'Centralized dashboard for analytics, imports, feeds, and automation.',
+  'Role-based access with owner overrides and subscription gating baked in.',
+  'Translation, clustering, and variant workflows that keep catalogs consistent.',
+  'Usage counters and quotas ready for metered billing and diagnostics.',
+];
+
+export default async function Home() {
+  const { userId } = await auth();
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
+
   return (
-    <main className="min-h-screen bg-gray-50 px-6 py-16 text-gray-900">
-      <div className="mx-auto max-w-5xl space-y-12">
-        <section className="space-y-4 text-center">
-          <p className="text-sm font-semibold text-blue-600">Phase 1 delivery</p>
-          <h1 className="text-4xl font-bold sm:text-5xl">AvidiaTech Product Automation</h1>
-          <p className="text-lg text-gray-600">
-            A cohesive Next.js + Clerk starter that wires together the dashboard shell,
-            core product data workflows, and Supabase migrations so the team can ship.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              href="/dashboard"
-              className="rounded-lg bg-blue-600 px-5 py-3 text-white shadow hover:bg-blue-700"
-            >
-              Open dashboard
-            </Link>
-            <Link
-              href="/dashboard/api-keys"
-              className="rounded-lg border border-gray-300 px-5 py-3 text-gray-800 hover:bg-white"
-            >
-              Manage API keys
-            </Link>
+    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
+      <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
+        <section className="grid items-center gap-10 lg:grid-cols-2">
+          <div className="space-y-6">
+            <p className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-semibold text-blue-200 ring-1 ring-white/10">
+              Secured by Clerk • Subscription ready
+            </p>
+            <div className="space-y-4">
+              <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
+                AvidiaTech product data automation
+              </h1>
+              <p className="text-lg text-slate-200">
+                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase
+                tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+              >
+                Open Dashboard
+              </Link>
+              <Link
+                href={getStartedHref}
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+              >
+                Get Started
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {pillars.map((item) => (
+                <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
+                  <p className="text-sm font-semibold text-blue-200">{item.title}</p>
+                  <p className="mt-2 text-sm text-slate-200">{item.copy}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
+            <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
+              <div className="flex items-center justify-between text-sm text-slate-300">
+                <span>Secure access</span>
+                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">Clerk live</span>
+              </div>
+              <div className="mt-4 space-y-3 text-slate-100">
+                <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-sm text-slate-200">Tenant-aware dashboard</span>
+                  <span className="text-xs text-blue-200">Protected</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-sm text-slate-200">Usage + quotas</span>
+                  <span className="text-xs text-blue-200">Metered</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-sm text-slate-200">Owner overrides</span>
+                  <span className="text-xs text-emerald-200">Unlimited</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                  <span className="text-sm text-slate-200">Stripe billing</span>
+                  <span className="text-xs text-amber-200">Upgrade ready</span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-2xl bg-white p-8 shadow sm:grid-cols-2 lg:grid-cols-3">
-          {featureSections.map((section) => (
-            <div key={section.title} className="space-y-3">
-              <h2 className="text-xl font-semibold text-gray-900">{section.title}</h2>
-              <ul className="space-y-2 text-gray-700">
-                {section.items.map((item) => (
-                  <li key={item} className="flex gap-2">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-blue-500" aria-hidden />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-inner">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-3xl space-y-2">
+              <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
+              <p className="text-base text-slate-200">
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage
+                counters, and subscription checks that guard premium actions while still logging activity.
+              </p>
             </div>
-          ))}
-        </section>
-
-        <section className="rounded-2xl bg-blue-50 p-8 text-center">
-          <h2 className="text-2xl font-semibold text-gray-900">Ready for rollout</h2>
-          <p className="mt-2 text-gray-700">
-            Sign in with Clerk, explore the dashboard navigation, and plug in your service
-            integrations to activate formatting, monitoring, and subscription flows.
-          </p>
+            <div className="flex flex-wrap gap-3 text-sm text-slate-200">
+              {capabilities.map((item) => (
+                <span key={item} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15">
+                  <span className="h-2 w-2 rounded-full bg-blue-400" />
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
         </section>
       </div>
     </main>
