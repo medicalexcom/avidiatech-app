@@ -45,7 +45,6 @@ export default async function Home() {
                 Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
               </p>
             </div>
-
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
               {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
@@ -55,7 +54,6 @@ export default async function Home() {
               >
                 Get Started
               </Link>
-
               {/* Static "Open Dashboard" button */}
               <Link
                 href="/dashboard"
@@ -64,7 +62,6 @@ export default async function Home() {
                 Open Dashboard
               </Link>
             </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
@@ -74,7 +71,6 @@ export default async function Home() {
               ))}
             </div>
           </div>
-
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -102,7 +98,6 @@ export default async function Home() {
             </div>
           </div>
         </section>
-
         <section className="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-inner">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl space-y-2">
