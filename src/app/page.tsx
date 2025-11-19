@@ -40,7 +40,6 @@ export default async function Home() {
             <p className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-semibold text-blue-200 ring-1 ring-white/10">
               Secured by Clerk • Subscription ready
             </p>
-
             <div className="space-y-4">
               <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
                 AvidiaTech product data automation
@@ -61,10 +60,10 @@ export default async function Home() {
               </Link>
 
               <Link
-                href={userId ? '/dashboard' : '/sign-up'}
+                href="/dashboard"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
-                {userId ? 'Open Dashboard' : 'Create Account'}
+                Open Dashboard
               </Link>
             </div>
 
@@ -85,9 +84,10 @@ export default async function Home() {
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Secure access</span>
-                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">Clerk live</span>
+                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
+                  Clerk live
+                </span>
               </div>
-
               <div className="mt-4 space-y-3 text-slate-100">
                 <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
                   <span className="text-sm text-slate-200">Tenant-aware dashboard</span>
@@ -115,8 +115,8 @@ export default async function Home() {
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
               <p className="text-base text-slate-200">
-                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules,
-                usage counters, and subscription checks that guard premium actions while still logging activity.
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage
+                counters, and subscription checks that guard premium actions while still logging activity.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
