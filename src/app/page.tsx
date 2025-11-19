@@ -40,6 +40,7 @@ export default async function Home() {
             <p className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-semibold text-blue-200 ring-1 ring-white/10">
               Secured by Clerk • Subscription ready
             </p>
+
             <div className="space-y-4">
               <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
                 AvidiaTech product data automation
@@ -58,17 +59,21 @@ export default async function Home() {
               >
                 Get Started
               </Link>
+
               <Link
-                href="/dashboard"
+                href={userId ? '/dashboard' : '/sign-up'}
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
-                Open Dashboard
+                {userId ? 'Open Dashboard' : 'Create Account'}
               </Link>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
-                <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner"
+                >
                   <p className="text-sm font-semibold text-blue-200">{item.title}</p>
                   <p className="mt-2 text-sm text-slate-200">{item.copy}</p>
                 </div>
@@ -82,6 +87,7 @@ export default async function Home() {
                 <span>Secure access</span>
                 <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">Clerk live</span>
               </div>
+
               <div className="mt-4 space-y-3 text-slate-100">
                 <div className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
                   <span className="text-sm text-slate-200">Tenant-aware dashboard</span>
@@ -109,13 +115,16 @@ export default async function Home() {
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
               <p className="text-base text-slate-200">
-                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage
-                counters, and subscription checks that guard premium actions while still logging activity.
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules,
+                usage counters, and subscription checks that guard premium actions while still logging activity.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
               {capabilities.map((item) => (
-                <span key={item} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15">
+                <span
+                  key={item}
+                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15"
+                >
                   <span className="h-2 w-2 rounded-full bg-blue-400" />
                   {item}
                 </span>
