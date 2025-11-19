@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 /**
  * Endpoint for bulk file uploads. Accepts multipart/form-data with a single
@@ -8,17 +9,19 @@ import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from
  * implemented to handle parsing of CSV/XLSX files and queuing ingestion jobs.
  */
 export async function POST(request: Request) {
-  const { userId } = auth();
+  const { userId, sessionClaims } = auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    const userEmail = extractEmailFromSessionClaims(sessionClaims);
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
       feature: 'variants',
       increment: 1,
+      userEmail,
     });
 
     if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {

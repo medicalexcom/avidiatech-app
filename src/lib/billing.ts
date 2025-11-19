@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { clerkClient } from '@clerk/nextjs/server';
 import { HttpError } from './errors';
 import { getServiceSupabaseClient } from './supabase';
+import { getOwnerEmails, normalizeEmail } from './owners';
 
 export type TenantRole = 'owner' | 'admin' | 'member';
 export type UsageFeature = 'ingestion' | 'seo' | 'variants' | 'match';
@@ -41,6 +43,32 @@ export interface TenantContext {
   role: TenantRole;
   subscription: SubscriptionStatus;
   usage: UsageSnapshot;
+}
+
+async function resolveOwnerOverride(userId: string, userEmail?: string): Promise<boolean> {
+  const ownerEmails = getOwnerEmails();
+  if (ownerEmails.length === 0) {
+    return false;
+  }
+
+  const normalizedEmail = normalizeEmail(userEmail);
+  if (normalizedEmail) {
+    return ownerEmails.includes(normalizedEmail);
+  }
+
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    const primary =
+      normalizeEmail(user.primaryEmailAddress?.emailAddress) ||
+      normalizeEmail(user.emailAddresses?.[0]?.emailAddress);
+    if (!primary) {
+      return false;
+    }
+    return ownerEmails.includes(primary);
+  } catch (error) {
+    console.error('Failed to resolve owner override', error);
+    return false;
+  }
 }
 
 function isSubscriptionActive(status: string | null | undefined): boolean {
@@ -183,17 +211,22 @@ async function incrementUsage(usage: UsageSnapshot, feature: UsageFeature, amoun
 export async function getTenantContextForUser({
   userId,
   requestedTenantId,
+  userEmail,
 }: {
   userId: string;
   requestedTenantId?: string;
+  userEmail?: string;
 }): Promise<TenantContext> {
   const membership = await resolveTenantMembership(userId, requestedTenantId);
   const subscription = await fetchSubscription(membership.tenantId);
   const usage = await getOrCreateUsageRow(membership.tenantId);
+  const hasOwnerOverride =
+    membership.role === 'owner' ? true : await resolveOwnerOverride(userId, userEmail);
+  const role: TenantRole = hasOwnerOverride ? 'owner' : membership.role;
 
   return {
     tenantId: membership.tenantId,
-    role: membership.role,
+    role,
     subscription,
     usage,
   };
@@ -204,13 +237,15 @@ export async function requireSubscriptionAndUsage({
   requestedTenantId,
   feature,
   increment = 1,
+  userEmail,
 }: {
   userId: string;
   requestedTenantId?: string;
   feature?: UsageFeature;
   increment?: number;
+  userEmail?: string;
 }): Promise<TenantContext> {
-  const context = await getTenantContextForUser({ userId, requestedTenantId });
+  const context = await getTenantContextForUser({ userId, requestedTenantId, userEmail });
   const isOwner = context.role === 'owner';
 
   if (!isOwner && !context.subscription.isActive) {
