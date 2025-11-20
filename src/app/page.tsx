@@ -1,19 +1,26 @@
-
 import Link from 'next/link';
 
+// Import Clerk's server-side auth helper. This lets us check if a user
+// is authenticated when rendering the home page. If a user is signed in,
+// we'll send them straight to the dashboard; otherwise we'll prompt
+// them to sign up.
+import { auth } from '@clerk/nextjs/server';
 
-
-
+// Tell Next.js that this page is always dynamically rendered. Without
+// this flag, the page could be statically generated at build time and
+// wouldn't be able to check the current auth state.
 export const dynamic = 'force-dynamic';
 
+// Marketing copy for the three product pillars displayed on the landing
+// page. Keeping these in an array makes the JSX cleaner below.
 const pillars = [
   {
     title: 'Product data intelligence',
-    copy: 'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
+    copy: 'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO‑ready content.',
   },
   {
     title: 'Operational guardrails',
-    copy: 'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
+    copy: 'Tenant‑aware access, usage metering, and Stripe‑ready subscription states keep teams aligned on limits and rollout.',
   },
   {
     title: 'Developer ergonomics',
@@ -21,15 +28,21 @@ const pillars = [
   },
 ];
 
+// Additional feature bullets shown near the bottom of the page.
 const capabilities = [
   'Centralized dashboard for analytics, imports, feeds, and automation.',
-  'Role-based access with owner overrides and subscription gating baked in.',
+  'Role‑based access with owner overrides and subscription gating baked in.',
   'Translation, clustering, and variant workflows that keep catalogs consistent.',
   'Usage counters and quotas ready for metered billing and diagnostics.',
 ];
 
+// The main landing page component. Because it's async, we can await
+// Clerk's auth() call to determine whether a user is signed in. That
+// allows us to set the "Get Started" link dynamically: guests go to
+// /sign‑up, whereas authenticated users go straight to /dashboard.
 export default async function Home() {
- const getStartedHref = '/sign-up';
+  const { userId } = await auth();
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
