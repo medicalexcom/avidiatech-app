@@ -8,7 +8,7 @@ import { HttpError } from '@/lib/errors';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
   if (!userId) {

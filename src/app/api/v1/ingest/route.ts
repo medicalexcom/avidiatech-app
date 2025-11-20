@@ -13,7 +13,7 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
  * `RENDER_ENGINE_AUTH_TOKEN` can be provided to authenticate with the engine.
  */
 export async function POST(req: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

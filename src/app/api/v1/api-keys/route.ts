@@ -12,7 +12,7 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
  * membership, optionally filtered by a provided tenant_id or x-tenant-id.
  */
 export async function GET(request: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

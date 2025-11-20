@@ -10,7 +10,7 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
  * and returns the formatted description.
  */
 export async function POST(request: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

@@ -12,9 +12,9 @@ export function isClerkConfigured(): boolean {
 
 /**
  * Wrapper around Clerk's auth() that returns null values when Clerk is not configured
- * instead of throwing an error.
+ * instead of throwing an error. Must be awaited in async server components.
  */
-export function auth() {
+export async function auth() {
   if (!isClerkConfigured()) {
     return {
       userId: null,
@@ -30,7 +30,7 @@ export function auth() {
     };
   }
   
-  return clerkAuth();
+  return await clerkAuth();
 }
 
 /**
