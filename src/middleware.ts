@@ -6,6 +6,7 @@ import { getOwnerEmails, normalizeEmail } from '@/lib/owners';
 const isProtectedRoute = createRouteMatcher(['/dashboard(.*)', '/api/v1/(.*)']);
 const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 export default clerkMiddleware((auth, req) => {
   const authResult = auth();
   const { userId, sessionClaims } = authResult;

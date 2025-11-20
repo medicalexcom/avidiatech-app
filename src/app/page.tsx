@@ -1,4 +1,5 @@
-import Link from 'next/link';
+src/app/page.tsx
+iimport Link from 'next/link//
 import { auth } from '@clerk/nextjs/server';
 
 export const dynamic = 'force-dynamic';
@@ -26,8 +27,7 @@ const capabilities = [
 ];
 
 export default async function Home() {
-  const { userId } = await auth();
-  const getStartedHref = userId ? '/dashboard' : '/sign-up';
+  const//// getStartedHref = '/sign-up';
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
