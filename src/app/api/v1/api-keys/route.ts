@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/lib/clerk-server';
 import { NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import { getServiceSupabaseClient } from '@/lib/supabase';

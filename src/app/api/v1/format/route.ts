@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/lib/clerk-server';
 import { NextResponse } from 'next/server';
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from '@/lib/billing';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';

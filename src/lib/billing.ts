@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { clerkClient } from '@clerk/nextjs/server';
+import { clerkClient } from '@/lib/clerk-server';
 import { HttpError } from './errors';
 import { getServiceSupabaseClient } from './supabase';
 import { getOwnerEmails, normalizeEmail } from './owners';

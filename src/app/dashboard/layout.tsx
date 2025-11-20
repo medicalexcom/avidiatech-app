@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/lib/clerk-server';
 import TopNav from '@/components/TopNav';
 import Sidebar from '@/components/Sidebar';
 import { getTenantContextForUser } from '@/lib/billing';
