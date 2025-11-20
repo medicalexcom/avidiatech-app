@@ -1,8 +1,6 @@
 import Link from 'next/link';
-import { auth } from '@/lib/clerk-server';
 
-export const dynamic = 'force-dynamic';
-
+// Static data for the landing page
 const pillars = [
   {
     title: 'Product data intelligence',
@@ -25,10 +23,12 @@ const capabilities = [
   'Usage counters and quotas ready for metered billing and diagnostics.',
 ];
 
-export default async function Home() {
-  const { userId } = await auth();
-  const getStartedHref = userId ? '/dashboard' : '/sign-up';
-
+/**
+ * Landing page - Pure server component without any dynamic API calls.
+ * No auth(), headers(), cookies(), or other dynamic APIs to ensure compatibility with Next.js 16.
+ * The middleware handles authentication, so this page can be fully static.
+ */
+export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -47,14 +47,14 @@ export default async function Home() {
             </div>
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
-              {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
+              {/* Get Started button - links to sign-up, middleware handles redirects for signed-in users */}
               <Link
-                href={getStartedHref}
+                href="/sign-up"
                 className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
               >
                 Get Started
               </Link>
-              {/* Static "Open Dashboard" button */}
+              {/* Dashboard button - middleware will redirect to sign-in if not authenticated */}
               <Link
                 href="/dashboard"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
