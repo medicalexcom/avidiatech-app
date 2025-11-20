@@ -13,10 +13,13 @@ export function isClerkConfigured(): boolean {
 /**
  * Wrapper around Clerk's auth() that returns null values when Clerk is not configured
  * instead of throwing an error. Must be awaited in async server components.
+ * 
+ * In Next.js 16, Clerk's auth() properly handles the async nature of headers() and other dynamic APIs.
  */
-export async function auth() {
+export function auth() {
   if (!isClerkConfigured()) {
-    return {
+    // Return a Promise to maintain consistent async interface
+    return Promise.resolve({
       userId: null,
       sessionId: null,
       sessionClaims: null,
@@ -27,10 +30,11 @@ export async function auth() {
       protect: () => {
         throw new Error('Clerk is not configured. Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to enable authentication.');
       },
-    };
+    });
   }
   
-  return await clerkAuth();
+  // Return Clerk's auth() directly - it handles async headers() internally in Next.js 16
+  return clerkAuth();
 }
 
 /**
