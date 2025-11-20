@@ -13,6 +13,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
   if (!userId) {
+   
     redirect(`${signInUrl}?redirect_url=/dashboard`);
   }
 

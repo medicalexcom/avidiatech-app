@@ -27,7 +27,7 @@ const capabilities = [
 ];
 
 export default async function Home() {
-  const//// getStartedHref = '/sign-up';
+ const getStartedHref = '/sign-up';
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
