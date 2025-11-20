@@ -1,6 +1,9 @@
 src/app/page.tsx
-iimport Link from 'next/link//
-import { auth } from '@clerk/nextjs/server';
+import Link from 'next/link';
+
+
+
+
 
 export const dynamic = 'force-dynamic';
 
