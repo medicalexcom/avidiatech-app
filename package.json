@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.0.0",
+    "@clerk/nextjs": "^6.31.9",
     "@supabase/supabase-js": "^2.81.1",
     "autoprefixer": "^10.4.16",
     "next": "latest",
