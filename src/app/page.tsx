@@ -1,5 +1,6 @@
 
 import Link from 'next/link';
+import { auth } from '@clerk/nextjs/server';
 
 
 
@@ -29,7 +30,12 @@ const capabilities = [
 ];
 
 export default async function Home() {
- const getStartedHref = '/sign-up';
+  const { userId } = await auth();
+  
+  // For signed-in users, both buttons go to dashboard
+  // For signed-out users: Get Started goes to sign-up, Open Dashboard goes to sign-in with redirect
+  const getStartedHref = userId ? '/dashboard' : '/sign-up';
+  const openDashboardHref = userId ? '/dashboard' : '/sign-in?redirect_url=/dashboard';
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
@@ -58,7 +64,7 @@ export default async function Home() {
               </Link>
               {/* Static "Open Dashboard" button */}
               <Link
-                href="/dashboard"
+                href={openDashboardHref}
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
                 Open Dashboard
