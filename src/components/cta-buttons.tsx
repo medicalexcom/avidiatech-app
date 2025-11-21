@@ -4,11 +4,34 @@ import { SignInButton, SignUpButton, SignedIn, SignedOut } from '@clerk/nextjs';
 import Link from 'next/link';
 
 export function CTAButtons() {
+  // Determine if Clerk is configured (if publishable key is defined)
+  const clerkEnabled = typeof process !== 'undefined' && !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  if (!clerkEnabled) {
+    // Fallback buttons when Clerk is not configured
+    return (
+      <div className="flex flex-wrap items-center gap-4">
+        <Link
+          href="/sign-up"
+          className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50"
+        >
+          Get Started
+        </Link>
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-5 py-3 font-medium text-white hover:border-white/20 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50"
+        >
+          Open Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-4">
       <SignedOut>
         <SignUpButton mode="modal" forceRedirectUrl="/dashboard" fallbackRedirectUrl="/dashboard">
-          <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
+          <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50">
             Get Started
           </button>
         </SignUpButton>
@@ -19,22 +42,21 @@ export function CTAButtons() {
           signUpForceRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/dashboard"
         >
-          <button className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5">
+          <button className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-5 py-3 font-medium text-white hover:border-white/20 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50">
             Open Dashboard
           </button>
         </SignInButton>
       </SignedOut>
-
       <SignedIn>
         <Link
           href="/dashboard"
-          className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+          className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50"
         >
           Get Started
         </Link>
         <Link
           href="/dashboard"
-          className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+          className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-5 py-3 font-medium text-white hover:border-white/20 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 focus-visible:ring-opacity-50"
         >
           Open Dashboard
         </Link>
