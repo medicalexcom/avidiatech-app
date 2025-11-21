@@ -25,19 +25,21 @@ export default async function TrialSetupPage() {
 
   // Check if user already has a tenant
   const supabase = getServiceSupabaseClient();
-  const { data: existingMembership } = await supabase
+  const { data: existingMembership, error: membershipCheckError } = await supabase
     .from('team_members')
     .select('tenant_id')
     .eq('user_id', userId)
-    .limit(1);
+    .maybeSingle();
 
-  if (existingMembership && existingMembership.length > 0) {
+  if (existingMembership) {
     // User already has a tenant, redirect to dashboard
     redirect('/dashboard');
   }
 
   // Create a new tenant for the user
-  const tenantName = userEmail.split('@')[0] + "'s Workspace";
+  // Sanitize email to create a safe tenant name
+  const emailUsername = userEmail.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '');
+  const tenantName = emailUsername ? `${emailUsername}'s Workspace` : 'My Workspace';
   const { data: newTenant, error: tenantError } = await supabase
     .from('tenants')
     .insert({
@@ -81,7 +83,7 @@ export default async function TrialSetupPage() {
 
   // Create Stripe checkout session
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  const checkoutUrl = `${appUrl}/api/create-checkout-session?tenant_id=${newTenant.id}&user_email=${encodeURIComponent(userEmail)}`;
+  const checkoutUrl = `${appUrl}/api/create-checkout-session?tenant_id=${newTenant.id}`;
 
   // Redirect to the API route that will create the checkout session
   redirect(checkoutUrl);

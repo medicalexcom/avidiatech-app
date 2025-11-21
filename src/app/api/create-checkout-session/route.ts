@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import Stripe from 'stripe';
 import { getServiceSupabaseClient } from '@/lib/supabase';
+import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export async function GET(request: NextRequest) {
-  const { userId } = await auth();
+  const { userId, sessionClaims } = await auth();
 
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -12,10 +13,15 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const tenantId = searchParams.get('tenant_id');
-  const userEmail = searchParams.get('user_email');
 
-  if (!tenantId || !userEmail) {
-    return NextResponse.json({ error: 'Missing tenant_id or user_email' }, { status: 400 });
+  if (!tenantId) {
+    return NextResponse.json({ error: 'Missing tenant_id' }, { status: 400 });
+  }
+
+  // Get user email from session claims
+  const userEmail = extractEmailFromSessionClaims(sessionClaims);
+  if (!userEmail) {
+    return NextResponse.json({ error: 'Unable to retrieve user email' }, { status: 400 });
   }
 
   // Initialize Stripe
