@@ -26,21 +26,21 @@ jobs:
           echo "zip=$ZIP" >> $GITHUB_OUTPUT
           echo "Using ZIP: $ZIP"
 
-      - name: Install unzip and rsync
+      - name: Install requirements
         run: sudo apt-get update && sudo apt-get install -y unzip rsync
 
       - name: Extract ZIP
         run: |
           mkdir -p extracted
           unzip "${{ steps.findzip.outputs.zip }}" -d extracted
-          echo "Extracted folders:"
+          echo "Extracted content:"
           ls -R extracted
 
       - name: Detect real root folder (ignore __MACOSX)
         id: root
         run: |
           ITEMS=$(ls extracted | grep -v "__MACOSX")
-          echo "ZIP top-level items: $ITEMS"
+
           COUNT=$(echo "$ITEMS" | wc -w)
 
           if [ $COUNT -eq 1 ] && [ -d "extracted/$ITEMS" ]; then
@@ -49,20 +49,24 @@ jobs:
             ROOT="extracted"
           fi
 
-          echo "Using root folder: $ROOT"
+          echo "Using root: $ROOT"
           echo "root=$ROOT" >> $GITHUB_OUTPUT
 
       - name: Clean repo except .git and .github
         run: |
-          shopt -s extglob dotglob
-          rm -rf !(.git|.github)
+          echo "Cleaning repo..."
+          find . -mindepth 1 -maxdepth 1 \
+            -not -name '.git' \
+            -not -name '.github' \
+            -exec rm -rf {} +
+          echo "Cleanup complete"
 
-      - name: Copy extracted contents into repo
+      - name: Copy extracted contents
         run: |
           ROOT="${{ steps.root.outputs.root }}"
           echo "Copying from: $ROOT"
           rsync -av --exclude="__MACOSX" "$ROOT"/ ./ 
-          echo "Copy complete."
+          echo "Copy finished."
 
       - name: Commit & push
         run: |
