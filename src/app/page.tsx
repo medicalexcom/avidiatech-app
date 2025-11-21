@@ -1,5 +1,5 @@
 
-import Link from 'next/link';
+import { CTAButtons } from '@/components/cta-buttons';
 
 
 
@@ -29,8 +29,6 @@ const capabilities = [
 ];
 
 export default async function Home() {
- const getStartedHref = '/sign-up';
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -48,22 +46,7 @@ export default async function Home() {
               </p>
             </div>
             {/* CTA buttons */}
-            <div className="flex flex-wrap items-center gap-4">
-              {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
-              <Link
-                href={getStartedHref}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-              >
-                Get Started
-              </Link>
-              {/* Static "Open Dashboard" button */}
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
-              >
-                Open Dashboard
-              </Link>
-            </div>
+            <CTAButtons />
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
