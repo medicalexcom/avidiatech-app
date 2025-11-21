@@ -12,10 +12,10 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repo
+      - name: Checkout the repo
         uses: actions/checkout@v4
 
-      - name: Find ZIP
+      - name: Find latest ZIP
         id: findzip
         run: |
           ZIP=$(ls -t updates/*.zip | head -n 1)
@@ -32,44 +32,42 @@ jobs:
           echo "Extracted content:"
           ls -R extracted
 
-      - name: Determine real root automatically
-        id: getroot
+      - name: Determine real root folder (ignore __MACOSX)
+        id: root
         run: |
-          # List folders and files excluding __MACOSX and hidden items
-          ITEMS=$(find extracted -mindepth 1 -maxdepth 1 \
-            -not -name "__MACOSX" \
-            -not -name ".*" \
-            -not -name "__MACOSX*" \
-            )
+          # list top-level entries except __MACOSX
+          ITEMS=$(ls extracted | grep -v "__MACOSX")
+          echo "Top-level items: $ITEMS"
 
-          echo "Detected top-level items:"
-          echo "$ITEMS"
+          # If exactly 1, use that folder
+          COUNT=$(echo "$ITEMS" | wc -w)
 
-          COUNT=$(echo "$ITEMS" | wc -l)
-
-          # If exactly one folder → treat as root
-          if [ $COUNT -eq 1 ] && [ -d "$ITEMS" ]; then
-            ROOT="$ITEMS"
+          if [ $COUNT -eq 1 ] && [ -d "extracted/$ITEMS" ]; then
+            ROOT="extracted/$ITEMS"
           else
             ROOT="extracted"
           fi
 
-          echo "Using ROOT = $ROOT"
+          echo "Detected root = $ROOT"
           echo "root=$ROOT" >> $GITHUB_OUTPUT
 
-      - name: Clean repo (keep .git & .github)
+      - name: Clean repo (except .git and .github)
         run: |
           shopt -s extglob
           rm -rf !(.git|.github)
 
-      - name: Copy extracted content
+      - name: Copy extracted project content into repo root
         run: |
-          ROOT="${{ steps.getroot.outputs.root }}"
-          echo "Copying from $ROOT..."
-          cp -R "$ROOT"/. .
+          ROOT="${{ steps.root.outputs.root }}"
+          echo "Copying from: $ROOT"
+
+          # THIS IS THE SAFE COPY COMMAND
+          # copies *all* files, including hidden ones
+          rsync -av --exclude="__MACOSX" "$ROOT"/ ./ 
+
           echo "Copy finished."
 
-      - name: Commit & push
+      - name: Commit and push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
