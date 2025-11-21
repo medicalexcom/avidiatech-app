@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
-import TopNav from '@/components/TopNav';
+import TopNavClient from '@/components/TopNavClient';
 import Sidebar from '@/components/Sidebar';
 import { getTenantContextForUser } from '@/lib/billing';
 import { HttpError } from '@/lib/errors';
@@ -34,7 +34,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopNav />
+      <TopNavClient />
       {showSubscriptionBanner && (
         <div className="bg-amber-100 text-amber-900 px-6 py-3 text-sm border-b border-amber-200">
           Your subscription is inactive. Please update billing to restore full access.
