@@ -2,6 +2,7 @@
 
 ## Environment setup
 
+This project expects the Clerk, Supabase, and Stripe credentials to be available at build and runtime. The deployment is already configured with these values in Vercel, and the app reads them from `process.env` at runtime.
 This project expects the Clerk, Supabase, and Stripe credentials to be available at build and runtime. Configure the variables in both Vercel **and** your local `.env.local` when running the app outside Vercel.
 
 Required keys:
@@ -14,6 +15,11 @@ Required keys:
 
 ### Local development
 
+Use `vercel dev` to mirror the Vercel environment when running locally, or export the needed variables in your shell before starting the app:
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=... CLERK_SECRET_KEY=... npm run dev
+```
 1. Copy `.env.example` to `.env.local` and paste your secrets.
 2. Run `npm run dev` to start the app with Clerk authentication wired.
 
