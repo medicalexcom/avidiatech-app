@@ -37,13 +37,16 @@ export default async function TrialSetupPage() {
   }
 
   // Create a new tenant for the user
-  // Sanitize email to create a safe tenant name
+  // Sanitize email to create a safe tenant name - only allow alphanumeric, underscore, hyphen
   const emailUsername = userEmail.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '');
-  const tenantName = emailUsername ? `${emailUsername}'s Workspace` : 'My Workspace';
+  // Use a default name if sanitization results in empty string
+  const safeTenantName = emailUsername && emailUsername.length > 0 
+    ? `${emailUsername.substring(0, 50)}'s Workspace` 
+    : 'My Workspace';
   const { data: newTenant, error: tenantError } = await supabase
     .from('tenants')
     .insert({
-      name: tenantName,
+      name: safeTenantName,
       owner_email: userEmail,
     })
     .select('id')
