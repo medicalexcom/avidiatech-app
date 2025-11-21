@@ -1,6 +1,6 @@
 import './globals.css';
-import { ReactNode } from 'react';
-import { ClerkProvider } from '@clerk/nextjs';
+import type { ReactNode } from 'react';
+import Providers from './providers';
 
 export const metadata = {
   title: 'AvidiaTech | Product Data Automation',
@@ -13,10 +13,10 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
 }
