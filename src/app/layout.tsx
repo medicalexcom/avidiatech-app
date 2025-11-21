@@ -11,7 +11,7 @@ export const metadata = {
   }
 };
 
-// Prevent static generation to avoid useContext errors with Clerk
+// Prevent static generation to avoid useContext errors with Clerk during build
 export const dynamic = 'force-dynamic';
 
 export default function RootLayout({ children }: { children: ReactNode }) {
