@@ -1,6 +1,6 @@
 import './globals.css';
 import { ReactNode } from 'react';
-import Providers from './providers';
+import { ClerkProvider } from '@clerk/nextjs';
 
 export const metadata = {
   title: 'AvidiaTech | Product Data Automation',
@@ -11,15 +11,12 @@ export const metadata = {
   }
 };
 
-// Prevent static generation to avoid useContext errors with Clerk during build
-export const dynamic = 'force-dynamic';
-
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }
