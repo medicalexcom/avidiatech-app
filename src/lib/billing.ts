@@ -57,7 +57,8 @@ async function resolveOwnerOverride(userId: string, userEmail?: string): Promise
   }
 
   try {
-    const user = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();  // ✅ Changed: clerkClient is now a function
+    const user = await client.users.getUser(userId);  // ✅ Use client instance
     const primary =
       normalizeEmail(user.primaryEmailAddress?.emailAddress) ||
       normalizeEmail(user.emailAddresses?.[0]?.emailAddress);
