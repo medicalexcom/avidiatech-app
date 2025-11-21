@@ -20,6 +20,7 @@ jobs:
         run: |
           ZIP_FILE=$(ls -t updates/*.zip | head -n 1)
           echo "zip=$ZIP_FILE" >> $GITHUB_OUTPUT
+          echo "Using ZIP: $ZIP_FILE"
 
       - name: Install unzip
         run: sudo apt-get install unzip
@@ -28,20 +29,35 @@ jobs:
         run: |
           mkdir extracted
           unzip "${{ steps.findzip.outputs.zip }}" -d extracted
+          echo "Contents of extracted:"
+          ls -R extracted
 
-      - name: Delete all repo files except .git and workflow
+      - name: Detect extracted root folder
+        id: rootfolder
+        run: |
+          FIRST_ITEM=$(ls extracted | head -n 1)
+          ROOT_PATH="extracted"
+          if [ -d "extracted/$FIRST_ITEM" ]; then
+            # If the ZIP contains a single top-level folder, use it
+            ROOT_PATH="extracted/$FIRST_ITEM"
+          fi
+          echo "root=$ROOT_PATH" >> $GITHUB_OUTPUT
+          echo "Detected root: $ROOT_PATH"
+
+      - name: Delete everything except .git and .github
         run: |
           shopt -s extglob
           rm -rf !(.git|.github)
 
-      - name: Move extracted files to repo root
+      - name: Move extracted contents into repo root
         run: |
-          cp -R extracted/* .
+          cp -R "${{ steps.rootfolder.outputs.root }}/." .
+          echo "Copy completed"
 
-      - name: Commit and push changes
+      - name: Commit and push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add -A
-          git commit -m "Automated full repo replacement from uploaded ZIP"
+          git commit -m "Automated repo replacement from ZIP" || echo "No changes to commit"
           git push
