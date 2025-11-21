@@ -1,139 +1,95 @@
-"use client";
+import { redirect } from 'next/navigation';
+import { auth, clerkClient } from '@clerk/nextjs/server';
+import Stripe from 'stripe';
+import { getServiceSupabaseClient } from '@/lib/supabase';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
+async function createTenantAndStripeSession() {
+  const { userId, sessionClaims } = auth();
 
-export default function TrialSetupPage() {
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
-  const [status, setStatus] = useState<'initializing' | 'creating-tenant' | 'starting-trial' | 'error' | 'success'>('initializing');
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    
-    if (!user) {
-      // Redirect to sign-up if not authenticated
-      router.push('/sign-up');
-      return;
-    }
-
-    async function setupTrial() {
-      try {
-        setStatus('creating-tenant');
-        
-        // Call API to create tenant
-        const tenantResponse = await fetch('/api/setup-tenant', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!tenantResponse.ok) {
-          const errorData = await tenantResponse.json();
-          throw new Error(errorData.error || 'Failed to create tenant');
-        }
-
-        const tenantData = await tenantResponse.json();
-        
-        setStatus('starting-trial');
-        
-        // Call API to create Stripe checkout session
-        const checkoutResponse = await fetch('/api/create-checkout-session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tenantId: tenantData.tenantId,
-          }),
-        });
-
-        if (!checkoutResponse.ok) {
-          const errorData = await checkoutResponse.json();
-          throw new Error(errorData.error || 'Failed to create checkout session');
-        }
-
-        const checkoutData = await checkoutResponse.json();
-        
-        // Redirect to Stripe checkout
-        if (checkoutData.url) {
-          window.location.href = checkoutData.url;
-        } else {
-          // If no checkout URL (e.g., free trial doesn't require payment), redirect to dashboard
-          setStatus('success');
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 1500);
-        }
-      } catch (err) {
-        console.error('Trial setup error:', err);
-        setStatus('error');
-        setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-      }
-    }
-
-    setupTrial();
-  }, [user, isLoaded, router]);
-
-  if (!isLoaded) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+  // 1. Verify the user is authenticated
+  if (!userId) {
+    return redirect('/sign-in');
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <div className="text-center">
-          {status === 'error' ? (
-            <>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-                <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-              <h2 className="mb-2 text-2xl font-bold text-gray-900">Setup Failed</h2>
-              <p className="mb-4 text-gray-600">{error}</p>
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="rounded-lg bg-blue-500 px-6 py-2 text-white hover:bg-blue-600"
-              >
-                Go to Dashboard
-              </button>
-            </>
-          ) : status === 'success' ? (
-            <>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h2 className="mb-2 text-2xl font-bold text-gray-900">All Set!</h2>
-              <p className="text-gray-600">Redirecting to your dashboard...</p>
-            </>
-          ) : (
-            <>
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center">
-                <div className="h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-500 border-r-transparent"></div>
-              </div>
-              <h2 className="mb-2 text-2xl font-bold text-gray-900">
-                {status === 'creating-tenant' && 'Creating your workspace...'}
-                {status === 'starting-trial' && 'Setting up your trial...'}
-                {status === 'initializing' && 'Initializing...'}
-              </h2>
-              <p className="text-gray-600">Please wait while we set up your account.</p>
-            </>
-          )}
+  const supabase = getServiceSupabaseClient();
+
+  // Check if a team_member entry already exists to prevent duplicates
+  const { data: existingMember, error: existingMemberError } = await supabase
+    .from('team_members')
+    .select('tenant_id')
+    .eq('user_id', userId)
+    .single();
+
+  if (existingMemberError && existingMemberError.code !== 'PGRST116') {
+    // An actual error occurred, not just "no rows found"
+    throw existingMemberError;
+  }
+
+  if (existingMember) {
+    // User already has a tenant, send them to the dashboard
+    return redirect('/dashboard');
+  }
+
+  // 2. Create a Tenant in Supabase
+  const { data: tenantData, error: tenantErr } = await supabase
+    .from('tenants')
+    .insert({}) // Add any default tenant data if needed
+    .select('id')
+    .single();
+
+  if (tenantErr) throw tenantErr;
+  const tenantId = tenantData.id;
+
+  // 3. Link the new user to the tenant as 'owner'
+  const { error: memberErr } = await supabase.from('team_members').insert({
+    tenant_id: tenantId,
+    user_id: userId,
+    role: 'owner',
+  });
+
+  if (memberErr) throw memberErr;
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2024-04-10',
+  });
+
+  // 4. Create a Stripe Customer
+  const user = await clerkClient.users.getUser(userId);
+  const customer = await stripe.customers.create({
+    email: user.emailAddresses.find(e => e.id === user.primaryEmailAddressId)?.emailAddress,
+    metadata: { clerkUserId: userId, tenantId },
+  });
+
+  // 5. Create a Stripe Checkout Session for the Trial Plan
+  const appUrl = process.env.APP_URL || 'http://localhost:3000';
+  const session = await stripe.checkout.sessions.create({
+    mode: 'subscription',
+    customer: customer.id,
+    line_items: [{ price: process.env.STRIPE_TRIAL_PRICE_ID!, quantity: 1 }],
+    subscription_data: {
+      trial_period_days: 14,
+      metadata: { tenantId },
+    },
+    success_url: `${appUrl}/dashboard?trial=success`,
+    cancel_url: `${appUrl}/?trial=canceled`,
+  });
+
+  // 6. Redirect to Stripe Checkout
+  if (session.url) {
+    return redirect(session.url);
+  } else {
+    // Handle error case where session URL isn't created
+    return redirect('/?error=stripe_session_failed');
+  }
+}
+
+export default async function TrialSetupPage() {
+    await createTenantAndStripeSession();
+    // This component will either redirect or throw an error, so it won't render anything.
+    // You could add a loading spinner as a fallback.
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <p>Setting up your trial...</p>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
