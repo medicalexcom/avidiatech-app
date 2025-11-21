@@ -1,5 +1,9 @@
 name: Auto Replace Repo From ZIP
 
+defaults:
+  run:
+    working-directory: ${{ github.workspace }}
+
 on:
   push:
     paths:
@@ -12,7 +16,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout the repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Find latest ZIP
@@ -22,24 +26,21 @@ jobs:
           echo "zip=$ZIP" >> $GITHUB_OUTPUT
           echo "Using ZIP: $ZIP"
 
-      - name: Install unzip
-        run: sudo apt-get install unzip
+      - name: Install unzip and rsync
+        run: sudo apt-get update && sudo apt-get install -y unzip rsync
 
       - name: Extract ZIP
         run: |
-          mkdir extracted
+          mkdir -p extracted
           unzip "${{ steps.findzip.outputs.zip }}" -d extracted
-          echo "Extracted content:"
+          echo "Extracted folders:"
           ls -R extracted
 
-      - name: Determine real root folder (ignore __MACOSX)
+      - name: Detect real root folder (ignore __MACOSX)
         id: root
         run: |
-          # list top-level entries except __MACOSX
           ITEMS=$(ls extracted | grep -v "__MACOSX")
-          echo "Top-level items: $ITEMS"
-
-          # If exactly 1, use that folder
+          echo "ZIP top-level items: $ITEMS"
           COUNT=$(echo "$ITEMS" | wc -w)
 
           if [ $COUNT -eq 1 ] && [ -d "extracted/$ITEMS" ]; then
@@ -48,26 +49,22 @@ jobs:
             ROOT="extracted"
           fi
 
-          echo "Detected root = $ROOT"
+          echo "Using root folder: $ROOT"
           echo "root=$ROOT" >> $GITHUB_OUTPUT
 
-      - name: Clean repo (except .git and .github)
+      - name: Clean repo except .git and .github
         run: |
-          shopt -s extglob
+          shopt -s extglob dotglob
           rm -rf !(.git|.github)
 
-      - name: Copy extracted project content into repo root
+      - name: Copy extracted contents into repo
         run: |
           ROOT="${{ steps.root.outputs.root }}"
           echo "Copying from: $ROOT"
-
-          # THIS IS THE SAFE COPY COMMAND
-          # copies *all* files, including hidden ones
           rsync -av --exclude="__MACOSX" "$ROOT"/ ./ 
+          echo "Copy complete."
 
-          echo "Copy finished."
-
-      - name: Commit and push
+      - name: Commit & push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
