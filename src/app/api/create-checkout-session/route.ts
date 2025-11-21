@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { getStripeClient } from '@/lib/stripe';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
+import { TRIAL_PERIOD_DAYS, STRIPE_PRICING } from '@/lib/config';
 
 export async function POST(request: Request) {
   try {
@@ -96,21 +97,21 @@ export async function POST(request: Request) {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: STRIPE_PRICING.PRO_PLAN.currency,
             product_data: {
-              name: 'AvidiaTech Pro Plan',
-              description: 'Full access to product data automation features',
+              name: STRIPE_PRICING.PRO_PLAN.name,
+              description: STRIPE_PRICING.PRO_PLAN.description,
             },
-            unit_amount: 9900, // $99.00
+            unit_amount: STRIPE_PRICING.PRO_PLAN.amount,
             recurring: {
-              interval: 'month',
+              interval: STRIPE_PRICING.PRO_PLAN.interval,
             },
           },
           quantity: 1,
         },
       ],
       subscription_data: {
-        trial_period_days: 14,
+        trial_period_days: TRIAL_PERIOD_DAYS,
         metadata: {
           tenant_id: tenantId,
         },

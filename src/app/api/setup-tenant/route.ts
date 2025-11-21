@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { getServiceSupabaseClient } from '@/lib/supabase';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
+import { TRIAL_PERIOD_DAYS, DEFAULT_QUOTAS } from '@/lib/config';
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export async function POST() {
   try {
@@ -12,8 +17,8 @@ export async function POST() {
     }
 
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Email not found in session' }, { status: 400 });
+    if (!userEmail || !isValidEmail(userEmail)) {
+      return NextResponse.json({ error: 'Valid email not found in session' }, { status: 400 });
     }
 
     const supabase = getServiceSupabaseClient();
@@ -65,8 +70,9 @@ export async function POST() {
     }
 
     // Create a new tenant
-    const tenantName = `${userEmail.split('@')[0]}'s Workspace`;
-    const tenantSlug = `${userEmail.split('@')[0]}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const emailLocalPart = userEmail.split('@')[0] || 'user';
+    const tenantName = `${emailLocalPart}'s Workspace`;
+    const tenantSlug = `${emailLocalPart}-${Date.now()}`.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
     const { data: newTenant, error: tenantError } = await supabase
       .from('tenants')
@@ -97,17 +103,18 @@ export async function POST() {
     }
 
     // Create initial subscription record (trial status)
+    const trialEndDate = new Date(Date.now() + TRIAL_PERIOD_DAYS * 24 * 60 * 60 * 1000);
     const { error: subscriptionError } = await supabase
       .from('tenant_subscriptions')
       .insert({
         tenant_id: newTenant.id,
         plan_name: 'trial',
         status: 'trialing',
-        current_period_end: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days from now
-        ingestion_quota: 1000,
-        seo_quota: 500,
-        variant_quota: 200,
-        match_quota: 1000,
+        current_period_end: trialEndDate.toISOString(),
+        ingestion_quota: DEFAULT_QUOTAS.TRIAL.ingestion,
+        seo_quota: DEFAULT_QUOTAS.TRIAL.seo,
+        variant_quota: DEFAULT_QUOTAS.TRIAL.variants,
+        match_quota: DEFAULT_QUOTAS.TRIAL.match,
       });
 
     if (subscriptionError) {
