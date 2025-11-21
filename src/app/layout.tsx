@@ -13,6 +13,9 @@ export const metadata = {
   },
 };
 
+// Force dynamic rendering for all pages to prevent pre-rendering issues with Clerk
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider>
