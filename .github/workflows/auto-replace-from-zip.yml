@@ -15,12 +15,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Find most recent ZIP
+      - name: Find ZIP
         id: findzip
         run: |
-          ZIP_FILE=$(ls -t updates/*.zip | head -n 1)
-          echo "zip=$ZIP_FILE" >> $GITHUB_OUTPUT
-          echo "Using ZIP: $ZIP_FILE"
+          ZIP=$(ls -t updates/*.zip | head -n 1)
+          echo "zip=$ZIP" >> $GITHUB_OUTPUT
+          echo "Using ZIP: $ZIP"
 
       - name: Install unzip
         run: sudo apt-get install unzip
@@ -29,45 +29,47 @@ jobs:
         run: |
           mkdir extracted
           unzip "${{ steps.findzip.outputs.zip }}" -d extracted
-          echo "Extracted structure:"
+          echo "Extracted content:"
           ls -R extracted
 
-      - name: Detect REAL root folder (ignore __MACOSX and hidden folders)
-        id: realroot
+      - name: Determine real root automatically
+        id: getroot
         run: |
-          # Get list of first-level items ignoring __MACOSX and dotfiles
-          ITEMS=$(ls extracted | grep -v "__MACOSX" | grep -v "^\.")
+          # List folders and files excluding __MACOSX and hidden items
+          ITEMS=$(find extracted -mindepth 1 -maxdepth 1 \
+            -not -name "__MACOSX" \
+            -not -name ".*" \
+            -not -name "__MACOSX*" \
+            )
 
-          COUNT=$(echo "$ITEMS" | wc -w)
+          echo "Detected top-level items:"
+          echo "$ITEMS"
 
-          if [ $COUNT -eq 0 ]; then
-            echo "ERROR: No valid content found in ZIP."
-            exit 1
-          fi
+          COUNT=$(echo "$ITEMS" | wc -l)
 
-          # If there is exactly ONE folder, use it
-          FIRST=$(echo "$ITEMS" | head -n 1)
-
-          if [ $COUNT -eq 1 ] && [ -d "extracted/$FIRST" ]; then
-            ROOT="extracted/$FIRST"
+          # If exactly one folder → treat as root
+          if [ $COUNT -eq 1 ] && [ -d "$ITEMS" ]; then
+            ROOT="$ITEMS"
           else
             ROOT="extracted"
           fi
 
-          echo "Detected root: $ROOT"
+          echo "Using ROOT = $ROOT"
           echo "root=$ROOT" >> $GITHUB_OUTPUT
 
-      - name: Delete everything except .git and .github
+      - name: Clean repo (keep .git & .github)
         run: |
           shopt -s extglob
           rm -rf !(.git|.github)
 
-      - name: Copy extracted content into repo root
+      - name: Copy extracted content
         run: |
-          cp -R "${{ steps.realroot.outputs.root }}/." .
-          echo "Copy completed."
+          ROOT="${{ steps.getroot.outputs.root }}"
+          echo "Copying from $ROOT..."
+          cp -R "$ROOT"/. .
+          echo "Copy finished."
 
-      - name: Commit and push changes
+      - name: Commit & push
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
