@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
@@ -8,11 +10,10 @@ import { HttpError } from '@/lib/errors';
 import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-const { userId, sessionClaims, has } = await auth();
+  const { userId, sessionClaims, has } = await auth();
   const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || '/sign-in';
 
   if (!userId) {
-   
     redirect(`${signInUrl}?redirect_url=/dashboard`);
   }
 
@@ -20,7 +21,7 @@ const { userId, sessionClaims, has } = await auth();
   try {
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
     const context = await getTenantContextForUser({ userId, userEmail });
-        if (context.role !== 'owner' && !context.subscription.isActive) {
+    if (context.role !== 'owner' && !context.subscription.isActive) {
       redirect('/subscribe');
     }
     showSubscriptionBanner = context.role !== 'owner' && !context.subscription.isActive;
