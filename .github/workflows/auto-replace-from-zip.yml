@@ -29,32 +29,45 @@ jobs:
         run: |
           mkdir extracted
           unzip "${{ steps.findzip.outputs.zip }}" -d extracted
-          echo "Contents of extracted:"
+          echo "Extracted structure:"
           ls -R extracted
 
-      - name: Detect extracted root folder
-        id: rootfolder
+      - name: Detect REAL root folder (ignore __MACOSX and hidden folders)
+        id: realroot
         run: |
-          FIRST_ITEM=$(ls extracted | head -n 1)
-          ROOT_PATH="extracted"
-          if [ -d "extracted/$FIRST_ITEM" ]; then
-            # If the ZIP contains a single top-level folder, use it
-            ROOT_PATH="extracted/$FIRST_ITEM"
+          # Get list of first-level items ignoring __MACOSX and dotfiles
+          ITEMS=$(ls extracted | grep -v "__MACOSX" | grep -v "^\.")
+
+          COUNT=$(echo "$ITEMS" | wc -w)
+
+          if [ $COUNT -eq 0 ]; then
+            echo "ERROR: No valid content found in ZIP."
+            exit 1
           fi
-          echo "root=$ROOT_PATH" >> $GITHUB_OUTPUT
-          echo "Detected root: $ROOT_PATH"
+
+          # If there is exactly ONE folder, use it
+          FIRST=$(echo "$ITEMS" | head -n 1)
+
+          if [ $COUNT -eq 1 ] && [ -d "extracted/$FIRST" ]; then
+            ROOT="extracted/$FIRST"
+          else
+            ROOT="extracted"
+          fi
+
+          echo "Detected root: $ROOT"
+          echo "root=$ROOT" >> $GITHUB_OUTPUT
 
       - name: Delete everything except .git and .github
         run: |
           shopt -s extglob
           rm -rf !(.git|.github)
 
-      - name: Move extracted contents into repo root
+      - name: Copy extracted content into repo root
         run: |
-          cp -R "${{ steps.rootfolder.outputs.root }}/." .
-          echo "Copy completed"
+          cp -R "${{ steps.realroot.outputs.root }}/." .
+          echo "Copy completed."
 
-      - name: Commit and push
+      - name: Commit and push changes
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
