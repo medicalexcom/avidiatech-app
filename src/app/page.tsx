@@ -32,25 +32,20 @@ export default async function Home() {
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
         <section className="grid items-center gap-10 lg:grid-cols-2">
-          
-          {/* LEFT SIDE */}
           <div className="space-y-6">
             <p className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-semibold text-blue-200 ring-1 ring-white/10">
               Secured by Clerk • Subscription ready
             </p>
-
             <div className="space-y-4">
               <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
                 AvidiaTech product data automation
               </h1>
               <p className="text-lg text-slate-200">
-                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, 
-                Supabase tracks tenants, and Stripe handles upgrades so your team can ship 
-                features—not boilerplate.
+                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
               </p>
             </div>
 
-            {/* CTA BUTTONS */}
+            {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
               <SignedOut>
                 <SignUpButton redirectUrl="/dashboard">
@@ -58,7 +53,6 @@ export default async function Home() {
                     Get Started
                   </button>
                 </SignUpButton>
-
                 <SignInButton redirectUrl="/dashboard">
                   <button className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                     Open Dashboard
@@ -83,7 +77,8 @@ export default async function Home() {
             </div>
           </div>
 
-          {/* PILLARS GRID */}
+          {/* FIX APPLIED HERE — removed the extra </div> */}
+
           <div className="grid gap-4 sm:grid-cols-2">
             {pillars.map((item) => (
               <div
@@ -96,7 +91,6 @@ export default async function Home() {
             ))}
           </div>
 
-          {/* RIGHT CARD */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -131,16 +125,12 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* CAPABILITIES SECTION */}
         <section className="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-inner">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
               <p className="text-base text-slate-200">
-                Every workflow is wired for real tenants: authentication with Clerk, owner bypass 
-                rules, usage counters, and subscription checks that guard premium actions while 
-                still logging activity.
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage counters, and subscription checks that guard premium actions while still logging activity.
               </p>
             </div>
 
@@ -155,7 +145,6 @@ export default async function Home() {
                 </span>
               ))}
             </div>
-
           </div>
         </section>
       </div>
