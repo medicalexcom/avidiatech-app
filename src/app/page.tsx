@@ -1,36 +1,31 @@
+"use client";
 
-import Link from 'next/link';
-
-
-
-
-export const dynamic = 'force-dynamic';
+import { SignedIn, SignedOut, SignUpButton } from "@clerk/nextjs";
+export const dynamic = "force-dynamic";
 
 const pillars = [
   {
-    title: 'Product data intelligence',
-    copy: 'Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.',
+    title: "Product data intelligence",
+    copy: "Extract, enrich, and format product data with opinionated workflows for descriptions, specs, and SEO-ready content.",
   },
   {
-    title: 'Operational guardrails',
-    copy: 'Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.',
+    title: "Operational guardrails",
+    copy: "Tenant-aware access, usage metering, and Stripe-ready subscription states keep teams aligned on limits and rollout.",
   },
   {
-    title: 'Developer ergonomics',
-    copy: 'Next.js App Router, Clerk auth, and Supabase migrations ship with API stubs so engineers can plug in services fast.',
+    title: "Developer ergonomics",
+    copy: "Next.js App Router, Clerk auth, and Supabase migrations ship with API stubs so engineers can plug in services fast.",
   },
 ];
 
 const capabilities = [
-  'Centralized dashboard for analytics, imports, feeds, and automation.',
-  'Role-based access with owner overrides and subscription gating baked in.',
-  'Translation, clustering, and variant workflows that keep catalogs consistent.',
-  'Usage counters and quotas ready for metered billing and diagnostics.',
+  "Centralized dashboard for analytics, imports, feeds, and automation.",
+  "Role-based access with owner overrides and subscription gating baked in.",
+  "Translation, clustering, and variant workflows that keep catalogs consistent.",
+  "Usage counters and quotas ready for metered billing and diagnostics.",
 ];
 
-export default async function Home() {
- const getStartedHref = '/dashboard';
-
+export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -50,19 +45,41 @@ export default async function Home() {
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
               {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
-              <Link
-                href={getStartedHref}
-                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-              >
-                Get Started
-              </Link>
-              {/* Static "Open Dashboard" button */}
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
-              >
-                Open Dashboard
-              </Link>
+              <SignedOut>
+                <SignUpButton redirectUrl="/trial-setup">
+                  <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
+                    Get Started
+                  </button>
+                </SignUpButton>
+              </SignedOut>
+
+              <SignedIn>
+                <a
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+                >
+                  Get Started
+                </a>
+              </SignedIn>
+
+              {/* Open Dashboard button */}
+              <SignedOut>
+                <a
+                  href="/sign-in?redirect_url=/dashboard"
+                  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+                >
+                  Open Dashboard
+                </a>
+              </SignedOut>
+
+              <SignedIn>
+                <a
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+                >
+                  Open Dashboard
+                </a>
+              </SignedIn>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
@@ -105,7 +122,7 @@ export default async function Home() {
             <div className="max-w-3xl space-y-2">
               <h2 className="text-2xl font-semibold text-white">Built for production launches</h2>
               <p className="text-base text-slate-200">
-                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage counters, and subscription checks that guard premium actions while still logging activity.
+                Every workflow is wired for real tenants: authentication with Clerk, owner bypass rules, usage counters, and subscription checks that guard premium actions while still logging activity and diagnostics.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
