@@ -7,33 +7,45 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export async function POST(req: Request) {
   try {
-    // Pass the request to getAuth to match the Clerk version used in your project
+    // Authenticate the request
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    // Retrieve Clerk user to get email (if any)
-    let email: string | undefined;
+    // Fetch Clerk user (to check for stored stripeCustomerId or email)
+    let clerkUser;
     try {
-      const clerkUser = await clerkClient.users.getUser(userId);
-      email = clerkUser.emailAddresses?.[0]?.emailAddress;
+      clerkUser = await clerkClient.users.getUser(userId);
     } catch (err) {
       console.warn("Unable to fetch Clerk user for billing portal creation", err);
     }
 
-    // Try to find a Stripe customer by email first
-    let customer;
-    if (email) {
-      const customers = await stripe.customers.list({ email, limit: 1 });
-      customer = customers.data[0];
+    // 1) Preferred: try to read stripeCustomerId from Clerk privateMetadata (server-only)
+    const stripeCustomerId =
+      (clerkUser?.privateMetadata as any)?.stripeCustomerId ||
+      (clerkUser?.publicMetadata as any)?.stripeCustomerId ||
+      undefined;
+
+    let customerId = stripeCustomerId;
+
+    // 2) Fallback: if no stored customer id, try to find by email
+    if (!customerId) {
+      const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
+      if (email) {
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data && customers.data.length > 0) {
+          customerId = customers.data[0].id;
+        }
+      }
     }
 
-    // If no customer exists, instruct frontend to create a checkout session first
-    if (!customer) {
-      return NextResponse.json({ error: "no_stripe_customer" }, { status: 400 });
+    // If we still don't have a customer id, tell the client to create one (via checkout)
+    if (!customerId) {
+      return NextResponse.json({ error: "no_stripe_customer", message: "No Stripe customer found for this user. Create a subscription/checkout first." }, { status: 400 });
     }
 
+    // Create billing portal session
     const session = await stripe.billingPortal.sessions.create({
-      customer: customer.id,
+      customer: customerId,
       return_url: `${APP_URL}/dashboard`,
     });
 
