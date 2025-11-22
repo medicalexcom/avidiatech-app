@@ -5,12 +5,11 @@ import Stripe from "stripe";
 
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
 /**
- * Allowed paths under /dashboard for unauthenticated / unsubscribed users.
- * Keep this minimal according to your policy.
+ * Very conservative allowlist:
+ * Only these UI/API routes are allowed without an active subscription/trial.
  */
 const ALLOWLIST = [
   "/dashboard/pricing",
@@ -19,6 +18,7 @@ const ALLOWLIST = [
   "/api/checkout/session",
   "/api/billing/portal",
   "/api/webhooks/stripe",
+  "/api/subscription/status", // our new status endpoint
 ];
 
 /** Helper to determine whether a pathname is allowed without an active subscription */
@@ -30,17 +30,11 @@ function isAllowedPath(pathname: string) {
   return false;
 }
 
-/**
- * Server-side check: does the Clerk user have an active subscription or trial?
- * Strategy:
- * 1) Prefer stripeCustomerId stored in Clerk privateMetadata.
- * 2) Fallback to searching Stripe by email.
- * 3) Query Stripe subscriptions for that customer and treat 'trialing' or 'active' as allowed.
- */
+/** Check via Clerk metadata/Stripe if user has trialing or active subscription */
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
   if (!stripe) {
-    console.warn("Stripe secret key not configured; treating as no active subscription.");
+    console.warn("Stripe key not set; treating as no subscription.");
     return false;
   }
 
@@ -75,7 +69,7 @@ async function userHasActiveSubscription(userId: string | undefined) {
   if (!customerId) return false;
 
   try {
-    const subs = await stripe.subscriptions.list({ customer: customerId, limit: 20 });
+    const subs = await stripe.subscriptions.list({ customer: customerId, limit: 50 });
     if (subs.data && subs.data.length > 0) {
       for (const s of subs.data) {
         if (s.status === "trialing" || s.status === "active") {
@@ -84,74 +78,57 @@ async function userHasActiveSubscription(userId: string | undefined) {
       }
     }
   } catch (err) {
-    console.warn("Stripe subscriptions list failed:", err);
+    console.warn("Stripe subscriptions lookup failed:", err);
+    // fail-safe: treat as no subscription
   }
 
   return false;
 }
 
-/**
- * Compose Clerk middleware and then run our gate logic.
- *
- * We call clerkMiddleware() and invoke the returned middleware function to ensure Clerk initializes,
- * then run our own checks using getAuth(). Some Clerk versions expose different typings for the middleware,
- * so we cast to `any` when invoking the returned function to avoid a TS typing error.
- */
+/** Compose Clerk middleware then enforce our gate */
 const clerkMw = clerkMiddleware();
 
 export default async function middleware(req: NextRequest, ev: any) {
-  // First run Clerk's middleware so getAuth() will work
+  // Run Clerk middleware first (so getAuth works)
   try {
-    // clerkMw is a NextMiddleware; some Clerk versions return a function with signature (req, ev).
-    // Cast to any to call it regardless of exact type signature.
     const maybeResponse = await (clerkMw as any)(req, ev);
-    if (maybeResponse) {
-      // If clerkMiddleware returned a Response (e.g., redirect), pass it through.
-      return maybeResponse;
-    }
+    if (maybeResponse) return maybeResponse;
   } catch (err) {
-    // If Clerk middleware throws, log and continue to our gate logic (we will block by default if needed).
     console.warn("clerkMiddleware invocation warning:", err);
   }
 
   const pathname = req.nextUrl.pathname;
 
-  // If the request is unrelated to dashboard/API gating, let it pass.
+  // Only protect dashboard/UI and API routes
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  // Allow explicit allowlist paths (pricing, billing endpoints, webhooks, sign-in/up)
+  // Allow whitelisted paths without subscription
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Now it's safe to call getAuth because clerkMw already ran
+  // Now safe to call getAuth
   const { userId } = getAuth(req as any);
 
-  // Unauthenticated -> redirect to sign-in with redirect back to original pathname
   if (!userId) {
+    // Not signed in → force sign-in
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
     signInUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  // Authenticated -> verify subscription/trial
+  // Signed-in → check subscription/trial
   const hasActive = await userHasActiveSubscription(userId);
+  if (hasActive) return NextResponse.next();
 
-  if (hasActive) {
-    return NextResponse.next();
-  }
-
-  // Signed-in but unsubscribed -> redirect to pricing
+  // Signed-in but unsubscribed → redirect to pricing (hard gate)
   const pricingUrl = new URL("/dashboard/pricing", req.nextUrl.origin);
   return NextResponse.redirect(pricingUrl);
 }
 
-/**
- * Only run middleware for dashboard routes. If you need to gate API endpoints too,
- * add "/api/:path*" to the matcher.
- */
+/** Middleware matches both dashboard and API routes so server endpoints are blocked as well */
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/api/:path*"],
 };
