@@ -1,21 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
-// Server action wrapped in a helper because
-// "use server" cannot appear inside a client component.
-async function ingestActionWrapper(url: string) {
-  "use server";
-
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/ingest`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-    cache: "no-store",
-  });
-
-  return await res.json();
-}
+import { ingestAction } from "./actions";
 
 export default function ExtractPage() {
   const [url, setUrl] = useState("");
@@ -30,7 +16,7 @@ export default function ExtractPage() {
     setResult(null);
 
     try {
-      const data = await ingestActionWrapper(url);
+      const data = await ingestAction(url);
       setResult(data);
     } catch (err) {
       console.error(err);
@@ -44,18 +30,10 @@ export default function ExtractPage() {
     <div>
       <h1 className="text-3xl font-semibold mb-4">Extract</h1>
       <p className="mb-4">
-        Our Extract product uses advanced crawling and scraping to collect data from any
-        source—websites, PDFs, catalogs, and more.
+        Our Extract product uses advanced crawling and scraping to collect data
+        from any source—websites, PDFs, catalogs, and more.
       </p>
 
-      <ul className="list-disc pl-5 space-y-2">
-        <li>AI-powered parsing extracts attributes, images, and pricing</li>
-        <li>Supports e-commerce, manufacturer catalogs, and marketplaces</li>
-        <li>Schedule automated extractions</li>
-        <li>Integrated with Describe, Match, Validate, Visualize</li>
-      </ul>
-
-      {/* FORM */}
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
           <label htmlFor="url" className="block font-medium mb-1">
@@ -81,7 +59,6 @@ export default function ExtractPage() {
         </button>
       </form>
 
-      {/* RESULT */}
       {result && (
         <div className="mt-6">
           <h2 className="text-xl font-medium mb-2">Ingestion Result</h2>
