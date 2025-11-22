@@ -13,8 +13,7 @@ export default function PricingPage() {
   async function choosePlan(plan: "starter" | "growth" | "pro") {
     if (!isLoaded) return;
     if (!isSignedIn) {
-      // navigate to the full-page sign-in (no modal)
-      router.push(`/sign-in?redirect=/dashboard/pricing`);
+      router.push(`/sign-in?redirect=/dashboard`);
       return;
     }
     setLoading(true);
@@ -46,11 +45,7 @@ export default function PricingPage() {
       {!isSignedIn ? (
         <div className="mt-4">
           <p className="mb-2">Sign in to pick a plan.</p>
-          <button
-            className="btn-primary"
-            onClick={() => router.push(`/sign-in?redirect=/dashboard/pricing`)}
-            disabled={!isLoaded}
-          >
+          <button className="btn-primary" onClick={() => router.push(`/sign-in?redirect=/dashboard`)} disabled={!isLoaded}>
             Sign in / Sign up
           </button>
         </div>
