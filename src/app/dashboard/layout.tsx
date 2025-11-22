@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import PlanModal from "src/components/PlanModal";
+import PlanModal from "../../components/PlanModal";
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
@@ -45,7 +45,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         // Be conservative: show the modal if we can't verify
         setShowModal(true);
       } finally {
-        setChecked(true);
+        if (mounted) setChecked(true);
       }
     }
 
