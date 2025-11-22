@@ -8,7 +8,8 @@ export default function SignUpPage() {
   const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") || "/dashboard";
+  // default changed from "/dashboard" → "/dashboard/pricing"
+  const redirectTo = searchParams.get("redirect") || "/dashboard/pricing";
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
