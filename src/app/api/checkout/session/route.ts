@@ -5,10 +5,8 @@ import { getAuth, clerkClient } from "@clerk/nextjs/server";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-// Map plan keys to env price IDs
 function resolvePriceId(payload: any) {
   if (payload?.priceId && typeof payload.priceId === "string") return payload.priceId;
-
   const plan = (payload?.plan || "starter").toString().toLowerCase();
   const map: Record<string, string | undefined> = {
     starter: process.env.STRIPE_PRICE_ID_STARTER,
@@ -27,18 +25,14 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const priceId = resolvePriceId(body);
 
-    // Defensive validation and helpful logs
     console.info("checkout session requested", { userId, payload: body, resolvedPriceId: priceId });
 
     if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
       console.error("Invalid or missing priceId:", priceId, "payload:", body);
-      return NextResponse.json(
-        { error: "server misconfigured: invalid or missing Stripe price id" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "server misconfigured: invalid or missing Stripe price id" }, { status: 500 });
     }
 
-    // Retrieve Clerk user email (optional)
+    // Get Clerk user email (optional)
     let email: string | undefined;
     try {
       const clerkUser = await clerkClient.users.getUser(userId);
@@ -47,7 +41,7 @@ export async function POST(req: Request) {
       console.warn("Unable to fetch Clerk user email:", err);
     }
 
-    // Find or create Stripe customer
+    // Find or create customer
     let customer;
     if (email) {
       const customers = await stripe.customers.list({ email, limit: 1 });
@@ -58,6 +52,21 @@ export async function POST(req: Request) {
         email,
         metadata: { clerkUserId: userId },
       });
+
+      // Persist stripeCustomerId to Clerk privateMetadata (server-side)
+      try {
+        // merge with existing privateMetadata if needed
+        const existing = await clerkClient.users.getUser(userId);
+        const prevPrivate = (existing?.privateMetadata as any) || {};
+        await clerkClient.users.updateUser(userId, {
+          privateMetadata: {
+            ...prevPrivate,
+            stripeCustomerId: customer.id,
+          },
+        });
+      } catch (err) {
+        console.warn("Failed to persist stripeCustomerId to Clerk user metadata:", err);
+      }
     }
 
     // Create Checkout session with 14-day trial
