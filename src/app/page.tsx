@@ -50,17 +50,17 @@ export default function Home() {
               </p>
             </div>
 
-            {/* CTAs */}
+            {/* CTA BUTTONS */}
             <div className="flex flex-wrap items-center gap-4">
               <SignedOut>
                 <>
-                  <SignUpButton mode="modal" afterSignUpUrl="/dashboard">
+                  <SignUpButton>
                     <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                       Get Started
                     </button>
                   </SignUpButton>
 
-                  <SignInButton mode="modal" afterSignInUrl="/dashboard">
+                  <SignInButton>
                     <button className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                       Open Dashboard
                     </button>
@@ -101,7 +101,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT PANEL */}
+          {/* SECURITY PANEL */}
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -157,6 +157,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
       </div>
     </main>
   );
