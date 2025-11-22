@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useUser, signOut } from "@clerk/nextjs";
+import { useUser, useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
 /**
@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
  * - Shows avatar, name, email
  * - Links: Account, Subscription/Billing (opens Billing Portal), Organization, API Keys
  * - Theme toggle stored in localStorage
- * - Sign out via Clerk signOut()
+ * - Sign out via clerk.signOut()
  *
- * Style classes use Tailwind utility names — adjust to your design tokens.
+ * Tailwind classes used as example — adjust to your design tokens.
  */
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
+  const clerk = useClerk();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
@@ -62,10 +63,17 @@ export default function ProfileMenu() {
 
   async function onSignOut() {
     try {
-      await signOut();
-      router.push("/");
+      // call Clerk client signOut
+      if (clerk && typeof clerk.signOut === "function") {
+        await clerk.signOut();
+      } else {
+        // fallback: navigate to home if signOut not available for any reason
+        router.push("/");
+      }
     } catch (err) {
       console.error("Sign out failed", err);
+      // ensure redirect even if clerk.signOut throws
+      router.push("/");
     }
   }
 
