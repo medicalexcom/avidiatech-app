@@ -23,12 +23,9 @@ export default function TopNav() {
           <Link href="/dashboard/description-formats">Descriptions</Link>
         </div>
 
-        {/* Organization & Admin */}
+        {/* Organization & Admin (kept lightweight: removed items now in ProfileMenu) */}
         <div className="flex space-x-4 border-l border-gray-600 pl-4">
-          <Link href="/dashboard/organization">Organization</Link>
           <Link href="/dashboard/roles">Roles</Link>
-          <Link href="/dashboard/subscription">Subscription</Link>
-          <Link href="/dashboard/api-keys">API Keys</Link>
           <Link href="/dashboard/versioning">Versioning</Link>
         </div>
 
