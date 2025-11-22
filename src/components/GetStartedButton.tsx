@@ -2,19 +2,12 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
-type Props = {
-  className?: string;
-  children?: React.ReactNode;
-};
-
-export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: Props) {
+export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: { className?: string; children?: React.ReactNode }) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useUser();
 
   function onClick() {
-    // We disable until isLoaded; this check is defensive.
-    if (!isLoaded) return;
-
+    if (!isLoaded) return; // avoid race where Clerk mounts a modal
     if (isSignedIn) {
       router.push("/dashboard");
     } else {
@@ -26,7 +19,7 @@ export default function GetStartedButton({ className = "btn-primary", children =
     <button
       onClick={onClick}
       className={className}
-      disabled={!isLoaded} // prevents clicks while Clerk is initializing (avoids modal flash)
+      disabled={!isLoaded}
       aria-disabled={!isLoaded}
       type="button"
     >
