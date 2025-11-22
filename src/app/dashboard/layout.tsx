@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import TopNav from '@/components/TopNav';
 import Sidebar from '@/components/Sidebar';
