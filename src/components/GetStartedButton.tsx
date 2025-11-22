@@ -2,22 +2,34 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
-export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: { className?: string; children?: React.ReactNode }) {
+type Props = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: Props) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useUser();
 
   function onClick() {
-    if (!isLoaded) return; // wait until Clerk finishes loading
+    // We disable until isLoaded; this check is defensive.
+    if (!isLoaded) return;
+
     if (isSignedIn) {
       router.push("/dashboard");
     } else {
-      // route to a path-based sign-up page (not modal)
       router.push("/sign-up?redirect=/dashboard");
     }
   }
 
   return (
-    <button onClick={onClick} className={className}>
+    <button
+      onClick={onClick}
+      className={className}
+      disabled={!isLoaded} // prevents clicks while Clerk is initializing (avoids modal flash)
+      aria-disabled={!isLoaded}
+      type="button"
+    >
       {children}
     </button>
   );
