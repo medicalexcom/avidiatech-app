@@ -6,18 +6,17 @@ import { useEffect, useState } from "react";
 
 export default function SignInPage() {
   const params = useSearchParams();
-  const redirect = params?.get("redirect_url") ?? "/dashboard";
+  // accept either ?redirect=... or ?redirect_url=..., default to pricing
+  const redirect = params?.get("redirect") ?? params?.get("redirect_url") ?? "/dashboard/pricing";
 
-  // Fallback UI if Clerk doesn't initialize or Clerk client endpoint returns an error
+  // ... rest unchanged (fallback UI, Clerk heuristics) ...
+
   const [clerkFailed, setClerkFailed] = useState(false);
   const [clerkErrorText, setClerkErrorText] = useState<string | null>(null);
 
-  // Heuristic to detect whether Clerk has already rendered a modal or embedded UI.
-  // This uses several selectors to be robust across Clerk versions.
   function hasClerkUI(): boolean {
     if (typeof document === "undefined") return false;
 
-    // Known Clerk modal/roots/selectors - keep these broad to avoid false negatives.
     const selectors = [
       "[data-clerk-modal]",
       ".clerk-modal",
@@ -33,16 +32,9 @@ export default function SignInPage() {
   }
 
   useEffect(() => {
-    // if Clerk hasn't initialized in 4s, show fallback only when there's no Clerk UI present
     const t = setTimeout(async () => {
-      // If a Clerk modal or embedded UI is already present, don't show the fallback overlay.
-      if (hasClerkUI()) {
-        return;
-      }
-
-      // No visible Clerk UI — show fallback and capture a Clerk client error for debugging.
+      if (hasClerkUI()) return;
       setClerkFailed(true);
-
       try {
         const frontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API || "";
         const url = `https://${frontendApi}/v1/client?__clerk_api_version=2025-11-10&_clerk_js_version=5.109.2`;
@@ -63,6 +55,7 @@ export default function SignInPage() {
         {!clerkFailed ? (
           <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" afterSignInUrl={redirect} />
         ) : (
+          // fallback UI unchanged...
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Sign in</h2>
             <p className="text-sm text-slate-600">
