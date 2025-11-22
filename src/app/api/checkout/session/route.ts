@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
 const PRICE_ID = process.env.STRIPE_PRICE_ID!;
@@ -9,13 +9,20 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 export async function POST(req: Request) {
   try {
     // Ensure user is signed in
-    const { userId, orgId, sessionId, user } = getAuth();
+    const { userId } = getAuth();
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    // Create or find a Stripe Customer for this user:
-    // Strategy: list by email first (fast), fallback to creating a new customer.
-    const email = user?.emailAddresses?.[0]?.emailAddress || undefined;
+    // Retrieve Clerk user to get email (if any)
+    let email: string | undefined;
+    try {
+      const clerkUser = await clerkClient.users.getUser(userId);
+      email = clerkUser.emailAddresses?.[0]?.emailAddress;
+    } catch (err) {
+      // If the user can't be fetched, continue without email; we'll create a customer without email.
+      console.warn("Unable to fetch Clerk user for Stripe customer creation", err);
+    }
 
+    // Create or find a Stripe Customer for this user:
     let customer;
     if (email) {
       const customers = await stripe.customers.list({ email, limit: 1 });
