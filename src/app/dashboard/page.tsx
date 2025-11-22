@@ -1,5 +1,3 @@
-'use client';
-
 export default function DashboardPage() {
   return (
     <main className="p-10 space-y-4">
