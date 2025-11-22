@@ -10,6 +10,7 @@ const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-
 
 /**
  * Allowed paths under /dashboard for unauthenticated / unsubscribed users.
+ * Keep this minimal according to your policy.
  */
 const ALLOWLIST = [
   "/dashboard/pricing",
@@ -20,6 +21,7 @@ const ALLOWLIST = [
   "/api/webhooks/stripe",
 ];
 
+/** Helper to determine whether a pathname is allowed without an active subscription */
 function isAllowedPath(pathname: string) {
   if (ALLOWLIST.includes(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
@@ -28,6 +30,13 @@ function isAllowedPath(pathname: string) {
   return false;
 }
 
+/**
+ * Server-side check: does the Clerk user have an active subscription or trial?
+ * Strategy:
+ * 1) Prefer stripeCustomerId stored in Clerk privateMetadata.
+ * 2) Fallback to searching Stripe by email.
+ * 3) Query Stripe subscriptions for that customer and treat 'trialing' or 'active' as allowed.
+ */
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
   if (!stripe) {
@@ -82,50 +91,67 @@ async function userHasActiveSubscription(userId: string | undefined) {
 }
 
 /**
- * Use clerkMiddleware to initialize Clerk auth for requests. inside afterAuth we run our gate.
- * clerkMiddleware ensures getAuth() works and prevents the MIDDLEWARE_INVOCATION_FAILED error.
+ * Compose Clerk middleware and then run our gate logic.
+ *
+ * We call clerkMiddleware() and invoke the returned middleware function to ensure Clerk initializes,
+ * then run our own checks using getAuth(). Some Clerk versions expose different typings for the middleware,
+ * so we cast to `any` when invoking the returned function to avoid a TS typing error.
  */
-export default clerkMiddleware({
-  async afterAuth(req: NextRequest) {
-    const pathname = req.nextUrl.pathname;
+const clerkMw = clerkMiddleware();
 
-    // If not a dashboard path and not an API that we want to gate, just continue.
-    if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
-      return NextResponse.next();
+export default async function middleware(req: NextRequest, ev: any) {
+  // First run Clerk's middleware so getAuth() will work
+  try {
+    // clerkMw is a NextMiddleware; some Clerk versions return a function with signature (req, ev).
+    // Cast to any to call it regardless of exact type signature.
+    const maybeResponse = await (clerkMw as any)(req, ev);
+    if (maybeResponse) {
+      // If clerkMiddleware returned a Response (e.g., redirect), pass it through.
+      return maybeResponse;
     }
+  } catch (err) {
+    // If Clerk middleware throws, log and continue to our gate logic (we will block by default if needed).
+    console.warn("clerkMiddleware invocation warning:", err);
+  }
 
-    // Allow explicit allowlist paths (pricing, billing endpoints, webhooks, sign-in/up)
-    if (isAllowedPath(pathname)) {
-      return NextResponse.next();
-    }
+  const pathname = req.nextUrl.pathname;
 
-    // Use getAuth now that clerkMiddleware ran
-    const { userId } = getAuth(req as any);
+  // If the request is unrelated to dashboard/API gating, let it pass.
+  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
 
-    // Unauthenticated -> redirect to sign-in with redirect back.
-    if (!userId) {
-      const signInUrl = new URL("/sign-in", req.nextUrl.origin);
-      signInUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(signInUrl);
-    }
+  // Allow explicit allowlist paths (pricing, billing endpoints, webhooks, sign-in/up)
+  if (isAllowedPath(pathname)) {
+    return NextResponse.next();
+  }
 
-    // Authenticated -> verify subscription/trial
-    const hasActive = await userHasActiveSubscription(userId);
+  // Now it's safe to call getAuth because clerkMw already ran
+  const { userId } = getAuth(req as any);
 
-    if (hasActive) {
-      return NextResponse.next();
-    }
+  // Unauthenticated -> redirect to sign-in with redirect back to original pathname
+  if (!userId) {
+    const signInUrl = new URL("/sign-in", req.nextUrl.origin);
+    signInUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(signInUrl);
+  }
 
-    // Signed-in but unsubscribed -> redirect to pricing
-    const pricingUrl = new URL("/dashboard/pricing", req.nextUrl.origin);
-    return NextResponse.redirect(pricingUrl);
-  },
-});
+  // Authenticated -> verify subscription/trial
+  const hasActive = await userHasActiveSubscription(userId);
+
+  if (hasActive) {
+    return NextResponse.next();
+  }
+
+  // Signed-in but unsubscribed -> redirect to pricing
+  const pricingUrl = new URL("/dashboard/pricing", req.nextUrl.origin);
+  return NextResponse.redirect(pricingUrl);
+}
 
 /**
- * Ensure middleware only runs for dashboard routes.
- * Leave API matcher lines out if you don't want to gate every API route.
+ * Only run middleware for dashboard routes. If you need to gate API endpoints too,
+ * add "/api/:path*" to the matcher.
  */
 export const config = {
-  matcher: ["/dashboard/:path*", /* optionally add api matcher like "/api/:path*" */],
+  matcher: ["/dashboard/:path*"],
 };
