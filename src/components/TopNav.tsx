@@ -23,23 +23,21 @@ export default function TopNav() {
           <Link href="/dashboard/description-formats">Descriptions</Link>
         </div>
 
-        {/* Organization & Admin (kept lightweight: removed items now in ProfileMenu) */}
         <div className="flex space-x-4 border-l border-gray-600 pl-4">
           <Link href="/dashboard/roles">Roles</Link>
           <Link href="/dashboard/versioning">Versioning</Link>
         </div>
 
-        {/* Notifications & Profile */}
         <div className="flex space-x-4 border-l border-gray-600 pl-4 items-center">
           <Link href="/dashboard/notifications">Notifications</Link>
 
-          {/* Profile area: show ProfileMenu when signed in, otherwise a Sign in button */}
           {isLoaded && isSignedIn ? (
             <ProfileMenu />
           ) : (
+            // include redirect to pricing/trial on sign-in
             <button
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded"
-              onClick={() => router.push("/sign-in")}
+              onClick={() => router.push("/sign-in?redirect=/dashboard/pricing")}
               type="button"
               disabled={!isLoaded}
             >
