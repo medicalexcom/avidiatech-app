@@ -14,7 +14,7 @@ export default function TrialSetupPage() {
   async function startCheckout() {
     if (!isLoaded) return;
     if (!isSignedIn) {
-      router.push(`/sign-in?redirect=/dashboard`);
+      router.push(`/sign-in?redirect=/trial-setup`);
       return;
     }
     setLoading(true);
@@ -52,6 +52,7 @@ export default function TrialSetupPage() {
             <button
               className="btn-primary mt-2"
               onClick={() => router.push(`/sign-in?redirect=/trial-setup`)}
+              disabled={!isLoaded}
             >
               Sign in / Sign up
             </button>
