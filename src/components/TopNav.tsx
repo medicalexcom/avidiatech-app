@@ -34,10 +34,10 @@ export default function TopNav() {
           {isLoaded && isSignedIn ? (
             <ProfileMenu />
           ) : (
-            // include redirect to pricing/trial on sign-in
+            // Redirect to dashboard root so PlanModal can appear and block the dashboard shell
             <button
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded"
-              onClick={() => router.push("/sign-in?redirect=/dashboard/pricing")}
+              onClick={() => router.push("/sign-in?redirect=/dashboard")}
               type="button"
               disabled={!isLoaded}
             >
