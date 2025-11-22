@@ -1,6 +1,6 @@
 "use client";
 
-import { SignUpButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 export const dynamic = "force-dynamic";
 
 const pillars = [
@@ -28,8 +28,6 @@ const capabilities = [
 export default function Home() {
   const { isSignedIn } = useAuth();
 
-  // If Clerk hasn't loaded yet, isSignedIn will be falsey — this still shows the signed-out CTAs immediately.
-  // Once Clerk finishes and isSignedIn becomes true, the links update to the signed-in targets.
   const getStartedButton = isSignedIn ? (
     <a
       href="/dashboard"
@@ -38,12 +36,14 @@ export default function Home() {
       Get Started
     </a>
   ) : (
-    // Use SignUpButton so Clerk's hosted sign-up UI is used. The sign-up page is configured with afterSignUpUrl="/trial-setup"
-    <SignUpButton>
-      <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
-        Get Started
-      </button>
-    </SignUpButton>
+    // Use a plain link to the local sign-up page so the CTA is always visible.
+    // The sign-up page is already configured with afterSignUpUrl="/trial-setup"
+    <a
+      href="/sign-up"
+      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+    >
+      Get Started
+    </a>
   );
 
   const openDashboardHref = isSignedIn ? "/dashboard" : "/sign-in?redirect_url=/dashboard";
@@ -64,6 +64,7 @@ export default function Home() {
                 Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase tracks tenants, and Stripe handles upgrades so your team can ship features—not boilerplate.
               </p>
             </div>
+
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
               {getStartedButton}
@@ -75,6 +76,7 @@ export default function Home() {
                 Open Dashboard
               </a>
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
@@ -84,6 +86,7 @@ export default function Home() {
               ))}
             </div>
           </div>
+
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-blue-900/30">
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
@@ -111,6 +114,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+
         <section className="rounded-3xl border border-white/10 bg-white/5 p-10 shadow-inner">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-3xl space-y-2">
