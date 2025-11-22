@@ -8,8 +8,8 @@ export default function SignUpPage() {
   const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // default changed from "/dashboard" → "/dashboard/pricing"
-  const redirectTo = searchParams.get("redirect") || "/dashboard/pricing";
+  // default redirect goes to dashboard root now (modal will block until plan chosen)
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
@@ -24,7 +24,7 @@ export default function SignUpPage() {
         {/* Render SignUp inline (no modal) */}
         <SignUp path="/sign-up" routing="path" />
         <p className="mt-4 text-sm text-slate-500">
-          After sign-up you'll be redirected to the dashboard to pick a plan.
+          After sign-up you'll be redirected to your dashboard.
         </p>
       </div>
     </main>
