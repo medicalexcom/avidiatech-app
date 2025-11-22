@@ -1,34 +1,40 @@
-import { useState } from 'react';
+"use client";
 
-/**
- * Extract page
- *
- * This page allows a user to submit a product URL for ingestion.  It calls
- * the API route defined at `/api/v1/ingest` and displays the returned
- * JSON.  It also retains the original introductory content explaining
- * the capabilities of the Extract product.
- */
+import { useState } from "react";
+
+// Server action wrapped in a helper because
+// "use server" cannot appear inside a client component.
+async function ingestActionWrapper(url: string) {
+  "use server";
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/v1/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    cache: "no-store",
+  });
+
+  return await res.json();
+}
+
 export default function ExtractPage() {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!url) return;
+
     setLoading(true);
     setResult(null);
+
     try {
-      const res = await fetch('/api/v1/ingest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      const data = await res.json();
+      const data = await ingestActionWrapper(url);
       setResult(data);
     } catch (err) {
       console.error(err);
-      setResult({ error: 'An unexpected error occurred during ingestion.' });
+      setResult({ error: "An unexpected error occurred during ingestion." });
     } finally {
       setLoading(false);
     }
@@ -41,17 +47,15 @@ export default function ExtractPage() {
         Our Extract product uses advanced crawling and scraping to collect data from any
         source—websites, PDFs, catalogs, and more.
       </p>
+
       <ul className="list-disc pl-5 space-y-2">
-        <li>
-          AI‑powered parsing extracts attributes, images, and pricing from semi‑structured
-          pages
-        </li>
-        <li>Supports e‑commerce sites, manufacturer catalogs, and marketplaces</li>
-        <li>Schedule automated extractions to keep your catalog up to date</li>
-        <li>
-          Seamlessly integrates with our Describe, Match, Validate, and Visualize products
-        </li>
+        <li>AI-powered parsing extracts attributes, images, and pricing</li>
+        <li>Supports e-commerce, manufacturer catalogs, and marketplaces</li>
+        <li>Schedule automated extractions</li>
+        <li>Integrated with Describe, Match, Validate, Visualize</li>
       </ul>
+
+      {/* FORM */}
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
           <label htmlFor="url" className="block font-medium mb-1">
@@ -67,14 +71,17 @@ export default function ExtractPage() {
             required
           />
         </div>
+
         <button
           type="submit"
           disabled={loading}
           className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
         >
-          {loading ? 'Ingesting…' : 'Ingest'}
+          {loading ? "Ingesting…" : "Ingest"}
         </button>
       </form>
+
+      {/* RESULT */}
       {result && (
         <div className="mt-6">
           <h2 className="text-xl font-medium mb-2">Ingestion Result</h2>
