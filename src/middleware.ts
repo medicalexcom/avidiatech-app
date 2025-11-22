@@ -1,13 +1,12 @@
 import { clerkMiddleware } from "@clerk/nextjs";
 
-// Ensure this file is placed at src/middleware.ts (because you use the src/ App Router).
-// The matcher below covers API routes and all pages except Next static assets.
+// Ensure this file is placed at src/middleware.ts (not src/src/).
 export default clerkMiddleware();
 
 export const config = {
   matcher: [
-    // include API routes and all pages so getAuth() works in server routes and pages
     "/api/:path*",
+    // match all app routes except Next static assets
     "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };
