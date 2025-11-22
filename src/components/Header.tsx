@@ -1,5 +1,5 @@
 import React from "react";
-import ProfileMenu from "src/components/ProfileMenu";
+import ProfileMenu from "./ProfileMenu";
 
 export default function Header() {
   return (
