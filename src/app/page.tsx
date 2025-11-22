@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 export const dynamic = "force-dynamic";
 
 const pillars = [
@@ -26,28 +25,7 @@ const capabilities = [
 ];
 
 export default function Home() {
-  const { isSignedIn } = useAuth();
-
-  const getStartedButton = isSignedIn ? (
-    <a
-      href="/dashboard"
-      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-    >
-      Get Started
-    </a>
-  ) : (
-    // Use a plain link to the local sign-up page so the CTA is always visible.
-    // The sign-up page is already configured with afterSignUpUrl="/trial-setup"
-    <a
-      href="/sign-up"
-      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-    >
-      Get Started
-    </a>
-  );
-
-  const openDashboardHref = isSignedIn ? "/dashboard" : "/sign-in?redirect_url=/dashboard";
-
+  // Render plain links so the CTAs are always visible regardless of Clerk initialization.
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -67,10 +45,15 @@ export default function Home() {
 
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
-              {getStartedButton}
+              <a
+                href="/sign-up"
+                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+              >
+                Get Started
+              </a>
 
               <a
-                href={openDashboardHref}
+                href="/sign-in?redirect_url=/dashboard"
                 className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
               >
                 Open Dashboard
