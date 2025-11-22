@@ -61,7 +61,7 @@ export default async function Home() {
       <button className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
         Open Dashboard
       </button>
-    </SignInButton>
+   </SignInButton>
   </SignedOut>
   <SignedIn>
     <Link href="/dashboard" className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
@@ -71,7 +71,9 @@ export default async function Home() {
       Open Dashboard
     </Link>
   </SignedIn>
-</div>          </div>
+</div>        
+   >
+        
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
                 <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
