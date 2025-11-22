@@ -30,7 +30,7 @@ const capabilities = [
   'Usage counters and quotas ready for metered billing and diagnostics.',
 ];
 
-export default async function Home() {
+export default  function Home() {
 
 
   return (
