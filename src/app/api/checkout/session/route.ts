@@ -3,26 +3,51 @@ import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
-const PRICE_ID = process.env.STRIPE_PRICE_ID!;
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+function resolvePriceIdFromPayload(payload: any) {
+  // Accept either a direct priceId from the client or a plan name that maps to server envs
+  const directPriceId = payload?.priceId;
+  if (directPriceId) return directPriceId;
+
+  const plan = payload?.plan || "default";
+  const priceMap: Record<string, string | undefined> = {
+    basic: process.env.STRIPE_PRICE_ID_BASIC,
+    pro: process.env.STRIPE_PRICE_ID_PRO,
+    enterprise: process.env.STRIPE_PRICE_ID_ENTERPRISE,
+    default: process.env.STRIPE_PRICE_ID,
+  };
+  return priceMap[plan];
+}
 
 export async function POST(req: Request) {
   try {
-    // Ensure user is signed in - pass the request into getAuth to match the expected signature
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    // Retrieve Clerk user to get email (if any)
+    const body = await req.json().catch(() => ({}));
+    const priceId = resolvePriceIdFromPayload(body);
+
+    // Defensive validation
+    if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
+      console.error("Invalid or missing priceId:", priceId);
+      return NextResponse.json(
+        { error: "server misconfigured: invalid or missing Stripe price id" },
+        { status: 500 }
+      );
+    }
+
+    // Get Clerk user email if available
     let email: string | undefined;
     try {
       const clerkUser = await clerkClient.users.getUser(userId);
       email = clerkUser.emailAddresses?.[0]?.emailAddress;
     } catch (err) {
-      // If the user can't be fetched, continue without email; we'll create a customer without email.
-      console.warn("Unable to fetch Clerk user for Stripe customer creation", err);
+      console.warn("Unable to fetch Clerk user email:", err);
     }
 
-    // Create or find a Stripe Customer for this user:
+    // Create or find Stripe customer
     let customer;
     if (email) {
       const customers = await stripe.customers.list({ email, limit: 1 });
@@ -36,7 +61,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Create Checkout Session for subscription
     const successUrl = `${APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${APP_URL}/trial-setup`;
 
@@ -44,7 +68,7 @@ export async function POST(req: Request) {
       customer: customer.id,
       mode: "subscription",
       payment_method_types: ["card"],
-      line_items: [{ price: PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }], // <-- ensure 'price' is present and valid
       allow_promotion_codes: true,
       subscription_data: {
         metadata: { clerkUserId: userId },
