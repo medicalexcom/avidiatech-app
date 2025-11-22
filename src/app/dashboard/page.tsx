@@ -1,11 +1,10 @@
-'use client';
+"use client";
 
 import React from "react";
 
 /**
- * Dashboard root
- * - No client-side redirect to pricing. The hard-block PlanModal in layout will appear for unsubscribed users.
- * - Keep this page as the visible product background under the modal.
+ * Dashboard root: render product background. No client-side redirect to /dashboard/pricing.
+ * The hard-block PlanModal will overlay this page for unsubscribed users.
  */
 
 export default function DashboardPage() {
