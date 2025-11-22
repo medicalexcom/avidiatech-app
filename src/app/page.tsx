@@ -72,7 +72,6 @@ export default async function Home() {
     </Link>
   </SignedIn>
 </div>        
-   >
         
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
