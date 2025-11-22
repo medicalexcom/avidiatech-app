@@ -8,8 +8,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 export async function POST(req: Request) {
   try {
-    // Ensure user is signed in
-    const { userId } = getAuth();
+    // Ensure user is signed in - pass the request into getAuth to match the expected signature
+    const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
     // Retrieve Clerk user to get email (if any)
