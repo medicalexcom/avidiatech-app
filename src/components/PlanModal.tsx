@@ -3,23 +3,22 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUser } from "@clerk/nextjs";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 /**
  * PlanModal - Hard-blocking paywall modal
- *
  * - Non-closable: no close button, Escape is ignored
  * - Focus-trapped: Tab cycles within the modal
  * - Blocking overlay covers entire viewport and prevents any clicks/keys outside modal
  * - Uses /api/checkout/session to create a Stripe Checkout session
  * - Polls /api/subscription/status after checkout / when session_id present
  *
- * Styling uses Tailwind utilities. Adjust to match your design system.
+ * This component does NOT perform client-side navigation to the pricing page.
+ * Ensure other parts of the app do not auto-redirect to /dashboard/pricing.
  */
 
 export default function PlanModal({ onActivated }: { onActivated?: () => void }) {
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
+  const { isLoaded } = useUser();
   const searchParams = useSearchParams();
 
   const [checking, setChecking] = useState(true);
@@ -31,7 +30,6 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   const firstFocusableRef = useRef<HTMLButtonElement | null>(null);
   const focusableRefs = useRef<HTMLElement[]>([]);
 
-  // helper: fetch subscription status from your endpoint
   async function fetchStatus() {
     try {
       const res = await fetch("/api/subscription/status");
@@ -44,7 +42,6 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       return isActive;
     } catch (err) {
       console.error("status fetch error", err);
-      // be conservative: treat as not active
       return false;
     } finally {
       setChecking(false);
@@ -52,7 +49,6 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   }
 
   useEffect(() => {
-    // On mount: check status. If active -> no modal display (parent should hide it).
     let mounted = true;
     (async () => {
       if (!isLoaded) return;
@@ -65,24 +61,16 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
 
-  // If user returns from Stripe (session_id in query), start polling for activation
+  // Poll when returning from Stripe (session_id present)
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (!sessionId) return;
-
     let stop = false;
     const interval = setInterval(async () => {
       const got = await fetchStatus();
-      if (got || stop) {
-        clearInterval(interval);
-      }
+      if (got || stop) clearInterval(interval);
     }, 3000);
-
-    // stop after 5 minutes as a safety
-    const timeout = setTimeout(() => {
-      clearInterval(interval);
-    }, 5 * 60 * 1000);
-
+    const timeout = setTimeout(() => clearInterval(interval), 5 * 60 * 1000);
     return () => {
       stop = true;
       clearInterval(interval);
@@ -91,28 +79,24 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
-  // Focus trap: gather focusable elements and trap Tab/Shift+Tab
+  // Focus trap inside modal
   useEffect(() => {
     if (!modalRef.current) return;
     const modal = modalRef.current;
-
     const selectors = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
     const nodes = Array.from(modal.querySelectorAll<HTMLElement>(selectors));
     focusableRefs.current = nodes;
-
-    // focus first element
-    if (nodes.length && firstFocusableRef.current) {
-      firstFocusableRef.current.focus();
-    }
+    if (nodes.length && firstFocusableRef.current) firstFocusableRef.current.focus();
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        // Do NOT close on Escape; swallow it
         e.preventDefault();
         e.stopPropagation();
-      } else if (e.key === "Tab") {
+        return;
+      }
+      if (e.key === "Tab") {
         const focusables = focusableRefs.current;
-        if (focusables.length === 0) {
+        if (!focusables.length) {
           e.preventDefault();
           return;
         }
@@ -125,16 +109,13 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
         }
         e.preventDefault();
         focusables[nextIndex]?.focus();
-      } else {
-        // block other keys from bubbling to page if necessary
       }
     }
 
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [active, checking]);
+  }, [checking, active]);
 
-  // Start checkout for a plan
   async function startPlan(plan: "starter" | "growth" | "pro") {
     setError(null);
     setLoadingPlan(plan);
@@ -157,39 +138,20 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     }
   }
 
-  // User clicked "I already paid / check status" to re-check
   async function manualCheck() {
     setChecking(true);
     const ok = await fetchStatus();
     if (ok) setActive(true);
   }
 
-  // If active, don't render (parent may remove modal)
   if (active) return null;
+  if (checking && !isLoaded) return null;
 
-  // Ensure no accidental rendering before we check
-  if (checking && !isLoaded) {
-    // Show nothing until Clerk finishes init
-    return null;
-  }
-
-  // Modal markup (non-closable)
   const modal = (
-    <div
-      aria-modal="true"
-      role="dialog"
-      aria-label="Choose a plan"
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-    >
-      {/* full-screen backdrop — blocks all interaction */}
+    <div aria-modal="true" role="dialog" aria-label="Choose a plan" className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60"></div>
 
-      {/* Centered dialog */}
-      <div
-        ref={modalRef}
-        className="relative z-[10000] w-full max-w-md mx-4 rounded-lg bg-white dark:bg-slate-900 shadow-lg p-6"
-        role="document"
-      >
+      <div ref={modalRef} className="relative z-[10000] w-full max-w-md mx-4 rounded-lg bg-white dark:bg-slate-900 shadow-lg p-6">
         <h2 className="text-lg font-semibold mb-3">Choose a plan</h2>
         <p className="text-sm text-slate-600 mb-4">Start your 14‑day trial by choosing a plan.</p>
 
@@ -224,19 +186,11 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <button
-            onClick={manualCheck}
-            className="text-sm underline text-slate-600"
-            type="button"
-            disabled={checking}
-          >
+          <button onClick={manualCheck} className="text-sm underline text-slate-600" type="button" disabled={checking}>
             Already completed checkout? Check status
           </button>
 
-          <div className="text-sm text-slate-500">
-            {/* show small help text */}
-            {error ? <span className="text-red-600">{error}</span> : <span>Secure Stripe checkout</span>}
-          </div>
+          <div className="text-sm text-slate-500">{error ? <span className="text-red-600">{error}</span> : <span>Secure Stripe checkout</span>}</div>
         </div>
       </div>
     </div>
@@ -244,4 +198,3 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
 
   return typeof document !== "undefined" ? createPortal(modal, document.body) : null;
 }
-
