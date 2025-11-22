@@ -2,12 +2,18 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
-export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: { className?: string; children?: React.ReactNode }) {
+type Props = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+export default function GetStartedButton({ className = "btn-primary", children = "Get started" }: Props) {
   const router = useRouter();
   const { isLoaded, isSignedIn } = useUser();
 
   function onClick() {
-    if (!isLoaded) return; // avoid race where Clerk mounts a modal
+    // avoid racing with Clerk modal initialization
+    if (!isLoaded) return;
     if (isSignedIn) {
       router.push("/dashboard");
     } else {
