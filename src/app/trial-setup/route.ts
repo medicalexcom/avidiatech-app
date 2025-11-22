@@ -38,10 +38,12 @@ export async function GET() {
 
     // Fetch user information (email) from Clerk
     const user = await clerkClient.users.getUser(userId);
+
+    // Extract email safely according to Clerk types
     const email =
-      user.primaryEmailAddress?.emailAddress ||
-      user.emailAddresses?.[0]?.emailAddress ||
-      (user.email ? user.email : null);
+      user.primaryEmailAddress?.emailAddress ??
+      user.emailAddresses?.[0]?.emailAddress ??
+      undefined;
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({ error: "Missing Supabase environment variables" }, { status: 500 });
