@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 export default function PricingPage() {
   const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function choosePlan(plan: "starter" | "growth" | "pro") {
     if (!isLoaded) return;
     if (!isSignedIn) {
-      setError("Please sign in to choose a plan.");
+      // navigate to the full-page sign-in (no modal)
+      router.push(`/sign-in?redirect=/dashboard/pricing`);
       return;
     }
     setLoading(true);
@@ -24,7 +27,6 @@ export default function PricingPage() {
       });
       const data = await res.json();
       if (!res.ok || !data?.url) throw new Error(data?.error || "Failed to create checkout session");
-      // Redirect user to Stripe Checkout
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message || "Unknown error");
@@ -44,9 +46,13 @@ export default function PricingPage() {
       {!isSignedIn ? (
         <div className="mt-4">
           <p className="mb-2">Sign in to pick a plan.</p>
-          <SignInButton>
-            <button className="btn-primary">Sign in / Sign up</button>
-          </SignInButton>
+          <button
+            className="btn-primary"
+            onClick={() => router.push(`/sign-in?redirect=/dashboard/pricing`)}
+            disabled={!isLoaded}
+          >
+            Sign in / Sign up
+          </button>
         </div>
       ) : (
         <div className="mt-4 flex gap-4">
