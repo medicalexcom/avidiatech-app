@@ -10,15 +10,17 @@ const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-
 /**
  * Very conservative allowlist:
  * Only these UI/API routes are allowed without an active subscription/trial.
+ * NOTE: we added "/dashboard" here so the shell (topbar/sidebar) can render and the modal can overlay.
  */
 const ALLOWLIST = [
+  "/dashboard",                  // allow dashboard shell so modal can overlay it
   "/dashboard/pricing",
   "/dashboard/account",
   "/dashboard/organization",
   "/api/checkout/session",
   "/api/billing/portal",
   "/api/webhooks/stripe",
-  "/api/subscription/status", // our new status endpoint
+  "/api/subscription/status",
 ];
 
 /** Helper to determine whether a pathname is allowed without an active subscription */
@@ -104,7 +106,7 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.next();
   }
 
-  // Allow whitelisted paths without subscription
+  // Allow whitelisted paths without subscription (includes "/dashboard" now)
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
@@ -123,9 +125,10 @@ export default async function middleware(req: NextRequest, ev: any) {
   const hasActive = await userHasActiveSubscription(userId);
   if (hasActive) return NextResponse.next();
 
-  // Signed-in but unsubscribed → redirect to pricing (hard gate)
-  const pricingUrl = new URL("/dashboard/pricing", req.nextUrl.origin);
-  return NextResponse.redirect(pricingUrl);
+  // Signed-in but unsubscribed → restrict access to non-allowed paths
+  // For non-allowed routes, we redirect to the dashboard root where the modal will show
+  const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
+  return NextResponse.redirect(dashboardRoot);
 }
 
 /** Middleware matches both dashboard and API routes so server endpoints are blocked as well */
