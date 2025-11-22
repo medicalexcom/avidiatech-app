@@ -6,11 +6,10 @@ import { useEffect, useState } from "react";
 
 export default function SignInPage() {
   const params = useSearchParams();
-  // accept either ?redirect=... or ?redirect_url=..., default to pricing
-  const redirect = params?.get("redirect") ?? params?.get("redirect_url") ?? "/dashboard/pricing";
+  // accept either ?redirect=... or ?redirect_url=..., default to dashboard root
+  const redirect = params?.get("redirect") ?? params?.get("redirect_url") ?? "/dashboard";
 
-  // ... rest unchanged (fallback UI, Clerk heuristics) ...
-
+  // Fallback UI if Clerk doesn't initialize or Clerk client endpoint returns an error
   const [clerkFailed, setClerkFailed] = useState(false);
   const [clerkErrorText, setClerkErrorText] = useState<string | null>(null);
 
@@ -55,7 +54,6 @@ export default function SignInPage() {
         {!clerkFailed ? (
           <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" afterSignInUrl={redirect} />
         ) : (
-          // fallback UI unchanged...
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Sign in</h2>
             <p className="text-sm text-slate-600">
