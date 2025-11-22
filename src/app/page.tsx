@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { SignedIn, SignedOut, SignUpButton, SignInButton, useClerk } from '@clerk/nextjs';
+import { SignedIn, SignedOut, SignUpButton, SignInButton } from '@clerk/nextjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +28,6 @@ const capabilities = [
 ];
 
 export default function Home() {
-  const { signUp, signIn } = useClerk();
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -46,26 +44,23 @@ export default function Home() {
                 AvidiaTech product data automation
               </h1>
               <p className="text-lg text-slate-200">
-                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access, Supabase tracks tenants,
-                and Stripe handles upgrades so your team can ship features—not boilerplate.
+                Ingest, enrich, and monitor every SKU in one workspace. Clerk guards access,
+                Supabase tracks tenants, and Stripe handles upgrades so your team can ship
+                features—not boilerplate.
               </p>
             </div>
 
-            {/* CTA */}
+            {/* CTAs */}
             <div className="flex flex-wrap items-center gap-4">
               <SignedOut>
                 <>
-                  <SignUpButton
-                    signUp={() => signUp.redirect({ afterSignUpUrl: "/dashboard" })}
-                  >
+                  <SignUpButton mode="modal" afterSignUpUrl="/dashboard">
                     <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                       Get Started
                     </button>
                   </SignUpButton>
 
-                  <SignInButton
-                    signIn={() => signIn.redirect({ afterSignInUrl: "/dashboard" })}
-                  >
+                  <SignInButton mode="modal" afterSignInUrl="/dashboard">
                     <button className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2">
                       Open Dashboard
                     </button>
@@ -95,7 +90,10 @@ export default function Home() {
             {/* PILLARS */}
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
-                <div key={item.title} className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner"
+                >
                   <p className="text-sm font-semibold text-blue-200">{item.title}</p>
                   <p className="mt-2 text-sm text-slate-200">{item.copy}</p>
                 </div>
@@ -108,7 +106,9 @@ export default function Home() {
             <div className="rounded-2xl bg-slate-950 p-6 ring-1 ring-white/10">
               <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Secure access</span>
-                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">Clerk live</span>
+                <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
+                  Clerk live
+                </span>
               </div>
 
               <div className="mt-4 space-y-3 text-slate-100">
@@ -146,7 +146,10 @@ export default function Home() {
 
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
               {capabilities.map((item) => (
-                <span key={item} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15">
+                <span
+                  key={item}
+                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 ring-1 ring-white/15"
+                >
                   <span className="h-2 w-2 rounded-full bg-blue-400" />
                   {item}
                 </span>
