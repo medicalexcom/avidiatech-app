@@ -1,6 +1,6 @@
 "use client";
 
-import { SignedIn, SignedOut, SignUpButton } from "@clerk/nextjs";
+import { SignUpButton, useAuth } from "@clerk/nextjs";
 export const dynamic = "force-dynamic";
 
 const pillars = [
@@ -26,6 +26,28 @@ const capabilities = [
 ];
 
 export default function Home() {
+  const { isSignedIn } = useAuth();
+
+  // If Clerk hasn't loaded yet, isSignedIn will be falsey — this still shows the signed-out CTAs immediately.
+  // Once Clerk finishes and isSignedIn becomes true, the links update to the signed-in targets.
+  const getStartedButton = isSignedIn ? (
+    <a
+      href="/dashboard"
+      className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
+    >
+      Get Started
+    </a>
+  ) : (
+    // Use SignUpButton so Clerk's hosted sign-up UI is used. The sign-up page is configured with afterSignUpUrl="/trial-setup"
+    <SignUpButton>
+      <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
+        Get Started
+      </button>
+    </SignUpButton>
+  );
+
+  const openDashboardHref = isSignedIn ? "/dashboard" : "/sign-in?redirect_url=/dashboard";
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-16 px-6 py-20">
@@ -44,44 +66,14 @@ export default function Home() {
             </div>
             {/* CTA buttons */}
             <div className="flex flex-wrap items-center gap-4">
-              {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
-              <SignedOut>
-                {/* Removed redirectUrl prop because the SignUpButton typings in this project/version do not accept it.
-                    The sign-up page is configured with afterSignUpUrl="/trial-setup", so users will be redirected there after sign-up. */}
-                <SignUpButton>
-                  <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
-                    Get Started
-                  </button>
-                </SignUpButton>
-              </SignedOut>
+              {getStartedButton}
 
-              <SignedIn>
-                <a
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400"
-                >
-                  Get Started
-                </a>
-              </SignedIn>
-
-              {/* Open Dashboard button */}
-              <SignedOut>
-                <a
-                  href="/sign-in?redirect_url=/dashboard"
-                  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
-                >
-                  Open Dashboard
-                </a>
-              </SignedOut>
-
-              <SignedIn>
-                <a
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
-                >
-                  Open Dashboard
-                </a>
-              </SignedIn>
+              <a
+                href={openDashboardHref}
+                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-5 py-3 text-base font-semibold text-white transition hover:border-white/40 hover:bg-white/5"
+              >
+                Open Dashboard
+              </a>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {pillars.map((item) => (
