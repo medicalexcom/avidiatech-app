@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import type { ReactNode } from 'react';
+import { ClerkProvider } from "@clerk/nextjs";
+import type { ReactNode } from "react";
 
 export default function Providers({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <ClerkProvider>{children}</ClerkProvider>;
 }
