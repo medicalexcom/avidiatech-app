@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { useUser, SignInButton } from "@clerk/nextjs";
 
-export default function Pricing() {
+export default function PricingPage() {
   const { isLoaded, isSignedIn } = useUser();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function choosePlan(plan: "basic" | "pro" | "enterprise") {
+  async function choosePlan(plan: "starter" | "growth" | "pro") {
+    if (!isLoaded) return;
     if (!isSignedIn) {
-      setError("You must sign in to choose a plan.");
+      setError("Please sign in to choose a plan.");
       return;
     }
     setLoading(true);
@@ -22,10 +23,12 @@ export default function Pricing() {
         body: JSON.stringify({ plan }),
       });
       const data = await res.json();
-      if (!res.ok || !data?.url) throw new Error(data?.error || "Failed to create checkout");
+      if (!res.ok || !data?.url) throw new Error(data?.error || "Failed to create checkout session");
+      // Redirect user to Stripe Checkout
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message || "Unknown error");
+      console.error("choosePlan error", err);
     } finally {
       setLoading(false);
     }
@@ -35,22 +38,26 @@ export default function Pricing() {
 
   return (
     <div className="p-6">
-      <h2>Choose a plan</h2>
-      {error && <div className="text-red-600">{error}</div>}
+      <h2 className="text-2xl font-semibold">Choose a plan</h2>
+      {error && <div className="mt-4 text-red-600">{error}</div>}
+
       {!isSignedIn ? (
-        <SignInButton>
-          <button className="btn-primary mt-3">Sign in / Sign up</button>
-        </SignInButton>
+        <div className="mt-4">
+          <p className="mb-2">Sign in to pick a plan.</p>
+          <SignInButton>
+            <button className="btn-primary">Sign in / Sign up</button>
+          </SignInButton>
+        </div>
       ) : (
-        <div className="mt-4 space-x-3">
-          <button onClick={() => choosePlan("basic")} disabled={loading} className="btn">
-            {loading ? "..." : "Start Basic (14-day trial)"}
+        <div className="mt-4 flex gap-4">
+          <button className="btn" onClick={() => choosePlan("starter")} disabled={loading}>
+            {loading ? "..." : "Start Starter — 14‑day trial"}
           </button>
-          <button onClick={() => choosePlan("pro")} disabled={loading} className="btn">
-            Start Pro (14-day trial)
+          <button className="btn" onClick={() => choosePlan("growth")} disabled={loading}>
+            Start Growth — 14‑day trial
           </button>
-          <button onClick={() => choosePlan("enterprise")} disabled={loading} className="btn">
-            Start Enterprise (14-day trial)
+          <button className="btn" onClick={() => choosePlan("pro")} disabled={loading}>
+            Start Pro — 14‑day trial
           </button>
         </div>
       )}
