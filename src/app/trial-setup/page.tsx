@@ -1,17 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 export default function TrialSetupPage() {
-  const { isSignedIn, isLoaded } = useUser();
+  const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<"basic" | "pro" | "enterprise">("basic");
+  const [plan, setPlan] = useState<"starter" | "growth" | "pro">("starter");
 
   async function startCheckout() {
+    if (!isLoaded) return;
     if (!isSignedIn) {
-      setError("You must sign in before starting a trial.");
+      router.push(`/sign-in?redirect=/dashboard`);
       return;
     }
     setLoading(true);
@@ -20,12 +23,10 @@ export default function TrialSetupPage() {
       const res = await fetch("/api/checkout/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }), // send plan -> server maps to correct price env
+        body: JSON.stringify({ plan }),
       });
       const data = await res.json();
-      if (!res.ok || !data?.url) {
-        throw new Error(data?.error || "Failed to create checkout session");
-      }
+      if (!res.ok || !data?.url) throw new Error(data?.error || "Failed to create checkout session");
       window.location.href = data.url;
     } catch (err: any) {
       setError(err.message || "Unknown error");
@@ -48,18 +49,21 @@ export default function TrialSetupPage() {
         {!isSignedIn ? (
           <div className="mt-6">
             <p className="text-sm">You must sign in to start a trial.</p>
-            <SignInButton>
-              <button className="btn-primary mt-2">Sign in</button>
-            </SignInButton>
+            <button
+              className="btn-primary mt-2"
+              onClick={() => router.push(`/sign-in?redirect=/trial-setup`)}
+            >
+              Sign in / Sign up
+            </button>
           </div>
         ) : (
           <>
             <div className="mt-4">
               <label className="block text-sm">Choose plan</label>
               <select value={plan} onChange={(e) => setPlan(e.target.value as any)} className="mt-2">
-                <option value="basic">Basic</option>
+                <option value="starter">Starter</option>
+                <option value="growth">Growth</option>
                 <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
               </select>
             </div>
 
