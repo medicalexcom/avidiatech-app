@@ -46,7 +46,9 @@ export default function Home() {
             <div className="flex flex-wrap items-center gap-4">
               {/* Dynamic "Get Started" button: signed-in users go to dashboard, others to sign-up */}
               <SignedOut>
-                <SignUpButton redirectUrl="/trial-setup">
+                {/* Removed redirectUrl prop because the SignUpButton typings in this project/version do not accept it.
+                    The sign-up page is configured with afterSignUpUrl="/trial-setup", so users will be redirected there after sign-up. */}
+                <SignUpButton>
                   <button className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-400">
                     Get Started
                   </button>
