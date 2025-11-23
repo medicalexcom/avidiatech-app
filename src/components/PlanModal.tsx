@@ -39,7 +39,7 @@ const PLANS: Record<
   growth: {
     title: "Growth",
     price: "$149/mo",
-    subtitle: "Best for growing e‑commerce teams managing catalogs and workflows.",
+    subtitle: "For growing e‑commerce teams managing catalogs and workflows.",
     features: [
       "300 product ingests / month",
       "Full Extraction, SEO & Variant workflows",
