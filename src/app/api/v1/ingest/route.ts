@@ -1,8 +1,7 @@
 // Next.js App Router: POST /api/v1/ingest
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || ""; // e.g. https://ingest-render.example.com/ingest
@@ -10,18 +9,8 @@ const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 /**
- * Lazily create Supabase client at request time so builds don't run createClient()
- * when env vars are not yet available during static / build phases.
+ * POST /api/v1/ingest
  */
-function getSupabaseClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL || "";
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
-  }
-  return createClient(SUPABASE_URL, SUPABASE_KEY);
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { userId } = getAuth(req as any);
@@ -37,9 +26,9 @@ export async function POST(req: NextRequest) {
     // create supabase client at runtime (throws if env not present)
     let supabase;
     try {
-      supabase = getSupabaseClient();
+      supabase = getServiceSupabaseClient();
     } catch (err: any) {
-      console.error("Supabase configuration missing", err.message);
+      console.error("Supabase configuration missing", err?.message || err);
       return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
     }
 
@@ -64,7 +53,6 @@ export async function POST(req: NextRequest) {
       const { data: counters } = await supabase.from("usage_counters").select("*").eq("tenant_id", tenant_id).limit(1).single();
       // simple check: if absent allow — real logic should check month and quotas
       if (counters && typeof counters.ingest_calls === "number") {
-        // placeholder quota check (customize to your limits)
         const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT ? parseInt(process.env.DEFAULT_MONTHLY_INGEST_LIMIT) : 1000;
         if (counters.ingest_calls >= monthlyLimit) {
           return NextResponse.json({ error: "quota_exceeded" }, { status: 402 });
@@ -105,24 +93,28 @@ export async function POST(req: NextRequest) {
     const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
 
     // Post to ingestion engine (async fire-and-forget preferred)
-    try {
-      const res = await fetch(INGEST_ENGINE_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-avidiatech-signature": signature,
-        },
-        body: JSON.stringify(payload),
-      });
+    if (!INGEST_ENGINE_URL) {
+      console.warn("INGEST_ENGINE_URL not configured; ingestion engine call skipped");
+    } else {
+      try {
+        const res = await fetch(INGEST_ENGINE_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-avidiatech-signature": signature,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        console.warn("ingest engine responded non-OK", res.status, text);
-        // mark job as processing_with_errors or leave pending
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          console.warn("ingest engine responded non-OK", res.status, text);
+          // optionally update DB to mark engine call failed
+        }
+      } catch (err) {
+        console.error("failed to call ingest engine", err);
+        // continue: job exists and engine can be retried externally
       }
-    } catch (err) {
-      console.error("failed to call ingest engine", err);
-      // continue: job exists and engine can be retried externally
     }
 
     return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
