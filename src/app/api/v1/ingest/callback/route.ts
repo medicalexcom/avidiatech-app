@@ -1,24 +1,15 @@
 // POST /api/v1/ingest/callback - ingestion engine calls back here with results
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { NextResponse, type NextRequest } from "next/server";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 import { verifySignature } from "@/lib/ingest/signature";
 
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
-
-function getSupabaseClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL || "";
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
-  }
-  return createClient(SUPABASE_URL, SUPABASE_KEY);
-}
 
 export async function POST(req: NextRequest) {
   try {
     const sig = req.headers.get("x-avidiatech-signature") || "";
     const bodyText = await req.text();
+
     if (!verifySignature(bodyText, sig, INGEST_SECRET)) {
       console.warn("invalid ingest callback signature");
       return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
@@ -31,11 +22,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "missing job_id" }, { status: 400 });
     }
 
+    // Create supabase client lazily and using service role key (throws if misconfigured)
     let supabase;
     try {
-      supabase = getSupabaseClient();
+      supabase = getServiceSupabaseClient();
     } catch (err: any) {
-      console.error("Supabase configuration missing", err.message);
+      console.error("Supabase configuration missing", err?.message || err);
       return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
     }
 
@@ -59,13 +51,15 @@ export async function POST(req: NextRequest) {
       const { data: ing } = await supabase.from("product_ingestions").select("tenant_id").eq("id", job_id).single();
       const tenant_id = ing?.tenant_id;
       if (tenant_id) {
+        const month = new Date().toISOString().slice(0, 7);
+        // Upsert: add one ingest call (simple approach). For production, use atomic increment SQL or tx.
         await supabase.from("usage_counters").upsert(
-          { tenant_id, month: new Date().toISOString().slice(0, 7), ingest_calls: 1 },
+          { tenant_id, month, ingest_calls: 1 },
           { onConflict: "tenant_id" }
         );
         await supabase.from("usage_logs").insert({
           tenant_id,
-          user_id: body.user_id || null,
+          user_id: (body as any).user_id || null,
           product_ingestion_id: job_id,
           event: "ingest",
           payload: { correlation_id },
