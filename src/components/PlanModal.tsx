@@ -10,6 +10,7 @@ import { useSearchParams, useRouter } from "next/navigation";
  *
  * - Non-closable (Escape swallowed), focus-trapped, portaled
  * - Shows three plan cards with price, concise subtitle (<=2 lines) and up to 3 feature bullets
+ * - Growth plan is pre-selected and visually highlighted as "Most popular" (subtle)
  * - "Compare all plans" toggles a compact comparison table (keeps full details on pricing page)
  * - "Already completed checkout? Check status" polls /api/subscription/status
  * - Includes Sign out and Account actions in the footer so users can escape
@@ -72,6 +73,9 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   const [error, setError] = useState<string | null>(null);
   const [showCompare, setShowCompare] = useState(false);
 
+  // Pre-select Growth as the default "recommended" plan
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("growth");
+
   const modalRef = useRef<HTMLDivElement | null>(null);
   const firstFocusableRef = useRef<HTMLButtonElement | null>(null);
   const focusableRefs = useRef<HTMLElement[]>([]);
@@ -121,7 +125,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     };
   }, [searchParams.toString()]);
 
-  // Focus trap inside modal
+  // Focus trap inside modal and focus the selected plan's CTA by default
   useEffect(() => {
     if (!modalRef.current) return;
     const modal = modalRef.current;
@@ -129,7 +133,13 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
     const nodes = Array.from(modal.querySelectorAll<HTMLElement>(selectors));
     focusableRefs.current = nodes;
-    if (nodes.length && firstFocusableRef.current) firstFocusableRef.current.focus();
+
+    // Focus the CTA for the selected plan if available
+    if (firstFocusableRef.current) {
+      firstFocusableRef.current.focus();
+    } else if (nodes.length) {
+      nodes[0].focus();
+    }
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -157,7 +167,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
 
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [checking, active, showCompare]);
+  }, [checking, active, showCompare, selectedPlan]);
 
   async function startPlan(plan: PlanKey) {
     setError(null);
@@ -207,8 +217,32 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     const p = PLANS[planKey];
     const loading = loadingPlan === planKey;
     const visibleFeatures = p.features.slice(0, 3); // show up to 3 features
+
+    const isSelected = selectedPlan === planKey;
+    const isRecommended = planKey === "growth";
+
     return (
-      <div key={planKey} className="flex-1 border rounded-lg p-4 bg-white dark:bg-slate-900 shadow-sm">
+      <div
+        key={planKey}
+        onClick={() => setSelectedPlan(planKey)}
+        className={`relative cursor-pointer flex-1 rounded-lg p-4 ${
+          isSelected
+            ? "border-2 border-indigo-500 bg-indigo-50 dark:bg-slate-800 shadow-lg transform"
+            : "border bg-white dark:bg-slate-900 shadow-sm"
+        }`}
+        role="button"
+        aria-pressed={isSelected}
+        tabIndex={-1}
+      >
+        {/* Recommended badge for Growth */}
+        {isRecommended && (
+          <div className="absolute -top-3 right-3">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+              Most popular
+            </span>
+          </div>
+        )}
+
         <div className="flex items-baseline justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold">{p.title}</h3>
@@ -231,11 +265,21 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
 
         <div className="mt-4">
           <button
-            ref={planKey === "starter" ? firstFocusableRef : undefined}
-            onClick={() => startPlan(planKey)}
-            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${loading ? "bg-slate-200 text-slate-700" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}
+            ref={isSelected ? firstFocusableRef : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              startPlan(planKey);
+            }}
+            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${
+              loading
+                ? "bg-slate-200 text-slate-700"
+                : isSelected
+                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+            }`}
             disabled={Boolean(loadingPlan)}
             type="button"
+            aria-label={`${p.title} - ${p.price} - ${p.ctaLabel ?? "Start trial"}`}
           >
             {loading ? "Redirecting…" : p.ctaLabel ?? "Start trial"}
           </button>
