@@ -6,6 +6,7 @@ import Stripe from "stripe";
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
+// Allowlist for public routes / API used previously
 const ALLOWLIST = [
   "/dashboard",                  // allow dashboard shell
   "/dashboard/pricing",
@@ -25,13 +26,28 @@ function isAllowedPath(pathname: string) {
   return false;
 }
 
+/**
+ * Parse OWNER_EMAILS env var into a Set of normalized emails.
+ * OWNER_EMAILS expected as CSV, e.g. "regis@avidiatech.com,cofounder@avidiatech.com"
+ */
+function getOwnerEmailsSet() {
+  const raw = process.env.OWNER_EMAILS || "";
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+/**
+ * Returns true if the user should be treated as having an active subscription.
+ * Owners (in OWNER_EMAILS or marked in Clerk metadata) bypass Stripe.
+ */
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
-  if (!stripe) {
-    console.warn("Stripe key not set; treating as no subscription.");
-    return false;
-  }
 
+  // First, try to fetch Clerk user. If that fails, fall back to Stripe logic below.
   let clerkUser;
   try {
     clerkUser = await clerkClient.users.getUser(userId);
@@ -39,6 +55,40 @@ async function userHasActiveSubscription(userId: string | undefined) {
     console.warn("Unable to fetch Clerk user:", err);
   }
 
+  // OWNER BY EMAIL LIST (env)
+  try {
+    const ownerEmails = getOwnerEmailsSet();
+    if (ownerEmails.size > 0 && clerkUser?.emailAddresses?.length) {
+      for (const e of clerkUser.emailAddresses) {
+        if (e?.emailAddress && ownerEmails.has(e.emailAddress.toLowerCase())) {
+          console.info("Owner detected by email list, bypassing Stripe:", e.emailAddress);
+          return true;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Owner email check failed:", err);
+  }
+
+  // OWNER BY CLERK METADATA (optional)
+  try {
+    const privateMeta = (clerkUser?.privateMetadata as any) || {};
+    const publicMeta = (clerkUser?.publicMetadata as any) || {};
+    if (privateMeta?.role === "owner" || publicMeta?.role === "owner") {
+      console.info("Owner detected by Clerk metadata; bypassing Stripe for user:", userId);
+      return true;
+    }
+  } catch (err) {
+    console.warn("Clerk metadata owner check failed:", err);
+  }
+
+  // If Stripe is not configured, treat as no subscription (conservative)
+  if (!stripe) {
+    console.warn("Stripe key not set; treating as no subscription.");
+    return false;
+  }
+
+  // If a stripe customer id is stored in Clerk metadata, use it. Otherwise try email lookup.
   const stripeCustomerId =
     (clerkUser?.privateMetadata as any)?.stripeCustomerId ||
     (clerkUser?.publicMetadata as any)?.stripeCustomerId ||
