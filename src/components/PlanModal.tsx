@@ -13,6 +13,10 @@ import { useSearchParams, useRouter } from "next/navigation";
  * - Growth plan is pre-selected and visually highlighted as "Most popular" (subtle)
  * - Smooth, non-bouncy interactions; monthly/yearly toggle added (20% off for yearly)
  *
+ * UX fix: When the user returns from Stripe with ?checkout_canceled=1,
+ * the modal clears any lingering "loading" state so users can immediately
+ * switch plans or retry without being stuck on "Redirecting…".
+ *
  * Behavior:
  * - Selecting a plan highlights it (ring + softened shadow)
  * - Default selection: Growth
@@ -121,6 +125,25 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     };
   }, [searchParams.toString()]);
 
+  // NEW: handle checkout_canceled param — clear any lingering loading state and allow immediate interaction
+  useEffect(() => {
+    const canceled = searchParams.get("checkout_canceled");
+    if (canceled) {
+      // Clear loading indicators so CTA/buttons become interactive again
+      setLoadingPlan(null);
+      // Provide a small, friendly message
+      setError("You canceled checkout — you can pick another plan or try again.");
+      // Focus the CTA of the currently selected plan so user can quickly continue
+      setTimeout(() => {
+        firstFocusableRef.current?.focus();
+      }, 50);
+
+      // Optionally clear the error after a short interval so UI is clean
+      const t = setTimeout(() => setError(null), 5_000);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams.toString()]);
+
   // Focus trap inside modal; focus selected plan CTA by default
   useEffect(() => {
     if (!modalRef.current) return;
@@ -186,6 +209,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     } catch (err: any) {
       console.error("startPlan error", err);
       setError(err?.message || "Failed to start checkout");
+      // Reset loadingPlan so buttons become interactive again after failure
       setLoadingPlan(null);
     }
   }
