@@ -20,8 +20,9 @@ export default function SignUpPage() {
     <main className="min-h-screen flex items-center justify-center">
       <div className="w-full max-w-md p-6 bg-white rounded shadow">
         <h2 className="text-xl font-semibold mb-4">Create your account</h2>
+        {/* Render SignUp inline (no modal) */}
         <SignUp path="/sign-up" routing="path" />
-        <p classNameName="mt-4 text-sm text-slate-500">After sign-up you'll be redirected to your dashboard.</p>
+        <p className="mt-4 text-sm text-slate-500">After sign-up you'll be redirected to your dashboard.</p>
       </div>
     </main>
   );
