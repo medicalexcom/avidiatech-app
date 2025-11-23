@@ -9,7 +9,6 @@ export async function GET(req: Request) {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ active: false, reason: "unauthenticated" }, { status: 200 });
 
-    // Try Clerk privateMetadata first
     let clerkUser;
     try {
       clerkUser = await clerkClient.users.getUser(userId);
@@ -33,8 +32,7 @@ export async function GET(req: Request) {
     }
 
     if (!customerId) return NextResponse.json({ active: false, reason: "no_customer" }, { status: 200 });
-
-    if (!stripe) return NextResponse.json({ active: false, reason: "no_stripe_config" }, { status: 200 });
+    if (!stripe) return NextResponse.json({ active: false, reason: "no_stripe" }, { status: 200 });
 
     const subs = await stripe.subscriptions.list({ customer: customerId, limit: 50 });
     if (subs.data && subs.data.length > 0) {
