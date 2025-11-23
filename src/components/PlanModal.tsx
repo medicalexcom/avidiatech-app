@@ -6,11 +6,11 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /**
- * PlanModal - Hard-blocking paywall modal (enhanced visual design + comparison)
+ * PlanModal - Hard-blocking paywall modal (compact features: max 3 per plan)
  *
  * - Non-closable (Escape swallowed), focus-trapped, portaled
- * - Shows three plan cards with price, description, features and CTA
- * - "Compare all plans" expandable section shows a simple features matrix
+ * - Shows three plan cards with price, concise subtitle (<=2 lines) and up to 3 feature bullets
+ * - "Compare all plans" toggles a compact comparison table (keeps full details on pricing page)
  * - "Already completed checkout? Check status" polls /api/subscription/status
  * - Includes Sign out and Account actions in the footer so users can escape
  *
@@ -27,22 +27,35 @@ const PLANS: Record<
   starter: {
     title: "Starter",
     price: "$49/mo",
-    subtitle: "Perfect for individuals and small teams.",
-    features: ["Up to 10k rows/month", "Basic automations", "Email support"],
+    subtitle: "For solopreneurs & small shops who want essential automation.",
+    features: [
+      "100 product ingests / month",
+      "Basic Extraction & Description AI",
+      "Basic SEO & Specs extraction",
+      // full details live on the pricing page
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
   growth: {
     title: "Growth",
     price: "$149/mo",
-    subtitle: "For teams who need automation and scale.",
-    features: ["Up to 100k rows/month", "Advanced automations", "Priority email support"],
+    subtitle: "Best for growing e‑commerce teams managing catalogs and workflows.",
+    features: [
+      "300 product ingests / month",
+      "Full Extraction, SEO & Variant workflows",
+      "Feeds, Bulk Ops & API (read-only)",
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
   pro: {
-    title: "Pro",
+    title: "Pro / Agency",
     price: "$399/mo",
-    subtitle: "For agencies & enterprises with high usage.",
-    features: ["Unlimited rows", "Enterprise automations", "Dedicated success manager"],
+    subtitle: "For agencies, distributors, and large catalog operations.",
+    features: [
+      "1,000 product ingests / month",
+      "Unlimited users & dedicated queues",
+      "Full API (read+write) & agency tools",
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
 };
@@ -106,7 +119,6 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       clearInterval(interval);
       clearTimeout(timeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.toString()]);
 
   // Focus trap inside modal
@@ -194,12 +206,13 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   const planCard = (planKey: PlanKey) => {
     const p = PLANS[planKey];
     const loading = loadingPlan === planKey;
+    const visibleFeatures = p.features.slice(0, 3); // show up to 3 features
     return (
       <div key={planKey} className="flex-1 border rounded-lg p-4 bg-white dark:bg-slate-900 shadow-sm">
         <div className="flex items-baseline justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold">{p.title}</h3>
-            <div className="text-sm text-slate-500">{p.subtitle}</div>
+            <div className="text-sm text-slate-500 leading-tight">{p.subtitle}</div>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold">{p.price}</div>
@@ -208,7 +221,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
         </div>
 
         <ul className="mt-4 space-y-2 text-sm text-slate-600">
-          {p.features.map((f) => (
+          {visibleFeatures.map((f) => (
             <li key={f} className="flex items-start gap-2">
               <span className="inline-block w-5 h-5 mt-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center">✓</span>
               <span>{f}</span>
@@ -244,28 +257,34 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
         </thead>
         <tbody>
           <tr>
-            <td className="py-2">Monthly rows</td>
-            <td>10k</td>
-            <td>100k</td>
-            <td>Unlimited</td>
+            <td className="py-2">Monthly ingests</td>
+            <td>100</td>
+            <td>300</td>
+            <td>1,000</td>
           </tr>
           <tr className="bg-slate-50 dark:bg-slate-800">
-            <td className="py-2">Automations</td>
+            <td className="py-2">Extraction</td>
             <td>Basic</td>
-            <td>Advanced</td>
-            <td>Enterprise</td>
+            <td>Full</td>
+            <td>Full</td>
           </tr>
           <tr>
-            <td className="py-2">Support</td>
-            <td>Email</td>
-            <td>Priority email</td>
-            <td>Dedicated manager</td>
+            <td className="py-2">AI Descriptions</td>
+            <td>Basic</td>
+            <td>Full</td>
+            <td>Full</td>
           </tr>
           <tr className="bg-slate-50 dark:bg-slate-800">
-            <td className="py-2">SLA / Uptime</td>
-            <td>Standard</td>
-            <td>Enhanced</td>
-            <td>Enterprise SLA</td>
+            <td className="py-2">API</td>
+            <td>—</td>
+            <td>Read-only</td>
+            <td>Read + Write</td>
+          </tr>
+          <tr>
+            <td className="py-2">Users</td>
+            <td>1</td>
+            <td>3</td>
+            <td>Unlimited</td>
           </tr>
         </tbody>
       </table>
