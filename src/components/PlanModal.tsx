@@ -8,11 +8,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 /**
  * PlanModal - Hard-blocking paywall modal (compact features: max 3 per plan)
  *
- * - Non-closable (Escape swallowed), focus-trapped, portaled
- * - Shows three plan cards with price, concise subtitle (<=2 lines) and up to 3 feature bullets
- * - Growth plan is pre-selected and visually highlighted as "Most popular" (subtle)
- * - Switching plans uses only transform/box-shadow/ring transitions (no border-width changes)
- *   to avoid layout reflow and visual "bounce"
+ * UX changes to be smoother / easier on the eyes:
+ * - Removed scale on selection (no layout-affecting changes)
+ * - Use subtle ring + softened shadow for the selected card
+ * - Longer, gentler transition on transform/shadow/background-color
+ * - Slight hover lift with transform-gpu for smoothness
+ * - Keep border width constant to avoid reflow / bounce
+ *
+ * Behavior unchanged otherwise: Growth is preselected, CTA focused, focus-trap maintained.
  */
 
 type PlanKey = "starter" | "growth" | "pro";
@@ -205,15 +208,12 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     const isSelected = selectedPlan === planKey;
     const isRecommended = planKey === "growth";
 
-    // Keep border width constant; highlight via ring/shadow/scale which don't cause reflow.
-    const baseClasses =
-      "relative cursor-pointer flex-1 rounded-lg p-4 border bg-white dark:bg-slate-900";
-    const interactiveClasses =
-      "transition-transform transition-shadow transition-colors duration-150 ease-out";
-
+    // Keep border width constant; highlight via ring + softened shadow and gentle transform (no scale)
+    const baseClasses = "relative cursor-pointer flex-1 rounded-lg p-4 border bg-white dark:bg-slate-900";
+    const interactiveClasses = "transform-gpu transition-shadow transition-transform transition-colors duration-300 ease-out";
     const selectedVisuals = isSelected
-      ? "ring-2 ring-indigo-500 shadow-xl scale-[1.01] bg-indigo-50 dark:bg-slate-800"
-      : "shadow-sm";
+      ? "ring-2 ring-indigo-500 shadow-[0_12px_30px_rgba(99,102,241,0.06)] bg-indigo-50 dark:bg-slate-800"
+      : "shadow-sm hover:shadow-[0_10px_24px_rgba(15,23,42,0.06)] hover:-translate-y-0.5";
 
     return (
       <div
@@ -262,7 +262,13 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
               e.stopPropagation();
               startPlan(planKey);
             }}
-            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${loading ? "bg-slate-200 text-slate-700" : isSelected ? "bg-indigo-600 text-white hover:bg-indigo-700" : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"}`}
+            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${
+              loading
+                ? "bg-slate-200 text-slate-700"
+                : isSelected
+                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+            }`}
             disabled={Boolean(loadingPlan)}
             type="button"
             aria-label={`${p.title} - ${p.price} - ${p.ctaLabel ?? "Start trial"}`}
