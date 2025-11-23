@@ -3,10 +3,11 @@ import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2022-11-15" });
-// Use explicit env. NEXT_PUBLIC_APP_URL should be set in your deployment settings.
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const CONFIGURED_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
 
-// Map plan keys to env price IDs
+/**
+ * resolvePriceId: same mapping logic as before — payload.priceId preferred, otherwise map plan keys.
+ */
 function resolvePriceId(payload: any) {
   if (payload?.priceId && typeof payload.priceId === "string") return payload.priceId;
   const plan = (payload?.plan || "starter").toString().toLowerCase();
@@ -19,6 +20,25 @@ function resolvePriceId(payload: any) {
   return map[plan] ?? map.default;
 }
 
+/**
+ * Helper: build a base URL for success/cancel. Prefer configured env (production).
+ * Fallback: derive origin from request headers (origin or x-forwarded-proto + host).
+ */
+function getBaseUrlFromRequest(req: Request) {
+  if (CONFIGURED_APP_URL) return CONFIGURED_APP_URL.replace(/\/$/, "");
+  // Prefer Origin header if present (client or proxy)
+  const origin = req.headers.get("origin");
+  if (origin) return origin.replace(/\/$/, "");
+  // Fallback to forwarded proto + host, or host alone (assume https if missing)
+  const proto = req.headers.get("x-forwarded-proto") || req.headers.get("x-forwarded-protocol") || "https";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+  if (host) {
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+  // Last fallback: localhost
+  return "http://localhost:3000";
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = getAuth(req as any);
@@ -27,7 +47,18 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const priceId = resolvePriceId(body);
 
-    console.info("checkout session requested", { userId, payload: body, resolvedPriceId: priceId, APP_URL });
+    const base = getBaseUrlFromRequest(req);
+    const successUrl = `${base}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${base}/dashboard?checkout_canceled=1`;
+
+    console.info("checkout session requested", {
+      userId,
+      payload: body,
+      resolvedPriceId: priceId,
+      base,
+      successUrl,
+      cancelUrl,
+    });
 
     if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
       console.error("Invalid or missing priceId:", priceId, "payload:", body);
@@ -63,7 +94,7 @@ export async function POST(req: Request) {
         metadata: { clerkUserId: userId },
       });
 
-      // Optionally persist stripeCustomerId to Clerk privateMetadata here (recommended)
+      // Persist stripeCustomerId to Clerk privateMetadata (recommended)
       try {
         const existing = await clerkClient.users.getUser(userId);
         const prevPrivate = (existing?.privateMetadata as any) || {};
@@ -78,12 +109,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Use a stable cancel url and include a query so you can show friendly UI
-    const successUrl = `${APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${APP_URL}/dashboard?checkout_canceled=1`;
-
-    console.info("creating Stripe checkout session", { customerId: customer.id, priceId, successUrl, cancelUrl });
-
+    // Create Checkout session with 14-day trial
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: "subscription",
