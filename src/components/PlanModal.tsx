@@ -42,7 +42,7 @@ const PLANS: Record<
     subtitle: "For growing e‑commerce teams managing catalogs and workflows.",
     features: [
       "300 product ingests / month",
-      "Full Extraction, SEO & Variant workflows",
+      "Full Extraction, SEO & Variants",
       "Feeds, Bulk Ops & API (read-only)",
     ],
     ctaLabel: "Start 14‑day free trial",
