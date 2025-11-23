@@ -1,6 +1,7 @@
-// TEMPORARY: /api/debug/envs
-// Returns boolean/present and length info for server envs (never prints values).
-// Protect with DEBUG_SECRET header: set DEBUG_SECRET in Vercel before deploying.
+// TEMPORARY debug endpoint - /api/debug/envs
+// Protect with DEBUG_SECRET header. This endpoint only returns presence/length info (no secret values).
+// Add DEBUG_SECRET in Vercel and deploy, then call with header x-debug-secret: <DEBUG_SECRET>.
+
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function GET(req: NextRequest) {
@@ -10,10 +11,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  function present(name: string) {
+  const present = (name: string) => {
     const v = process.env[name];
     return { present: !!v, length: v ? String(v).length : 0 };
-  }
+  };
 
   return NextResponse.json({
     ok: true,
@@ -24,8 +25,9 @@ export async function GET(req: NextRequest) {
       NEXT_PUBLIC_SUPABASE_URL: present("NEXT_PUBLIC_SUPABASE_URL"),
       NEXT_PUBLIC_SUPABASE_ANON_KEY: present("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
       INGEST_SECRET: present("INGEST_SECRET"),
-      APP_URL: present("APP_URL")
+      APP_URL: present("APP_URL"),
+      NODE_ENV: present("NODE_ENV")
     },
-    note: "This endpoint only reveals presence/length, not values. Remove after debugging."
+    note: "This endpoint shows only presence and lengths. Remove after debugging."
   });
 }
