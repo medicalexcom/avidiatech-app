@@ -1,6 +1,6 @@
 // GET status for a job: /api/v1/ingest/:id
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { Request } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -13,12 +13,16 @@ function getSupabaseClient() {
   return createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+/**
+ * Note: Use the Request type and the parameter shape { params: { id: string } }
+ * so the exported GET handler matches Next.js App Router's expected RouteHandlerConfig
+ */
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    const id = params.id;
+    const id = params?.id;
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
     let supabase;
@@ -35,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       .eq("id", id)
       .single();
 
-    if (error) {
+    if (error || !data) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
