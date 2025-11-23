@@ -2,9 +2,11 @@ import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2022-11-15" });
+// Use explicit env. NEXT_PUBLIC_APP_URL should be set in your deployment settings.
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+// Map plan keys to env price IDs
 function resolvePriceId(payload: any) {
   if (payload?.priceId && typeof payload.priceId === "string") return payload.priceId;
   const plan = (payload?.plan || "starter").toString().toLowerCase();
@@ -25,14 +27,22 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const priceId = resolvePriceId(body);
 
-    console.info("checkout session requested", { userId, payload: body, resolvedPriceId: priceId });
+    console.info("checkout session requested", { userId, payload: body, resolvedPriceId: priceId, APP_URL });
 
     if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
       console.error("Invalid or missing priceId:", priceId, "payload:", body);
-      return NextResponse.json({ error: "server misconfigured: invalid or missing Stripe price id" }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: "server misconfigured: invalid or missing Stripe price id",
+          resolvedPriceId: priceId ?? null,
+          hint:
+            "Ensure STRIPE_PRICE_ID_STARTER/STRIPE_PRICE_ID_GROWTH/STRIPE_PRICE_ID_PRO are set in your environment, or pass priceId in the request body.",
+        },
+        { status: 500 }
+      );
     }
 
-    // Get Clerk user email (optional)
+    // Retrieve Clerk user email (optional)
     let email: string | undefined;
     try {
       const clerkUser = await clerkClient.users.getUser(userId);
@@ -41,7 +51,7 @@ export async function POST(req: Request) {
       console.warn("Unable to fetch Clerk user email:", err);
     }
 
-    // Find or create customer
+    // Find or create Stripe customer
     let customer;
     if (email) {
       const customers = await stripe.customers.list({ email, limit: 1 });
@@ -53,9 +63,8 @@ export async function POST(req: Request) {
         metadata: { clerkUserId: userId },
       });
 
-      // Persist stripeCustomerId to Clerk privateMetadata (server-side)
+      // Optionally persist stripeCustomerId to Clerk privateMetadata here (recommended)
       try {
-        // merge with existing privateMetadata if needed
         const existing = await clerkClient.users.getUser(userId);
         const prevPrivate = (existing?.privateMetadata as any) || {};
         await clerkClient.users.updateUser(userId, {
@@ -69,7 +78,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // Create Checkout session with 14-day trial
+    // Use a stable cancel url and include a query so you can show friendly UI
+    const successUrl = `${APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${APP_URL}/dashboard?checkout_canceled=1`;
+
+    console.info("creating Stripe checkout session", { customerId: customer.id, priceId, successUrl, cancelUrl });
+
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: "subscription",
@@ -81,8 +95,8 @@ export async function POST(req: Request) {
         metadata: { clerkUserId: userId },
       },
       metadata: { clerkUserId: userId },
-      success_url: `${APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${APP_URL}/dashboard`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     });
 
     return NextResponse.json({ url: session.url });
