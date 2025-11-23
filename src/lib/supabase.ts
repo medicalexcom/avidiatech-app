@@ -1,26 +1,25 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { getSupabaseServiceRoleKey, getSupabaseUrl } from './env';
+// Lazy Supabase client factory — avoids calling createClient at module import time.
+// Replace any direct top-level createClient usage with getSupabaseClient().
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-let cachedClient: SupabaseClient | null = null;
+let _supabase: SupabaseClient | null = null;
 
-export function getServiceSupabaseClient(): SupabaseClient {
-  if (cachedClient) return cachedClient;
+export function getSupabaseClient(): SupabaseClient {
+  if (_supabase) return _supabase;
 
-  const supabaseUrl = getSupabaseUrl();
-  const serviceRoleKey = getSupabaseServiceRoleKey();
+  const SUPABASE_URL = process.env.SUPABASE_URL || "";
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error(
-      'Supabase environment variables are missing. Please set SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
-    );
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    // Throw so callers can return a 500 / server-misconfigured response.
+    throw new Error("Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
   }
 
-  cachedClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  // Require here to delay module evaluation until runtime
+  // (avoids importing/initializing at build-time when envs may be absent).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createClient } = require("@supabase/supabase-js");
 
-  return cachedClient;
+  _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  return _supabase;
 }
