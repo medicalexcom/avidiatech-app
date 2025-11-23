@@ -11,12 +11,8 @@ import { useSearchParams, useRouter } from "next/navigation";
  * - Non-closable (Escape swallowed), focus-trapped, portaled
  * - Shows three plan cards with price, concise subtitle (<=2 lines) and up to 3 feature bullets
  * - Growth plan is pre-selected and visually highlighted as "Most popular" (subtle)
- * - "Compare all plans" toggles a compact comparison table (keeps full details on pricing page)
- * - "Already completed checkout? Check status" polls /api/subscription/status
- * - Includes Sign out and Account actions in the footer so users can escape
- *
- * Keep the modal blocking: it intentionally prevents interaction with the dashboard
- * until the user starts a trial / has an active subscription.
+ * - Switching plans uses only transform/box-shadow/ring transitions (no border-width changes)
+ *   to avoid layout reflow and visual "bounce"
  */
 
 type PlanKey = "starter" | "growth" | "pro";
@@ -29,34 +25,21 @@ const PLANS: Record<
     title: "Starter",
     price: "$49/mo",
     subtitle: "For solopreneurs & small shops who want essential automation.",
-    features: [
-      "100 product ingests / month",
-      "Basic Extraction & Description AI",
-      "Basic SEO & Specs extraction",
-      // full details live on the pricing page
-    ],
+    features: ["100 product ingests / month", "Basic Extraction & Description AI", "Basic SEO & Specs extraction"],
     ctaLabel: "Start 14‑day free trial",
   },
   growth: {
     title: "Growth",
     price: "$149/mo",
     subtitle: "For growing e‑commerce teams managing catalogs and workflows.",
-    features: [
-      "300 product ingests / month",
-      "Full Extraction, SEO & Variants",
-      "Feeds, Bulk Ops & API (read-only)",
-    ],
+    features: ["300 product ingests / month", "Full Extraction, SEO & Variants", "Feeds, Bulk Ops & API (read-only)"],
     ctaLabel: "Start 14‑day free trial",
   },
   pro: {
     title: "Pro / Agency",
     price: "$399/mo",
     subtitle: "For agencies, distributors, and large catalog operations.",
-    features: [
-      "1,000 product ingests / month",
-      "Unlimited users & dedicated queues",
-      "Full API (read+write) & agency tools",
-    ],
+    features: ["1,000 product ingests / month", "Unlimited users & dedicated queues", "Full API (read+write) & agency tools"],
     ctaLabel: "Start 14‑day free trial",
   },
 };
@@ -73,7 +56,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   const [error, setError] = useState<string | null>(null);
   const [showCompare, setShowCompare] = useState(false);
 
-  // Pre-select Growth as the default "recommended" plan
+  // Pre-select Growth as the recommended plan
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>("growth");
 
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -125,7 +108,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     };
   }, [searchParams.toString()]);
 
-  // Focus trap inside modal and focus the selected plan's CTA by default
+  // Focus trap inside modal, focus CTA of selected plan by default
   useEffect(() => {
     if (!modalRef.current) return;
     const modal = modalRef.current;
@@ -134,8 +117,8 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     const nodes = Array.from(modal.querySelectorAll<HTMLElement>(selectors));
     focusableRefs.current = nodes;
 
-    // Focus the CTA for the selected plan if available
     if (firstFocusableRef.current) {
+      // focus selected plan CTA
       firstFocusableRef.current.focus();
     } else if (nodes.length) {
       nodes[0].focus();
@@ -166,7 +149,9 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     }
 
     document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+    };
   }, [checking, active, showCompare, selectedPlan]);
 
   async function startPlan(plan: PlanKey) {
@@ -217,26 +202,31 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     const p = PLANS[planKey];
     const loading = loadingPlan === planKey;
     const visibleFeatures = p.features.slice(0, 3); // show up to 3 features
-
     const isSelected = selectedPlan === planKey;
     const isRecommended = planKey === "growth";
+
+    // Keep border width constant; highlight via ring/shadow/scale which don't cause reflow.
+    const baseClasses =
+      "relative cursor-pointer flex-1 rounded-lg p-4 border bg-white dark:bg-slate-900";
+    const interactiveClasses =
+      "transition-transform transition-shadow transition-colors duration-150 ease-out";
+
+    const selectedVisuals = isSelected
+      ? "ring-2 ring-indigo-500 shadow-xl scale-[1.01] bg-indigo-50 dark:bg-slate-800"
+      : "shadow-sm";
 
     return (
       <div
         key={planKey}
         onClick={() => setSelectedPlan(planKey)}
-        className={`relative cursor-pointer flex-1 rounded-lg p-4 ${
-          isSelected
-            ? "border-2 border-indigo-500 bg-indigo-50 dark:bg-slate-800 shadow-lg transform"
-            : "border bg-white dark:bg-slate-900 shadow-sm"
-        }`}
+        className={`${baseClasses} ${interactiveClasses} ${selectedVisuals}`}
         role="button"
         aria-pressed={isSelected}
-        tabIndex={-1}
+        tabIndex={0}
       >
-        {/* Recommended badge for Growth */}
+        {/* Recommended badge for Growth (subtle) */}
         {isRecommended && (
-          <div className="absolute -top-3 right-3">
+          <div className="absolute -top-3 right-3 pointer-events-none">
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
               Most popular
             </span>
@@ -257,7 +247,9 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
         <ul className="mt-4 space-y-2 text-sm text-slate-600">
           {visibleFeatures.map((f) => (
             <li key={f} className="flex items-start gap-2">
-              <span className="inline-block w-5 h-5 mt-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center">✓</span>
+              <span className="inline-block w-5 h-5 mt-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center">
+                ✓
+              </span>
               <span>{f}</span>
             </li>
           ))}
@@ -270,13 +262,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
               e.stopPropagation();
               startPlan(planKey);
             }}
-            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${
-              loading
-                ? "bg-slate-200 text-slate-700"
-                : isSelected
-                ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
-            }`}
+            className={`w-full inline-flex items-center justify-center py-2 px-3 rounded ${loading ? "bg-slate-200 text-slate-700" : isSelected ? "bg-indigo-600 text-white hover:bg-indigo-700" : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"}`}
             disabled={Boolean(loadingPlan)}
             type="button"
             aria-label={`${p.title} - ${p.price} - ${p.ctaLabel ?? "Start trial"}`}
