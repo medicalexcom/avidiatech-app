@@ -5,13 +5,22 @@ import { getAuth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { signPayload } from "@/lib/ingest/signature";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || ""; // e.g. https://ingest-render.example.com/ingest
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+/**
+ * Lazily create Supabase client at request time so builds don't run createClient()
+ * when env vars are not yet available during static / build phases.
+ */
+function getSupabaseClient() {
+  const SUPABASE_URL = process.env.SUPABASE_URL || "";
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+  }
+  return createClient(SUPABASE_URL, SUPABASE_KEY);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +33,15 @@ export async function POST(req: NextRequest) {
     const correlation_id = body?.correlationId || `corr_${Date.now()}`;
 
     if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
+
+    // create supabase client at runtime (throws if env not present)
+    let supabase;
+    try {
+      supabase = getSupabaseClient();
+    } catch (err: any) {
+      console.error("Supabase configuration missing", err.message);
+      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
+    }
 
     // Resolve profile / tenant (profiles table assumed)
     const { data: profileData, error: profileError } = await supabase
