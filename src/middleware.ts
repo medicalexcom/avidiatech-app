@@ -4,16 +4,10 @@ import { clerkMiddleware, getAuth, clerkClient } from "@clerk/nextjs/server";
 import Stripe from "stripe";
 
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
-/**
- * Very conservative allowlist:
- * Only these UI/API routes are allowed without an active subscription/trial.
- * NOTE: we added "/dashboard" here so the shell (topbar/sidebar) can render and the modal can overlay.
- */
 const ALLOWLIST = [
-  "/dashboard",                  // allow dashboard shell so modal can overlay it
+  "/dashboard",                  // allow dashboard shell
   "/dashboard/pricing",
   "/dashboard/account",
   "/dashboard/organization",
@@ -23,7 +17,6 @@ const ALLOWLIST = [
   "/api/subscription/status",
 ];
 
-/** Helper to determine whether a pathname is allowed without an active subscription */
 function isAllowedPath(pathname: string) {
   if (ALLOWLIST.includes(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
@@ -32,7 +25,6 @@ function isAllowedPath(pathname: string) {
   return false;
 }
 
-/** Check via Clerk metadata/Stripe if user has trialing or active subscription */
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
   if (!stripe) {
@@ -81,17 +73,14 @@ async function userHasActiveSubscription(userId: string | undefined) {
     }
   } catch (err) {
     console.warn("Stripe subscriptions lookup failed:", err);
-    // fail-safe: treat as no subscription
   }
 
   return false;
 }
 
-/** Compose Clerk middleware then enforce our gate */
 const clerkMw = clerkMiddleware();
 
 export default async function middleware(req: NextRequest, ev: any) {
-  // Run Clerk middleware first (so getAuth works)
   try {
     const maybeResponse = await (clerkMw as any)(req, ev);
     if (maybeResponse) return maybeResponse;
@@ -101,37 +90,30 @@ export default async function middleware(req: NextRequest, ev: any) {
 
   const pathname = req.nextUrl.pathname;
 
-  // Only protect dashboard/UI and API routes
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  // Allow whitelisted paths without subscription (includes "/dashboard" now)
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Now safe to call getAuth
   const { userId } = getAuth(req as any);
 
   if (!userId) {
-    // Not signed in → force sign-in
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
     signInUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  // Signed-in → check subscription/trial
   const hasActive = await userHasActiveSubscription(userId);
   if (hasActive) return NextResponse.next();
 
-  // Signed-in but unsubscribed → restrict access to non-allowed paths
-  // For non-allowed routes, we redirect to the dashboard root where the modal will show
+  // Signed-in but unsubscribed -> redirect deep routes to dashboard root (so shell renders)
   const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
   return NextResponse.redirect(dashboardRoot);
 }
 
-/** Middleware matches both dashboard and API routes so server endpoints are blocked as well */
 export const config = {
   matcher: ["/dashboard/:path*", "/api/:path*"],
 };
