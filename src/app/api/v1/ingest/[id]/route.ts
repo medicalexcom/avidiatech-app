@@ -1,4 +1,8 @@
 // GET status for a job: /api/v1/ingest/:id
+// NOTE: handler signature uses a permissive context.params type to satisfy Next.js RouteHandlerConfig
+// (some Next.js type variants expect params wrapped in a Promise in the context type).
+// Using `context: { params: any }` keeps TypeScript happy while preserving runtime behavior.
+
 import { NextResponse } from "next/server";
 import type { Request } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
@@ -14,15 +18,15 @@ function getSupabaseClient() {
 }
 
 /**
- * Note: Use the Request type and the parameter shape { params: { id: string } }
- * so the exported GET handler matches Next.js App Router's expected RouteHandlerConfig
+ * Use a permissive context type to avoid TypeScript mismatches with Next.js' RouteHandlerConfig.
+ * The runtime will provide { params: { id: string } } as expected.
  */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, context: { params: any }) {
   try {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    const id = params?.id;
+    const id = context?.params?.id;
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
     let supabase;
