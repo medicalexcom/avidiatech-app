@@ -3,22 +3,35 @@ import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2022-11-15" });
-// Prefer a server-only env var APP_URL for production (set in Vercel -> Environment Variables)
+// Prefer server APP_URL when set
 const CONFIGURED_APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
 function resolvePriceId(payload: any) {
   if (payload?.priceId && typeof payload.priceId === "string") return payload.priceId;
+
   const plan = (payload?.plan || "starter").toString().toLowerCase();
-  const map: Record<string, string | undefined> = {
-    starter: process.env.STRIPE_PRICE_ID_STARTER,
-    growth: process.env.STRIPE_PRICE_ID_GROWTH,
-    pro: process.env.STRIPE_PRICE_ID_PRO,
-    default: process.env.STRIPE_PRICE_ID_STARTER,
-  };
-  return map[plan] ?? map.default;
+  const billing = (payload?.billing || "monthly").toString().toLowerCase();
+
+  const planKey = plan.toUpperCase();
+  const monthlyEnv = `STRIPE_PRICE_ID_${planKey}_MONTHLY`;
+  const yearlyEnv = `STRIPE_PRICE_ID_${planKey}_YEARLY`;
+  const fallbackEnv = `STRIPE_PRICE_ID_${planKey}`; // legacy
+
+  let priceId: string | undefined;
+
+  if (billing === "yearly") {
+    priceId = process.env[yearlyEnv];
+  } else {
+    priceId = process.env[monthlyEnv];
+  }
+
+  if (!priceId) {
+    priceId = process.env[fallbackEnv];
+  }
+
+  return priceId;
 }
 
-/** Build base URL: prefer a server APP_URL. Only fallback to request origin if APP_URL unset. */
 function getBaseUrlFromRequest(req: Request) {
   if (CONFIGURED_APP_URL) return CONFIGURED_APP_URL;
   const origin = req.headers.get("origin");
@@ -35,34 +48,52 @@ export async function POST(req: Request) {
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
+    const billing = (body?.billing || "monthly").toString().toLowerCase();
     const priceId = resolvePriceId(body);
 
     const base = getBaseUrlFromRequest(req);
     const successUrl = `${base}/dashboard?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${base}/dashboard?checkout_canceled=1`;
 
+    // Build a helpful env map for debugging (only price env vars, safe to log)
+    const planUpper = (body?.plan || "starter").toString().toUpperCase();
+    const envKeys = [
+      `STRIPE_PRICE_ID_${planUpper}_MONTHLY`,
+      `STRIPE_PRICE_ID_${planUpper}_YEARLY`,
+      `STRIPE_PRICE_ID_${planUpper}`,
+    ];
+    const envMap: Record<string, string | null> = {};
+    envKeys.forEach((k) => {
+      envMap[k] = typeof process.env[k] === "string" ? process.env[k]! : null;
+    });
+
     console.info("checkout session requested", {
       userId,
       payload: body,
+      billing,
       resolvedPriceId: priceId,
       base,
       successUrl,
       cancelUrl,
       CONFIGURED_APP_URL: CONFIGURED_APP_URL || null,
+      envMap,
     });
 
     if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
-      console.error("Invalid or missing priceId:", priceId, "payload:", body);
+      // Helpful error: include which env keys were visible at runtime
       return NextResponse.json(
         {
           error: "server misconfigured: invalid or missing Stripe price id",
           resolvedPriceId: priceId ?? null,
+          envMap,
+          hint:
+            "Ensure STRIPE_PRICE_ID_<PLAN>_MONTHLY and STRIPE_PRICE_ID_<PLAN>_YEARLY are set in the environment for this deployment and that you've redeployed.",
         },
         { status: 500 }
       );
     }
 
-    // get Clerk user email
+    // Retrieve Clerk user email (optional)
     let email: string | undefined;
     try {
       const clerkUser = await clerkClient.users.getUser(userId);
@@ -82,22 +113,25 @@ export async function POST(req: Request) {
         email,
         metadata: { clerkUserId: userId },
       });
+    }
 
-      // Persist stripeCustomerId to Clerk privateMetadata (recommended)
-      try {
-        const existing = await clerkClient.users.getUser(userId);
-        const prevPrivate = (existing?.privateMetadata as any) || {};
+    // Persist stripeCustomerId to Clerk privateMetadata (recommended)
+    try {
+      const existing = await clerkClient.users.getUser(userId);
+      const prevPrivate = (existing?.privateMetadata as any) || {};
+      if (prevPrivate?.stripeCustomerId !== customer.id) {
         await clerkClient.users.updateUser(userId, {
           privateMetadata: {
             ...prevPrivate,
             stripeCustomerId: customer.id,
           },
         });
-      } catch (err) {
-        console.warn("Failed to persist stripeCustomerId to Clerk user metadata:", err);
       }
+    } catch (err) {
+      console.warn("Failed to persist stripeCustomerId to Clerk user metadata:", err);
     }
 
+    // Create Checkout session with 14-day trial
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: "subscription",
@@ -106,9 +140,9 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       subscription_data: {
         trial_period_days: 14,
-        metadata: { clerkUserId: userId },
+        metadata: { clerkUserId: userId, billing },
       },
-      metadata: { clerkUserId: userId },
+      metadata: { clerkUserId: userId, billing },
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
