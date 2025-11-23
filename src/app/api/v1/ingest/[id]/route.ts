@@ -4,16 +4,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
-
-function getSupabaseClient() {
-  const SUPABASE_URL = process.env.SUPABASE_URL || "";
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "";
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Missing Supabase configuration: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
-  }
-  return createClient(SUPABASE_URL, SUPABASE_KEY);
-}
+import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
  * Runtime handler: GET /api/v1/ingest/:id
@@ -27,11 +18,12 @@ export async function GET(req: NextRequest, context: { params: any }) {
     const id = context?.params?.id;
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
+    // Create supabase client lazily using service-role key (throws if misconfigured)
     let supabase;
     try {
-      supabase = getSupabaseClient();
+      supabase = getServiceSupabaseClient();
     } catch (err: any) {
-      console.error("Supabase configuration missing", err.message);
+      console.error("Supabase configuration missing", err?.message || err);
       return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
     }
 
@@ -42,6 +34,7 @@ export async function GET(req: NextRequest, context: { params: any }) {
       .single();
 
     if (error || !data) {
+      // Distinguish between not found vs DB error if you want more granularity
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
