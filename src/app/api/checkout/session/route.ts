@@ -3,11 +3,9 @@ import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2022-11-15" });
-const CONFIGURED_APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
+// Prefer a server-only env var APP_URL for production (set in Vercel -> Environment Variables)
+const CONFIGURED_APP_URL = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
-/**
- * resolvePriceId: same mapping logic as before — payload.priceId preferred, otherwise map plan keys.
- */
 function resolvePriceId(payload: any) {
   if (payload?.priceId && typeof payload.priceId === "string") return payload.priceId;
   const plan = (payload?.plan || "starter").toString().toLowerCase();
@@ -20,22 +18,14 @@ function resolvePriceId(payload: any) {
   return map[plan] ?? map.default;
 }
 
-/**
- * Helper: build a base URL for success/cancel. Prefer configured env (production).
- * Fallback: derive origin from request headers (origin or x-forwarded-proto + host).
- */
+/** Build base URL: prefer a server APP_URL. Only fallback to request origin if APP_URL unset. */
 function getBaseUrlFromRequest(req: Request) {
-  if (CONFIGURED_APP_URL) return CONFIGURED_APP_URL.replace(/\/$/, "");
-  // Prefer Origin header if present (client or proxy)
+  if (CONFIGURED_APP_URL) return CONFIGURED_APP_URL;
   const origin = req.headers.get("origin");
   if (origin) return origin.replace(/\/$/, "");
-  // Fallback to forwarded proto + host, or host alone (assume https if missing)
-  const proto = req.headers.get("x-forwarded-proto") || req.headers.get("x-forwarded-protocol") || "https";
+  const proto = req.headers.get("x-forwarded-proto") || "https";
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-  if (host) {
-    return `${proto}://${host}`.replace(/\/$/, "");
-  }
-  // Last fallback: localhost
+  if (host) return `${proto}://${host}`.replace(/\/$/, "");
   return "http://localhost:3000";
 }
 
@@ -58,6 +48,7 @@ export async function POST(req: Request) {
       base,
       successUrl,
       cancelUrl,
+      CONFIGURED_APP_URL: CONFIGURED_APP_URL || null,
     });
 
     if (!priceId || typeof priceId !== "string" || !priceId.startsWith("price_")) {
@@ -66,14 +57,12 @@ export async function POST(req: Request) {
         {
           error: "server misconfigured: invalid or missing Stripe price id",
           resolvedPriceId: priceId ?? null,
-          hint:
-            "Ensure STRIPE_PRICE_ID_STARTER/STRIPE_PRICE_ID_GROWTH/STRIPE_PRICE_ID_PRO are set in your environment, or pass priceId in the request body.",
         },
         { status: 500 }
       );
     }
 
-    // Retrieve Clerk user email (optional)
+    // get Clerk user email
     let email: string | undefined;
     try {
       const clerkUser = await clerkClient.users.getUser(userId);
@@ -109,7 +98,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Create Checkout session with 14-day trial
     const session = await stripe.checkout.sessions.create({
       customer: customer.id,
       mode: "subscription",
