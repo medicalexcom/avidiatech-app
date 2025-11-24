@@ -34,11 +34,12 @@ export async function GET(req: NextRequest, context: { params: any }) {
       .single();
 
     if (error || !data) {
-      // Distinguish between not found vs DB error if you want more granularity
+      // Row not found or DB error
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
-    return NextResponse.json({ job: data }, { status: 200 });
+    // Return the row directly (not wrapped) so the client receives the expected shape
+    return NextResponse.json(data, { status: 200 });
   } catch (err: any) {
     console.error("GET /api/v1/ingest/:id error", err);
     return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
