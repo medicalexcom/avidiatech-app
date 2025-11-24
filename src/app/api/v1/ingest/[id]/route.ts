@@ -1,22 +1,41 @@
-// GET status for a job: /api/v1/ingest/:id
-// NOTE: Use NextRequest type from next/server to match exports in this Next.js version.
-// Use a permissive context type so TypeScript doesn't complain about differing RouteHandlerConfig shapes.
-
+// https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/api/v1/ingest/%5Bid%5D/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
- * Runtime handler: GET /api/v1/ingest/:id
- * Accepts NextRequest and a permissive context so it compiles across Next.js type variants.
+ * GET /api/v1/ingest/:id
+ *
+ * Robustly extract the id from either context.params or the request URL (fallback).
+ * Requires a signed-in user via Clerk (getAuth). Returns the ingestion row directly.
  */
-export async function GET(req: NextRequest, context: { params: any }) {
+export async function GET(req: NextRequest, context: { params?: any }) {
   try {
-    const { userId } = getAuth(req as any);
-    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    // Optional: log for debugging (remove in production)
+    console.log("GET /api/v1/ingest/:id called", { params: context?.params });
 
-    const id = context?.params?.id;
-    if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+    const { userId } = getAuth(req as any);
+    if (!userId) {
+      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    }
+
+    // Try params first, then fallback to parsing the URL path
+    let id = context?.params?.id;
+    if (!id) {
+      try {
+        const url = new URL(req.url);
+        // pathname like /api/v1/ingest/<id> -> take last segment
+        const parts = url.pathname.split("/").filter(Boolean);
+        id = parts.length > 0 ? parts[parts.length - 1] : undefined;
+      } catch (e) {
+        // ignore and let the missing id handling run below
+      }
+    }
+
+    if (!id) {
+      console.warn("missing id param for GET /api/v1/ingest/:id");
+      return NextResponse.json({ error: "missing id" }, { status: 400 });
+    }
 
     // Create supabase client lazily using service-role key (throws if misconfigured)
     let supabase;
@@ -34,14 +53,14 @@ export async function GET(req: NextRequest, context: { params: any }) {
       .single();
 
     if (error || !data) {
-      // Row not found or DB error
+      console.warn("ingest row not found", { id, error });
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
-    // Return the row directly (not wrapped) so the client receives the expected shape
+    // Return the row directly (client components expect the row shape)
     return NextResponse.json(data, { status: 200 });
   } catch (err: any) {
     console.error("GET /api/v1/ingest/:id error", err);
-    return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
   }
 }
