@@ -4,8 +4,13 @@ import { useState } from "react";
 import IngestResult from "@/components/IngestResult";
 
 /**
- * Extract page with module toggles and export type selector.
- * Submits options and export_type to /api/v1/ingest.
+ * Extract page with "Full extract" default and mutually-exclusive module toggles.
+ *
+ * Behavior:
+ * - Full Extract is ON by default (runs full extraction & all modules).
+ * - If the user toggles any individual module ON, Full Extract is automatically turned OFF.
+ * - If Full Extract is ON, individual module checkboxes are disabled (visually indicating they are included).
+ * - Export type and correlation_id are preserved and sent to the gateway.
  */
 export default function ExtractPage() {
   const [url, setUrl] = useState("");
@@ -13,14 +18,40 @@ export default function ExtractPage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // toggles (default UX: on for SEO/specs/docs, variants optional)
-  const [includeSeo, setIncludeSeo] = useState(true);
-  const [includeSpecs, setIncludeSpecs] = useState(true);
-  const [includeDocs, setIncludeDocs] = useState(true);
+  // UX: Full extract default true
+  const [fullExtract, setFullExtract] = useState(true);
+
+  // individual modules (start false but ignored while fullExtract === true)
+  const [includeSeo, setIncludeSeo] = useState(false);
+  const [includeSpecs, setIncludeSpecs] = useState(false);
+  const [includeDocs, setIncludeDocs] = useState(false);
   const [includeVariants, setIncludeVariants] = useState(false);
 
   // export type
   const [exportType, setExportType] = useState<"JSON" | "Shopify" | "BigCommerce">("JSON");
+
+  // If the user toggles any individual module ON, disable fullExtract.
+  function onToggleModule(setter: (v: boolean) => void, value: boolean) {
+    if (!value) {
+      // turning a module ON (value is current state; we will set opposite)
+      // disable fullExtract when turning any module ON
+      setFullExtract(false);
+    }
+    setter(!value);
+  }
+
+  // If the user explicitly turns fullExtract ON, clear individual selections (they'll be implied)
+  function onToggleFullExtract() {
+    const next = !fullExtract;
+    setFullExtract(next);
+    if (next) {
+      // clear explicit selections to avoid confusion (they are implicit)
+      setIncludeSeo(false);
+      setIncludeSpecs(false);
+      setIncludeDocs(false);
+      setIncludeVariants(false);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -30,17 +61,24 @@ export default function ExtractPage() {
     setError(null);
 
     try {
-      const body = {
+      // If fullExtract is true, we send fullExtract flag and minimal options.
+      // Server will map fullExtract to options.include* = true.
+      const body: any = {
         url,
-        options: {
+        export_type: exportType,
+        correlationId: `corr_${Date.now()}`,
+        fullExtract,
+      };
+
+      if (!fullExtract) {
+        // only include explicit options user selected
+        body.options = {
           includeSeo,
           includeSpecs,
           includeDocs,
           includeVariants,
-        },
-        export_type: exportType, // persisted with the job for export pipeline
-        correlation_id: `corr_${Date.now()}`,
-      };
+        };
+      }
 
       const res = await fetch("/api/v1/ingest", {
         method: "POST",
@@ -73,7 +111,9 @@ export default function ExtractPage() {
     <div>
       <h1 className="text-3xl font-semibold mb-4">Extract</h1>
       <p className="mb-4">
-        Ingest a product URL. We always run a full raw extraction; choose which modules to generate now.
+        Ingest a product URL. We always perform a full raw extraction; choose whether to
+        run optional modules (SEO, Specs, Manuals, Variants) now. Full Extract runs all
+        modules by default; choosing specific modules disables Full Extract.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -90,22 +130,54 @@ export default function ExtractPage() {
           />
         </div>
 
-        <fieldset className="grid grid-cols-2 gap-4 p-3 border rounded">
-          <legend className="font-medium">Include modules now</legend>
+        <div className="flex items-center gap-3">
           <label className="flex items-center space-x-2">
-            <input type="checkbox" checked={includeSeo} onChange={() => setIncludeSeo(!includeSeo)} />
+            <input type="checkbox" checked={fullExtract} onChange={onToggleFullExtract} />
+            <span className="font-medium">Full extract (recommended)</span>
+          </label>
+          <span className="text-sm text-gray-500">Runs raw extraction + all modules</span>
+        </div>
+
+        <fieldset className="grid grid-cols-2 gap-4 p-3 border rounded">
+          <legend className="font-medium">Or select individual modules (turning any ON disables Full extract)</legend>
+
+          <label className={`flex items-center space-x-2 ${fullExtract ? "opacity-50" : ""}`}>
+            <input
+              type="checkbox"
+              checked={includeSeo}
+              onChange={() => onToggleModule(setIncludeSeo, includeSeo)}
+              disabled={fullExtract}
+            />
             <span>Include SEO?</span>
           </label>
-          <label className="flex items-center space-x-2">
-            <input type="checkbox" checked={includeSpecs} onChange={() => setIncludeSpecs(!includeSpecs)} />
+
+          <label className={`flex items-center space-x-2 ${fullExtract ? "opacity-50" : ""}`}>
+            <input
+              type="checkbox"
+              checked={includeSpecs}
+              onChange={() => onToggleModule(setIncludeSpecs, includeSpecs)}
+              disabled={fullExtract}
+            />
             <span>Include Specs?</span>
           </label>
-          <label className="flex items-center space-x-2">
-            <input type="checkbox" checked={includeDocs} onChange={() => setIncludeDocs(!includeDocs)} />
+
+          <label className={`flex items-center space-x-2 ${fullExtract ? "opacity-50" : ""}`}>
+            <input
+              type="checkbox"
+              checked={includeDocs}
+              onChange={() => onToggleModule(setIncludeDocs, includeDocs)}
+              disabled={fullExtract}
+            />
             <span>Include Manuals / PDF extraction?</span>
           </label>
-          <label className="flex items-center space-x-2">
-            <input type="checkbox" checked={includeVariants} onChange={() => setIncludeVariants(!includeVariants)} />
+
+          <label className={`flex items-center space-x-2 ${fullExtract ? "opacity-50" : ""}`}>
+            <input
+              type="checkbox"
+              checked={includeVariants}
+              onChange={() => onToggleModule(setIncludeVariants, includeVariants)}
+              disabled={fullExtract}
+            />
             <span>Generate Variants? (optional)</span>
           </label>
         </fieldset>
