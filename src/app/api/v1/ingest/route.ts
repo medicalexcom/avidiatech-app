@@ -10,6 +10,11 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
 
 /**
  * POST /api/v1/ingest
+ *
+ * Accepts:
+ *  - fullExtract: boolean (if true, server maps to include* = true)
+ *  - options: { includeSeo, includeSpecs, includeDocs, includeVariants } (used when fullExtract is false)
+ *  - export_type
  */
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +23,9 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const url = (body?.url || "").toString();
-    const options = body?.options || {};
+    const clientOptions = body?.options || {};
+    const fullExtract = !!body?.fullExtract;
+    const export_type = body?.export_type || "JSON";
     const correlation_id = body?.correlationId || `corr_${Date.now()}`;
 
     if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
@@ -60,13 +67,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Build effective options:
+    const effectiveOptions = fullExtract
+      ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
+      : {
+          includeSeo: !!clientOptions.includeSeo,
+          includeSpecs: !!clientOptions.includeSpecs,
+          includeDocs: !!clientOptions.includeDocs,
+          includeVariants: !!clientOptions.includeVariants,
+        };
+
+    // persist flags for reprocessing and billing
+    const flags = {
+      full_extract: fullExtract,
+      includeSeo: !!effectiveOptions.includeSeo,
+      includeSpecs: !!effectiveOptions.includeSpecs,
+      includeDocs: !!effectiveOptions.includeDocs,
+      includeVariants: !!effectiveOptions.includeVariants,
+    };
+
     // Create product_ingestions row (status: pending)
     const insert = {
       tenant_id,
       user_id: userId,
       source_url: url,
       status: "pending",
-      options,
+      options: effectiveOptions,
+      flags,
+      export_type,
       correlation_id,
       created_at: new Date().toISOString(),
     };
@@ -85,8 +113,11 @@ export async function POST(req: NextRequest) {
       job_id: jobId,
       tenant_id,
       url,
-      options,
+      options: effectiveOptions,
+      export_type,
       callback_url: `${APP_URL}/api/v1/ingest/callback`,
+      // tell engine this is a freshly-created job
+      action: "ingest",
     };
 
     // Sign payload
