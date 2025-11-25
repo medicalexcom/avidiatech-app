@@ -7,6 +7,11 @@ import { useSearchParams, useRouter } from "next/navigation";
  * - Works with ?ingestionId=... OR ?url=...
  * - If ingestionId is present: loads job and allows generating & saving seo_payload/description_html
  * - If url is present: allows on-the-fly generation of SEO from URL (no ingest required)
+ *
+ * Layout fixes:
+ * - Responsive centered container (max width)
+ * - Wrapping header and controls to avoid overflow
+ * - Pre/code blocks configured to wrap/word-break to avoid horizontal scroll
  */
 export default function AvidiaSeoPage() {
   const params = useSearchParams();
@@ -87,9 +92,8 @@ export default function AvidiaSeoPage() {
         return;
       }
 
-      // If persisted, backend will have created/updated an ingestion; if not, we get seo object back.
+      // If persisted, backend will return ingestionId
       if (json?.ingestionId) {
-        // navigate to AvidiaSEO for the created ingestion
         router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(json.ingestionId)}`);
         return;
       }
@@ -104,13 +108,13 @@ export default function AvidiaSeoPage() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <button onClick={() => router.push(`/dashboard/extract${ingestionId ? `?ingestionId=${encodeURIComponent(ingestionId)}` : ""}`)}>← Back to Extract</button>
-        <h2 style={{ margin: 0 }}>AvidiaSEO</h2>
-      </div>
+    <div className="p-6">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex flex-wrap items-center gap-4 mb-4">
+          <button onClick={() => router.push(`/dashboard/extract${ingestionId ? `?ingestionId=${encodeURIComponent(ingestionId)}` : ""}`)}>← Back to Extract</button>
+          <h2 className="m-0">AvidiaSEO</h2>
+        </div>
 
-      <div style={{ marginTop: 16 }}>
         {loading && <p>Loading ingestion...</p>}
         {error && <div style={{ color: "crimson" }}>{error}</div>}
 
@@ -118,13 +122,15 @@ export default function AvidiaSeoPage() {
         {job && ingestionId && (
           <div style={{ marginTop: 12 }}>
             <h3>Source SEO (scraped)</h3>
-            <pre style={{ background: "#f8fafc", padding: 12 }}>{JSON.stringify(job.normalized_payload?.source_seo || job.source_seo || {}, null, 2)}</pre>
+            <pre style={{ background: "#f8fafc", padding: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+              {JSON.stringify(job.normalized_payload?.source_seo || job.source_seo || {}, null, 2)}
+            </pre>
 
-            <div style={{ marginTop: 12 }}>
-              <button onClick={generateFromIngestion} disabled={generating} style={{ padding: "8px 12px", background: "#0ea5e9", color: "white", borderRadius: 6 }}>
+            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+              <button onClick={generateFromIngestion} disabled={generating} className="px-3 py-2 bg-sky-600 text-white rounded">
                 {generating ? "Generating..." : "Generate SEO Description"}
               </button>
-              <span style={{ marginLeft: 12, color: "#666" }}>AvidiaSEO will generate H1, meta title, meta description and a full HTML description.</span>
+              <span style={{ color: "#666" }}>AvidiaSEO will generate H1, title, meta description and a full HTML description.</span>
             </div>
 
             <hr style={{ margin: "16px 0" }} />
@@ -136,7 +142,7 @@ export default function AvidiaSeoPage() {
                 <div><strong>Title:</strong> {job.seo_payload.title}</div>
                 <div><strong>Meta:</strong> {job.seo_payload.meta_description}</div>
                 <h4 style={{ marginTop: 8 }}>HTML Description</h4>
-                <div dangerouslySetInnerHTML={{ __html: job.description_html || "<em>No description generated yet</em>" }} />
+                <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }} dangerouslySetInnerHTML={{ __html: job.description_html || "<em>No description generated yet</em>" }} />
               </div>
             ) : (
               <div style={{ color: "#666" }}>No AvidiaSEO generated for this job yet.</div>
@@ -147,12 +153,12 @@ export default function AvidiaSeoPage() {
         {/* If no ingestion or direct URL flow: show URL input and on-the-fly generation */}
         <div style={{ marginTop: 16 }}>
           <h3>Generate SEO from a URL (no extract required)</h3>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://example.com/product" style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid #ddd" }} />
-            <button onClick={() => generateFromUrl(false)} disabled={generating} style={{ padding: "8px 12px", background: "#10b981", color: "white", borderRadius: 6 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://example.com/product" style={{ flex: 1, minWidth: 240, padding: 8, borderRadius: 6, border: "1px solid #ddd" }} />
+            <button onClick={() => generateFromUrl(false)} disabled={generating} className="px-3 py-2 bg-emerald-500 text-white rounded">
               {generating ? "Generating..." : "Generate (Preview)"}
             </button>
-            <button onClick={() => generateFromUrl(true)} disabled={generating} style={{ padding: "8px 12px", background: "#3b82f6", color: "white", borderRadius: 6 }}>
+            <button onClick={() => generateFromUrl(true)} disabled={generating} className="px-3 py-2 bg-sky-600 text-white rounded">
               Generate & Save to Ingestion
             </button>
           </div>
@@ -171,7 +177,7 @@ export default function AvidiaSeoPage() {
               <div><strong>Title:</strong> {job.seo_payload.title}</div>
               <div><strong>Meta:</strong> {job.seo_payload.meta_description}</div>
               <h4 style={{ marginTop: 8 }}>HTML Description</h4>
-              <div dangerouslySetInnerHTML={{ __html: job.description_html || "<em>No description generated</em>" }} />
+              <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }} dangerouslySetInnerHTML={{ __html: job.description_html || "<em>No description generated</em>" }} />
             </div>
           )}
         </div>
