@@ -1,15 +1,19 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 
 /**
- * Minimal tab shell. Each tab reads from job.normalized_payload (if available).
- * Extend each pane into separate components as needed.
+ * Minimal tab shell for Extract page.
+ * - Shows Source SEO (scraped) separately.
+ * - Does NOT display AvidiaSEO (generated) content here.
+ * - Provides CTA to go to AvidiaSEO page to generate GPT SEO.
  */
 export default function TabsShell({ job, loading, error, noDataMessage }: any) {
+  const router = useRouter();
   const payload = job?.normalized_payload || job?.raw_payload || null;
 
   // quick detection which tabs to show; show when module present or raw available
-  const hasSeo = !!payload?.seo;
+  const hasSourceSeo = !!payload?.source_seo;
   const hasSpecs = !!payload?.specs_json || !!payload?.specs || !!payload?.specs_payload;
   const hasManuals = Array.isArray(payload?.pdfs) && payload.pdfs.length > 0;
   const hasVariants = Array.isArray(payload?.variants) && payload.variants.length > 0;
@@ -29,9 +33,10 @@ export default function TabsShell({ job, loading, error, noDataMessage }: any) {
 
   return (
     <div>
-      <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+      <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button>Overview</button>
-        <button disabled={!hasSeo}>SEO</button>
+        {/* Note: Extract should NOT render AvidiaSEO. The SEO tab here shows only Source SEO (scraped). */}
+        <button disabled={!hasSourceSeo}>Source SEO</button>
         <button disabled={!hasSpecs}>Specs</button>
         <button disabled={!hasManuals}>Manuals</button>
         <button disabled={!hasVariants}>Variants</button>
@@ -43,22 +48,40 @@ export default function TabsShell({ job, loading, error, noDataMessage }: any) {
       <div>
         {/* Overview */}
         <section style={{ marginBottom: 12 }}>
-          <h4>Overview</h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h4>Overview</h4>
+            {job?.id && (
+              <button
+                onClick={() => router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(job.id)}`)}
+                style={{ padding: "6px 10px", background: "#0ea5e9", color: "white", borderRadius: 6 }}
+              >
+                Generate SEO Description →
+              </button>
+            )}
+          </div>
           <div dangerouslySetInnerHTML={{ __html: payload?.description_html || payload?.raw_preview || "<em>No overview available</em>" }} />
         </section>
 
-        {/* SEO */}
+        {/* Source SEO */}
         <section style={{ marginBottom: 12 }}>
-          <h4>SEO</h4>
-          {hasSeo ? (
-            <div>
-              <div><strong>H1:</strong> {payload.seo?.h1}</div>
-              <div><strong>Title:</strong> {payload.seo?.title}</div>
-              <div><strong>Meta:</strong> <div>{payload.seo?.meta_description}</div></div>
-            </div>
+          <h4>Source SEO (scraped)</h4>
+          {hasSourceSeo ? (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                <tr><td style={{ fontWeight: 600, padding: 6, width: 160 }}>Source H1</td><td style={{ padding: 6 }}>{payload.source_seo?.source_h1 ?? "-"}</td></tr>
+                <tr><td style={{ fontWeight: 600, padding: 6 }}>Title Tag</td><td style={{ padding: 6 }}>{payload.source_seo?.source_title_tag ?? "-"}</td></tr>
+                <tr><td style={{ fontWeight: 600, padding: 6 }}>Meta Description</td><td style={{ padding: 6 }}>{payload.source_seo?.source_meta_description ?? "-"}</td></tr>
+                <tr><td style={{ fontWeight: 600, padding: 6 }}>Canonical</td><td style={{ padding: 6 }}>{payload.source_seo?.canonical ?? "-"}</td></tr>
+                <tr><td style={{ fontWeight: 600, padding: 6 }}>OG Title</td><td style={{ padding: 6 }}>{payload.source_seo?.og_title ?? "-"}</td></tr>
+                <tr><td style={{ fontWeight: 600, padding: 6 }}>OG Description</td><td style={{ padding: 6 }}>{payload.source_seo?.og_description ?? "-"}</td></tr>
+              </tbody>
+            </table>
           ) : (
-            <div style={{ color: "#666" }}>SEO not generated</div>
+            <div style={{ color: "#666" }}>No scraped SEO fields were found on the source site.</div>
           )}
+          <p style={{ marginTop: 8, color: "#444" }}>
+            These SEO fields were extracted from the source website. They are NOT generated or optimized by AvidiaTech.
+          </p>
         </section>
 
         {/* Specs */}
