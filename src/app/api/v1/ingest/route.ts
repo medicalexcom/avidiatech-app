@@ -9,6 +9,8 @@ const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL = process.env.APP_URL || "";
 const INGEST_ALLOW_UNAUTH = process.env.INGEST_ALLOW_UNAUTH === "1";
 const INGEST_TEST_KEY = process.env.INGEST_TEST_KEY || "";
+// Gate debug logging so we can enable it briefly in production
+const ENABLE_ENQUEUE_DEBUG = process.env.INGEST_ENQUEUE_DEBUG === "1";
 
 function signBody(body: string) {
   if (!INGEST_SECRET) return "";
@@ -98,6 +100,17 @@ export async function POST(req: NextRequest) {
     const payloadBody = JSON.stringify(enginePayload);
     const signature = signBody(payloadBody);
 
+    // Debug logging: show the engine URL, payload size/keys and log response (gated)
+    if (ENABLE_ENQUEUE_DEBUG) {
+      try {
+        console.log("ENQUEUE: posting to", INGEST_ENGINE_URL);
+        console.log("ENQUEUE: payload_len", Buffer.byteLength(payloadBody, "utf8"));
+        console.log("ENQUEUE: payload_keys", Object.keys(enginePayload));
+      } catch (e) {
+        // noop
+      }
+    }
+
     // Post to engine (best-effort; don't fail the request if engine rejects — return job id to caller)
     let engineResText = "";
     try {
@@ -110,10 +123,17 @@ export async function POST(req: NextRequest) {
         body: payloadBody,
       });
       engineResText = await res.text();
+
+      // Additional debug logging for engine response
+      if (ENABLE_ENQUEUE_DEBUG) {
+        console.log("ENQUEUE RESPONSE STATUS:", res.status);
+        console.log("ENQUEUE RESPONSE BODY (truncated):", engineResText ? engineResText.slice(0, 2000) : "<empty>");
+      }
+
       if (!res.ok) {
         console.warn("engine enqueue returned non-ok", res.status, engineResText);
         // store a diagnostics note on the row
-        await supabase.from("product_ingestions").update({ diagnostics: { enqueue_error: engineResText } }).eq("id", jobId);
+        await supabase.from("product_ingestions").update({ diagnostics: { enqueue_error: engineResText, enqueue_status: res.status } }).eq("id", jobId);
       }
     } catch (err: any) {
       console.error("failed to call ingest engine", err?.message || err);
