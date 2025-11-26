@@ -1,0 +1,19 @@
+function readEnv(key: string): string | undefined {
+  return process.env[key];
+}
+
+export function getSupabaseUrl(): string | undefined {
+  return readEnv('SUPABASE_URL') || readEnv('NEXT_PUBLIC_SUPABASE_URL');
+}
+
+export function getSupabaseServiceRoleKey(): string | undefined {
+  return readEnv('SUPABASE_SERVICE_ROLE_KEY');
+}
+
+export function getStripeSecretKey(): string | undefined {
+  return readEnv('STRIPE_SECRET_KEY');
+}
+
+export function getClerkPublishableKey(): string | undefined {
+  return readEnv('NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY');
+}
