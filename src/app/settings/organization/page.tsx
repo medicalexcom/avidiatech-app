@@ -1,15 +1,18 @@
 import React from "react";
 import OrganizationPanel from "@/components/settings/OrganizationPanel";
 import { getUserRole } from "@/lib/auth/getUserRole";
+import BackToDashboard from "@/components/BackToDashboard";
 
 export default function OrganizationPage() {
   const role = getUserRole();
-  // allow owners & admins
   if (!["owner", "admin"].includes(role)) {
     return (
       <main className="p-6">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-lg font-semibold">Organization</h1>
+          <div className="mb-4">
+            <BackToDashboard />
+            <h1 className="text-lg font-semibold mt-2">Organization</h1>
+          </div>
           <p className="text-sm text-slate-500 mt-2">You do not have permission to manage the organization.</p>
         </div>
       </main>
@@ -19,7 +22,13 @@ export default function OrganizationPage() {
   return (
     <main className="p-6">
       <div className="max-w-6xl mx-auto">
-        <nav className="text-sm text-slate-500 mb-4">Settings &raquo; Organization</nav>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <BackToDashboard />
+            <nav className="text-sm text-slate-500 mt-2">Settings &raquo; Organization</nav>
+          </div>
+        </div>
+
         <OrganizationPanel />
       </div>
     </main>
