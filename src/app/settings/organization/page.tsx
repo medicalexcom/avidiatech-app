@@ -1,24 +1,27 @@
 import React from "react";
-import { redirect } from "next/navigation";
+import OrganizationPanel from "@/components/settings/OrganizationPanel";
 import { getUserRole } from "@/lib/auth/getUserRole";
-import OrganizationForm from "@/components/settings/OrganizationForm";
 
-/**
- * Server component for /dashboard/settings/organization
- * Access: owners + admins
- */
-export default async function OrganizationPage() {
+export default function OrganizationPage() {
   const role = getUserRole();
+  // allow owners & admins
   if (!["owner", "admin"].includes(role)) {
-    redirect("/dashboard/unauthorized");
+    return (
+      <main className="p-6">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-lg font-semibold">Organization</h1>
+          <p className="text-sm text-slate-500 mt-2">You do not have permission to manage the organization.</p>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main style={{ padding: 20 }}>
-      <h1>Settings &rarr; Organization</h1>
-      <section style={{ marginTop: 16 }}>
-        <OrganizationForm />
-      </section>
+    <main className="p-6">
+      <div className="max-w-6xl mx-auto">
+        <nav className="text-sm text-slate-500 mb-4">Settings &raquo; Organization</nav>
+        <OrganizationPanel />
+      </div>
     </main>
   );
 }
