@@ -9,7 +9,8 @@ export default function BillingPage() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <BackToDashboard />
-            <nav className="text-sm text-slate-500 mt-2">Settings &raquo; Billing</nav>
+            <h1 className="text-2xl font-semibold mt-2">Subscription &amp; Billing</h1>
+            <p className="text-sm text-slate-500 mt-1">Manage subscription, invoices and payment methods</p>
           </div>
         </div>
 
