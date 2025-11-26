@@ -6,9 +6,9 @@ import { useUser, SignOutButton } from "@clerk/nextjs";
 
 /**
  * Premium Profile Menu (portal)
- * - Uses anchors + window.location.href fallback for rock-solid navigation
- * - Shows avatar, name, email, org & role, quick links, billing portal button
- * - Dark mode toggle persisted to localStorage
+ * - Anchors for rock-solid navigation
+ * - "Subscription & Billing" is a normal menu item now
+ * - Shows org/role and theme toggle
  */
 
 export default function ProfileMenu() {
@@ -54,44 +54,23 @@ export default function ProfileMenu() {
     } catch {}
   }
 
+  // robust navigation: close and navigate
   function nav(href: string, e?: React.MouseEvent) {
     if (e) {
       const me = e as unknown as MouseEvent;
       if (me.metaKey || me.ctrlKey || me.shiftKey || me.button !== 0) {
-        // allow new-tab
         setOpen(false);
         return;
       }
       e.preventDefault();
     }
     setOpen(false);
-    // prefer SPA but fallback to full navigation
     try {
-      // try history API (if app has client router integrated)
+      // attempt SPA-like navigation then fallback
       window.history.pushState({}, "", href);
-      // trigger manual navigation if needed
       window.location.href = href;
     } catch {
       window.location.href = href;
-    }
-  }
-
-  async function openBillingPortal() {
-    setLoadingPortal(true);
-    try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
-      const json = await res.json();
-      if (res.ok && json.url) {
-        window.open(json.url, "_blank");
-      } else {
-        alert(json?.message || json?.error || "Billing portal unavailable.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Unable to open billing portal");
-    } finally {
-      setLoadingPortal(false);
-      setOpen(false);
     }
   }
 
@@ -104,14 +83,13 @@ export default function ProfileMenu() {
     (user as any)?.emailAddresses?.[0]?.emailAddress ??
     "";
 
-  // read role from Clerk public metadata if present
-  const role = (user as any)?.publicMetadata?.role ?? (user as any)?.unsafeMetadata?.role ?? "user";
+  const role = (user as any)?.publicMetadata?.role ?? "member";
   const orgName = (user as any)?.publicMetadata?.orgName ?? "";
 
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-[340px] bg-white dark:bg-slate-900 border rounded-lg shadow-2xl p-3"
+      className="fixed right-4 top-16 z-[9999] w-[320px] bg-white dark:bg-slate-900 border rounded-lg shadow-2xl p-3"
       role="menu"
       aria-orientation="vertical"
     >
@@ -128,25 +106,19 @@ export default function ProfileMenu() {
         <a href="/settings/profile" onClick={(e) => nav("/settings/profile", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
           Account Settings
         </a>
+
         <a href="/settings/organization" onClick={(e) => nav("/settings/organization", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
           Organization
         </a>
+
         <a href="/settings/developer/api-keys" onClick={(e) => nav("/settings/developer/api-keys", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
           API Keys & Developer Tools
         </a>
 
-        <div className="mt-2 px-3">
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              openBillingPortal();
-            }}
-            className="w-full inline-flex justify-center items-center gap-2 rounded-md px-3 py-2 bg-indigo-600 text-white hover:bg-indigo-700"
-            aria-busy={loadingPortal}
-          >
-            {loadingPortal ? "Opening portal…" : "Manage Subscription & Billing"}
-          </button>
-        </div>
+        {/* Changed: make billing a normal dropdown item, same behavior as others */}
+        <a href="/settings/billing" onClick={(e) => nav("/settings/billing", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
+          Subscription &amp; Billing
+        </a>
       </nav>
 
       <div className="mt-3 border-t dark:border-slate-800 pt-3">
