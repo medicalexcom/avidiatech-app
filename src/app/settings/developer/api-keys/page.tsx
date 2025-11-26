@@ -1,6 +1,7 @@
 import React from "react";
 import ApiKeysManager from "@/components/settings/ApiKeysManager";
 import { getUserRole } from "@/lib/auth/getUserRole";
+import BackToDashboard from "@/components/BackToDashboard";
 
 export default function ApiKeysPage() {
   const role = getUserRole();
@@ -8,7 +9,10 @@ export default function ApiKeysPage() {
     return (
       <main className="p-6">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-lg font-semibold">Developer → API Keys</h1>
+          <div className="mb-4">
+            <BackToDashboard />
+            <h1 className="text-lg font-semibold mt-2">Developer → API Keys</h1>
+          </div>
           <p className="text-sm text-slate-500 mt-2">You are not authorized to manage API keys.</p>
         </div>
       </main>
@@ -18,7 +22,13 @@ export default function ApiKeysPage() {
   return (
     <main className="p-6">
       <div className="max-w-6xl mx-auto">
-        <nav className="text-sm text-slate-500 mb-4">Settings &raquo; Developer &raquo; API Keys</nav>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <BackToDashboard />
+            <nav className="text-sm text-slate-500 mt-2">Settings &raquo; Developer &raquo; API Keys</nav>
+          </div>
+        </div>
+
         <ApiKeysManager />
       </div>
     </main>
