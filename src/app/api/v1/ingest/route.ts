@@ -47,10 +47,6 @@ export async function POST(req: NextRequest) {
     const effectiveOptions = fullExtract
       ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
       : {
-          includeSeo: !!clientOptions.includeSeo || !!body.includeSeo || false,
-          includeSpecs: !!clientOptions.includeSpecs || !!body.includeSpecs || false,
-          includeDocs: !!clientOptions.includeDocs || !!body.includeDocs || false,
-          includeVariants: !!clientOptions.includeVariants || !!body.includeVariants || false,
         };
 
     // Persist a pending product_ingestions row
