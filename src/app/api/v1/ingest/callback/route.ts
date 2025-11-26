@@ -27,20 +27,17 @@ export async function POST(req: NextRequest) {
     // Try imported verifier first (some implementations expect secret arg; preserve compatibility).
     let okSig = false;
     try {
-      // prefer the imported function if available
-      if (typeof importedVerifySignature === "function") {
-        // many helper variants: try common signatures
+      // cast to any to avoid strict TS signature mismatch
+      const anyVerify: any = importedVerifySignature as any;
+      try {
+        // Try calling as (body, sig, secret)
+        okSig = anyVerify(bodyText, sig, INGEST_SECRET);
+      } catch {
         try {
-          okSig = importedVerifySignature(bodyText, sig); // (body, sig)
+          // Try calling as (body, sig)
+          okSig = anyVerify(bodyText, sig);
         } catch {
-          try {
-            // some helpers accept (body, sig, secret)
-            // @ts-ignore
-            okSig = importedVerifySignature(bodyText, sig, INGEST_SECRET);
-          } catch {
-            // fallthrough
-            okSig = false;
-          }
+          okSig = false;
         }
       }
     } catch {
@@ -69,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     if (!jobId) {
       console.warn("callback missing job id", { body });
-      return NextResponse.json({ error: "missing job_id" }, { status: 400 });
+      return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
     }
 
     // Create supabase client lazily and using service role key (throws if misconfigured)
@@ -107,17 +104,14 @@ export async function POST(req: NextRequest) {
         const month = new Date().toISOString().slice(0, 7);
 
         // Try to atomically increment existing counter; if missing insert a new row.
-        // Read current counter
         const { data: counter, error: counterErr } = await supabase.from("usage_counters").select("*").eq("tenant_id", tenant_id).limit(1).single();
         if (!counterErr && counter) {
           const newCount = (counter.ingest_calls || 0) + 1;
           await supabase.from("usage_counters").update({ ingest_calls: newCount }).eq("tenant_id", tenant_id);
         } else {
-          // create initial counter row
           await supabase.from("usage_counters").insert({ tenant_id, month, ingest_calls: 1 });
         }
 
-        // Insert usage log
         await supabase.from("usage_logs").insert({
           tenant_id,
           user_id,
@@ -127,8 +121,6 @@ export async function POST(req: NextRequest) {
           count: 1,
           created_at: new Date().toISOString(),
         });
-      } else {
-        // no tenant found; skip usage increment
       }
     } catch (err) {
       console.warn("usage increment failed", err);
