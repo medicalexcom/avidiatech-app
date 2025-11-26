@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+"use client";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
 
 /**
@@ -6,14 +8,12 @@ import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
  * - Loads product via client fetch to /api/translate/product?productId=...
  * - Allows selecting languages and fields, then calls POST /api/translate
  *
- * NOTE: This is a client component for simplicity. If you prefer server-side fetch, convert accordingly.
+ * This is a client component for interactivity.
  */
-"use client";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 
 export default function TranslateWorkspace({ params }: { params: { productId: string } }) {
   const productId = params.productId;
+  const router = useRouter();
   const [product, setProduct] = useState<any>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(["es"]);
   const [selectedFields, setSelectedFields] = useState<string[]>(["name", "description_html"]);
@@ -22,10 +22,11 @@ export default function TranslateWorkspace({ params }: { params: { productId: st
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     fetch(`/api/translate/product?productId=${productId}`)
       .then((r) => r.json())
       .then((d) => setProduct(d.product))
-      .catch((e) => setError("Failed to load product"));
+      .catch(() => setError("Failed to load product"));
   }, [productId]);
 
   async function runTranslate() {
