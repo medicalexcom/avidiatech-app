@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser, useClerk, SignOutButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 
 /**
  * ProfileMenu (portal)
  * - Renders dropdown into document.body to avoid clipping by parent containers
- * - Items: Account, Subscription & Billing (opens /api/billing/portal), Organization, API Keys
+ * - Items: Account, Organization, Developer API Keys, Billing (navigates to billing settings)
  * - Theme toggle (localStorage)
- * - Sign out via Clerk client
+ * - Sign out via Clerk SignOutButton (with fallback)
  *
  * Tailwind classes used as example — adapt to your design system.
  */
@@ -50,19 +50,27 @@ export default function ProfileMenu() {
 
   // theme init
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const isDark = saved === "dark";
-    setDark(isDark);
-    if (isDark) document.documentElement.classList.add("dark");
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
+      const isDark = saved === "dark";
+      setDark(isDark);
+      if (isDark) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+    } catch (e) {
+      // ignore
+    }
   }, []);
 
   function toggleTheme() {
     const next = !dark;
     setDark(next);
-    localStorage.setItem("theme", next ? "dark" : "light");
-    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("theme", next ? "dark" : "light");
+      document.documentElement.classList.toggle("dark", next);
+    } catch {}
   }
 
+  // Billing portal helper (kept as optional helper)
   async function openBillingPortal() {
     setLoadingPortal(true);
     try {
@@ -71,7 +79,7 @@ export default function ProfileMenu() {
       if (res.ok && data.url) {
         window.open(data.url, "_blank");
       } else {
-        // show user friendly message — frontend can decide to open checkout instead
+        // show user friendly message
         alert(data?.message || data?.error || "No billing customer found. Create a subscription first.");
       }
     } catch (err) {
@@ -83,12 +91,12 @@ export default function ProfileMenu() {
     }
   }
 
-  async function onSignOut() {
+  // Fallback sign-out if SignOutButton not used
+  async function fallbackSignOut() {
     try {
       if (clerk && typeof clerk.signOut === "function") {
         await clerk.signOut();
       } else {
-        // fallback
         router.push("/");
       }
     } catch (err) {
@@ -99,18 +107,22 @@ export default function ProfileMenu() {
 
   if (!isLoaded) return null;
 
-  const avatarUrl = user?.imageUrl ?? "";
+  const avatarUrl = (user as any)?.imageUrl ?? "";
   const fullName = user?.fullName ?? user?.firstName ?? "Account";
   const email =
     (user as any)?.primaryEmailAddress?.emailAddress ??
     (user as any)?.emailAddresses?.[0]?.emailAddress ??
     "";
 
-  // menu markup to portal
+  function navigateTo(path: string) {
+    setOpen(false);
+    router.push(path);
+  }
+
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-64 bg-white dark:bg-slate-900 border rounded-md shadow-lg"
+      className="fixed right-4 top-16 z-[9999] w-72 bg-white dark:bg-slate-900 border rounded-md shadow-lg"
       role="menu"
       aria-orientation="vertical"
     >
@@ -125,56 +137,42 @@ export default function ProfileMenu() {
       </div>
 
       <div className="py-1">
-        <MenuItem
-          onClick={() => {
-            setOpen(false);
-            router.push("/account");
-          }}
-        >
-          Account Settings
-        </MenuItem>
+        <MenuItem onClick={() => navigateTo("/dashboard/settings/profile")}>Account Settings</MenuItem>
+
+        <MenuItem onClick={() => navigateTo("/dashboard/settings/organization")}>Organization</MenuItem>
+
+        <MenuItem onClick={() => navigateTo("/dashboard/settings/developer/api-keys")}>API Keys</MenuItem>
 
         <MenuItem
           onClick={() => {
-            setOpen(false);
-            router.push("/organization");
+            // per spec: route to billing settings page
+            navigateTo("/dashboard/settings/billing");
           }}
         >
-          Organization
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            setOpen(false);
-            router.push("/api-keys");
-          }}
-        >
-          API Keys
-        </MenuItem>
-
-        <MenuItem onClick={openBillingPortal}>
-          {loadingPortal ? "Opening billing..." : "Subscription & Billing"}
+          Subscription & Billing
         </MenuItem>
       </div>
 
       <div className="border-t dark:border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between">
-          <div className="text-sm">Dark mode</div>
+          <div>
+            <div className="text-sm">Dark mode</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Toggle UI theme</div>
+          </div>
           <label className="inline-flex items-center cursor-pointer">
-            <input type="checkbox" checked={dark} onChange={toggleTheme} className="sr-only" />
+            <input type="checkbox" checked={dark} onChange={toggleTheme} className="sr-only" aria-label="Toggle dark mode" />
             <span className={`w-9 h-5 rounded-full inline-block ${dark ? "bg-indigo-600" : "bg-slate-300"}`}></span>
           </label>
         </div>
       </div>
 
       <div className="border-t dark:border-slate-800 px-3 py-2">
-        <button
-          onClick={onSignOut}
-          className="w-full text-left text-sm text-red-600 hover:underline"
-          type="button"
-        >
-          Sign out
-        </button>
+        {/* Use Clerk's SignOutButton for a11y + server cleanup, with fallback */}
+        <SignOutButton>
+          <button className="w-full text-left text-sm text-red-600 hover:underline" type="button" onClick={fallbackSignOut}>
+            Sign out
+          </button>
+        </SignOutButton>
       </div>
     </div>
   );
