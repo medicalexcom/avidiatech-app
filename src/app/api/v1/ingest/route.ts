@@ -1,145 +1,156 @@
-// POST /api/v1/ingest
+// Next.js App Router: POST /api/v1/ingest
 import { NextResponse, type NextRequest } from "next/server";
-import crypto from "crypto";
-import { getServiceSupabaseClient } from "@/lib/supabase";
 import { getAuth } from "@clerk/nextjs/server";
+import { getServiceSupabaseClient } from "@/lib/supabase";
+import { signPayload } from "@/lib/ingest/signature";
 
-const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
+const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || ""; // e.g. https://ingest-render.example.com/ingest
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
-const APP_URL = process.env.APP_URL || "";
-const INGEST_ALLOW_UNAUTH = process.env.INGEST_ALLOW_UNAUTH === "1";
-const INGEST_TEST_KEY = process.env.INGEST_TEST_KEY || "";
-// Gate debug logging so we can enable it briefly in production
-const ENABLE_ENQUEUE_DEBUG = process.env.INGEST_ENQUEUE_DEBUG === "1";
+const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-function signBody(body: string) {
-  if (!INGEST_SECRET) return "";
-  return crypto.createHmac("sha256", INGEST_SECRET).update(body).digest("hex");
-}
-
+/**
+ * POST /api/v1/ingest
+ *
+ * Accepts:
+ *  - fullExtract: boolean (if true, server maps to include* = true)
+ *  - options: { includeSeo, includeSpecs, includeDocs, includeVariants } (used when fullExtract is false)
+ *  - export_type
+ */
 export async function POST(req: NextRequest) {
   try {
-    const auth = getAuth(req as any);
-    const userId = auth?.userId || null;
+    const { userId } = getAuth(req as any);
+    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    // Read request body
     const body = await req.json().catch(() => ({}));
-    const url = body?.url || body?.source_url || null;
+    const url = (body?.url || "").toString();
+    const clientOptions = body?.options || {};
+    const fullExtract = !!body?.fullExtract;
+    const export_type = body?.export_type || "JSON";
+    const correlation_id = body?.correlationId || `corr_${Date.now()}`;
+
     if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
 
-    // If unauthenticated and not allowed via env, return 401
-    if (!userId && !INGEST_ALLOW_UNAUTH) {
-      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-    }
-
-    // If unauthenticated but INGEST_TEST_KEY is set, require header match
-    if (!userId && INGEST_ALLOW_UNAUTH && INGEST_TEST_KEY) {
-      const provided = req.headers.get("x-ingest-test-key") || "";
-      if (!provided || provided !== INGEST_TEST_KEY) {
-        return NextResponse.json({ error: "invalid_test_key" }, { status: 401 });
-      }
-    }
-
-    // Build options mapping
-    const fullExtract = !!body.fullExtract;
-    const clientOptions = body.options || body.options_used || {};
-    // If fullExtract is requested, request every module (match MedicalEx full extract behaviour)
-    const effectiveOptions = fullExtract
-      ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
-      : {
-        };
-
-    // Persist a pending product_ingestions row
+    // create supabase client at runtime (throws if env not present)
     let supabase;
     try {
       supabase = getServiceSupabaseClient();
     } catch (err: any) {
-      console.error("Supabase client not configured", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
+      console.error("Supabase configuration missing", err?.message || err);
+      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
     }
 
-    const insertRow: any = {
-      tenant_id: null,
+    // Resolve profile / tenant (profiles table assumed)
+    const { data: profileData, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, tenant_id, role")
+      .eq("user_id", userId)
+      .limit(1)
+      .single();
+
+    if (profileError) {
+      console.warn("profile lookup failed", profileError);
+      return NextResponse.json({ error: "profile lookup failed" }, { status: 500 });
+    }
+
+    const tenant_id = profileData?.tenant_id || null;
+    const role = profileData?.role || "user";
+
+    // Usage/quota check (unless owner)
+    if (role !== "owner") {
+      const { data: counters } = await supabase.from("usage_counters").select("*").eq("tenant_id", tenant_id).limit(1).single();
+      // simple check: if absent allow — real logic should check month and quotas
+      if (counters && typeof counters.ingest_calls === "number") {
+        const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT ? parseInt(process.env.DEFAULT_MONTHLY_INGEST_LIMIT) : 1000;
+        if (counters.ingest_calls >= monthlyLimit) {
+          return NextResponse.json({ error: "quota_exceeded" }, { status: 402 });
+        }
+      }
+    }
+
+    // Build effective options:
+    const effectiveOptions = fullExtract
+      ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
+      : {
+          includeSeo: !!clientOptions.includeSeo,
+          includeSpecs: !!clientOptions.includeSpecs,
+          includeDocs: !!clientOptions.includeDocs,
+          includeVariants: !!clientOptions.includeVariants,
+        };
+
+    // persist flags for reprocessing and billing
+    const flags = {
+      full_extract: fullExtract,
+      includeSeo: !!effectiveOptions.includeSeo,
+      includeSpecs: !!effectiveOptions.includeSpecs,
+      includeDocs: !!effectiveOptions.includeDocs,
+      includeVariants: !!effectiveOptions.includeVariants,
+    };
+
+    // Create product_ingestions row (status: pending)
+    const insert = {
+      tenant_id,
       user_id: userId,
       source_url: url,
       status: "pending",
-      flags: { full_extract: fullExtract },
-      options_used: effectiveOptions,
+      options: effectiveOptions,
+      flags,
+      export_type,
+      correlation_id,
       created_at: new Date().toISOString(),
     };
 
-    // include correlation id if provided
-    if (body.correlationId || body.correlation_id) {
-      insertRow.correlation_id = body.correlationId || body.correlation_id;
-    }
-
-    // Insert row
-    const { data: created, error: insertErr } = await supabase.from("product_ingestions").insert(insertRow).select("id").single();
-    if (insertErr || !created) {
-      console.error("failed to create ingestion row", insertErr);
+    const { data: created, error: insertError } = await supabase.from("product_ingestions").insert(insert).select("*").single();
+    if (insertError) {
+      console.error("failed to create ingestion record", insertError);
       return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
     }
+
     const jobId = created.id;
 
-    // Prepare payload for engine
-    const enginePayload: any = {
+    // Build payload to ingestion engine
+    const payload = {
+      correlation_id,
       job_id: jobId,
-      correlation_id: insertRow.correlation_id || `corr_${Date.now()}`,
+      tenant_id,
       url,
-      tenant_id: insertRow.tenant_id,
-      user_id: userId,
       options: effectiveOptions,
-      export_type: body.export_type || body.exportType || "JSON",
-      callback_url: `${APP_URL.replace(/\/$/, "")}/api/v1/ingest/callback`,
+      export_type,
+      callback_url: `${APP_URL}/api/v1/ingest/callback`,
+      // tell engine this is a freshly-created job
+      action: "ingest",
     };
 
-    const payloadBody = JSON.stringify(enginePayload);
-    const signature = signBody(payloadBody);
+    // Sign payload
+    const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
 
-    // Debug logging: show the engine URL, payload size/keys and log response (gated)
-    if (ENABLE_ENQUEUE_DEBUG) {
+    // Post to ingestion engine (async fire-and-forget preferred)
+    if (!INGEST_ENGINE_URL) {
+      console.warn("INGEST_ENGINE_URL not configured; ingestion engine call skipped");
+    } else {
       try {
-        console.log("ENQUEUE: posting to", INGEST_ENGINE_URL);
-        console.log("ENQUEUE: payload_len", Buffer.byteLength(payloadBody, "utf8"));
-        console.log("ENQUEUE: payload_keys", Object.keys(enginePayload));
-      } catch (e) {
-        // noop
+        const res = await fetch(INGEST_ENGINE_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-avidiatech-signature": signature,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          console.warn("ingest engine responded non-OK", res.status, text);
+          // optionally update DB to mark engine call failed
+        }
+      } catch (err) {
+        console.error("failed to call ingest engine", err);
+        // continue: job exists and engine can be retried externally
       }
     }
 
-    // Post to engine (best-effort; don't fail the request if engine rejects — return job id to caller)
-    let engineResText = "";
-    try {
-      const res = await fetch(INGEST_ENGINE_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-avidiatech-signature": signature,
-        },
-        body: payloadBody,
-      });
-      engineResText = await res.text();
-
-      // Additional debug logging for engine response
-      if (ENABLE_ENQUEUE_DEBUG) {
-        console.log("ENQUEUE RESPONSE STATUS:", res.status);
-        console.log("ENQUEUE RESPONSE BODY (truncated):", engineResText ? engineResText.slice(0, 2000) : "<empty>");
-      }
-
-      if (!res.ok) {
-        console.warn("engine enqueue returned non-ok", res.status, engineResText);
-        // store a diagnostics note on the row
-        await supabase.from("product_ingestions").update({ diagnostics: { enqueue_error: engineResText, enqueue_status: res.status } }).eq("id", jobId);
-      }
-    } catch (err: any) {
-      console.error("failed to call ingest engine", err?.message || err);
-      await supabase.from("product_ingestions").update({ diagnostics: { enqueue_exception: String(err?.message || err) } }).eq("id", jobId);
-    }
-
-    // Return the job id so the UI can poll the job
-    return NextResponse.json({ id: jobId, status: "pending", engine_response: engineResText }, { status: 202 });
+    return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
   } catch (err: any) {
-    console.error("ingest route error", err);
-    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
+    console.error("POST /api/v1/ingest error:", err);
+    return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
   }
 }
