@@ -1,22 +1,14 @@
 import React from "react";
 import DescribeForm from "@/components/describe/DescribeForm";
 import DescribeOutput from "@/components/describe/DescribeOutput";
-import { getAuth } from "@clerk/nextjs/server";
 
 /**
  * Server page for /dashboard/describe
- * - Provides tenant/user context where needed (e.g. server-side fetch if required)
  * - Renders two-panel layout: DescribeForm (client) + DescribeOutput (client)
- *
- * The DescribeOutput will be rendered client-side when there's result data.
+ * - Removed getAuth() sample call because it required a Request argument; fetch tenant/user server-side only if needed.
  */
 
 export default async function DescribePage() {
-  // Example: getAuth to fetch userId/tenant info server-side if needed
-  const auth = getAuth();
-  // auth.userId will be available if signed in
-  // const tenantId = await fetchTenantForUser(auth.userId) // implement if required
-
   return (
     <main className="p-6">
       <div className="max-w-7xl mx-auto">
