@@ -34,7 +34,9 @@ export default function TranslateListPage() {
         <ul>
           {products.map((p: any) => (
             <li key={p.id} style={{ marginBottom: 12 }}>
-              <a href={`/dashboard/translate/${p.id}`}><strong>{p.source_url || p.id}</strong></a>
+              <a href={`/dashboard/translate/${p.id}`}>
+                <strong>{p.source_url || p.id}</strong>
+              </a>
               <div style={{ fontSize: 12, color: "#666" }}>{p.created_at}</div>
             </li>
           ))}
