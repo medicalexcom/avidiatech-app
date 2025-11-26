@@ -1,21 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { translateProduct } from "@/lib/translate/translateProduct";
 import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
 
-/**
- * POST /api/translate
- * Body:
- * {
- *   productId: "uuid",
- *   languages: ["es","fr"],
- *   fields: ["name","description_html"]
- * }
- */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, sessionId, getToken } = auth() as any;
+    const { userId } = auth() as any;
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
@@ -29,7 +20,6 @@ export async function POST(req: NextRequest) {
     if (!languages || languages.length === 0) return NextResponse.json({ error: "missing languages" }, { status: 400 });
     if (!fields || fields.length === 0) return NextResponse.json({ error: "missing fields" }, { status: 400 });
 
-    // Validate languages are supported
     const supportedCodes = new Set(SUPPORTED_LANGUAGES.map((s) => s.code));
     for (const l of languages) {
       if (!supportedCodes.has(l)) {
@@ -37,7 +27,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Use Supabase service client to fetch product
     const supabase = getServiceSupabaseClient();
     const { data: productRow, error: prodErr } = await supabase
       .from("product_ingestions")
@@ -50,10 +39,8 @@ export async function POST(req: NextRequest) {
     }
 
     const productJson = productRow.normalized_payload || {};
-    // Call translator
     const translations = await translateProduct(productJson, languages, fields);
 
-    // Persist each language translation into product_translations
     const inserts: any[] = [];
     for (const lang of Object.keys(translations)) {
       inserts.push({
@@ -71,7 +58,6 @@ export async function POST(req: NextRequest) {
     if (inserts.length > 0) {
       const { data: insData, error: insErr } = await supabase.from("product_translations").insert(inserts).select();
       if (insErr) {
-        // Write diagnostics to DB and return partial success
         await supabase
           .from("product_ingestions")
           .update({ diagnostics: { translate_insert_error: insErr.message || String(insErr) } })
