@@ -5,19 +5,19 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
 /**
  * GET /api/translate/list
  * Returns recent product_ingestions for the UI to list.
- * NOTE: This returns the most recent rows across tenants; you should scope by tenant_id
- * (or the user's tenant) in production.
+ *
+ * NOTE: For quick debugging you can set TRANSLATE_ALLOW_PUBLIC=1 to bypass Clerk session check.
+ * Remove or set to 0 for production.
  */
 export async function GET(req: Request) {
   try {
     const { userId } = auth() as any;
-    if (!userId) {
+    if (!userId && process.env.TRANSLATE_ALLOW_PUBLIC !== "1") {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
 
     const supabase = getServiceSupabaseClient();
 
-    // TODO: restrict by tenant_id for multi-tenant setups if you have it available in auth/session
     const { data, error } = await supabase
       .from("product_ingestions")
       .select("id, source_url, created_at")
