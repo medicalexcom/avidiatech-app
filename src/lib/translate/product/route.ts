@@ -5,11 +5,13 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
 /**
  * GET /api/translate/product?productId=<uuid>
  * Returns normalized_payload for a product by id.
+ *
+ * Set TRANSLATE_ALLOW_PUBLIC=1 for temporary debug bypass of Clerk auth.
  */
 export async function GET(req: Request) {
   try {
     const { userId } = auth() as any;
-    if (!userId) {
+    if (!userId && process.env.TRANSLATE_ALLOW_PUBLIC !== "1") {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
 
