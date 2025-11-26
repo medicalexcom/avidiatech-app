@@ -38,12 +38,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Build options mapping (do not request AvidiaSEO from Extract)
+    // Build options mapping
     const fullExtract = !!body.fullExtract;
     const clientOptions = body.options || body.options_used || {};
+    // If fullExtract is requested, request every module (match MedicalEx full extract behaviour)
     const effectiveOptions = fullExtract
-      ? { includeSeo: false, includeSpecs: true, includeDocs: true, includeVariants: true }
-      : { includeSeo: false, includeSpecs: !!clientOptions.includeSpecs || !!body.includeSpecs, includeDocs: !!clientOptions.includeDocs || !!body.includeDocs, includeVariants: !!clientOptions.includeVariants || !!body.includeVariants };
+      ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
+      : {
+          includeSeo: !!clientOptions.includeSeo || !!body.includeSeo || false,
+          includeSpecs: !!clientOptions.includeSpecs || !!body.includeSpecs || false,
+          includeDocs: !!clientOptions.includeDocs || !!body.includeDocs || false,
+          includeVariants: !!clientOptions.includeVariants || !!body.includeVariants || false,
+        };
 
     // Persist a pending product_ingestions row
     let supabase;
