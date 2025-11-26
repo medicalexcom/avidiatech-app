@@ -5,10 +5,10 @@ import { createPortal } from "react-dom";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 
 /**
- * Premium Profile Menu (portal)
- * - Anchors for rock-solid navigation
- * - "Subscription & Billing" is a normal menu item now
- * - Shows org/role and theme toggle
+ * ProfileMenu — consistent premium dropdown.
+ * - Each menu item uses identical spacing & styles.
+ * - "Subscription & Billing" is a normal item, same as Account Settings.
+ * - Robust nav via window.history/window.location.fallback.
  */
 
 export default function ProfileMenu() {
@@ -54,7 +54,6 @@ export default function ProfileMenu() {
     } catch {}
   }
 
-  // robust navigation: close and navigate
   function nav(href: string, e?: React.MouseEvent) {
     if (e) {
       const me = e as unknown as MouseEvent;
@@ -66,7 +65,7 @@ export default function ProfileMenu() {
     }
     setOpen(false);
     try {
-      // attempt SPA-like navigation then fallback
+      // try pushState (SPA-friendly), then ensure navigation
       window.history.pushState({}, "", href);
       window.location.href = href;
     } catch {
@@ -86,10 +85,21 @@ export default function ProfileMenu() {
   const role = (user as any)?.publicMetadata?.role ?? "member";
   const orgName = (user as any)?.publicMetadata?.orgName ?? "";
 
+  // Single menu item render to ensure consistent spacing
+  const Item = ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a
+      href={href}
+      onClick={(e) => nav(href, e)}
+      className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
+    >
+      {children}
+    </a>
+  );
+
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-[320px] bg-white dark:bg-slate-900 border rounded-lg shadow-2xl p-3"
+      className="fixed right-4 top-16 z-[9999] w-[340px] bg-white dark:bg-slate-900 border rounded-lg shadow-2xl p-3"
       role="menu"
       aria-orientation="vertical"
     >
@@ -98,27 +108,22 @@ export default function ProfileMenu() {
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">{name}</div>
           <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{email}</div>
-          {orgName ? <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">{orgName} • {role}</div> : <div className="text-xs text-slate-400 mt-1">{role}</div>}
+          {orgName ? (
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+              {orgName} • {role}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-400 mt-1">{role}</div>
+          )}
         </div>
       </div>
 
-      <nav className="py-2 space-y-1">
-        <a href="/settings/profile" onClick={(e) => nav("/settings/profile", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
-          Account Settings
-        </a>
-
-        <a href="/settings/organization" onClick={(e) => nav("/settings/organization", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
-          Organization
-        </a>
-
-        <a href="/settings/developer/api-keys" onClick={(e) => nav("/settings/developer/api-keys", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
-          API Keys & Developer Tools
-        </a>
-
-        {/* Changed: make billing a normal dropdown item, same behavior as others */}
-        <a href="/settings/billing" onClick={(e) => nav("/settings/billing", e)} className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">
-          Subscription &amp; Billing
-        </a>
+      <nav className="py-2">
+        <Item href="/settings/profile">Account Settings</Item>
+        <hr className="my-1 border-slate-100 dark:border-slate-800" />
+        <Item href="/settings/organization">Organization</Item>
+        <Item href="/settings/developer/api-keys">API Keys & Developer Tools</Item>
+        <Item href="/settings/billing">Subscription &amp; Billing</Item>
       </nav>
 
       <div className="mt-3 border-t dark:border-slate-800 pt-3">
