@@ -1,31 +1,27 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
 
 /**
- * Translation workspace.
+ * Translation workspace (client component).
  * - Loads product via client fetch to /api/translate/product?productId=...
  * - Allows selecting languages and fields, then calls POST /api/translate
- *
- * This is a client component for interactivity.
  */
 
 export default function TranslateWorkspace({ params }: { params: { productId: string } }) {
   const productId = params.productId;
-  const router = useRouter();
   const [product, setProduct] = useState<any>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(["es"]);
   const [selectedFields, setSelectedFields] = useState<string[]>(["name", "description_html"]);
   const [loading, setLoading] = useState(false);
-  const [translations, setTranslations] = useState<any>(null);
+  const [translations, setTranslations] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
     fetch(`/api/translate/product?productId=${productId}`)
       .then((r) => r.json())
-      .then((d) => setProduct(d.product))
+      .then((d) => setProduct(d.product ?? null))
       .catch(() => setError("Failed to load product"));
   }, [productId]);
 
@@ -43,7 +39,7 @@ export default function TranslateWorkspace({ params }: { params: { productId: st
       if (!res.ok) {
         setError(json.error || "translation_failed");
       } else {
-        setTranslations(json.translations);
+        setTranslations(json.translations ?? null);
       }
     } catch (err: any) {
       setError(err?.message || "network_error");
@@ -129,19 +125,22 @@ export default function TranslateWorkspace({ params }: { params: { productId: st
           {translations && (
             <div style={{ marginTop: 20 }}>
               <h3>Results</h3>
-              {Object.entries(translations).map(([lang, payload]) => (
-                <div key={lang} style={{ borderTop: "1px solid #eee", paddingTop: 12 }}>
-                  <h4>{lang}</h4>
-                  <div>
-                    <strong>Name</strong>
-                    <div>{payload.name ?? "(none)"}</div>
+              {Object.entries(translations as Record<string, any>).map(([lang, payload]) => {
+                const p = payload as Record<string, any>;
+                return (
+                  <div key={lang} style={{ borderTop: "1px solid #eee", paddingTop: 12 }}>
+                    <h4>{lang}</h4>
+                    <div>
+                      <strong>Name</strong>
+                      <div>{p?.name ?? "(none)"}</div>
+                    </div>
+                    <div>
+                      <strong>Description</strong>
+                      <div dangerouslySetInnerHTML={{ __html: p?.description_html ?? "" }} />
+                    </div>
                   </div>
-                  <div>
-                    <strong>Description</strong>
-                    <div dangerouslySetInnerHTML={{ __html: payload.description_html ?? "" }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
