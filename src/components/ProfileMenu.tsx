@@ -3,30 +3,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useUser, useClerk, SignOutButton } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
 
 /**
- * ProfileMenu (portal)
- * - Renders dropdown into document.body to avoid clipping by parent containers
- * - Items: Account, Organization, Developer API Keys, Billing (navigates to billing settings)
- * - Theme toggle (localStorage)
- * - Sign out via Clerk SignOutButton (with fallback)
- *
- * Tailwind classes used as example — adapt to your design system.
+ * ProfileMenu (portal) - robust navigation using anchors to avoid portal/router issues.
  */
 
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
   const clerk = useClerk();
-  const router = useRouter();
 
   const [open, setOpen] = useState(false);
   const [dark, setDark] = useState(false);
-  const [loadingPortal, setLoadingPortal] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // close on outside click
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (open && menuRef.current && buttonRef.current) {
@@ -39,7 +29,6 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("click", onDoc);
   }, [open]);
 
-  // close on ESC
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -48,7 +37,6 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // theme init
   useEffect(() => {
     try {
       const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
@@ -56,9 +44,7 @@ export default function ProfileMenu() {
       setDark(isDark);
       if (isDark) document.documentElement.classList.add("dark");
       else document.documentElement.classList.remove("dark");
-    } catch (e) {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   function toggleTheme() {
@@ -70,53 +56,40 @@ export default function ProfileMenu() {
     } catch {}
   }
 
-  // Billing portal helper (kept as optional helper)
-  async function openBillingPortal() {
-    setLoadingPortal(true);
-    try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        window.open(data.url, "_blank");
-      } else {
-        // show user friendly message
-        alert(data?.message || data?.error || "No billing customer found. Create a subscription first.");
-      }
-    } catch (err) {
-      console.error("openBillingPortal error", err);
-      alert("Unable to open billing portal");
-    } finally {
-      setLoadingPortal(false);
-      setOpen(false);
-    }
-  }
-
-  // Fallback sign-out if SignOutButton not used
   async function fallbackSignOut() {
     try {
-      if (clerk && typeof clerk.signOut === "function") {
-        await clerk.signOut();
-      } else {
-        router.push("/");
-      }
+      if (clerk && typeof clerk.signOut === "function") await clerk.signOut();
+      else window.location.href = "/";
     } catch (err) {
       console.error("Sign out failed", err);
-      router.push("/");
+      window.location.href = "/";
     }
   }
 
   if (!isLoaded) return null;
 
-  const avatarUrl = (user as any)?.imageUrl ?? "";
+  const avatarUrl = (user as any)?.imageUrl ?? "/default-avatar.png";
   const fullName = user?.fullName ?? user?.firstName ?? "Account";
   const email =
     (user as any)?.primaryEmailAddress?.emailAddress ??
     (user as any)?.emailAddresses?.[0]?.emailAddress ??
     "";
 
-  function navigateTo(path: string) {
+  function navAndClose(href: string, e?: React.MouseEvent) {
+    // For safety, allow callers to pass event
+    if (e) {
+      // allow modifier keys to open in new tab/window
+      const t = e as unknown as MouseEvent;
+      if (t.metaKey || t.ctrlKey || t.shiftKey || t.button !== 0) {
+        // allow default (open in new tab) and don't close
+        setOpen(false);
+        return;
+      }
+      e.preventDefault();
+    }
     setOpen(false);
-    router.push(path);
+    // force navigation
+    window.location.href = href;
   }
 
   const menu = (
@@ -128,7 +101,7 @@ export default function ProfileMenu() {
     >
       <div className="p-3 border-b dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <img src={avatarUrl || "/default-avatar.png"} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
+          <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
           <div className="truncate">
             <div className="text-sm font-medium truncate">{fullName}</div>
             <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{email}</div>
@@ -137,20 +110,37 @@ export default function ProfileMenu() {
       </div>
 
       <div className="py-1">
-        <MenuItem onClick={() => navigateTo("/dashboard/settings/profile")}>Account Settings</MenuItem>
-
-        <MenuItem onClick={() => navigateTo("/dashboard/settings/organization")}>Organization</MenuItem>
-
-        <MenuItem onClick={() => navigateTo("/dashboard/settings/developer/api-keys")}>API Keys</MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            // per spec: route to billing settings page
-            navigateTo("/dashboard/settings/billing");
-          }}
+        <a
+          href="/settings/profile"
+          onClick={(e) => navAndClose("/settings/profile", e)}
+          className="w-full block text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
         >
-          Subscription & Billing
-        </MenuItem>
+          Account Settings
+        </a>
+
+        <a
+          href="/settings/organization"
+          onClick={(e) => navAndClose("/settings/organization", e)}
+          className="w-full block text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Organization
+        </a>
+
+        <a
+          href="/settings/developer/api-keys"
+          onClick={(e) => navAndClose("/settings/developer/api-keys", e)}
+          className="w-full block text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          API Keys
+        </a>
+
+        <a
+          href="/settings/billing"
+          onClick={(e) => navAndClose("/settings/billing", e)}
+          className="w-full block text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Subscription &amp; Billing
+        </a>
       </div>
 
       <div className="border-t dark:border-slate-800 px-3 py-2">
@@ -167,7 +157,6 @@ export default function ProfileMenu() {
       </div>
 
       <div className="border-t dark:border-slate-800 px-3 py-2">
-        {/* Use Clerk's SignOutButton for a11y + server cleanup, with fallback */}
         <SignOutButton>
           <button className="w-full text-left text-sm text-red-600 hover:underline" type="button" onClick={fallbackSignOut}>
             Sign out
@@ -192,17 +181,5 @@ export default function ProfileMenu() {
 
       {open && typeof document !== "undefined" ? createPortal(menu, document.body) : null}
     </>
-  );
-}
-
-function MenuItem({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-      type="button"
-    >
-      {children}
-    </button>
   );
 }
