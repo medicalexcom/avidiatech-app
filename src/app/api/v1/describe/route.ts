@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuth } from "@clerk/nextjs/server";
 import type { DescribeRequest } from "@/components/describe/types";
@@ -34,15 +34,18 @@ async function saveIngestion(payload: any, status = "success") {
   return { id: null };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // NextRequest is the correct type here so getAuth(req) types align with Clerk helpers
     const auth = getAuth(req);
     if (!auth || !auth.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const userId = auth.userId;
+
     // tenant identification — adapt to how you store tenant info (publicMetadata or lookup)
-    const tenantId = (auth.actor && (auth.actor as any).tenantId) || (auth.userId ? (auth as any).orgId : null) || null;
+    // Keep this generic; update to match your tenant model
+    const tenantId = ((auth.actor as any)?.tenantId as string) || null;
 
     const body = await req.json();
     const parsed = BodySchema.safeParse(body);
