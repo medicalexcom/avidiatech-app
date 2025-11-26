@@ -6,7 +6,7 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  * GET /api/translate/list
  * Returns recent product_ingestions for the UI to list.
  *
- * NOTE: For quick debugging you can set TRANSLATE_ALLOW_PUBLIC=1 to bypass Clerk session check.
+ * For quick debugging you can set TRANSLATE_ALLOW_PUBLIC=1 to bypass Clerk session check.
  * Remove or set to 0 for production.
  */
 export async function GET(req: Request) {
