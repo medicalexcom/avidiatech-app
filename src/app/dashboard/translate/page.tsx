@@ -1,25 +1,45 @@
 "use client";
+import React, { useEffect, useState } from "react";
 
 /**
- * Translate product page
+ * Product list / translate landing (client component for interactivity).
+ * This is a simple UI to list recent extracted products and link to workspace.
  *
- * AvidiaTranslate localizes your product content into multiple languages while
- * preserving context, units, and brand voice.
+ * Replace / adapt data fetching to your app's data access pattern (Supabase client).
  */
-export default function TranslatePage() {
+
+export default function TranslateListPage() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch recent products via API route or via frontend Supabase client
+    fetch("/api/translate/list")
+      .then((r) => r.json())
+      .then((data) => {
+        setProducts(data.products || []);
+      })
+      .catch(() => setProducts([]))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
-    <div>
-      <h1 className="text-3xl font-semibold mb-4">Translate</h1>
-      <p className="mb-4">
-        AvidiaTranslate localizes your product content into multiple languages while
-        preserving context and brand voice.
-      </p>
-      <ul className="list-disc pl-5 space-y-2">
-        <li>Translates product content into multiple languages with contextual accuracy</li>
-        <li>Maintains brand voice and measurement units across locales</li>
-        <li>Supports localized SEO keywords and market‑specific variations</li>
-        <li>Works alongside our Specs and Describe modules to produce global product data</li>
-      </ul>
-    </div>
+    <main style={{ padding: 20 }}>
+      <h1>Translate — Products</h1>
+      {loading ? (
+        <p>Loading...</p>
+      ) : products.length === 0 ? (
+        <p>No recent products found.</p>
+      ) : (
+        <ul>
+          {products.map((p: any) => (
+            <li key={p.id} style={{ marginBottom: 12 }}>
+              <a href={`/dashboard/translate/${p.id}`}><strong>{p.source_url || p.id}</strong></a>
+              <div style={{ fontSize: 12, color: "#666" }}>{p.created_at}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </main>
   );
 }
