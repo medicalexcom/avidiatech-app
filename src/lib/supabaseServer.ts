@@ -8,6 +8,9 @@ import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+// Fallback tenant id used when tenantId is null
+const GLOBAL_TENANT_ID = process.env.SUPABASE_GLOBAL_TENANT_ID ?? "global";
+
 if (!url || !serviceKey) {
   console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
 }
@@ -16,6 +19,9 @@ const supabase = createClient(url, serviceKey, {
   auth: { persistSession: false },
 });
 
+/**
+ * saveIngestion - non-destructive insertion that avoids inserting explicit NULLs
+ */
 export async function saveIngestion({
   tenantId,
   type = "describe",
@@ -36,7 +42,8 @@ export async function saveIngestion({
   if (!url || !serviceKey) return { id: null };
 
   const payload: Record<string, any> = {
-    tenant_id: tenantId,
+    // Use explicit fallback tenant ID to avoid null inserts
+    tenant_id: tenantId ?? GLOBAL_TENANT_ID,
     user_id: userId ?? null,
     type,
     status,
@@ -60,9 +67,8 @@ export async function saveIngestion({
 /**
  * incrementUsageCounter
  *
- * - Works without assuming an "id" column exists.
- * - Handles tenant_id === null by using IS NULL for queries/updates.
- * - Fetches existing row by (tenant_id, metric). If exists -> update count; else insert.
+ * - Uses fallback tenant key instead of null
+ * - Matches/updates by tenant_id + metric
  */
 export async function incrementUsageCounter({
   tenantId,
@@ -76,17 +82,18 @@ export async function incrementUsageCounter({
   if (!url || !serviceKey) return null;
 
   const now = new Date().toISOString();
+  const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
 
   try {
-    // Build select query that handles NULL tenant_id properly
-    let selectQuery = supabase.from("usage_counters").select("count").limit(1).maybeSingle();
-    if (tenantId === null) {
-      selectQuery = (selectQuery as any).is("tenant_id", null).eq("metric", metric);
-    } else {
-      selectQuery = (selectQuery as any).eq("tenant_id", tenantId).eq("metric", metric);
-    }
+    // Find existing counter row by tenantKey + metric
+    const { data: existing, error: fetchErr } = await supabase
+      .from("usage_counters")
+      .select("count")
+      .eq("tenant_id", tenantKey)
+      .eq("metric", metric)
+      .limit(1)
+      .maybeSingle();
 
-    const { data: existing, error: fetchErr } = await selectQuery;
     if (fetchErr) {
       console.error("incrementUsageCounter: fetch error", fetchErr);
       throw fetchErr;
@@ -94,24 +101,20 @@ export async function incrementUsageCounter({
 
     if (existing && typeof existing.count !== "undefined") {
       const newCount = Number(existing.count ?? 0) + Number(incrementBy);
-
-      let updateQuery: any = supabase.from("usage_counters").update({ count: newCount, updated_at: now });
-      if (tenantId === null) {
-        updateQuery = updateQuery.is("tenant_id", null).eq("metric", metric);
-      } else {
-        updateQuery = updateQuery.eq("tenant_id", tenantId).eq("metric", metric);
-      }
-
-      const { error: updateErr } = await updateQuery;
+      const { error: updateErr } = await supabase
+        .from("usage_counters")
+        .update({ count: newCount, updated_at: now })
+        .eq("tenant_id", tenantKey)
+        .eq("metric", metric);
       if (updateErr) {
         console.error("incrementUsageCounter: update error", updateErr);
         throw updateErr;
       }
       return true;
     } else {
-      // Insert a new row
+      // Insert a new row for tenantKey+metric
       const insertPayload: Record<string, any> = {
-        tenant_id: tenantId,
+        tenant_id: tenantKey,
         metric,
         count: incrementBy,
         updated_at: now,
@@ -132,8 +135,7 @@ export async function incrementUsageCounter({
 /**
  * checkQuota
  *
- * - Returns true if under the limit.
- * - Handles tenant_id === null by using IS NULL in the query.
+ * - Uses fallback tenant key instead of null
  */
 export async function checkQuota({
   tenantId,
@@ -146,15 +148,17 @@ export async function checkQuota({
 }) {
   if (!url || !serviceKey) return true;
 
-  try {
-    let query: any = supabase.from("usage_counters").select("count").limit(1).maybeSingle();
-    if (tenantId === null) {
-      query = query.is("tenant_id", null).eq("metric", metric);
-    } else {
-      query = query.eq("tenant_id", tenantId).eq("metric", metric);
-    }
+  const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
 
-    const { data, error } = await query;
+  try {
+    const { data, error } = await supabase
+      .from("usage_counters")
+      .select("count")
+      .eq("tenant_id", tenantKey)
+      .eq("metric", metric)
+      .limit(1)
+      .maybeSingle();
+
     if (error) {
       console.error("checkQuota query error:", error);
       throw error;
