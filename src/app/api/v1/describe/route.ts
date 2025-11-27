@@ -115,9 +115,10 @@ async function callOpenAI(forwardBody: any) {
   ];
 
   const start = Date.now();
+  // Cast messages to any to satisfy OpenAI SDK TypeScript signatures across versions
   const completion = await client.chat.completions.create({
     model,
-    messages,
+    messages: messages as any,
     functions: [functionSchema as any],
     function_call: { name: "describe_response" },
     max_tokens: 2000,
