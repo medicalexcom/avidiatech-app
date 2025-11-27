@@ -10,6 +10,7 @@
 const express = require('express');
 const app = express();
 require('./request-logger')(app);
+require('./describe-handler')(app);
 
 const bodyParser = require("body-parser");
 const { Configuration, OpenAIApi } = require("openai");
