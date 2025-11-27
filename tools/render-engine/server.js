@@ -7,7 +7,10 @@
 //   OPENAI_API_KEY        (optional; if set engine will call OpenAI)
 //   PORT                  (optional)
 
-const express = require("express");
+const express = require('express');
+const app = express();
+require('./request-logger')(app);
+
 const bodyParser = require("body-parser");
 const { Configuration, OpenAIApi } = require("openai");
 
@@ -15,7 +18,6 @@ const PORT = process.env.PORT || 8081;
 const ENGINE_SECRET = process.env.RENDER_ENGINE_SECRET || "dev-secret";
 const OPENAI_KEY = process.env.OPENAI_API_KEY || null;
 
-const app = express();
 app.use(bodyParser.json());
 
 // health
