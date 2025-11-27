@@ -1,4 +1,3 @@
-// url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/lib/supabaseServer.ts
 // Simple Supabase server helper for AvidiaDescribe
 // - Uses SERVICE_ROLE key (server only)
 // - Exposes: saveIngestion, incrementUsageCounter, checkQuota
@@ -10,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 const url = process.env.SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 if (!url || !serviceKey) {
-  console.warn("Supabase service role key or URL not configured. Supabase helpers will no-op when used.");
+  console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
 }
 
 const supabase = createClient(url, serviceKey, {
@@ -24,6 +23,7 @@ export async function saveIngestion({
   normalizedPayload,
   rawPayload,
   userId,
+  sourceUrl, // optional
 }: {
   tenantId: string | null;
   type?: string;
@@ -31,21 +31,27 @@ export async function saveIngestion({
   normalizedPayload?: any;
   rawPayload?: any;
   userId?: string | null;
+  sourceUrl?: string | null;
 }) {
   if (!url || !serviceKey) return { id: null };
 
-  const payload = {
+  // Build payload conditionally to avoid inserting explicit NULL into NOT NULL columns
+  const payload: Record<string, any> = {
     tenant_id: tenantId,
     user_id: userId ?? null,
     type,
-    source_url: null,
     status,
     normalized_payload: normalizedPayload ?? null,
     raw_payload: rawPayload ?? null,
     created_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase.from("product_ingestions").insert(payload).select("id").limit(1).single();
+  // Only include source_url if a non-null string is provided
+  if (typeof sourceUrl === "string" && sourceUrl.length > 0) {
+    payload.source_url = sourceUrl;
+  }
+
+  const { data, error } = await supabase.from("product_ingestions").insert(payload).select("id").limit(1).maybeSingle();
   if (error) {
     console.error("saveIngestion error:", error);
     throw error;
@@ -85,7 +91,6 @@ export async function incrementUsageCounter({
       .maybeSingle();
 
     if (fetchErr) {
-      // If PostgREST returns "row not found" it's okay — otherwise bubble up
       console.error("incrementUsageCounter: fetch error", fetchErr);
       throw fetchErr;
     }
