@@ -1,3 +1,4 @@
+// url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/lib/supabaseServer.ts
 // Simple Supabase server helper for AvidiaDescribe
 // - Uses SERVICE_ROLE key (server only)
 // - Exposes: saveIngestion, incrementUsageCounter, checkQuota
@@ -6,10 +7,10 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.SUPABASE_URL!;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const url = process.env.SUPABASE_URL ?? "";
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 if (!url || !serviceKey) {
-  console.warn("Supabase service role key or URL not configured. Supabase helpers will throw if used.");
+  console.warn("Supabase service role key or URL not configured. Supabase helpers will no-op when used.");
 }
 
 const supabase = createClient(url, serviceKey, {
@@ -35,16 +36,16 @@ export async function saveIngestion({
 
   const payload = {
     tenant_id: tenantId,
+    user_id: userId ?? null,
     type,
+    source_url: null,
     status,
     normalized_payload: normalizedPayload ?? null,
     raw_payload: rawPayload ?? null,
-    user_id: userId ?? null,
-    source_url: null,
     created_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase.from("product_ingestions").insert(payload).select("id").single();
+  const { data, error } = await supabase.from("product_ingestions").insert(payload).select("id").limit(1).single();
   if (error) {
     console.error("saveIngestion error:", error);
     throw error;
@@ -52,6 +53,14 @@ export async function saveIngestion({
   return data;
 }
 
+/**
+ * incrementUsageCounter
+ *
+ * Safe, type-friendly implementation that:
+ * - Fetches the existing counter row (if any)
+ * - Updates it with a new increment (atomic enough for typical use; for heavy concurrency use an RPC)
+ * - Inserts a new row if none exists
+ */
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
@@ -63,27 +72,51 @@ export async function incrementUsageCounter({
 }) {
   if (!url || !serviceKey) return null;
 
-  // Upsert row and increment count atomically with RPC or transaction if needed.
-  // This example uses simple upsert pattern.
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from("usage_counters")
-    .upsert(
-      {
-        tenant_id: tenantId,
-        metric,
-        count: incrementBy,
-        updated_at: now,
-      },
-      { onConflict: ["tenant_id", "metric"] }
-    )
-    .select();
 
-  if (error) {
-    console.error("incrementUsageCounter error:", error);
-    throw error;
+  try {
+    // Try to fetch an existing counter row
+    const { data: existing, error: fetchErr } = await supabase
+      .from("usage_counters")
+      .select("id, count")
+      .eq("tenant_id", tenantId)
+      .eq("metric", metric)
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchErr) {
+      // If PostgREST returns "row not found" it's okay — otherwise bubble up
+      console.error("incrementUsageCounter: fetch error", fetchErr);
+      throw fetchErr;
+    }
+
+    if (existing && existing.id) {
+      // Update existing row with new count
+      const newCount = Number(existing.count ?? 0) + Number(incrementBy);
+      const { error: updateErr } = await supabase
+        .from("usage_counters")
+        .update({ count: newCount, updated_at: now })
+        .eq("id", existing.id);
+      if (updateErr) {
+        console.error("incrementUsageCounter: update error", updateErr);
+        throw updateErr;
+      }
+      return true;
+    } else {
+      // Insert a new row
+      const { error: insertErr } = await supabase
+        .from("usage_counters")
+        .insert([{ tenant_id: tenantId, metric, count: incrementBy, updated_at: now }]);
+      if (insertErr) {
+        console.error("incrementUsageCounter: insert error", insertErr);
+        throw insertErr;
+      }
+      return true;
+    }
+  } catch (err) {
+    console.error("incrementUsageCounter unexpected error:", err);
+    throw err;
   }
-  return true;
 }
 
 export async function checkQuota({
@@ -97,20 +130,25 @@ export async function checkQuota({
 }) {
   if (!url || !serviceKey) return true;
 
-  // Query current counter
-  const { data, error } = await supabase
-    .from("usage_counters")
-    .select("count")
-    .eq("tenant_id", tenantId)
-    .eq("metric", metric)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("usage_counters")
+      .select("count")
+      .eq("tenant_id", tenantId)
+      .eq("metric", metric)
+      .limit(1)
+      .maybeSingle();
 
-  if (error && error.code !== "PGRST116") {
-    console.error("checkQuota query error:", error);
-    throw error;
+    if (error) {
+      console.error("checkQuota query error:", error);
+      throw error;
+    }
+
+    const current = Number(data?.count ?? 0);
+    return current < limit;
+  } catch (err) {
+    console.error("checkQuota unexpected error:", err);
+    // Fail-open to avoid blocking when DB is unreachable; change if you prefer fail-closed
+    return true;
   }
-
-  const current = data?.count ?? 0;
-  if (current >= limit) return false;
-  return true;
 }
