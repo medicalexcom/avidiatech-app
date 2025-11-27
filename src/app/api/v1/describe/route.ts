@@ -38,8 +38,20 @@ function envPresenceReport() {
   };
 }
 
+/**
+ * callRenderEngine
+ *
+ * Accepts RENDER_ENGINE_ENDPOINT that may be either:
+ * - a base URL (e.g. https://host.example.com) -> appends /describe
+ * - a full path (e.g. https://host.example.com/describe or https://host/.../describe/) -> uses as-is
+ *
+ * Returns parsed JSON (or throws with details).
+ */
 async function callRenderEngine(forwardBody: any, engineUrl: string, engineSecret: string) {
-  const url = `${engineUrl.replace(/\/$/, "")}/describe`;
+  // Normalize: strip trailing slashes then decide if path already ends with /describe
+  const trimmed = engineUrl.replace(/\/+$/, "");
+  const url = trimmed.toLowerCase().endsWith("/describe") ? trimmed : `${trimmed}/describe`;
+
   const start = Date.now();
   const res = await fetch(url, {
     method: "POST",
@@ -50,15 +62,24 @@ async function callRenderEngine(forwardBody: any, engineUrl: string, engineSecre
     body: JSON.stringify(forwardBody),
   });
   const took = Date.now() - start;
-  const json = await res.json().catch(() => null);
+
+  const text = await res.text().catch(() => "");
+  let parsed: any = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch (e) {
+    parsed = text; // non-JSON body
+  }
+
   if (!res.ok) {
-    const err = new Error(`Render engine returned ${res.status}: ${JSON.stringify(json)}`);
+    const err = new Error(`Render engine returned ${res.status}: ${typeof parsed === "string" ? parsed : JSON.stringify(parsed)}`);
     (err as any).status = res.status;
-    (err as any).engineResponse = json;
+    (err as any).engineResponse = parsed;
     (err as any).took = took;
     throw err;
   }
-  return { json, took };
+
+  return { json: parsed, took };
 }
 
 async function callOpenAI(forwardBody: any) {
