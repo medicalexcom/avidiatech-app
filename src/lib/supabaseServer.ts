@@ -56,7 +56,14 @@ export async function saveIngestion({
     payload.source_url = sourceUrl;
   }
 
-  const { data, error } = await supabase.from("product_ingestions").insert(payload).select("id").limit(1).maybeSingle();
+  // Wrap payload in an array to match Supabase typings for insert/upsert calls
+  const { data, error } = await supabase
+    .from("product_ingestions")
+    .insert([payload])
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+
   if (error) {
     console.error("saveIngestion error:", error);
     throw error;
@@ -112,14 +119,16 @@ export async function incrementUsageCounter({
       }
       return true;
     } else {
-      // Insert a new row for tenantKey+metric
+      // Insert a new row for tenantKey+metric (wrap payload in array to match TS typings)
       const insertPayload: Record<string, any> = {
         tenant_id: tenantKey,
         metric,
         count: incrementBy,
         updated_at: now,
       };
-      const { error: insertErr } = await supabase.from("usage_counters").insert([insertPayload]);
+      const { error: insertErr } = await supabase
+        .from("usage_counters")
+        .insert([insertPayload]);
       if (insertErr) {
         console.error("incrementUsageCounter: insert error", insertErr);
         throw insertErr;
