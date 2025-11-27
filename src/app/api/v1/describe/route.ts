@@ -1,19 +1,24 @@
 import { NextResponse, NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuth } from "@clerk/nextjs/server";
-import OpenAI from "openai";
 import type { DescribeRequest } from "@/components/describe/types";
 import { saveIngestion, incrementUsageCounter, checkQuota } from "@/lib/supabaseServer";
 
 /**
- * Robust Describe route with enhanced logging for debugging.
+ * AvidiaDescribe API route
  *
- * Behavior:
- * - Validate auth + payload
- * - Try Render engine if configured; on error fallback to OpenAI if configured
- * - Persist ingestion (saveIngestion) and increment usage counters
+ * IMPORTANT: Render ALWAYS calls GPT. There is NO GPT usage directly in Next.js and NO fallback logic.
+ * This route MUST forward validated requests to the Render engine at `${RENDER_ENGINE_ENDPOINT}/describe`,
+ * passing x-engine-key: RENDER_ENGINE_SECRET. The Render engine is responsible for calling GPT and
+ * returning normalized, auto-healed structured JSON. The API then persists the result and returns it.
  *
- * Note: This file logs errors and returns debug details when NODE_ENV !== 'production'.
+ * Error handling:
+ *  - 401 Unauthorized (Clerk)
+ *  - 402 Quota exceeded
+ *  - 422 Validation error
+ *  - 502/500 Render/GPT failure (when Render responds with non-2xx)
+ *
+ * Do not perform any direct GPT calls here.
  */
 
 const BodySchema = z.object({
@@ -32,7 +37,6 @@ function envPresenceReport() {
   return {
     RENDER_ENGINE_ENDPOINT: !!process.env.RENDER_ENGINE_ENDPOINT,
     RENDER_ENGINE_SECRET: !!process.env.RENDER_ENGINE_SECRET,
-    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     SUPABASE_URL: !!process.env.SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
   };
@@ -40,15 +44,11 @@ function envPresenceReport() {
 
 /**
  * callRenderEngine
- *
- * Accepts RENDER_ENGINE_ENDPOINT that may be either:
- * - a base URL (e.g. https://host.example.com) -> appends /describe
- * - a full path (e.g. https://host.example.com/describe or https://host/.../describe/) -> uses as-is
- *
- * Returns parsed JSON (or throws with details).
+ * - Accepts an engineUrl that may be a base (appends /describe) or already include /describe
+ * - Posts the forwardBody as JSON with header x-engine-key
+ * - Returns parsed JSON on success, or throws an Error with .status and .engineResponse
  */
 async function callRenderEngine(forwardBody: any, engineUrl: string, engineSecret: string) {
-  // Normalize: strip trailing slashes then decide if path already ends with /describe
   const trimmed = engineUrl.replace(/\/+$/, "");
   const url = trimmed.toLowerCase().endsWith("/describe") ? trimmed : `${trimmed}/describe`;
 
@@ -82,103 +82,12 @@ async function callRenderEngine(forwardBody: any, engineUrl: string, engineSecre
   return { json: parsed, took };
 }
 
-async function callOpenAI(forwardBody: any) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OpenAI API key not configured");
-  }
-
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-  const functionSchema = {
-    name: "describe_response",
-    description: "Return structured product description and SEO fields as JSON.",
-    parameters: {
-      type: "object",
-      properties: {
-        descriptionHtml: { type: "string" },
-        sections: {
-          type: "object",
-          properties: {
-            overview: { type: "string" },
-            features: { type: "array", items: { type: "string" } },
-            specsSummary: { type: "object" },
-            includedItems: { type: "array", items: { type: "string" } },
-            manualsSectionHtml: { type: "string" },
-          },
-        },
-        seo: {
-          type: "object",
-          properties: {
-            h1: { type: "string" },
-            pageTitle: { type: "string" },
-            metaDescription: { type: "string" },
-            seoShortDescription: { type: "string" },
-          },
-        },
-        normalizedPayload: { type: "object" },
-        raw: { type: "object" },
-      },
-      required: ["descriptionHtml", "sections", "seo"],
-    },
-  };
-
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You are AvidiaDescribe: generate structured, SEO-friendly product descriptions. Output only valid JSON according to the provided function schema. Enforce H1 <= 60 chars and meta description <= 160 chars. Sanitize HTML (no scripts).",
-    },
-    {
-      role: "user",
-      content: `Product data:\nName: ${forwardBody.name}\nShort: ${forwardBody.shortDescription}\nBrand: ${forwardBody.brand || "-"}\nSpecs: ${JSON.stringify(forwardBody.specs || {})}\nFormat: ${forwardBody.format || "avidia_standard"}`,
-    },
-  ];
-
-  const start = Date.now();
-  // Cast messages to any to satisfy OpenAI SDK TypeScript signatures across versions
-  const completion = await client.chat.completions.create({
-    model,
-    messages: messages as any,
-    functions: [functionSchema as any],
-    function_call: { name: "describe_response" },
-    max_tokens: 2000,
-  });
-  const took = Date.now() - start;
-
-  const choice = completion.choices?.[0];
-  const funcCall = choice?.message?.function_call;
-  const argsJson = funcCall?.arguments;
-  if (!argsJson) {
-    throw new Error("Model did not return structured function response");
-  }
-  let structured: any;
-  try {
-    structured = JSON.parse(argsJson);
-  } catch (err) {
-    throw new Error("Failed to parse model output as JSON: " + String(err));
-  }
-
-  // Basic caps
-  if (structured?.seo?.h1 && structured.seo.h1.length > 60) {
-    structured.seo.h1 = structured.seo.h1.slice(0, 57).trim() + "...";
-  }
-  if (structured?.seo?.metaDescription && structured.seo.metaDescription.length > 160) {
-    structured.seo.metaDescription = structured.seo.metaDescription.slice(0, 157).trim() + "...";
-  }
-
-  return { structured, took, model: model };
-}
-
 export async function POST(req: NextRequest) {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const startOverall = Date.now();
-
-  // Log env presence (safe) on invocation
   console.log(`[describe:${requestId}] invoked; env presence:`, envPresenceReport());
 
   try {
-    // Auth
+    // Auth via Clerk
     const auth = getAuth(req);
     if (!auth || !auth.userId) {
       console.warn(`[describe:${requestId}] unauthorized request`);
@@ -188,7 +97,7 @@ export async function POST(req: NextRequest) {
     const tenantId = ((auth.actor as any)?.tenantId as string) || null;
     console.log(`[describe:${requestId}] auth ok user=${userId} tenant=${tenantId}`);
 
-    // Parse + validate
+    // Parse + validate body
     const body = await req.json().catch(() => null);
     if (!body) {
       console.warn(`[describe:${requestId}] empty body`);
@@ -212,80 +121,105 @@ export async function POST(req: NextRequest) {
       }
     } catch (qerr) {
       console.error(`[describe:${requestId}] quota check error:`, (qerr as any)?.stack || qerr);
-      // Fail-open: allow generation but log the failure
+      // Fail-open or return 500? We opt to fail-open (log) so generation can continue unless you prefer strict behavior.
     }
 
-    const forwardBody = { tenant_id: tenantId, user_id: userId, ...payload };
+    // Prepare forwarded body for Render
+    const forwardBody = {
+      tenant_id: tenantId,
+      user_id: userId,
+      name: payload.name,
+      shortDescription: payload.shortDescription,
+      brand: payload.brand ?? null,
+      specs: payload.specs ?? null,
+      format: payload.format ?? "avidia_standard",
+    };
 
-    // Attempt Render engine first
+    // Render engine must be configured and used ALWAYS (per corrected architecture)
     const engineUrl = process.env.RENDER_ENGINE_ENDPOINT;
     const engineSecret = process.env.RENDER_ENGINE_SECRET;
-    let finalResponse: any = null;
-    let usedEngine = "none";
-
-    if (engineUrl && engineSecret) {
-      try {
-        console.log(`[describe:${requestId}] attempting render engine at ${engineUrl}`);
-        const { json, took } = await callRenderEngine(forwardBody, engineUrl, engineSecret);
-        finalResponse = json;
-        usedEngine = "render";
-        console.log(`[describe:${requestId}] render engine success (took=${took}ms)`);
-      } catch (engErr) {
-        console.error(`[describe:${requestId}] render engine error:`, (engErr as any)?.stack || engErr);
-        usedEngine = "render_failed";
-      }
-    } else {
-      console.log(`[describe:${requestId}] render engine not configured; skipping.`);
+    if (!engineUrl || !engineSecret) {
+      console.error(`[describe:${requestId}] Render engine not configured (RENDER_ENGINE_ENDPOINT or RENDER_ENGINE_SECRET missing)`);
+      return NextResponse.json({ error: "Render engine not configured" }, { status: 500 });
     }
 
-    // If render failed or not configured, fallback to OpenAI
-    if (!finalResponse) {
+    // Send to Render (which itself will call GPT and return normalized output)
+    let finalResponse: any = null;
+    try {
+      console.log(`[describe:${requestId}] forwarding to render engine at ${engineUrl}`);
+      const { json, took } = await callRenderEngine(forwardBody, engineUrl, engineSecret);
+      finalResponse = json;
+      console.log(`[describe:${requestId}] render engine succeeded (took=${took}ms)`);
+    } catch (engErr: any) {
+      // Persist failed ingestion for debugging (best-effort)
       try {
-        console.log(`[describe:${requestId}] falling back to OpenAI`);
-        const { structured, took, model } = await callOpenAI(forwardBody);
-        finalResponse = structured;
-        usedEngine = `openai:${model}`;
-        console.log(`[describe:${requestId}] openai success (took=${took}ms)`);
-      } catch (openErr) {
-        console.error(`[describe:${requestId}] openai error:`, (openErr as any)?.stack || openErr);
-        // Save failed ingestion for debugging and return 500
-        try {
-          await saveIngestion({ tenantId, userId, type: "describe", status: "failed", rawPayload: { request: forwardBody, error: String(openErr) } });
-        } catch (saveErr) {
-          console.error(`[describe:${requestId}] saveIngestion (failed) error:`, (saveErr as any)?.stack || saveErr);
-        }
-        const message = (openErr as any)?.message || "AI generation failed";
-        return NextResponse.json({ error: message }, { status: 500 });
+        await saveIngestion({
+          tenantId,
+          userId,
+          type: "describe",
+          status: "failed",
+          rawPayload: { request: forwardBody, error: String(engErr), engineResponse: engErr?.engineResponse ?? null },
+        });
+      } catch (saveErr) {
+        console.error(`[describe:${requestId}] saveIngestion (failed) error:`, (saveErr as any)?.stack || saveErr);
       }
+
+      // Map render errors to appropriate response codes
+      const status = engErr?.status ?? 500;
+      // If engine returned 401/403 -> forward the auth error
+      if (status === 401) return NextResponse.json({ error: "Render engine unauthorized" }, { status: 401 });
+      if (status === 403) return NextResponse.json({ error: "Render engine forbidden" }, { status: 403 });
+
+      // For 4xx/5xx from the engine return 502/500 respectively
+      if (status >= 500) return NextResponse.json({ error: "Render engine error", details: engErr?.engineResponse ?? String(engErr) }, { status: 502 });
+      // For other non-OK statuses return 502
+      return NextResponse.json({ error: "Render engine unavailable", details: engErr?.engineResponse ?? String(engErr) }, { status: 502 });
+    }
+
+    // Validate that finalResponse matches expected schema minimally
+    if (!finalResponse || typeof finalResponse !== "object") {
+      console.error(`[describe:${requestId}] invalid response from render engine`, finalResponse);
+      // Persist as failed and return 500
+      try {
+        await saveIngestion({
+          tenantId,
+          userId,
+          type: "describe",
+          status: "failed",
+          rawPayload: { request: forwardBody, error: "Invalid render response", engineResponse: finalResponse },
+        });
+      } catch (saveErr) {
+        console.error(`[describe:${requestId}] saveIngestion (invalid response) error:`, (saveErr as any)?.stack || saveErr);
+      }
+      return NextResponse.json({ error: "Invalid render engine response" }, { status: 500 });
     }
 
     // Persist successful result (best-effort)
     try {
-      await saveIngestion({ tenantId, userId, type: "describe", status: "success", normalizedPayload: finalResponse?.normalizedPayload ?? null, rawPayload: finalResponse ?? null });
-      // increment usage counter (best-effort)
-      try {
-        await incrementUsageCounter({ tenantId, metric: "describe_calls", incrementBy: 1 });
-      } catch (incErr) {
-        console.error(`[describe:${requestId}] incrementUsageCounter error:`, (incErr as any)?.stack || incErr);
-      }
+      await saveIngestion({
+        tenantId,
+        userId,
+        type: "describe",
+        status: "success",
+        normalizedPayload: finalResponse?.normalizedPayload ?? null,
+        rawPayload: finalResponse ?? null,
+      });
     } catch (persistErr) {
       console.error(`[describe:${requestId}] saveIngestion error:`, (persistErr as any)?.stack || persistErr);
-      // continue: we already have a successful finalResponse to return to client
+      // continue: we still return the result to client
     }
 
-    const totalTook = Date.now() - startOverall;
-    console.log(`[describe:${requestId}] completed using ${usedEngine} totalTook=${totalTook}ms`);
+    // Increment usage counter (best-effort)
+    try {
+      await incrementUsageCounter({ tenantId, metric: "describe_calls", incrementBy: 1 });
+    } catch (incErr) {
+      console.error(`[describe:${requestId}] incrementUsageCounter error:`, (incErr as any)?.stack || incErr);
+    }
 
+    console.log(`[describe:${requestId}] completed (render-only pipeline)`);
     return NextResponse.json(finalResponse);
   } catch (err: any) {
-    // Log full stack to Vercel logs
     console.error(`[describe:${requestId}] unexpected error:`, err?.stack || err);
-
-    const body = {
-      error: err?.message || "Unknown error",
-      // Only expose stack/details when not in production
-      ...(isDev() ? { stack: err?.stack } : {}),
-    };
-    return NextResponse.json(body, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Unknown error", ...(isDev() ? { stack: err?.stack } : {}) }, { status: 500 });
   }
 }
