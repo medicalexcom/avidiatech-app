@@ -23,7 +23,7 @@ export async function saveIngestion({
   normalizedPayload,
   rawPayload,
   userId,
-  sourceUrl, // optional
+  sourceUrl,
 }: {
   tenantId: string | null;
   type?: string;
@@ -35,7 +35,6 @@ export async function saveIngestion({
 }) {
   if (!url || !serviceKey) return { id: null };
 
-  // Build payload conditionally to avoid inserting explicit NULL into NOT NULL columns
   const payload: Record<string, any> = {
     tenant_id: tenantId,
     user_id: userId ?? null,
@@ -46,7 +45,6 @@ export async function saveIngestion({
     created_at: new Date().toISOString(),
   };
 
-  // Only include source_url if a non-null string is provided
   if (typeof sourceUrl === "string" && sourceUrl.length > 0) {
     payload.source_url = sourceUrl;
   }
@@ -62,10 +60,9 @@ export async function saveIngestion({
 /**
  * incrementUsageCounter
  *
- * Safe, type-friendly implementation that:
- * - Fetches the existing counter row (if any)
- * - Updates it with a new increment (atomic enough for typical use; for heavy concurrency use an RPC)
- * - Inserts a new row if none exists
+ * - Works without assuming an "id" column exists.
+ * - Handles tenant_id === null by using IS NULL for queries/updates.
+ * - Fetches existing row by (tenant_id, metric). If exists -> update count; else insert.
  */
 export async function incrementUsageCounter({
   tenantId,
@@ -81,27 +78,31 @@ export async function incrementUsageCounter({
   const now = new Date().toISOString();
 
   try {
-    // Try to fetch an existing counter row
-    const { data: existing, error: fetchErr } = await supabase
-      .from("usage_counters")
-      .select("id, count")
-      .eq("tenant_id", tenantId)
-      .eq("metric", metric)
-      .limit(1)
-      .maybeSingle();
+    // Build select query that handles NULL tenant_id properly
+    let selectQuery = supabase.from("usage_counters").select("count").limit(1).maybeSingle();
+    if (tenantId === null) {
+      selectQuery = (selectQuery as any).is("tenant_id", null).eq("metric", metric);
+    } else {
+      selectQuery = (selectQuery as any).eq("tenant_id", tenantId).eq("metric", metric);
+    }
 
+    const { data: existing, error: fetchErr } = await selectQuery;
     if (fetchErr) {
       console.error("incrementUsageCounter: fetch error", fetchErr);
       throw fetchErr;
     }
 
-    if (existing && existing.id) {
-      // Update existing row with new count
+    if (existing && typeof existing.count !== "undefined") {
       const newCount = Number(existing.count ?? 0) + Number(incrementBy);
-      const { error: updateErr } = await supabase
-        .from("usage_counters")
-        .update({ count: newCount, updated_at: now })
-        .eq("id", existing.id);
+
+      let updateQuery: any = supabase.from("usage_counters").update({ count: newCount, updated_at: now });
+      if (tenantId === null) {
+        updateQuery = updateQuery.is("tenant_id", null).eq("metric", metric);
+      } else {
+        updateQuery = updateQuery.eq("tenant_id", tenantId).eq("metric", metric);
+      }
+
+      const { error: updateErr } = await updateQuery;
       if (updateErr) {
         console.error("incrementUsageCounter: update error", updateErr);
         throw updateErr;
@@ -109,9 +110,13 @@ export async function incrementUsageCounter({
       return true;
     } else {
       // Insert a new row
-      const { error: insertErr } = await supabase
-        .from("usage_counters")
-        .insert([{ tenant_id: tenantId, metric, count: incrementBy, updated_at: now }]);
+      const insertPayload: Record<string, any> = {
+        tenant_id: tenantId,
+        metric,
+        count: incrementBy,
+        updated_at: now,
+      };
+      const { error: insertErr } = await supabase.from("usage_counters").insert([insertPayload]);
       if (insertErr) {
         console.error("incrementUsageCounter: insert error", insertErr);
         throw insertErr;
@@ -124,6 +129,12 @@ export async function incrementUsageCounter({
   }
 }
 
+/**
+ * checkQuota
+ *
+ * - Returns true if under the limit.
+ * - Handles tenant_id === null by using IS NULL in the query.
+ */
 export async function checkQuota({
   tenantId,
   metric = "describe_calls",
@@ -136,14 +147,14 @@ export async function checkQuota({
   if (!url || !serviceKey) return true;
 
   try {
-    const { data, error } = await supabase
-      .from("usage_counters")
-      .select("count")
-      .eq("tenant_id", tenantId)
-      .eq("metric", metric)
-      .limit(1)
-      .maybeSingle();
+    let query: any = supabase.from("usage_counters").select("count").limit(1).maybeSingle();
+    if (tenantId === null) {
+      query = query.is("tenant_id", null).eq("metric", metric);
+    } else {
+      query = query.eq("tenant_id", tenantId).eq("metric", metric);
+    }
 
+    const { data, error } = await query;
     if (error) {
       console.error("checkQuota query error:", error);
       throw error;
