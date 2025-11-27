@@ -1,6 +1,5 @@
 // require('./describe-handler')(app)
 // Minimal handler: validate x-engine-key and return expected normalized shape.
-// This is safe to keep; it will respond to POST /describe immediately.
 
 module.exports = function describeHandler(app) {
   const ENGINE_SECRET = process.env.RENDER_ENGINE_SECRET || 'dev-secret';
@@ -16,7 +15,6 @@ module.exports = function describeHandler(app) {
     const name = body.name || 'Sample product';
     const shortDescription = body.shortDescription || 'Short description';
 
-    // Minimal normalized response
     const response = {
       descriptionHtml: `<p>${shortDescription}</p>`,
       sections: {
@@ -39,7 +37,7 @@ module.exports = function describeHandler(app) {
     return res.json(response);
   });
 
-  // help debug: respond to GET /describe with a short message
+  // help debug: GET /describe
   app.get('/describe', (req, res) => {
     res.status(200).send('POST /describe is supported; send JSON body.');
   });
