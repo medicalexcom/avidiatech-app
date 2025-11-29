@@ -4,17 +4,24 @@
  * GET /api/v1/ingest/{id}?url=<encoded-url>
  * Proxies to extractAndIngest and returns { ok: true, data } on success.
  *
- * NOTE: fixed import path to correctly reach src/services from this file.
+ * Fixes TypeScript signature differences between NextRequest/NextResponse and the
+ * RouteHandlerConfig types: context.params can be a Promise<{ id: string }>,
+ * so we await Promise.resolve(context.params) to handle both sync and async forms.
  */
 
-import { NextResponse } from 'next/server';
-// Correct relative path: from src/app/api/v1/ingest/[id]/route.ts to src/services is five levels up
+import { NextResponse, type NextRequest } from 'next/server';
 import { extractAndIngest } from '../../../../../services/avidiaExtractToIngest';
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  context: { params: { id: string } | Promise<{ id: string }> }
+) {
   try {
+    // handle both sync and promise-style params:
+    const params = await Promise.resolve(context.params);
     const id = params?.id;
-    const urlParam = new URL(req.url).searchParams.get('url');
+
+    const urlParam = new URL(request.url).searchParams.get('url');
 
     if (!urlParam) {
       return NextResponse.json({ ok: false, error: 'Missing url query parameter' }, { status: 400 });
