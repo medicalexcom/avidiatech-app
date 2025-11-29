@@ -4,7 +4,7 @@ import { getAuth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 
-const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || ""; // e.g. https://ingest-render.example.com/ingest
+const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || ""; // e.g. https://medx-ingest-api.onrender.com
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -15,6 +15,17 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
  *  - fullExtract: boolean (if true, server maps to include* = true)
  *  - options: { includeSeo, includeSpecs, includeDocs, includeVariants } (used when fullExtract is false)
  *  - export_type
+ *
+ * Behavior changes:
+ * - Creates a product_ingestions row (status: pending) as before.
+ * - Calls the ingestion engine in the shape this host expects:
+ *     GET ${INGEST_ENGINE_URL}/ingest?url=...
+ *   (medx currently expects a URL query for synchronous extraction).
+ * - If the engine returns 200 JSON immediately, update the ingestion row to 'completed'
+ *   and persist normalized_payload so dashboard shows results right away.
+ * - If the engine returns non-OK or fails, keep the job as pending and log the upstream snippet.
+ *
+ * This keeps your current UI (client POST) unchanged while adapting proxy behavior to the engine.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -107,8 +118,8 @@ export async function POST(req: NextRequest) {
 
     const jobId = created.id;
 
-    // Build payload to ingestion engine
-    const payload = {
+    // Build payload for signature (keep for compatibility if engine checks signature)
+    const payloadForSignature = {
       correlation_id,
       job_id: jobId,
       tenant_id,
@@ -116,38 +127,77 @@ export async function POST(req: NextRequest) {
       options: effectiveOptions,
       export_type,
       callback_url: `${APP_URL}/api/v1/ingest/callback`,
-      // tell engine this is a freshly-created job
       action: "ingest",
     };
 
-    // Sign payload
-    const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
+    const signature = signPayload(JSON.stringify(payloadForSignature), INGEST_SECRET);
 
-    // Post to ingestion engine (async fire-and-forget preferred)
+    // Call ingestion engine using the query-style medx expects: GET /ingest?url=...
+    // medx's implementation currently returns extracted JSON synchronously for this call.
     if (!INGEST_ENGINE_URL) {
       console.warn("INGEST_ENGINE_URL not configured; ingestion engine call skipped");
     } else {
       try {
-        const res = await fetch(INGEST_ENGINE_URL, {
-          method: "POST",
+        // Build target using base (no trailing slash) + /ingest
+        const base = INGEST_ENGINE_URL.replace(/\/+$/, "");
+        const target = `${base}/ingest?url=${encodeURIComponent(url)}`;
+
+        const res = await fetch(target, {
+          method: "GET",
           headers: {
-            "content-type": "application/json",
-            "x-avidiatech-signature": signature,
+            Accept: "application/json",
+            // keep signature header for engines that expect it — harmless if ignored
+            ...(signature ? { "x-avidiatech-signature": signature } : {}),
           },
-          body: JSON.stringify(payload),
         });
 
+        const text = await res.text().catch(() => "");
+        const contentType = res.headers.get("content-type") || "";
+
         if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          console.warn("ingest engine responded non-OK", res.status, text);
-          // optionally update DB to mark engine call failed
+          // Upstream returned non-OK; log a snippet and leave the job pending so it can be retried or inspected
+          const snippet = text?.slice(0, 800);
+          console.warn("ingest engine responded non-OK", res.status, snippet);
+          // Optionally update DB with external error metadata
+          await supabase.from("product_ingestions").update({
+            engine_status: res.status,
+            engine_error_snippet: snippet,
+            updated_at: new Date().toISOString(),
+          }).eq("id", jobId);
+        } else {
+          // Upstream returned success (likely JSON). Try parse and persist normalized payload & mark completed.
+          try {
+            const json = JSON.parse(text || "{}");
+            await supabase.from("product_ingestions").update({
+              status: "completed",
+              normalized_payload: json,
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }).eq("id", jobId);
+
+            // Return accepted + include jobId and optionally the extracted preview
+            return NextResponse.json({ jobId, status: "completed", preview: json }, { status: 200 });
+          } catch (err) {
+            // If parsing fails, mark job pending with snippet
+            console.warn("ingest engine returned non-JSON success body", err);
+            await supabase.from("product_ingestions").update({
+              engine_status: 200,
+              engine_error_snippet: (text || "").slice(0, 800),
+              updated_at: new Date().toISOString(),
+            }).eq("id", jobId);
+          }
         }
       } catch (err) {
         console.error("failed to call ingest engine", err);
-        // continue: job exists and engine can be retried externally
+        // leave job pending; record the error
+        await supabase.from("product_ingestions").update({
+          engine_error_snippet: String(err?.message || err).slice(0, 800),
+          updated_at: new Date().toISOString(),
+        }).eq("id", jobId);
       }
     }
 
+    // Default: return accepted with jobId (engine may have completed synchronously above)
     return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
   } catch (err: any) {
     console.error("POST /api/v1/ingest error:", err);
