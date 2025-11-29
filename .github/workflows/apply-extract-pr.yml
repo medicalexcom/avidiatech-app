@@ -1,5 +1,3 @@
-# Apply Extract PR — creates branch, adds files, commits them, and opens a PR
-# Run this workflow manually from Actions → Apply Extract PR → Run workflow
 name: Apply Extract PR
 
 on:
@@ -53,7 +51,7 @@ jobs:
 
       - name: Add files
         run: |
-          mkdir -p src/services src/app/api/v1/ingest src/app/api/v1 src/app/api src/app types scripts .github/workflows docs
+          mkdir -p src/services src/app/api/v1/ingest types scripts .github/workflows docs
 
           cat > src/services/avidiaExtractToIngest.ts <<'EOF'
 /**
@@ -379,6 +377,49 @@ EOF
           cat > .github/workflows/dispatch-extract.yml <<'EOF'
 name: Dispatch - Run Avidia Extract smoke test
 
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Target product URL to ingest'
+        required: true
+        default: 'https://www.apple.com/iphone-17/'
+
+permissions:
+  contents: read
+
+jobs:
+  run-smoke:
+    name: Run extract smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies (strict)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --prefer-offline --no-audit
+          elif [ -f package.json ]; then
+            npm install --prefer-offline --no-audit
+          else
+            echo "No package.json found; skipping install"
+          fi
+
+      - name: Run TypeScript smoke script with ts-node
+        env:
+          TARGET_URL: ${{ github.event.inputs.url }}
+          INGEST_API_ENDPOINT: ${{ secrets.INGEST_API_ENDPOINT }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+        run: |
+          npx ts-node -O '{"module":"commonjs"}' scripts/run-extract.ts "${{ github.event.inputs.url }}"
+EOF
+
       - name: Commit & push
         run: |
           git add .
@@ -408,4 +449,3 @@ name: Dispatch - Run Avidia Extract smoke test
       - name: Output PR URL
         run: |
           echo "PR created (check Actions log for URL)."
-EOF
