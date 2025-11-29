@@ -4,9 +4,7 @@
  * GET /api/v1/ingest/{id}?url=<encoded-url>
  * Proxies to extractAndIngest and returns { ok: true, data } on success.
  *
- * Fixes TypeScript signature differences between NextRequest/NextResponse and the
- * RouteHandlerConfig types: context.params can be a Promise<{ id: string }>,
- * so we await Promise.resolve(context.params) to handle both sync and async forms.
+ * Uses NextRequest and handles promise-style context.params for compatibility.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
