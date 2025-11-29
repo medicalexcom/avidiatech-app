@@ -1,0 +1,106 @@
+name: Regenerate package-lock.json and open PR
+
+# Run manually from Actions UI to regenerate package-lock.json via npm install,
+# commit the updated lockfile to a branch, and open a PR for review.
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: 'Base branch to open PR against'
+        required: true
+        default: 'main'
+      commit_branch_prefix:
+        description: 'Branch name prefix for update branch'
+        required: false
+        default: 'chore/update-lockfile'
+      run_install:
+        description: 'If false, only prints npm version and exit (safe check)'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Show npm/node
+        run: |
+          node -v
+          npm -v
+
+      - name: Run npm install to regenerate lockfile
+        if: ${{ github.event.inputs.run_install == 'true' }}
+        run: |
+          npm config set audit false
+          npm install --no-audit --no-fund
+
+      - name: Show diff (if any)
+        run: |
+          git status --porcelain
+          git --no-pager diff --name-only || true
+
+      - name: Create branch and commit lockfile (if changed)
+        id: commit
+        run: |
+          set -e
+          BASE=${{ github.event.inputs.base_branch }}
+          PREFIX=${{ github.event.inputs.commit_branch_prefix }}
+          DATE=$(date +%F)
+          BRANCH="${PREFIX}-${DATE}"
+          git fetch origin $BASE:$BASE || true
+          git checkout -b "$BRANCH" "origin/$BASE" || git checkout -b "$BRANCH"
+          if git diff --quiet -- package-lock.json; then
+            echo "no_changes=true" >> $GITHUB_OUTPUT
+            echo "No changes in package-lock.json; nothing to commit."
+            exit 0
+          fi
+          git add package-lock.json
+          git commit -m "chore: regenerate package-lock.json"
+          git push --set-upstream origin "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "no_changes=false" >> $GITHUB_OUTPUT
+
+      - name: Create PR
+        if: steps.commit.outputs.no_changes == 'false'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const branch = "${{ steps.commit.outputs.branch }}";
+            const base = "${{ github.event.inputs.base_branch }}";
+            const title = `chore: regenerate package-lock.json (${branch})`;
+            const body = `This PR regenerates package-lock.json via npm install on GitHub Actions.\n\nPlease review and merge if OK.`;
+            const { data: existing } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${branch}`,
+              base,
+              state: 'open'
+            });
+            if (existing.length) {
+              console.log(`PR already exists: #${existing[0].number}`);
+              return;
+            }
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: branch,
+              base,
+              title,
+              body,
+              maintainer_can_modify: true
+            });
+            console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
