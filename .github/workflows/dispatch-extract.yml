@@ -1,13 +1,5 @@
 name: Dispatch - Run Avidia Extract smoke test
 
-# Manually-run workflow to call the local wrapper which calls medx-ingest-api ingest endpoint.
-# This lets you run the extract test from GitHub Actions UI (no local commands needed).
-#
-# Inputs:
-#   url: product page to ingest
-# Secrets (set in repository Settings -> Secrets):
-#   INGEST_API_ENDPOINT (optional; defaults to https://medx-ingest-api.onrender.com)
-#   INGEST_API_KEY      (optional; required if your ingest API needs a key)
 on:
   workflow_dispatch:
     inputs:
@@ -32,12 +24,13 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install dependencies (if package.json present)
+      - name: Install dependencies (try npm ci, fall back to npm install)
         run: |
           if [ -f package.json ]; then
-            npm ci
+            echo "Attempting npm ci..."
+            npm ci --prefer-offline --no-audit || { echo "npm ci failed, running npm install..."; npm install --prefer-offline --no-audit; }
           else
-            echo "No package.json found; skipping npm ci"
+            echo "No package.json found; skipping install"
           fi
 
       - name: Run TypeScript smoke script with ts-node
@@ -46,6 +39,4 @@ jobs:
           INGEST_API_ENDPOINT: ${{ secrets.INGEST_API_ENDPOINT }}
           INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
         run: |
-          # Use npx ts-node to avoid requiring ts-node in repo deps.
-          # The -O option forces commonjs module output for compatibility.
           npx ts-node -O '{"module":"commonjs"}' scripts/run-extract.ts "${{ github.event.inputs.url }}"
