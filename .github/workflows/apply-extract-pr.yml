@@ -1,5 +1,3 @@
-# Apply Extract PR — creates branch, adds files, commits them, and opens a PR
-# Run this workflow manually from Actions → Apply Extract PR → Run workflow
 name: Apply Extract PR
 
 on:
@@ -49,7 +47,7 @@ jobs:
 
       - name: Create branch
         run: |
-          git checkout -b ${{ steps.vars.outputs.branch }}
+          git checkout -b "${{ steps.vars.outputs.branch }}"
 
       - name: Add files (create/update)
         run: |
@@ -102,7 +100,7 @@ function timeoutPromise<T>(p: Promise<T>, ms: number, controller?: AbortControll
       try {
         controller?.abort();
       } catch {}
-      reject(new Error(`Request timed out after ${ms}ms`));
+      reject(new Error(\`Request timed out after \${ms}ms\`));
     }, ms);
     p.then((v) => {
       clearTimeout(timer);
@@ -134,9 +132,9 @@ export async function extractAndIngest(targetUrl: string, opts: ExtractOpts = {}
     const controller =
       typeof AbortController !== 'undefined' ? new AbortController() : (null as any);
     try {
-      const url = `${ingestApiEndpoint.replace(/\/$/, '')}/ingest?url=${encodeURIComponent(
+      const url = \`${ingestApiEndpoint.replace(/\\/$/, '')}/ingest?url=\${encodeURIComponent(
         targetUrl
-      )}`;
+      )}\`;
       const headers: Record<string, string> = {
         Accept: 'application/json',
       };
@@ -153,7 +151,7 @@ export async function extractAndIngest(targetUrl: string, opts: ExtractOpts = {}
           bodyText = await (res.text ? res.text() : Promise.resolve(''));
         } catch {}
         const err = new Error(
-          `Ingest API returned ${res.status} ${res.statusText}${bodyText ? `: ${bodyText}` : ''}`
+          \`Ingest API returned \${res.status} \${res.statusText}\${bodyText ? \`: \${bodyText}\` : ''}\`
         );
         // @ts-ignore
         err.status = res.status;
@@ -168,7 +166,7 @@ export async function extractAndIngest(targetUrl: string, opts: ExtractOpts = {}
       const delay = Math.round(retryDelayMs * Math.pow(2, attempt - 1));
       // eslint-disable-next-line no-console
       console.warn(
-        `extractAndIngest attempt ${attempt} failed${isAbort ? ' (timeout/abort)' : ''}: ${err?.message || err}. Retrying in ${delay}ms...`
+        \`extractAndIngest attempt \${attempt} failed\${isAbort ? ' (timeout/abort)' : ''}: \${err?.message || err}. Retrying in \${delay}ms...\`
       );
       await new Promise((r) => setTimeout(r, delay));
       continue;
@@ -176,7 +174,7 @@ export async function extractAndIngest(targetUrl: string, opts: ExtractOpts = {}
       // no-op
     }
   }
-  const finalErr = new Error(`extractAndIngest failed after ${retries} attempts: ${lastErr?.message || lastErr}`);
+  const finalErr = new Error(\`extractAndIngest failed after \${retries} attempts: \${lastErr?.message || lastErr}\`);
   // @ts-ignore
   finalErr.cause = lastErr;
   throw finalErr;
