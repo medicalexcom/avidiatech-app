@@ -1,66 +1,46 @@
-// https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/api/v1/ingest/%5Bid%5D/route.ts
-import { NextResponse, type NextRequest } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
-import { getServiceSupabaseClient } from "@/lib/supabase";
-
 /**
- * GET /api/v1/ingest/:id
+ * src/app/api/v1/ingest/[id]/route.ts
  *
- * Robustly extract the id from either context.params or the request URL (fallback).
- * Requires a signed-in user via Clerk (getAuth). Returns the ingestion row directly.
+ * Lightweight Next.js App Router route that triggers an ingest by URL.
+ * Behavior:
+ *  - Accepts GET requests with query parameter `url` (the product page to ingest).
+ *  - Example: GET /api/v1/ingest/123?url=https://example.com/p
+ *  - Calls extractAndIngest and returns JSON result or an error payload.
+ *
+ * If your existing route did other work (database lookup by id), merge that logic and
+ * pass the resolved URL to extractAndIngest instead of reading it from the query.
  */
-export async function GET(req: NextRequest, context: { params?: any }) {
+
+import { NextResponse } from 'next/server';
+import { extractAndIngest } from '../../../../services/avidiaExtractToIngest';
+
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    // Optional: log for debugging (remove in production)
-    console.log("GET /api/v1/ingest/:id called", { params: context?.params });
+    const id = params?.id;
+    const urlParam = new URL(req.url).searchParams.get('url');
 
-    const { userId } = getAuth(req as any);
-    if (!userId) {
-      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    if (!urlParam) {
+      return NextResponse.json({ error: 'Missing url query parameter' }, { status: 400 });
     }
 
-    // Try params first, then fallback to parsing the URL path
-    let id = context?.params?.id;
-    if (!id) {
-      try {
-        const url = new URL(req.url);
-        // pathname like /api/v1/ingest/<id> -> take last segment
-        const parts = url.pathname.split("/").filter(Boolean);
-        id = parts.length > 0 ? parts[parts.length - 1] : undefined;
-      } catch (e) {
-        // ignore and let the missing id handling run below
-      }
-    }
+    // Optionally: you may wish to validate that the id is authorized to request this ingest
+    // or to resolve the URL from a DB using the id. For now we trust the provided URL.
+    const result = await extractAndIngest(urlParam, {
+      // You can override endpoint/key here, otherwise env vars are used.
+      // ingestApiEndpoint: process.env.INGEST_API_ENDPOINT,
+      // ingestApiKey: process.env.INGEST_API_KEY,
+      timeoutMs: 120_000,
+      retries: 3,
+    });
 
-    if (!id) {
-      console.warn("missing id param for GET /api/v1/ingest/:id");
-      return NextResponse.json({ error: "missing id" }, { status: 400 });
-    }
-
-    // Create supabase client lazily using service-role key (throws if misconfigured)
-    let supabase;
-    try {
-      supabase = getServiceSupabaseClient();
-    } catch (err: any) {
-      console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
-    }
-
-    const { data, error } = await supabase
-      .from("product_ingestions")
-      .select("id, status, normalized_payload, error, created_at, completed_at")
-      .eq("id", id)
-      .single();
-
-    if (error || !data) {
-      console.warn("ingest row not found", { id, error });
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-
-    // Return the row directly (client components expect the row shape)
-    return NextResponse.json(data, { status: 200 });
+    return NextResponse.json({ ok: true, data: result }, { status: 200 });
   } catch (err: any) {
-    console.error("GET /api/v1/ingest/:id error", err);
-    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
+    // Log error server-side; return a helpful error payload
+    // eslint-disable-next-line no-console
+    console.error('API ingest error:', err?.message || err, { stack: err?.stack });
+
+    const status = (err?.status && Number(err.status)) || 500;
+    const message = err?.message || 'Unknown error contacting ingest API';
+    return NextResponse.json({ ok: false, error: message }, { status });
   }
 }
