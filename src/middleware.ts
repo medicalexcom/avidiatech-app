@@ -16,6 +16,7 @@ const ALLOWLIST = [
   "/api/billing/portal",
   "/api/webhooks/stripe",
   "/api/subscription/status",
+  // Note: do not add robot endpoint to ALLOWLIST unless you want it publicly callable
 ];
 
 function isAllowedPath(pathname: string) {
@@ -131,14 +132,39 @@ async function userHasActiveSubscription(userId: string | undefined) {
 const clerkMw = clerkMiddleware();
 
 export default async function middleware(req: NextRequest, ev: any) {
+  const pathname = req.nextUrl.pathname;
+
+  // Robot token bypass: allow a server-side robot to call specific API routes without Clerk auth.
+  // The robot must send x-avidiatech-robot-token === process.env.ROBOT_TOKEN.
+  // This check runs BEFORE clerkMiddleware so robot calls are not intercepted.
+  try {
+    const ROBOT_TOKEN = process.env.ROBOT_TOKEN || "";
+    if (ROBOT_TOKEN && pathname.startsWith("/api/v1/ingest/robot")) {
+      const incoming = req.headers.get("x-avidiatech-robot-token") || "";
+      if (incoming && incoming === ROBOT_TOKEN) {
+        // authorized robot — allow through
+        return NextResponse.next();
+      }
+      // If token present but invalid, return 401 immediately (avoid redirect)
+      if (incoming) {
+        return new NextResponse(JSON.stringify({ error: "unauthorized" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      // If no token provided and endpoint is robot path, fall through to standard auth (so we don't inadvertently open it)
+    }
+  } catch (err) {
+    console.warn("robot token check failed in middleware:", err);
+  }
+
+  // Run Clerk middleware (keeps existing auth behavior)
   try {
     const maybeResponse = await (clerkMw as any)(req, ev);
     if (maybeResponse) return maybeResponse;
   } catch (err) {
     console.warn("clerkMiddleware invocation warning:", err);
   }
-
-  const pathname = req.nextUrl.pathname;
 
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
     return NextResponse.next();
