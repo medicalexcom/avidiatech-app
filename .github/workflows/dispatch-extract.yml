@@ -24,11 +24,12 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install dependencies (try npm ci, fall back to npm install)
+      - name: Install dependencies (strict)
         run: |
-          if [ -f package.json ]; then
-            echo "Attempting npm ci..."
-            npm ci --prefer-offline --no-audit || { echo "npm ci failed, running npm install..."; npm install --prefer-offline --no-audit; }
+          if [ -f package-lock.json ]; then
+            npm ci --prefer-offline --no-audit
+          elif [ -f package.json ]; then
+            npm install --prefer-offline --no-audit
           else
             echo "No package.json found; skipping install"
           fi
