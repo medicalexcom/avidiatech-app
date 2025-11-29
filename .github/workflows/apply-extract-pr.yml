@@ -54,15 +54,7 @@ jobs:
           mkdir -p src/services src/app/api/v1/ingest types scripts .github/workflows docs
 
           cat > src/services/avidiaExtractToIngest.ts <<'EOF'
-/**
- * src/services/avidiaExtractToIngest.ts
- *
- * Thin, robust TypeScript client for the central medx-ingest-api.
- * - Exports extractAndIngest(targetUrl, opts)
- * - Uses global fetch when available (Node 18+ or Next server runtime). Falls back to node-fetch@2.
- * - Supports configurable ingest endpoint and API key via opts or env vars.
- * - Built-in timeout + retry (exponential backoff).
- */
+
 type ExtractOpts = {
   ingestApiEndpoint?: string;
   ingestApiKey?: string;
