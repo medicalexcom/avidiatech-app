@@ -54,8 +54,11 @@ export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: 
           includeVariants,
         };
       }
+
+      // include credentials so Clerk/session cookies are sent with the request
       const res = await fetch("/api/v1/ingest", {
         method: "POST",
+        credentials: "same-origin", // <<-- ensure cookies are sent
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
