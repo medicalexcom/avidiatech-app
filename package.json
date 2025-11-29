@@ -2,16 +2,21 @@
   "name": "avidiatech-app",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.0",
     "@supabase/supabase-js": "^2.81.1",
     "autoprefixer": "^10.4.16",
     "next": "latest",
+    "node-fetch": "^2.7.0",
     "postcss": "^8.4.31",
     "react": "latest",
     "react-dom": "latest",
@@ -22,7 +27,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.5.9",
+    "@types/node-fetch": "^2.6.13",
     "@types/react": "^18.2.48",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }
 }
