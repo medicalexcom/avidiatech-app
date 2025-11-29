@@ -26,17 +26,18 @@ jobs:
   regen-lock:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Show npm/node
+      - name: Show node / npm versions
         run: |
           node -v
           npm -v
@@ -52,28 +53,41 @@ jobs:
           git status --porcelain
           git --no-pager diff --name-only || true
 
-      - name: Create branch and commit lockfile (if changed)
+      - name: Create branch, commit package-lock.json, and push
         id: commit
         run: |
-          set -e
-          BASE=${{ github.event.inputs.base_branch }}
-          PREFIX=${{ github.event.inputs.commit_branch_prefix }}
+          set -euo pipefail
+
+          BASE="${{ github.event.inputs.base_branch }}"
+          PREFIX="${{ github.event.inputs.commit_branch_prefix }}"
           DATE=$(date +%F)
           BRANCH="${PREFIX}-${DATE}"
-          git fetch origin $BASE:$BASE || true
-          git checkout -b "$BRANCH" "origin/$BASE" || git checkout -b "$BRANCH"
+
+          # Make sure we have the base refs available
+          git fetch origin "${BASE}" || true
+
+          # Create new branch from origin/BASE
+          git checkout -b "${BRANCH}" "origin/${BASE}" || git checkout -b "${BRANCH}"
+
+          # Configure a committer identity for CI runner
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # If no change to package-lock.json, exit cleanly
           if git diff --quiet -- package-lock.json; then
-            echo "no_changes=true" >> $GITHUB_OUTPUT
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
             echo "No changes in package-lock.json; nothing to commit."
             exit 0
           fi
+
           git add package-lock.json
           git commit -m "chore: regenerate package-lock.json"
-          git push --set-upstream origin "$BRANCH"
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "no_changes=false" >> $GITHUB_OUTPUT
+          git push --set-upstream origin "${BRANCH}"
 
-      - name: Create PR
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR (if branch created)
         if: steps.commit.outputs.no_changes == 'false'
         uses: actions/github-script@v6
         with:
@@ -83,15 +97,16 @@ jobs:
             const base = "${{ github.event.inputs.base_branch }}";
             const title = `chore: regenerate package-lock.json (${branch})`;
             const body = `This PR regenerates package-lock.json via npm install on GitHub Actions.\n\nPlease review and merge if OK.`;
-            const { data: existing } = await github.rest.pulls.list({
+            // check existing open PRs from the same head -> base
+            const existing = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
               head: `${context.repo.owner}:${branch}`,
               base,
               state: 'open'
             });
-            if (existing.length) {
-              console.log(`PR already exists: #${existing[0].number}`);
+            if (existing.data && existing.data.length) {
+              console.log(`PR already exists: #${existing.data[0].number}`);
               return;
             }
             const pr = await github.rest.pulls.create({
@@ -104,3 +119,6 @@ jobs:
               maintainer_can_modify: true
             });
             console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+      - name: Nothing to do
+        if: steps.commit.outputs.no_changes == 'true'
+        run: echo "package-lock.json unchanged; no PR created."
