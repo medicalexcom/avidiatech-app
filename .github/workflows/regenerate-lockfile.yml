@@ -1,7 +1,5 @@
 name: Regenerate package-lock.json and open PR
 
-# Run manually from Actions UI to regenerate package-lock.json via npm install,
-# commit the updated lockfile to a branch, and open a PR for review.
 on:
   workflow_dispatch:
     inputs:
