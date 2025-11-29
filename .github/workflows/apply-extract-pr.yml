@@ -1,3 +1,5 @@
+# Apply Extract PR — creates branch, adds files, commits them, and opens a PR
+# Run this workflow manually from Actions → Apply Extract PR → Run workflow
 name: Apply Extract PR
 
 on:
@@ -49,7 +51,7 @@ jobs:
         run: |
           git checkout -b ${{ steps.vars.outputs.branch }}
 
-      - name: Add files
+      - name: Add files (create/update)
         run: |
           mkdir -p src/services src/app/api/v1/ingest types scripts .github/workflows docs
 
@@ -443,7 +445,6 @@ EOF
               body,
               maintainer_can_modify: true
             });
-            core.setOutput('pr_number', pr.data.number);
             console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
 
       - name: Output PR URL
