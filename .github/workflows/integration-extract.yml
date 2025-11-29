@@ -40,6 +40,3 @@ jobs:
           TARGET_URL: ${{ inputs.test_url || 'https://www.apple.com/iphone-17/' }}
         run: |
           npx ts-node -O '{"module":"commonjs"}' scripts/assert-extract.ts "${{ env.TARGET_URL }}"
-Notes:
-  - This job will fail the PR if the adapter returns a result missing required keys (name and features).
-  - Ensure INGEST_API_ENDPOINT and INGEST_API_KEY repository secrets are set for Actions environments where private ingest API is required.
