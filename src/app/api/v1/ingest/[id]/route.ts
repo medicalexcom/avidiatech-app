@@ -3,10 +3,13 @@
  *
  * GET /api/v1/ingest/{id}?url=<encoded-url>
  * Proxies to extractAndIngest and returns { ok: true, data } on success.
+ *
+ * NOTE: fixed import path to correctly reach src/services from this file.
  */
 
 import { NextResponse } from 'next/server';
-import { extractAndIngest } from '../../../../services/avidiaExtractToIngest';
+// Correct relative path: from src/app/api/v1/ingest/[id]/route.ts to src/services is five levels up
+import { extractAndIngest } from '../../../../../services/avidiaExtractToIngest';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
