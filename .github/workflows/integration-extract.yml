@@ -1,0 +1,45 @@
+name: Integration — Extract smoke assertion
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  assert-extract:
+    name: Assert Extract returns required keys
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --prefer-offline --no-audit
+          else
+            npm install --prefer-offline --no-audit
+          fi
+
+      - name: Run Extract assertion
+        env:
+          INGEST_API_ENDPOINT: ${{ secrets.INGEST_API_ENDPOINT }}
+          INGEST_API_KEY: ${{ secrets.INGEST_API_KEY }}
+          TARGET_URL: ${{ inputs.test_url || 'https://www.apple.com/iphone-17/' }}
+        run: |
+          npx ts-node -O '{"module":"commonjs"}' scripts/assert-extract.ts "${{ env.TARGET_URL }}"
+Notes:
+  - This job will fail the PR if the adapter returns a result missing required keys (name and features).
+  - Ensure INGEST_API_ENDPOINT and INGEST_API_KEY repository secrets are set for Actions environments where private ingest API is required.
