@@ -1,4 +1,3 @@
-```tsx
 "use client";
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -18,18 +17,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 type AnyObj = Record<string, any>;
 
 function normalizeSeoResponse(resp: AnyObj) {
-  // Normalize various server response shapes into a predictable object:
-  // { seo_payload: {...}, description_html: string, source_seo: {...}, ingestionId?: string, seoId?: string }
   if (!resp) return null;
 
-  // If server returned wrapper { ok: true, data: {...} } or { ok: true, job: {...} }
+  // unwrap common wrappers
   const payload = resp?.data ?? resp?.job ?? resp;
 
-  const seoPayload =
-    payload?.seo_payload ??
-    payload?.seoPayload ??
-    (payload?.description_html || payload?.descriptionHtml ? payload?.seo_payload ?? payload?.seoPayload : undefined);
-
+  const seoPayload = payload?.seo_payload ?? payload?.seoPayload ?? null;
   const descriptionHtml = payload?.description_html ?? payload?.descriptionHtml ?? null;
 
   const sourceSeo =
@@ -40,10 +33,10 @@ function normalizeSeoResponse(resp: AnyObj) {
     null;
 
   const ingestionId = payload?.id ?? payload?.ingestionId ?? payload?.ingestion_id ?? null;
-  const seoId = payload?.seoId ?? payload?.id ?? payload?.seo_id ?? null;
+  const seoId = payload?.seoId ?? payload?.seo_id ?? null;
 
   return {
-    seo_payload: seoPayload ?? null,
+    seo_payload: seoPayload,
     description_html: descriptionHtml,
     source_seo: sourceSeo,
     ingestionId,
@@ -58,9 +51,10 @@ export default function AvidiaSeoPage() {
   const ingestionIdParam = params?.get("ingestionId") || null;
   const urlParam = params?.get("url") || null;
 
-  const [ingestionId] = useState<string | null>(ingestionIdParam);
-  const [urlInput, setUrlInput] = useState<string>(urlParam || "");
+  // treat ingestionId as a stable param (no setter needed)
+  const ingestionId = ingestionIdParam;
 
+  const [urlInput, setUrlInput] = useState<string>(urlParam || "");
   const [job, setJob] = useState<AnyObj | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -113,16 +107,14 @@ export default function AvidiaSeoPage() {
         return;
       }
 
-      // If backend returns insertion result / seoOutputs and the ingestion row was updated,
-      // re-fetch the ingestion row to show persisted SEO.
+      // re-fetch ingestion to pick up persisted SEO if backend updated it
       const refresh = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}`);
       const refJson = await refresh.json();
       if (!refresh.ok) {
-        // fallback: use returned payload if ingestion refresh failed
         const normalized = normalizeSeoResponse(json);
         setJob(normalized?.raw ?? normalized);
       } else {
-        setJob((normalizeSeoResponse(refJson)?.raw ?? normalizeSeoResponse(refJson)) as AnyObj);
+        setJob(normalizeSeoResponse(refJson)?.raw ?? normalizeSeoResponse(refJson));
       }
     } catch (err: any) {
       setError(String(err?.message || err));
@@ -150,15 +142,12 @@ export default function AvidiaSeoPage() {
         return;
       }
 
-      // If persisted, backend will return ingestionId (navigate to ingestion view)
       const returnedIngestionId = json?.ingestionId ?? json?.ingestion_id ?? null;
       if (returnedIngestionId) {
         router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(returnedIngestionId)}`);
         return;
       }
 
-      // Otherwise show returned SEO result inline.
-      // Normalize both camelCase and snake_case shapes.
       const normalized = normalizeSeoResponse(json);
       if (normalized) {
         setJob(normalized?.raw ?? normalized);
@@ -172,30 +161,17 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  // Helpers to read SEO fields from job with tolerant keys
-  function getSeoField(field: "h1" | "title" | "metaDescription" | "meta_description") {
-    const seo = (job?.seo_payload ?? job?.seoPayload ?? job?.seo_payload) as AnyObj | undefined;
-    if (!seo) return "";
-    return (
-      seo[field] ??
-      seo[field === "metaDescription" ? "meta_description" : field] ??
-      seo["metaDescription"] ??
-      seo["meta_description"] ??
-      ""
-    );
-  }
-
   const renderPreview = () => {
-    const seoPayload = job?.seo_payload ?? job?.seoPayload ?? job?.seo_payload;
-    const descriptionHtml = job?.description_html ?? job?.descriptionHtml ?? job?.description_html;
+    const seoPayload = job?.seo_payload ?? job?.seoPayload ?? null;
+    const descriptionHtml = job?.description_html ?? job?.descriptionHtml ?? null;
     return (
       <>
         <h3>Generated SEO (AvidiaSEO)</h3>
         {seoPayload ? (
           <div>
-            <div><strong>H1:</strong> {seoPayload.h1 ?? seoPayload.h1_text ?? seoPayload.name_best ?? ""}</div>
-            <div><strong>Title:</strong> {seoPayload.title ?? seoPayload.title_text ?? ""}</div>
-            <div><strong>Meta:</strong> {seoPayload.metaDescription ?? seoPayload.meta_description ?? seoPayload.metaDescription ?? ""}</div>
+            <div><strong>H1:</strong> {seoPayload.h1 ?? seoPayload.name_best ?? ""}</div>
+            <div><strong>Title:</strong> {seoPayload.title ?? ""}</div>
+            <div><strong>Meta:</strong> {seoPayload.metaDescription ?? seoPayload.meta_description ?? ""}</div>
             <h4 style={{ marginTop: 8 }}>HTML Description</h4>
             <div
               style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere", border: "1px solid #eee", padding: 12, background: "#fff" }}
@@ -230,7 +206,11 @@ export default function AvidiaSeoPage() {
           <div style={{ marginTop: 12 }}>
             <h3>Source SEO (scraped)</h3>
             <pre style={{ background: "#f8fafc", padding: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-              {JSON.stringify(job.normalized_payload?.source_seo ?? job.source_seo ?? job.normalized_payload ?? job.sourceSeo ?? {}, null, 2)}
+              {JSON.stringify(
+                job.normalized_payload?.source_seo ?? job.source_seo ?? job.normalized_payload ?? job.sourceSeo ?? {},
+                null,
+                2
+              )}
             </pre>
 
             <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
@@ -299,4 +279,3 @@ export default function AvidiaSeoPage() {
     </div>
   );
 }
-```
