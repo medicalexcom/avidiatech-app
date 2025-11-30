@@ -18,18 +18,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (!INGEST_ENGINE_URL) {
     return NextResponse.json(
-      { ok: false, error: "ingest engine not configured" },
+      { ok: false, error: "INGEST_ENGINE_URL not configured" },
       { status: 500 }
     );
   }
 
-  // These flags mirror how you usually call the engine from MedicalEx.
-  const flags =
-    "browse=true&harvest=true&sanitize=true&markdown=true&pdf=true";
+  // Mirror how you usually call the engine (you can tweak flags as needed)
+  const flags = "browse=true&harvest=true&sanitize=true&markdown=true&pdf=true";
+  const target = `${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(urlParam)}&${flags}`;
 
-  const target = `${ INGEST_ENGINE_URL }/ingest?url=${encodeURIComponent(
-    urlParam
-  )}&${flags}`;
+  console.log("[preview] calling ingest engine:", target);
 
   try {
     const upstream = await fetch(target, {
@@ -45,11 +43,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!upstream.ok) {
       const snippet = safeSnippet(text);
 
-      // Detect host HTML errors (Render / platform issues, etc.)
+      // Render / host error
       if (
         contentType.includes("text/html") ||
         snippet.toLowerCase().includes("service suspended")
       ) {
+        console.error("[preview] host HTML error:", snippet);
         return NextResponse.json(
           {
             ok: false,
@@ -63,11 +62,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       try {
         const j = JSON.parse(text || "{}");
+        console.error("[preview] upstream JSON error:", j);
         return NextResponse.json(
-          { ok: false, upstream: j },
+          { ok: false, error: "upstream_error", upstream_status: upstream.status, upstream: j },
           { status: upstream.status }
         );
       } catch {
+        console.error("[preview] upstream non-JSON error:", snippet);
         return NextResponse.json(
           {
             ok: false,
@@ -79,18 +80,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Success: parse JSON and return it as-is to the Extract dashboard.
     try {
       const json = JSON.parse(text || "{}");
+      // Just pass through whatever the ingest engine returns
       return NextResponse.json(json, { status: 200 });
-    } catch {
+    } catch (e) {
+      console.error("[preview] JSON parse error:", e, "body:", text);
       return NextResponse.json(
         { ok: false, error: "Upstream returned non-JSON response" },
         { status: 200 }
       );
     }
   } catch (err: any) {
-    console.error("preview fetch failed", err);
+    console.error("[preview] fetch failed:", err);
     return NextResponse.json(
       {
         ok: false,
