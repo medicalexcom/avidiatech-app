@@ -209,3 +209,13 @@ export default async function middleware(req: NextRequest, ev: any) {
 export const config = {
   matcher: ["/dashboard/:path*", "/api/:path*"]
 };
+
+
+
+
+
+
+
+export const config = {
+  matcher: ["/:path*"] // TEMPORARY broad matcher for debugging only — revert after diagnosis
+};
