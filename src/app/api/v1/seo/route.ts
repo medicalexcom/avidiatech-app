@@ -1,128 +1,181 @@
-// POST /api/v1/seo - generate AvidiaSEO output for an existing ingestion job OR from a raw URL
-import { NextResponse, type NextRequest } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
+import { postSeoUrlOnlySchema } from "@/lib/seo/validators";
+import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
+import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
+import { autoHeal } from "@/lib/seo/autoHeal";
+import { callOpenaiChat } from "@/lib/openai";
 
-/**
- * Request body:
- *  - { ingestionId }             // existing: persist seo to this ingestion
- *  - { url, persist?: boolean }   // direct-from-url: generate (and optionally persist to a new ingestion)
- *
- * Behavior:
- *  - If ingestionId provided: load job, run generator using job.normalized_payload or job.raw_payload, persist seo_payload + description_html
- *  - Else if url provided: fetch URL, scrape basic source_seo, run generator, if persist true create a product_ingestions row and persist seo there, else just return generated SEO (no DB write)
- *
- * NOTE: This route uses a simple mock generator for testing. Replace with your GPT/LLM integration.
- */
+const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
+const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440", 10);
+
+async function upsertIngestionForUrl(sb: any, tenantId: string, url: string) {
+  // 1) check fresh ingestion
+  const freshnessThreshold = new Date(Date.now() - INGEST_CACHE_MINUTES * 60_000).toISOString();
+  const { data: existing } = await sb
+    .from("product_ingestions")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("source_url", url)
+    .gte("created_at", freshnessThreshold)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (existing) return existing;
+
+  // 2) create a stub row with status pending
+  const { data: inserted } = await sb
+    .from("product_ingestions")
+    .insert({
+      tenant_id: tenantId,
+      user_id: null,
+      source_url: url,
+      status: "pending",
+      options: { includeSeo: true, includeDocs: true, includeSpecs: true, includeVariants: true },
+    })
+    .select("*")
+    .single();
+
+  // 3) call ingest engine synchronously to obtain normalized preview (best-effort)
+  if (!INGEST_ENGINE_URL) return inserted;
+  try {
+    const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    const text = await res.text();
+    if (res.ok) {
+      let parsed: any = {};
+      try { parsed = JSON.parse(text); } catch {}
+      // persist normalized pieces if present
+      const updates: any = { updated_at: new Date().toISOString() };
+      if (parsed) {
+        updates.normalized_payload = parsed;
+        updates.status = "completed";
+        updates.completed_at = new Date().toISOString();
+      }
+      await sb.from("product_ingestions").update(updates).eq("id", inserted.id);
+      const { data: finalRow } = await sb.from("product_ingestions").select("*").eq("id", inserted.id).single();
+      return finalRow;
+    } else {
+      // record last_error
+      await sb.from("product_ingestions").update({
+        last_error: `ingest_failed_${res.status}`,
+        updated_at: new Date().toISOString(),
+      }).eq("id", inserted.id);
+      return inserted;
+    }
+  } catch (e: any) {
+    await sb.from("product_ingestions").update({
+      last_error: `ingest_exception:${String(e?.message||e)}`,
+      updated_at: new Date().toISOString(),
+    }).eq("id", inserted.id);
+    return inserted;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = getAuth(req as any);
-    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    const { userId, orgId } = auth();
+    if (!userId || !orgId) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
+    const tenantId = orgId as string;
 
-    const body = await req.json().catch(() => ({}));
-    const ingestionId = body?.ingestionId;
-    const url = body?.url;
-    const persist = !!body?.persist;
+    const body = await req.json();
+    const parsed = postSeoUrlOnlySchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: { code: "SEO_INVALID_URL", detail: parsed.error.flatten() } }, { status: 400 });
+    }
+    const { url } = parsed.data;
 
-    let supabase;
-    try {
-      supabase = getServiceSupabaseClient();
-    } catch (err: any) {
-      console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
+    const sb = getServiceSupabaseClient();
+
+    // 1) obtain ingestion (fresh or new)
+    const ingestion = await upsertIngestionForUrl(sb, tenantId, url);
+
+    // If ingestion indicates failure or missing normalized payload, surface an error
+    if (!ingestion) {
+      return NextResponse.json({ error: { code: "SEO_INGESTION_FAILED", message: "Ingestion not created" } }, { status: 500 });
     }
 
-    let sourceSeo: any = {};
-    let rawPreview = "";
-
-    if (ingestionId) {
-      // load existing job
-      const { data: job, error: fetchErr } = await supabase.from("product_ingestions").select("*").eq("id", ingestionId).single();
-      if (fetchErr || !job) {
-        console.warn("job not found", { ingestionId, fetchErr });
-        return NextResponse.json({ error: "not_found" }, { status: 404 });
-      }
-      sourceSeo = job.normalized_payload?.source_seo || {};
-      rawPreview = job.normalized_payload?.raw_preview || job.raw_payload?.raw_preview || "";
-    } else if (url) {
-      // fetch the url and extract simple metadata (title, meta description)
-      try {
-        const resp = await fetch(url, { method: "GET" });
-        const html = await resp.text();
-        rawPreview = html.slice(0, 20000);
-        // simple parsing for title/meta (server-side)
-        const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-        const metaMatch = html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) || html.match(/<meta[^>]+content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
-        sourceSeo = {
-          source_h1: (html.match(/<h1[^>]*>([^<]*)<\/h1>/i) || [null, null])[1] || null,
-          source_title_tag: titleMatch ? titleMatch[1] : null,
-          source_meta_description: metaMatch ? metaMatch[1] : null,
-          canonical: (html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']*)["'][^>]*>/i) || [null, null])[1] || null,
-        };
-      } catch (err) {
-        console.warn("failed to fetch url for seo", url, err);
-        // continue with empty sourceSeo/rawPreview
-      }
-    } else {
-      return NextResponse.json({ error: "missing ingestionId or url" }, { status: 400 });
+    if (!ingestion.normalized_payload) {
+      // still allow attempt, but warn
+      // we could return an error here; for UX we attempt generation with whatever exists
     }
 
-    // MOCK generator: replace with GPT integration
-    const generated = {
-      h1: sourceSeo.source_h1 || "Product",
-      title: (sourceSeo.source_title_tag || "Product") + " | AvidiaTech",
-      meta_description: (sourceSeo.source_meta_description && sourceSeo.source_meta_description.slice(0, 300)) || `Buy ${(sourceSeo.source_title_tag || "this product")} — features and specs.`,
-      seo_short_description: (sourceSeo.source_meta_description || "").slice(0, 160),
-      features: [],
+    // 2) load tenant instructions
+    const instructions = await loadCustomGptInstructions(tenantId);
+
+    // 3) assemble prompt strictly from normalized fields
+    const { system, user } = assembleSeoPrompt({
+      instructions,
+      extractData: ingestion.normalized_payload ?? {},
+      manufacturerText: ingestion.raw_payload?.manufacturer_text ?? ""
+    });
+
+    // 4) enforce tenant quota (placeholder - implement assertTenantQuota as needed)
+    // await assertTenantQuota(tenantId, { kind: "seo" });
+
+    // 5) call OpenAI (strict generation, expecting JSON)
+    const model = process.env.OPENAI_SEO_MODEL || "gpt-4o";
+    const completion = await callOpenaiChat({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(user) }
+      ],
+      temperature: 0.2,
+      max_tokens: 1200
+    });
+
+    const raw = completion?.choices?.[0]?.message?.content ?? "{}";
+    let out: any = {};
+    try { out = JSON.parse(raw); } catch (e) {
+      return NextResponse.json({ error: { code: "SEO_MODEL_ERROR", message: "Model returned non-JSON" , raw } }, { status: 500 });
+    }
+
+    const descriptionHtml = out.description_html ?? "";
+    const seoPayload = out.seo_payload ?? { h1: "", title: "", metaDescription: "" };
+    const features = Array.isArray(out.features) ? out.features : [];
+
+    // 6) autoHeal strict
+    const healed = autoHeal(descriptionHtml, seoPayload, features, { strict: true });
+
+    // 7) persist seo_outputs
+    const insertBody: any = {
+      tenant_id: tenantId,
+      ingestion_id: ingestion.id,
+      input_snapshot: { url, normalized_snapshot_keys: Object.keys(ingestion.normalized_payload ?? {}) },
+      description_html: healed.html,
+      seo_payload: healed.seo,
+      features: healed.features,
+      autoheal_log: healed.log,
+      model_info: { model }
     };
-    const descriptionHtml = `<h1>${generated.h1}</h1><p>${generated.meta_description}</p>`;
 
-    // If ingestionId present -> persist to that ingestion row
-    if (ingestionId) {
-      const { error: updErr } = await supabase.from("product_ingestions").update({
-        seo_payload: generated,
-        description_html: descriptionHtml,
-        features: generated.features,
-        seo_generated_at: new Date().toISOString(),
-      }).eq("id", ingestionId);
-
-      if (updErr) {
-        console.error("failed to update seo payload", updErr);
-        return NextResponse.json({ error: "db_update_failed" }, { status: 500 });
-      }
-
-      return NextResponse.json({ ok: true, ingestionId }, { status: 200 });
+    const { data: inserted, error: insErr } = await sb.from("seo_outputs").insert(insertBody).select("*").single();
+    if (insErr) {
+      return NextResponse.json({ error: { code: "SEO_DB_ERROR", message: insErr.message } }, { status: 500 });
     }
 
-    // If url provided and persist requested: create a new ingestion row and persist seo there
-    if (url && persist) {
-      const insert = {
-        tenant_id: null,
-        user_id: userId,
-        source_url: url,
-        status: "success",
-        raw_payload: { raw_preview: rawPreview },
-        normalized_payload: { source_seo: sourceSeo }, // minimal normalized payload
-        seo_payload: generated,
-        description_html: descriptionHtml,
-        features: generated.features,
-        flags: { full_extract: false },
-        created_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-      };
+    // TODO: increment tenant usage counters
 
-      const { data: created, error: insertErr } = await supabase.from("product_ingestions").insert(insert).select("id").single();
-      if (insertErr) {
-        console.error("failed to create ingestion for seo persist", insertErr);
-        return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
-      }
-      return NextResponse.json({ ok: true, ingestionId: created.id }, { status: 200 });
-    }
+    return NextResponse.json({
+      seoId: inserted.id,
+      tenantId,
+      ingestionId: ingestion.id,
+      url,
+      descriptionHtml: inserted.description_html,
+      seoPayload: inserted.seo_payload,
+      features: inserted.features,
+      autohealLog: inserted.autoheal_log,
+      createdAt: inserted.created_at
+    }, { status: 200 });
 
-    // Otherwise return generated SEO (no persistence)
-    return NextResponse.json({ ok: true, seo_payload: generated, description_html: descriptionHtml, source_seo: sourceSeo }, { status: 200 });
-  } catch (err: any) {
-    console.error("POST /api/v1/seo error:", err);
-    return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
+  } catch (e: any) {
+    console.error("POST /api/v1/seo error", e);
+    return NextResponse.json({ error: { code: "SEO_MODEL_ERROR", message: String(e?.message || e) } }, { status: 500 });
   }
 }
