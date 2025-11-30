@@ -31,6 +31,15 @@ import Stripe from "stripe";
   }
 })();
 
+// Diagnostic log (non-sensitive): shows whether the middleware file is executing.
+// Do NOT log secrets — we only log booleans / flags.
+console.log(
+  "[DIAG-middleware] executing; CLERK_SECRET_SET=" +
+    (process.env.CLERK_SECRET ? "true" : "false") +
+    " FEATURE_MATCH=" +
+    String(process.env.FEATURE_MATCH || "")
+);
+
 // Now require clerk server helpers (after env normalization).
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { clerkMiddleware, getAuth, clerkClient } = require("@clerk/nextjs/server");
@@ -205,20 +214,10 @@ export default async function middleware(req: NextRequest, ev: any) {
 /**
  * Ensure matcher covers the routes that call auth().
  * Keep minimal set for performance. If you have other pages that call auth() directly, add them here.
+ *
+ * NOTE: For debugging we temporarily include "/:path*" to broaden coverage so we can confirm middleware
+ * runs for any route. Remove "/:path*" after you finish diagnosing.
  */
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*"]
+  matcher: ["/dashboard/:path*", "/api/:path*", "/:path*"]
 };
-
-
-
-
-
-
-
-export const config = {
-  matcher: ["/:path*"] // TEMPORARY broad matcher for debugging only — revert after diagnosis
-};
-console.log("[DIAG-middleware] incoming", process.env.VERCEL && process.env.VERCEL ? "VERCEL" : "local");
-
-
