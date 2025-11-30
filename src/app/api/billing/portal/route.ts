@@ -1,68 +1,66 @@
-// Add this import at the top:
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
 import { safeGetAuth } from "@/lib/clerkSafe";
 
-// Replace usages like:
-// const { userId } = getAuth(req as any);
-// with:
-const { userId } = safeGetAuth(req as any);
+/**
+ * Creates a Stripe Billing Portal session for the current user.
+ * - Uses safeGetAuth to avoid Clerk runtime warnings when middleware detection is imperfect.
+ * - Attempts to read the stripeCustomerId from Clerk user metadata.
+ * - Returns a portal URL on success.
+ *
+ * Note: This is a minimal, sensible implementation. If your app stores customer IDs elsewhere
+ * (e.g. Supabase) or has a different return URL, adapt the lookup/return_url accordingly.
+ */
 
-// Rest of file unchanged.
-
-
-import Stripe from "stripe";
-import { NextResponse } from "next/server";
-import { getAuth, clerkClient } from "@clerk/nextjs/server";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
 export async function POST(req: Request) {
   try {
-    // Authenticate the request
-    const { userId } = getAuth(req as any);
-    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    const { userId } = safeGetAuth(req as any);
+    if (!userId) {
+      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    }
 
-    // Fetch Clerk user (to check for stored stripeCustomerId or email)
-    let clerkUser;
+    if (!stripe) {
+      return NextResponse.json({ error: "stripe-not-configured" }, { status: 500 });
+    }
+
+    // Use Clerk to fetch user metadata (required to read stripeCustomerId by default)
+    // Require dynamically so build-time environments that don't have Clerk won't fail.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { clerkClient } = require("@clerk/nextjs/server");
+
+    let clerkUser: any = null;
     try {
       clerkUser = await clerkClient.users.getUser(userId);
     } catch (err) {
-      console.warn("Unable to fetch Clerk user for billing portal creation", err);
+      // If Clerk lookup fails, surface a 500 so caller can diagnose.
+      return NextResponse.json({ error: "failed-to-fetch-clerk-user", details: String(err?.message ?? err) }, { status: 500 });
     }
 
-    // 1) Preferred: try to read stripeCustomerId from Clerk privateMetadata (server-only)
     const stripeCustomerId =
       (clerkUser?.privateMetadata as any)?.stripeCustomerId ||
       (clerkUser?.publicMetadata as any)?.stripeCustomerId ||
       undefined;
 
-    let customerId = stripeCustomerId;
-
-    // 2) Fallback: if no stored customer id, try to find by email
-    if (!customerId) {
-      const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
-      if (email) {
-        const customers = await stripe.customers.list({ email, limit: 1 });
-        if (customers.data && customers.data.length > 0) {
-          customerId = customers.data[0].id;
-        }
-      }
+    if (!stripeCustomerId) {
+      return NextResponse.json({ error: "no-stripe-customer", message: "No Stripe customer id found for user" }, { status: 400 });
     }
 
-    // If we still don't have a customer id, tell the client to create one (via checkout)
-    if (!customerId) {
-      return NextResponse.json({ error: "no_stripe_customer", message: "No Stripe customer found for this user. Create a subscription/checkout first." }, { status: 400 });
+    const returnUrl = process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/dashboard` : `${process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : "http://localhost:3000"}/dashboard`;
+
+    try {
+      const session = await stripe.billingPortal.sessions.create({
+        customer: stripeCustomerId,
+        return_url: returnUrl,
+      });
+
+      return NextResponse.json({ url: session.url });
+    } catch (err: any) {
+      return NextResponse.json({ error: "stripe-failed", details: String(err?.message ?? err) }, { status: 500 });
     }
-
-    // Create billing portal session
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${APP_URL}/dashboard`,
-    });
-
-    return NextResponse.json({ url: session.url });
   } catch (err: any) {
-    console.error("create-billing-portal error:", err);
-    return NextResponse.json({ error: err.message || "stripe error" }, { status: 500 });
+    return NextResponse.json({ error: "unexpected", details: String(err?.message ?? err) }, { status: 500 });
   }
 }
