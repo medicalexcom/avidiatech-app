@@ -186,11 +186,13 @@ function JsonNode({
     );
   }
 
-  // Object / array
-  const entries =
+  // Object / array with explicit tuple typing to satisfy TS
+  const entries: [string, unknown][] =
     type === "object"
       ? Object.entries(value as Record<string, unknown>)
-      : (value as any[]).map((v, i) => [String(i), v as unknown]);
+      : (value as unknown[]).map(
+          (v, i) => [String(i), v] as [string, unknown]
+        );
 
   const bracketOpen = type === "object" ? "{" : "[";
   const bracketClose = type === "object" ? "}" : "]";
@@ -219,9 +221,7 @@ function JsonNode({
               {JSON.stringify(label)}:
             </span>
           )}
-          <span className="text-neutral-300">
-            {bracketOpen}
-          </span>
+          <span className="text-neutral-300">{bracketOpen}</span>
           <span className="ml-1 text-[11px] text-neutral-500">
             {summary}
           </span>
@@ -235,7 +235,9 @@ function JsonNode({
       {/* Children */}
       {isExpanded && entries.length > 0 && (
         <div>
-          {entries.map(([k, v], idx) => {
+          {entries.map(([key, val], idx) => {
+            const k = key as string;
+            const v = val;
             const childPath = `${path}.${k}`;
             const isLast = idx === entries.length - 1;
             return (
@@ -315,7 +317,14 @@ function Primitive({ value }: { value: unknown }) {
 
 function getType(
   value: unknown
-): "null" | "string" | "number" | "boolean" | "object" | "array" | "other" {
+):
+  | "null"
+  | "string"
+  | "number"
+  | "boolean"
+  | "object"
+  | "array"
+  | "other" {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
   const t = typeof value;
@@ -337,18 +346,11 @@ function getDisplayRoot(value: unknown): {
   rootLabel: string;
   envelope: unknown | null;
 } {
-  if (
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value)
-  ) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
     const obj = value as any;
     if ("data" in obj && obj.data && typeof obj.data === "object") {
       const data = obj.data;
-      if (
-        "normalized_payload" in data &&
-        data.normalized_payload
-      ) {
+      if ("normalized_payload" in data && data.normalized_payload) {
         return {
           displayRoot: data.normalized_payload,
           rootLabel: "data.normalized_payload",
@@ -386,7 +388,11 @@ function matchesFilter(
 
   if (value === null || value === undefined) return false;
 
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return String(value).toLowerCase().includes(needle);
   }
 
