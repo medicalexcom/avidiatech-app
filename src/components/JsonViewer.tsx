@@ -354,7 +354,8 @@ function Primitive({ value }: { value: unknown }) {
     return (
       <span className="text-orange-300">
         {String(value)}
-      </span>;
+      </span>
+    );
   }
 
   if (type === "boolean") {
