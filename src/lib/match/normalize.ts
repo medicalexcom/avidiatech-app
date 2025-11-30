@@ -1,4 +1,4 @@
-import csvParse from "csv-parse/lib/sync";
+import { parse as csvParse } from "csv-parse/sync";
 
 /**
  * parsePasteOrCsv
