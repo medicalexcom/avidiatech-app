@@ -4,6 +4,11 @@ import React, { useState } from "react";
 /**
  * Header: URL input, toggles, Extract button.
  * Calls POST /api/v1/ingest and returns jobId via onJobCreated.
+ *
+ * Changes made:
+ * - Sends credentials: "same-origin" so Clerk session cookie is included.
+ * - Better error handling and minimal UX feedback (err state).
+ * - Keeps payload shape compatible with server route (fullExtract/options/export_type/correlationId).
  */
 export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: string) => void }) {
   const [url, setUrl] = useState("");
@@ -54,18 +59,31 @@ export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: 
           includeVariants,
         };
       }
+
+      // include Clerk cookies/session so the server sees an authenticated user
       const res = await fetch("/api/v1/ingest", {
         method: "POST",
+        credentials: "same-origin", // critical: include Clerk session cookie
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const json = await res.json();
+
+      const json = await res.json().catch(() => null);
+
       if (!res.ok) {
-        setErr(json?.error || `ingest failed: ${res.status}`);
+        const message = json?.error || json?.message || `Ingest failed (${res.status})`;
+        setErr(message);
         return;
       }
+
       const id = json?.jobId || json?.job_id || json?.id;
-      if (id) onJobCreated(String(id));
+      if (id) {
+        onJobCreated(String(id));
+        // small success feedback
+        setErr(null);
+      } else {
+        setErr("Ingest succeeded but no job id returned");
+      }
     } catch (err: any) {
       setErr(String(err?.message || err));
     } finally {
@@ -77,12 +95,20 @@ export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: 
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 8 }}>
         <input
+          aria-label="Product URL to ingest"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://manufacturer.com/product/xyz"
           style={{ flex: 1, padding: "8px 12px", borderRadius: 6, border: "1px solid #d1d5db" }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
         />
-        <button onClick={submit} disabled={loading} style={{ padding: "8px 14px", background: "#2563eb", color: "white", borderRadius: 6 }}>
+        <button
+          onClick={submit}
+          disabled={loading}
+          style={{ padding: "8px 14px", background: "#2563eb", color: "white", borderRadius: 6 }}
+        >
           {loading ? "Extracting…" : "Extract Product"}
         </button>
       </div>
