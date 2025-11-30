@@ -1,4 +1,4 @@
-# Pushes scaffold files from a patch and opens a PR (manual trigger)
+# Pushes scaffold files from an embedded base64 patch and opens a PR (manual trigger)
 name: Add AvidiaMatch scaffold (apply patch and open PR)
 
 on:
@@ -33,152 +33,20 @@ jobs:
           fi
           git switch -c $BRANCH
 
-      - name: Write patch file
+      - name: Write base64 patch to disk
         run: |
-          cat > avidiatch-match-scaffold.patch <<'PATCH'
-diff --git a/supabase/migrations/0XX_create_url_intelligence_patterns.sql b/supabase/migrations/0XX_create_url_intelligence_patterns.sql
-new file mode 100644
---- /dev/null
-+++ b/supabase/migrations/0XX_create_url_intelligence_patterns.sql
-@@ -0,0 +1,27 @@
-+create table if not exists public.url_intelligence_patterns (
-+  id uuid primary key default gen_random_uuid(),
-+  tenant_id uuid not null,
-+  brand text,
-+  domain text not null,
-+  pattern text not null,
-+  kind text not null,
-+  confidence_base numeric not null default 0.7,
-+  enabled boolean not null default true,
-+  created_at timestamptz not null default now(),
-+  updated_at timestamptz not null default now()
-+);
-+
-+create index if not exists url_patterns_tenant_brand_domain_idx
-+  on public.url_intelligence_patterns (tenant_id, brand, domain);
-+
-+alter table public.url_intelligence_patterns enable row level security;
-+
-diff --git a/supabase/migrations/0XY_create_sku_url_matches.sql b/supabase/migrations/0XY_create_sku_url_matches.sql
-new file mode 100644
---- /dev/null
-+++ b/supabase/migrations/0XY_create_sku_url_matches.sql
-@@ -0,0 +1,38 @@
-+create table if not exists public.sku_url_matches (
-+  id uuid primary key default gen_random_uuid(),
-+  tenant_id uuid not null,
-+  job_id uuid not null,
-+  sku text not null,
-+  brand_hint text,
-+  gtin text,
-+  candidate_url text,
-+  domain text,
-+  source text not null,
-+  confidence numeric not null default 0,
-+  status text not null,
-+  verify_checks jsonb,
-+  created_at timestamptz not null default now(),
-+  updated_at timestamptz not null default now()
-+);
-+
-+create index if not exists sku_url_matches_tenant_job_idx
-+  on public.sku_url_matches (tenant_id, job_id);
-+
-+create index if not exists sku_url_matches_tenant_status_idx
-+  on public.sku_url_matches (tenant_id, status);
-+
-+alter table public.sku_url_matches enable row level security;
-+
-diff --git a/supabase/migrations/0XZ_rls_policies.sql b/supabase/migrations/0XZ_rls_policies.sql
-new file mode 100644
---- /dev/null
-+++ b/supabase/migrations/0XZ_rls_policies.sql
-@@ -0,0 +1,103 @@
-+-- Ensure this migration creates a safe tenant resolver and then the RLS policies.
-+-- Adjust claim names in the resolver if your JWT uses different keys.
-+
-+-- 1) Tenant / user resolver function (safe: checks multiple claim names and validates UUID format)
-+create or replace function public.current_tenant_id()
-+returns uuid
-+language sql
-+stable
-+as $$
-+  SELECT
-+    CASE
-+      WHEN (current_setting('request.jwt.claim.tenant_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.tenant_id', true)::uuid
-+      WHEN (current_setting('request.jwt.claim.org_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.org_id', true)::uuid
-+      WHEN (current_setting('request.jwt.claim.team_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.team_id', true)::uuid
-+      WHEN (current_setting('request.jwt.claim.workspace_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.workspace_id', true)::uuid
-+      WHEN (current_setting('request.jwt.claim.user_tenant_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.user_tenant_id', true)::uuid
-+      ELSE NULL
-+    END;
-+$$;
-+
-+create or replace function public.current_user_id()
-+returns uuid
-+language sql
-+stable
-+as $$
-+  SELECT
-+    CASE
-+      WHEN (current_setting('request.jwt.claim.user_id', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.user_id', true)::uuid
-+      WHEN (current_setting('request.jwt.claim.sub', true) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-+        THEN current_setting('request.jwt.claim.sub', true)::uuid
-+      ELSE NULL
-+    END;
-+$$;
-+
-+-- 2) RLS policies for url_intelligence_patterns
-+-- Select: only rows that match tenant in JWT
-+create policy "url_patterns_select" on public.url_intelligence_patterns
-+for select
-+using (tenant_id = public.current_tenant_id());
-+
-+-- Insert: only allow inserting rows where tenant_id equals current tenant
-+create policy "url_patterns_insert" on public.url_intelligence_patterns
-+for insert
-+with check (tenant_id = public.current_tenant_id());
-+
-+-- Update: only allow updating rows belonging to current tenant; ensure tenant_id remains correct
-+create policy "url_patterns_update" on public.url_intelligence_patterns
-+for update
-+using (tenant_id = public.current_tenant_id())
-+with check (tenant_id = public.current_tenant_id());
-+
-+-- Delete: only allow deleting rows belonging to current tenant
-+create policy "url_patterns_delete" on public.url_intelligence_patterns
-+for delete
-+using (tenant_id = public.current_tenant_id());
-+
-+-- 3) RLS policies for sku_url_matches
-+create policy "sku_matches_select" on public.sku_url_matches
-+for select
-+using (tenant_id = public.current_tenant_id());
-+
-+create policy "sku_matches_insert" on public.sku_url_matches
-+for insert
-+with check (tenant_id = public.current_tenant_id());
-+
-+create policy "sku_matches_update" on public.sku_url_matches
-+for update
-+using (tenant_id = public.current_tenant_id())
-+with check (tenant_id = public.current_tenant_id());
-+
-+create policy "sku_matches_delete" on public.sku_url_matches
-+for delete
-+using (tenant_id = public.current_tenant_id());
-PATCH
+          cat > avidiatch-match-scaffold.patch.b64 <<'B64'
+          REPLACE_WITH_BASE64_PATCH
+          B64
 
-      - name: Apply patch
+      - name: Decode patch and apply
         run: |
           set -e
-          git apply --index avidiatch-match-scaffold.patch
+          base64 --decode avidiatch-match-scaffold.patch.b64 > avidiatch-match-scaffold.patch
+          if ! git apply --index avidiatch-match-scaffold.patch; then
+            echo "git apply failed"
+            exit 1
+          fi
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -201,7 +69,7 @@ PATCH
           title: feat(match): scaffold AvidiaMatch SKU→URL matching module (retry)
           body: |
             Adds Supabase migrations, match library, Next.js API endpoints, UI scaffold under /dashboard/match, and a unit test.
-            
+
             Next steps:
             1. Run the SQL migrations in supabase/migrations/ (0XX, 0XY, 0XZ).
             2. Seed starter patterns (BD, Nonin, MTI, etc).
