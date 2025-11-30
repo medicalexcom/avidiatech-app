@@ -1,3 +1,14 @@
+// Add this import at the top:
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Replace usages like:
+// const auth = getAuth(req);
+// with:
+const auth = safeGetAuth(req);
+
+// Rest of file unchanged.
+
+
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { saveIngestion, incrementUsageCounter, checkQuota } from "@/lib/supabaseServer";
