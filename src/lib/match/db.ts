@@ -1,4 +1,4 @@
-import { supabase } from "@/src/lib/supabase";
+import { supabase } from "@/lib/supabase";   
 import { MatchRow, MatchInput } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
