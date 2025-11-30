@@ -8,11 +8,12 @@ function safeSnippet(t?: string, n = 800) {
   return t.length > n ? t.slice(0, n) + "…(truncated)" : t;
 }
 
-// GET /api/v1/ingest/{id}?url=...
-// If ?url present: call ingest engine for synchronous preview, persist preview to DB if JSON returned.
-// Otherwise: return DB job row.
+// GET /api/v1/ingest/{id}?url=...&debug=1
+// - If ?url present: call ingest engine, try to persist preview to DB,
+//   and when ?debug=1 include upstream and DB diagnostics in the response.
+// - Otherwise: return DB job row as before.
 export async function GET(request: NextRequest, context: any) {
-  // Resolve params whether Next supplies them directly or as a Promise
+  // Resolve params (handles Next variations where params may be a Promise)
   let paramsObj: any = context?.params;
   if (paramsObj && typeof paramsObj.then === "function") {
     try { paramsObj = await paramsObj; } catch { paramsObj = undefined; }
@@ -22,101 +23,116 @@ export async function GET(request: NextRequest, context: any) {
 
   try {
     const urlParam = request.nextUrl.searchParams.get("url") || undefined;
+    const debug = request.nextUrl.searchParams.get("debug") === "1";
 
-    // If url provided -> attempt synchronous preview from ingest engine
     if (urlParam) {
       if (!INGEST_ENGINE_URL) {
-        return NextResponse.json({ ok: false, error: "ingest engine not configured" }, { status: 500 });
+        const resp = { ok: false, error: "ingest engine not configured" };
+        if (debug) console.log("[ingest-preview] no INGEST_ENGINE_URL");
+        return NextResponse.json(resp, { status: 500 });
       }
 
       const target = `${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(urlParam)}`;
+      if (debug) console.log("[ingest-preview] calling engine", target);
 
+      let upstreamStatus = 0;
+      let upstreamSnippet = "";
+      let upstreamBodyText = "";
       try {
         const upstream = await fetch(target, { method: "GET", headers: { Accept: "application/json" } });
+        upstreamStatus = upstream.status;
         const contentType = upstream.headers.get("content-type") || "";
-        const text = await upstream.text().catch(() => "");
+        upstreamBodyText = await upstream.text().catch(() => "");
+        upstreamSnippet = safeSnippet(upstreamBodyText);
 
         if (!upstream.ok) {
-          const snippet = safeSnippet(text);
-          if (contentType.includes("text/html") || snippet.toLowerCase().includes("service suspended")) {
-            return NextResponse.json({
-              ok: false,
-              error: "Upstream ingest engine returned HTML/host error",
-              upstream_status: upstream.status,
-              upstream_snippet: snippet,
-            }, { status: 502 });
-          }
+          if (debug) console.log("[ingest-preview] upstream non-ok", upstreamStatus, contentType, upstreamSnippet);
+          // Try to parse JSON error
           try {
-            const j = JSON.parse(text || "{}");
-            return NextResponse.json({ ok: false, upstream: j }, { status: upstream.status });
+            const j = JSON.parse(upstreamBodyText || "{}");
+            return NextResponse.json({ ok: false, upstream_status: upstreamStatus, upstream: j }, { status: upstreamStatus });
           } catch {
-            return NextResponse.json({ ok: false, error: `Upstream error ${upstream.status}`, upstream_snippet: snippet }, { status: upstream.status });
+            return NextResponse.json(
+              { ok: false, upstream_status: upstreamStatus, upstream_snippet: upstreamSnippet, contentType },
+              { status: upstreamStatus }
+            );
           }
         }
 
-        // success: try parse JSON and persist to DB
-        let parsed: any = null;
+        // upstream ok -> parse JSON
+        let parsed: any;
         try {
-          parsed = JSON.parse(text || "{}");
-        } catch {
-          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response" }, { status: 200 });
+          parsed = JSON.parse(upstreamBodyText || "{}");
+        } catch (err) {
+          if (debug) console.log("[ingest-preview] upstream returned non-JSON", err);
+          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response", upstream_snippet: upstreamSnippet }, { status: 200 });
         }
 
-        // Persist preview into product_ingestions.normalized_payload and mark completed
-        let supabase;
+        // Try to persist to DB (best-effort). If Supabase not configured or update fails, still return preview.
+        let persisted = false;
+        let persistError: any = null;
         try {
-          supabase = getServiceSupabaseClient();
-        } catch (err: any) {
-          console.warn("Supabase not configured; returning preview without persisting", err?.message || err);
-          return NextResponse.json(parsed, { status: 200 });
-        }
-
-        try {
-          const updated = {
-            status: "completed",
-            normalized_payload: parsed,
-            completed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          const { error: updateError } = await supabase.from("product_ingestions").update(updated).eq("id", id);
-          if (updateError) {
-            console.warn("Failed to persist preview into DB", updateError);
-            // still return the preview to the client even if DB update failed
-            return NextResponse.json(parsed, { status: 200 });
+          const supabase = getServiceSupabaseClient();
+          if (supabase) {
+            // Mark completed and write normalized_payload
+            const updates = {
+              status: "completed",
+              normalized_payload: parsed,
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            const { error: updateError, data: updateData } = await supabase.from("product_ingestions").update(updates).eq("id", id);
+            if (updateError) {
+              persistError = updateError;
+              if (debug) console.log("[ingest-preview] supabase update error", updateError);
+            } else {
+              persisted = true;
+              if (debug) console.log("[ingest-preview] persisted preview to DB", id);
+            }
+          } else {
+            if (debug) console.log("[ingest-preview] no supabase client returned");
           }
-
-          // success: return preview JSON
-          return NextResponse.json(parsed, { status: 200 });
         } catch (dbErr: any) {
-          console.error("Error while persisting preview", dbErr);
-          // return preview even if DB persistence failed
-          return NextResponse.json(parsed, { status: 200 });
+          persistError = String(dbErr?.message || dbErr);
+          if (debug) console.log("[ingest-preview] exception while persisting", persistError);
         }
+
+        // Build debug envelope if requested
+        const envelope: any = parsed;
+        if (debug) {
+          envelope.__debug = {
+            upstream_status: upstreamStatus,
+            upstream_snippet: upstreamSnippet,
+            persisted,
+            persistError: persistError ? String(persistError) : null,
+          };
+        }
+
+        return NextResponse.json(envelope, { status: 200 });
       } catch (err: any) {
-        console.error("preview fetch failed", err);
+        console.error("[ingest-preview] fetch failed", err);
         return NextResponse.json({ ok: false, error: "Failed to contact ingest engine", detail: String(err?.message || err) }, { status: 502 });
       }
     }
 
     // No url param — return DB job row
-    let supabase;
     try {
-      supabase = getServiceSupabaseClient();
+      const supabase = getServiceSupabaseClient();
+      if (!supabase) throw new Error("supabase not configured");
+      const { data, error } = await supabase.from("product_ingestions").select("*").eq("id", id).single();
+      if (error) {
+        if (debug) console.log("[ingest-preview] db lookup failed", error);
+        return NextResponse.json({ ok: false, error: "db_lookup_failed", detail: String(error) }, { status: 500 });
+      }
+      const resp = { ok: true, data };
+      if (debug) resp.__debug = { note: "returned DB row" };
+      return NextResponse.json(resp, { status: 200 });
     } catch (err: any) {
-      console.error("Supabase config missing", err);
-      return NextResponse.json({ ok: false, error: "server misconfigured" }, { status: 500 });
+      console.error("[ingest-preview] supabase error", err);
+      return NextResponse.json({ ok: false, error: "server misconfigured", detail: String(err?.message || err) }, { status: 500 });
     }
-
-    const { data, error } = await supabase.from("product_ingestions").select("*").eq("id", id).single();
-    if (error) {
-      console.warn("db lookup failed", error);
-      return NextResponse.json({ ok: false, error: "db_lookup_failed" }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true, data }, { status: 200 });
   } catch (err: any) {
-    console.error("GET /api/v1/ingest/[id] error", err);
+    console.error("[ingest-preview] unexpected error", err);
     return NextResponse.json({ ok: false, error: "internal_error", detail: String(err?.message || err) }, { status: 500 });
   }
 }
