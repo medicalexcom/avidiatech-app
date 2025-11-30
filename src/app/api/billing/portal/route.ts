@@ -1,3 +1,14 @@
+// Add this import at the top:
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Replace usages like:
+// const { userId } = getAuth(req as any);
+// with:
+const { userId } = safeGetAuth(req as any);
+
+// Rest of file unchanged.
+
+
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { getAuth, clerkClient } from "@clerk/nextjs/server";
