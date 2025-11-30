@@ -38,9 +38,12 @@ export async function GET(request: NextRequest, context: any) {
       let upstreamStatus = 0;
       let upstreamSnippet = "";
       let upstreamBodyText = "";
+      let upstreamEtag: string | null = null;
+
       try {
         const upstream = await fetch(target, { method: "GET", headers: { Accept: "application/json" } });
         upstreamStatus = upstream.status;
+        upstreamEtag = upstream.headers.get("etag");
         const contentType = upstream.headers.get("content-type") || "";
         upstreamBodyText = await upstream.text().catch(() => "");
         upstreamSnippet = safeSnippet(upstreamBodyText);
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest, context: any) {
               normalized_payload: parsed,
               preview_persisted_at: new Date().toISOString(),
               preview_source: "preview",
-              preview_etag: upstream.headers?.get ? upstream.headers.get("etag") : null,
+              preview_etag: upstreamEtag || null,
               completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
               last_error: null,
@@ -154,7 +157,7 @@ export async function GET(request: NextRequest, context: any) {
             upstream_snippet,
             persisted,
             persistError: persistError ? String(persistError) : null,
-            etag: upstream.headers?.get ? upstream.headers.get("etag") : null,
+            etag: upstreamEtag || null,
           };
         }
 
