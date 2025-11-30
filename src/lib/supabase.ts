@@ -72,3 +72,13 @@ export function getBrowserSupabase(): SupabaseClient | null {
  */
 export const serverSupabase: SupabaseClient | null = (url && serviceRoleKey) ? createClient(url, serviceRoleKey) : null;
 export const browserSupabase: SupabaseClient | null = (url && anonKey) ? createClient(url, anonKey) : null;
+
+// --- append / add these exports for backward-compatibility ----
+
+// If the module already exports getServerSupabase (suggested by the build error),
+// provide a compatibility alias so older imports using getServiceSupabaseClient still work.
+//
+// Note: we intentionally don't create a new client here; we alias an existing server helper.
+// If your module uses a different name, adjust the alias to match the exported helper.
+
+export { getServerSupabase as getServiceSupabaseClient } from "./supabase";
