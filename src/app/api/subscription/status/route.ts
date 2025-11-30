@@ -1,19 +1,10 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const { userId } = getAuth(req as any);
-// with:
-const { userId } = safeGetAuth(req as any);
-
-// Rest of file unchanged.
-
-
 import { NextResponse } from "next/server";
-import { getAuth, clerkClient } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 import Stripe from "stripe";
 
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" }) : null;
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
+  : null;
 
 /**
  * Helper: parse OWNER_EMAILS from env and return a Set of lowercase emails.
@@ -30,15 +21,20 @@ function getOwnerEmailsSet() {
 
 export async function GET(req: Request) {
   try {
-    const { userId } = getAuth(req as any);
+    // Use safeGetAuth inside the handler scope
+    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ active: false, reason: "unauthenticated" }, { status: 200 });
 
-    // Try to fetch Clerk user
+    // Try to fetch Clerk user (require dynamically to avoid build-time init)
     let clerkUser: any | undefined;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { clerkClient } = require("@clerk/nextjs/server");
       clerkUser = await clerkClient.users.getUser(userId);
     } catch (err) {
-      console.warn("Failed to fetch clerk user:", err);
+      // Clerk may be unavailable in some build contexts; log and continue.
+      console.warn("Failed to fetch clerk user (clerkClient unavailable or error):", String(err));
+      clerkUser = undefined;
     }
 
     // Owner detection: by OWNER_EMAILS env or Clerk metadata
