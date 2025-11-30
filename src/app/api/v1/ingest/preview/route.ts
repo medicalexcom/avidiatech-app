@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
+// IMPORTANT: For this version, set INGEST_ENGINE_URL in Vercel to the FULL ingest URL
+// e.g. https://medx-ingest-api.onrender.com/ingest
+// (no trailing ?url=..., just up to /ingest)
+const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 
 function safeSnippet(t?: string, n = 800) {
   if (!t) return "";
@@ -8,7 +11,7 @@ function safeSnippet(t?: string, n = 800) {
 }
 
 // GET /api/v1/ingest/preview?url=<product_url>
-// Pure proxy to the main MedicalEx ingest engine (medx-ingest-api).
+// Pure proxy to the MedicalEx ingest engine (medx-ingest-api).
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const urlParam = request.nextUrl.searchParams.get("url") || undefined;
 
@@ -23,9 +26,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Mirror how you usually call the engine (you can tweak flags as needed)
+  // Build the upstream URL based on how INGEST_ENGINE_URL is set.
+  // Expected: INGEST_ENGINE_URL = "https://medx-ingest-api.onrender.com/engest"
+  const base = INGEST_ENGINE_URL.replace(/\/+$/, "");
+  const sep = base.includes("?") ? "&" : "?";
+
+  // You can bake flags directly into INGEST_ENGINE_URL if you prefer,
+  // or keep them here:
   const flags = "browse=true&harvest=true&sanitize=true&markdown=true&pdf=true";
-  const target = `${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(urlParam)}&${flags}`;
+  const target = `${base}${sep}url=${encodeURIComponent(urlParam)}&${flags}`;
 
   console.log("[preview] calling ingest engine:", target);
 
@@ -43,7 +52,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!upstream.ok) {
       const snippet = safeSnippet(text);
 
-      // Render / host error
       if (
         contentType.includes("text/html") ||
         snippet.toLowerCase().includes("service suspended")
@@ -82,7 +90,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     try {
       const json = JSON.parse(text || "{}");
-      // Just pass through whatever the ingest engine returns
       return NextResponse.json(json, { status: 200 });
     } catch (e) {
       console.error("[preview] JSON parse error:", e, "body:", text);
