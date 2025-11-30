@@ -1,16 +1,5 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const auth = getAuth(req);
-// with:
-const auth = safeGetAuth(req);
-
-// Rest of file unchanged.
-
-
 import { NextRequest, NextResponse } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { saveIngestion, incrementUsageCounter, checkQuota } from "@/lib/supabaseServer";
 import type { DescribeRequest } from "@/components/describe/types";
 
@@ -139,8 +128,8 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    // Auth via Clerk
-    const auth = getAuth(req);
+    // Auth via Clerk (use safeGetAuth inside handler to avoid top-level build/runtime issues)
+    const auth = safeGetAuth(req as any) as any;
     if (!auth || !auth.userId) {
       console.warn(`[describe:${requestId}] unauthorized request`);
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
