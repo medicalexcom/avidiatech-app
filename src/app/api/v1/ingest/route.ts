@@ -1,17 +1,6 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const { userId } = getAuth(req as any);
-// with:
-const { userId } = safeGetAuth(req as any);
-
-// Rest of file unchanged.
-
-
 // Next.js App Router: POST /api/v1/ingest
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 
@@ -29,10 +18,11 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = getAuth(req as any);
+    // Authenticate using safeGetAuth inside handler scope
+    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({} as any));
     const url = (body?.url || "").toString();
     const clientOptions = body?.options || {};
     const fullExtract = !!body?.fullExtract;
@@ -42,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
 
     // create supabase client at runtime (throws if env not present)
-    let supabase;
+    let supabase: any;
     try {
       supabase = getServiceSupabaseClient();
     } catch (err: any) {
