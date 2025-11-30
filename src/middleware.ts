@@ -219,3 +219,6 @@ export const config = {
 export const config = {
   matcher: ["/:path*"] // TEMPORARY broad matcher for debugging only — revert after diagnosis
 };
+console.log("[DIAG-middleware] incoming", process.env.VERCEL && process.env.VERCEL ? "VERCEL" : "local");
+
+
