@@ -1,3 +1,14 @@
+// Add this import at the top:
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Replace usages like:
+// const auth = getAuth(req as any);
+// with:
+const auth = safeGetAuth(req as any);
+
+// Rest of file unchanged.
+
+
 // TEMPORARY: /api/debug/supabase/profile
 // Protected by x-debug-secret header (DEBUG_SECRET env var).
 // This endpoint returns the Clerk userId (if any) and the result/error of a profiles lookup.
