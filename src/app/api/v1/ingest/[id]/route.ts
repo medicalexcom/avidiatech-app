@@ -16,7 +16,11 @@ export async function GET(request: NextRequest, context: any) {
   // Resolve params (handles Next variations where params may be a Promise)
   let paramsObj: any = context?.params;
   if (paramsObj && typeof paramsObj.then === "function") {
-    try { paramsObj = await paramsObj; } catch { paramsObj = undefined; }
+    try {
+      paramsObj = await paramsObj;
+    } catch {
+      paramsObj = undefined;
+    }
   }
   const id = paramsObj?.id;
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 });
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest, context: any) {
         upstreamSnippet = safeSnippet(upstreamBodyText);
 
         // Get supabase client early (for recording attempts)
-        let supabase;
+        let supabase: any = null;
         try {
           supabase = getServiceSupabaseClient();
         } catch (err) {
@@ -64,11 +68,14 @@ export async function GET(request: NextRequest, context: any) {
             try {
               const { data: jobRow } = await supabase.from("product_ingestions").select("attempts_count").eq("id", id).single();
               const currentAttempts = (jobRow?.attempts_count as number) || 0;
-              await supabase.from("product_ingestions").update({
-                attempts_count: currentAttempts + 1,
-                last_attempt_at: new Date().toISOString(),
-                last_error: `upstream_non_ok_${upstream.status}:${safeSnippet(upstreamBodyText, 500)}`,
-              }).eq("id", id);
+              await supabase
+                .from("product_ingestions")
+                .update({
+                  attempts_count: currentAttempts + 1,
+                  last_attempt_at: new Date().toISOString(),
+                  last_error: `upstream_non_ok_${upstream.status}:${safeSnippet(upstreamBodyText, 500)}`,
+                })
+                .eq("id", id);
             } catch (err) {
               if (debug) console.warn("[ingest-preview] failed to record attempt", String(err));
             }
@@ -96,16 +103,22 @@ export async function GET(request: NextRequest, context: any) {
             try {
               const { data: jobRow } = await supabase.from("product_ingestions").select("attempts_count").eq("id", id).single();
               const currentAttempts = (jobRow?.attempts_count as number) || 0;
-              await supabase.from("product_ingestions").update({
-                attempts_count: currentAttempts + 1,
-                last_attempt_at: new Date().toISOString(),
-                last_error: `upstream_non_json`,
-              }).eq("id", id);
+              await supabase
+                .from("product_ingestions")
+                .update({
+                  attempts_count: currentAttempts + 1,
+                  last_attempt_at: new Date().toISOString(),
+                  last_error: `upstream_non_json`,
+                })
+                .eq("id", id);
             } catch (e) {
               if (debug) console.warn("[ingest-preview] failed to record attempt (non-json)", String(e));
             }
           }
-          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response", upstream_snippet: upstreamSnippet }, { status: 200 });
+          return NextResponse.json(
+            { ok: false, error: "Upstream returned non-JSON response", upstream_snippet: upstreamSnippet },
+            { status: 200 }
+          );
         }
 
         // Try to persist to DB (best-effort). If Supabase not configured or update fails, still return preview.
@@ -153,7 +166,7 @@ export async function GET(request: NextRequest, context: any) {
         const envelope: any = parsed;
         if (debug) {
           envelope.__debug = {
-            upstream_status,
+            upstream_status: upstreamStatus,
             upstream_snippet: upstreamSnippet,
             persisted,
             persistError: persistError ? String(persistError) : null,
@@ -169,11 +182,14 @@ export async function GET(request: NextRequest, context: any) {
           const supabase = getServiceSupabaseClient();
           const { data: jobRow } = await supabase.from("product_ingestions").select("attempts_count").eq("id", id).single();
           const currentAttempts = (jobRow?.attempts_count as number) || 0;
-          await supabase.from("product_ingestions").update({
-            attempts_count: currentAttempts + 1,
-            last_attempt_at: new Date().toISOString(),
-            last_error: String(err?.message || err),
-          }).eq("id", id);
+          await supabase
+            .from("product_ingestions")
+            .update({
+              attempts_count: currentAttempts + 1,
+              last_attempt_at: new Date().toISOString(),
+              last_error: String(err?.message || err),
+            })
+            .eq("id", id);
         } catch (e) {
           if (debug) console.warn("[ingest-preview] failed to record fetch error", String(e));
         }
