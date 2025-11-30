@@ -73,24 +73,8 @@ export function getBrowserSupabase(): SupabaseClient | null {
 export const serverSupabase: SupabaseClient | null = (url && serviceRoleKey) ? createClient(url, serviceRoleKey) : null;
 export const browserSupabase: SupabaseClient | null = (url && anonKey) ? createClient(url, anonKey) : null;
 
-// --- append / add these exports for backward-compatibility ----
-
-// If the module already exports getServerSupabase (suggested by the build error),
-// provide a compatibility alias so older imports using getServiceSupabaseClient still work.
-//
-// Note: we intentionally don't create a new client here; we alias an existing server helper.
-// If your module uses a different name, adjust the alias to match the exported helper.
-
-export { getServerSupabase as getServiceSupabaseClient } from "./supabase";
-
-/* --- Compatibility alias for callers expecting getServiceSupabaseClient --- */
-// Import module namespace and alias common exported server helpers.
-// This avoids breaking callers that expect getServiceSupabaseClient.
-import * as _supabaseModule from "./supabase";
-
-export const getServiceSupabaseClient =
-  (_supabaseModule as any).getServiceSupabaseClient ??
-  (_supabaseModule as any).getServerSupabase ??
-  (_supabaseModule as any).getServerClient ??
-  (_supabaseModule as any).getServiceClient ??
-  undefined;
+/* --- Backwards-compatible alias for callers expecting getServiceSupabaseClient --- */
+/* The previous attempt to re-export from "./supabase" caused a redeclaration when this file
+   is the module itself. Provide a direct alias to the server getter already defined above.
+*/
+export const getServiceSupabaseClient = getServerSupabase;
