@@ -84,15 +84,13 @@ export const browserSupabase: SupabaseClient | null = (url && anonKey) ? createC
 export { getServerSupabase as getServiceSupabaseClient } from "./supabase";
 
 /* --- Compatibility alias for callers expecting getServiceSupabaseClient --- */
-/* We import the module namespace and then export a runtime alias for common server helper names.
-   This avoids referencing an identifier that might not exist and is safe at build-time. */
+// Import module namespace and alias common exported server helpers.
+// This avoids breaking callers that expect getServiceSupabaseClient.
+import * as _supabaseModule from "./supabase";
 
-import * as _supabase from "./supabase";
-
-// Try common names that other modules might expect; prefer existing exact alias if present.
 export const getServiceSupabaseClient =
-  (_supabase as any).getServiceSupabaseClient ??
-  (_supabase as any).getServerSupabase ??
-  (_supabase as any).getServerClient ??
-  (_supabase as any).getServiceClient ??
+  (_supabaseModule as any).getServiceSupabaseClient ??
+  (_supabaseModule as any).getServerSupabase ??
+  (_supabaseModule as any).getServerClient ??
+  (_supabaseModule as any).getServiceClient ??
   undefined;
