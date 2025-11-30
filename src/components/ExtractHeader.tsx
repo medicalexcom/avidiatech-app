@@ -3,14 +3,13 @@ import React, { useState } from "react";
 
 /**
  * Header: URL input, toggles, Extract button.
- * Calls POST /api/v1/ingest and returns jobId via onJobCreated.
+ * Calls POST /api/v1/ingest and invokes onJobCreated(jobId, url).
  *
- * Changes made:
- * - Sends credentials: "same-origin" so Clerk session cookie is included.
- * - Better error handling and minimal UX feedback (err state).
- * - Keeps payload shape compatible with server route (fullExtract/options/export_type/correlationId).
+ * NOTE: onJobCreated signature changed to (jobId: string, url: string)
+ * so the parent can fetch the synchronous extraction preview route:
+ *   GET /api/v1/ingest/{jobId}?url=<url>
  */
-export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: string) => void }) {
+export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: string, url: string) => void }) {
   const [url, setUrl] = useState("");
   const [fullExtract, setFullExtract] = useState(true);
   const [includeSeo, setIncludeSeo] = useState(false);
@@ -63,7 +62,7 @@ export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: 
       // include Clerk cookies/session so the server sees an authenticated user
       const res = await fetch("/api/v1/ingest", {
         method: "POST",
-        credentials: "same-origin", // critical: include Clerk session cookie
+        credentials: "same-origin", // include Clerk session cookie
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -78,9 +77,8 @@ export default function ExtractHeader({ onJobCreated }: { onJobCreated: (jobId: 
 
       const id = json?.jobId || json?.job_id || json?.id;
       if (id) {
-        onJobCreated(String(id));
-        // small success feedback
-        setErr(null);
+        // pass both jobId and original URL to parent so it can call synchronous preview route
+        onJobCreated(String(id), url);
       } else {
         setErr("Ingest succeeded but no job id returned");
       }
