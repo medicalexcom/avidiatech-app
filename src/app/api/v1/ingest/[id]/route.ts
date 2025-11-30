@@ -9,24 +9,15 @@ function safeSnippet(t?: string, n = 800) {
 }
 
 // GET /api/v1/ingest/{id}?url=...
-export async function GET(request: NextRequest, context: any) {
-  // Resolve params whether Next supplies them directly or as a Promise
-  let paramsObj: any = context?.params;
-  if (paramsObj && typeof paramsObj.then === "function") {
-    try {
-      paramsObj = await paramsObj;
-    } catch {
-      paramsObj = undefined;
-    }
-  }
-
-  const id = paramsObj?.id;
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const id = params?.id;
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 });
 
   try {
+    // Use NextRequest.nextUrl to access query string
     const urlParam = request.nextUrl.searchParams.get("url") || undefined;
 
-    // If a URL param is present: call the ingestion engine synchronously for preview
+    // If a URL param is present: call the ingestion engine synchronously for a preview
     if (urlParam) {
       if (!INGEST_ENGINE_URL) {
         return NextResponse.json({ ok: false, error: "ingest engine not configured" }, { status: 500 });
@@ -66,7 +57,6 @@ export async function GET(request: NextRequest, context: any) {
           }
         }
 
-        // success: parse JSON and return directly as preview
         try {
           const json = JSON.parse(text || "{}");
           return NextResponse.json(json, { status: 200 });
@@ -80,7 +70,7 @@ export async function GET(request: NextRequest, context: any) {
       }
     }
 
-    // No url param — return DB job row (existing behavior)
+    // No url param — fall back to DB row
     let supabase;
     try {
       supabase = getServiceSupabaseClient();
