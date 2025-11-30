@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, context: any) {
               completed_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             };
-            const { error: updateError, data: updateData } = await supabase.from("product_ingestions").update(updates).eq("id", id);
+            const { error: updateError } = await supabase.from("product_ingestions").update(updates).eq("id", id);
             if (updateError) {
               persistError = updateError;
               if (debug) console.log("[ingest-preview] supabase update error", updateError);
@@ -124,7 +124,8 @@ export async function GET(request: NextRequest, context: any) {
         if (debug) console.log("[ingest-preview] db lookup failed", error);
         return NextResponse.json({ ok: false, error: "db_lookup_failed", detail: String(error) }, { status: 500 });
       }
-      const resp = { ok: true, data };
+      // use a permissive typing so we can add debug envelope without TS errors
+      const resp: any = { ok: true, data };
       if (debug) resp.__debug = { note: "returned DB row" };
       return NextResponse.json(resp, { status: 200 });
     } catch (err: any) {
