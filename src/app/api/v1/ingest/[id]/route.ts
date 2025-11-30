@@ -1,9 +1,4 @@
-// src/app/api/v1/ingest/[id]/route.ts
-// GET /api/v1/ingest/{id}?url=<url>
-// - If ?url is present: call the ingestion engine's GET /ingest?url=... and return its JSON as a preview
-// - Otherwise: return the DB row for the ingestion id (existing behavior)
-
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
@@ -13,15 +8,16 @@ function safeSnippet(t?: string, n = 800) {
   return t.length > n ? t.slice(0, n) + "…(truncated)" : t;
 }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+// GET /api/v1/ingest/{id}?url=...
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const id = params?.id;
   if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 });
 
   try {
-    const urlObj = new URL(request.url);
-    const urlParam = urlObj.searchParams.get("url") || undefined;
+    // Use NextRequest.nextUrl to access query string
+    const urlParam = request.nextUrl.searchParams.get("url") || undefined;
 
-    // If a URL param is present, try a synchronous preview by calling the ingest engine directly.
+    // If a URL param is present: call the ingestion engine synchronously for a preview
     if (urlParam) {
       if (!INGEST_ENGINE_URL) {
         return NextResponse.json({ ok: false, error: "ingest engine not configured" }, { status: 500 });
@@ -35,7 +31,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
           headers: {
             Accept: "application/json",
           },
-          // no credentials required for server-to-server preview
         });
 
         const contentType = upstream.headers.get("content-type") || "";
@@ -43,7 +38,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
         if (!upstream.ok) {
           const snippet = safeSnippet(text);
-          // detect host HTML errors
           if (contentType.includes("text/html") || snippet.toLowerCase().includes("service suspended")) {
             return NextResponse.json(
               {
@@ -55,7 +49,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
               { status: 502 }
             );
           }
-
           try {
             const j = JSON.parse(text || "{}");
             return NextResponse.json({ ok: false, upstream: j }, { status: upstream.status });
@@ -64,7 +57,6 @@ export async function GET(request: Request, { params }: { params: { id: string }
           }
         }
 
-        // success: try parse and return JSON as preview
         try {
           const json = JSON.parse(text || "{}");
           return NextResponse.json(json, { status: 200 });
@@ -78,7 +70,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       }
     }
 
-    // No url param — return DB job row so existing UI polling still works.
+    // No url param — fall back to DB row
     let supabase;
     try {
       supabase = getServiceSupabaseClient();
