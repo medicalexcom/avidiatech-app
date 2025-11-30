@@ -24,7 +24,8 @@
     "stripe": "^12.0.0",
     "openai": "^4.8.0",
     "zod": "^3.22.2",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "csv-parse": "^5.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.5.9",
