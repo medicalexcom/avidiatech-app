@@ -1,8 +1,3 @@
-// NOTE: we purposely avoid a static import from "@clerk/nextjs/server" at top-level
-// so we can normalize environment variable names (CLERK_SECRET_KEY -> CLERK_SECRET)
-// before Clerk initializes. This ensures clerkMiddleware() and getAuth() work even
-// if the env was set under CLERK_SECRET_KEY.
-
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import Stripe from "stripe";
@@ -12,27 +7,22 @@ import Stripe from "stripe";
    Set process.env.CLERK_SECRET to ensure the Clerk package sees it.
 */
 (function normalizeClerkEnv() {
-  // prefer the canonical name if already present
   if (!process.env.CLERK_SECRET) {
-    // Accept either CLERK_SECRET_KEY or CLERK_SECRET (some naming variants)
     const candidate = process.env.CLERK_SECRET_KEY || process.env.CLERK_SECRET;
     if (candidate) {
       process.env.CLERK_SECRET = candidate;
-      // optional: also set CLERK_API_KEY if provided under an alternate name
-      if (!process.env.CLERK_API_KEY && (process.env.CLERK_API_KEY_KEY || process.env.CLERK_API)) {
-        process.env.CLERK_API_KEY = process.env.CLERK_API_KEY_KEY || process.env.CLERK_API;
+      if (!process.env.CLERK_API_KEY && (process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY)) {
+        process.env.CLERK_API_KEY = process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY;
       }
     }
   }
 
-  // Ensure NEXT_PUBLIC_CLERK_FRONTEND_API exists for client init if present under another name
   if (!process.env.NEXT_PUBLIC_CLERK_FRONTEND_API && process.env.NEXT_PUBLIC_CLERK_FRONTEND) {
     process.env.NEXT_PUBLIC_CLERK_FRONTEND_API = process.env.NEXT_PUBLIC_CLERK_FRONTEND;
   }
 })();
 
-// Diagnostic log (non-sensitive): shows whether the middleware file is executing.
-// Do NOT log secrets — we only log booleans / flags.
+// Diagnostic log (non-sensitive)
 console.log(
   "[DIAG-middleware] executing; CLERK_SECRET_SET=" +
     (process.env.CLERK_SECRET ? "true" : "false") +
@@ -40,22 +30,19 @@ console.log(
     String(process.env.FEATURE_MATCH || "")
 );
 
-// Now require clerk server helpers (after env normalization).
+// Require Clerk server helpers after env normalization.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { clerkMiddleware, getAuth, clerkClient } = require("@clerk/nextjs/server");
 
 /**
- * NOTE: This file must live at src/middleware.ts for Next to pick it up when using the src/ app dir.
- * The rest of the file preserves your subscription/allowlist logic.
+ * Stripe init (optional)
  */
-
-// Stripe init (optional)
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
-// Routes that should be public / allowed even without subscription
+/* allowlist, helpers, userHasActiveSubscription, etc. — keep as you had them */
 const ALLOWLIST = [
-  "/dashboard", // allow dashboard shell
+  "/dashboard",
   "/dashboard/pricing",
   "/dashboard/account",
   "/dashboard/organization",
@@ -86,7 +73,6 @@ function getOwnerEmailsSet() {
 
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
-
   let clerkUser;
   try {
     clerkUser = await clerkClient.users.getUser(userId);
@@ -130,7 +116,6 @@ async function userHasActiveSubscription(userId: string | undefined) {
     undefined;
 
   let customerId = stripeCustomerId;
-
   if (!customerId) {
     const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
     if (email) {
@@ -163,21 +148,18 @@ async function userHasActiveSubscription(userId: string | undefined) {
   return false;
 }
 
-// Create the clerk middleware instance once
-const clerkMw = clerkMiddleware();
-
 /**
  * Primary middleware exported function.
- * We call clerkMiddleware() first so Clerk sets up the auth session context.
- * Then we run our app-specific allowlist / subscription enforcement.
+ * Call clerkMiddleware(req, ev) directly (no intermediate variable) so Clerk's detection
+ * can reliably see the middleware invocation.
  */
 export default async function middleware(req: NextRequest, ev: any) {
   // 1) run Clerk middleware early (it may return a Response for auth flows)
   try {
-    const maybeResponse = await (clerkMw as any)(req, ev);
+    // CALL clerkMiddleware directly here (avoid an intermediate function variable)
+    const maybeResponse = await clerkMiddleware(req, ev);
     if (maybeResponse) return maybeResponse;
   } catch (err) {
-    // Do not fail the request if Clerk middleware throws — log and continue to safe path
     console.warn("clerkMiddleware invocation warning:", err);
   }
 
@@ -188,12 +170,12 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.next();
   }
 
-  // Allow explicitly public paths (shell + sign-in + webhooks, etc.)
+  // Allow explicitly public paths
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Now that clerkMiddleware ran, getAuth should succeed (it reads the context clerkMiddleware added)
+  // Now that clerkMiddleware ran, getAuth should succeed
   const { userId } = getAuth(req as any);
 
   if (!userId) {
@@ -202,21 +184,15 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.redirect(signInUrl);
   }
 
-  // Check subscription / owner bypass
   const hasActive = await userHasActiveSubscription(userId);
   if (hasActive) return NextResponse.next();
 
-  // Signed-in but unsubscribed -> redirect deep dashboard routes to dashboard root (so the shell renders)
   const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
   return NextResponse.redirect(dashboardRoot);
 }
 
 /**
- * Ensure matcher covers the routes that call auth().
- * Keep minimal set for performance. If you have other pages that call auth() directly, add them here.
- *
- * NOTE: For debugging we temporarily include "/:path*" to broaden coverage so we can confirm middleware
- * runs for any route. Remove "/:path*" after you finish diagnosing.
+ * NOTE: temporarily broadened matcher for diagnosis. Remove "/:path*" after you confirm middleware behavior.
  */
 export const config = {
   matcher: ["/dashboard/:path*", "/api/:path*", "/:path*"]
