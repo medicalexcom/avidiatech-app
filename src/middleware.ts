@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import Stripe from "stripe";
+import { safeGetAuth } from "@/lib/clerkSafe";
 
-/* Normalize Clerk env var names before loading @clerk/nextjs/server.
-   Many deployments name the server secret CLERK_SECRET or CLERK_SECRET_KEY.
-   Set process.env.CLERK_SECRET to ensure the Clerk package sees it.
-*/
+/* Normalize Clerk env var names before loading @clerk/nextjs/server. */
 (function normalizeClerkEnv() {
   if (!process.env.CLERK_SECRET) {
     const candidate = process.env.CLERK_SECRET_KEY || process.env.CLERK_SECRET;
@@ -16,31 +14,20 @@ import Stripe from "stripe";
       }
     }
   }
-
   if (!process.env.NEXT_PUBLIC_CLERK_FRONTEND_API && process.env.NEXT_PUBLIC_CLERK_FRONTEND) {
     process.env.NEXT_PUBLIC_CLERK_FRONTEND_API = process.env.NEXT_PUBLIC_CLERK_FRONTEND;
   }
 })();
 
-// Diagnostic log (non-sensitive)
-console.log(
-  "[DIAG-middleware] executing; CLERK_SECRET_SET=" +
-    (process.env.CLERK_SECRET ? "true" : "false") +
-    " FEATURE_MATCH=" +
-    String(process.env.FEATURE_MATCH || "")
-);
-
-// Require Clerk server helpers after env normalization.
+// Require Clerk helpers after env normalization.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { clerkMiddleware, getAuth, clerkClient } = require("@clerk/nextjs/server");
+const { clerkMiddleware, clerkClient } = require("@clerk/nextjs/server");
 
-/**
- * Stripe init (optional)
- */
+/* Stripe init (optional) */
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
-/* allowlist, helpers, userHasActiveSubscription, etc. — keep as you had them */
+/* allowlist and helpers (unchanged logic) */
 const ALLOWLIST = [
   "/dashboard",
   "/dashboard/pricing",
@@ -73,6 +60,7 @@ function getOwnerEmailsSet() {
 
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
+
   let clerkUser;
   try {
     clerkUser = await clerkClient.users.getUser(userId);
@@ -116,6 +104,7 @@ async function userHasActiveSubscription(userId: string | undefined) {
     undefined;
 
   let customerId = stripeCustomerId;
+
   if (!customerId) {
     const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
     if (email) {
@@ -148,16 +137,14 @@ async function userHasActiveSubscription(userId: string | undefined) {
   return false;
 }
 
-/**
- * Primary middleware exported function.
- * Call clerkMiddleware(req, ev) directly (no intermediate variable) so Clerk's detection
- * can reliably see the middleware invocation.
- */
+/* Create the clerk middleware instance once */
+const clerkMw = clerkMiddleware();
+
+/* Exported middleware: call clerkMiddleware directly and use safeGetAuth to avoid detection issues */
 export default async function middleware(req: NextRequest, ev: any) {
-  // 1) run Clerk middleware early (it may return a Response for auth flows)
   try {
-    // CALL clerkMiddleware directly here (avoid an intermediate function variable)
-    const maybeResponse = await clerkMiddleware(req, ev);
+    // Call clerkMiddleware directly (avoid indirection) so Clerk can detect middleware usage.
+    const maybeResponse = await clerkMw(req, ev);
     if (maybeResponse) return maybeResponse;
   } catch (err) {
     console.warn("clerkMiddleware invocation warning:", err);
@@ -175,8 +162,8 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.next();
   }
 
-  // Now that clerkMiddleware ran, getAuth should succeed
-  const { userId } = getAuth(req as any);
+  // Use safeGetAuth so an unexpected missing middleware doesn't throw the Clerk warning.
+  const { userId } = safeGetAuth(req as any);
 
   if (!userId) {
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
@@ -184,16 +171,16 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.redirect(signInUrl);
   }
 
+  // Check subscription / owner bypass
   const hasActive = await userHasActiveSubscription(userId);
   if (hasActive) return NextResponse.next();
 
+  // Signed-in but unsubscribed -> redirect deep dashboard routes to dashboard root
   const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
   return NextResponse.redirect(dashboardRoot);
 }
 
-/**
- * NOTE: temporarily broadened matcher for diagnosis. Remove "/:path*" after you confirm middleware behavior.
- */
+/* Narrow matcher for production */
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*", "/:path*"]
+  matcher: ["/dashboard/:path*", "/api/:path*"]
 };
