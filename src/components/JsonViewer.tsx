@@ -5,7 +5,7 @@ import React from "react";
 type JsonViewerProps = {
   data: unknown;
   loading?: boolean;
-  /** how many levels should be expanded by default */
+  /** how many levels should be expanded by default (when no filter) */
   collapsedLevels?: number;
 };
 
@@ -19,8 +19,10 @@ type JsonViewerProps = {
  *
  * - Toolbar:
  *   - Shows which root is currently displayed ("Root: data.normalized_payload")
- *   - Search box to highlight matching keys/values
+ *   - Search box to highlight matching keys/values (expands all nodes when searching)
  *   - Toggle to show the full envelope (raw response) vs focused root.
+ *   - "Copy JSON" button to copy currently visible JSON.
+ *   - "Download JSON" button to download currently visible JSON as a .json file.
  *
  * - Tree:
  *   - Collapsible objects/arrays with ▾/▸ arrows
@@ -35,6 +37,7 @@ export default function JsonViewer({
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const [filter, setFilter] = React.useState("");
   const [showEnvelope, setShowEnvelope] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
 
   const { displayRoot, rootLabel, envelope } = React.useMemo(
     () => getDisplayRoot(data),
@@ -58,6 +61,43 @@ export default function JsonViewer({
     }));
   };
 
+  const normalizedFilter = filter.trim().toLowerCase();
+
+  // Reset "Copied" label when data root changes
+  React.useEffect(() => {
+    setCopied(false);
+  }, [effectiveData]);
+
+  const handleCopy = React.useCallback(() => {
+    try {
+      const text = JSON.stringify(effectiveData as any, null, 2);
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    } catch {
+      // ignore
+    }
+  }, [effectiveData]);
+
+  const handleDownload = React.useCallback(() => {
+    try {
+      const text = JSON.stringify(effectiveData as any, null, 2);
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ingestion.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }, [effectiveData]);
+
   if (loading) {
     return (
       <div className="text-xs text-neutral-300">
@@ -73,8 +113,6 @@ export default function JsonViewer({
       </div>
     );
   }
-
-  const normalizedFilter = filter.trim().toLowerCase();
 
   return (
     <div className="text-xs text-neutral-50">
@@ -110,6 +148,20 @@ export default function JsonViewer({
               {showEnvelope ? "Focused view" : "Full response"}
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="px-2 py-1 rounded text-[11px] border bg-neutral-900 text-neutral-100 border-neutral-700 hover:bg-neutral-800"
+          >
+            {copied ? "Copied" : "Copy JSON"}
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="px-2 py-1 rounded text-[11px] border bg-neutral-900 text-neutral-100 border-neutral-700 hover:bg-neutral-800"
+          >
+            Download JSON
+          </button>
         </div>
       </div>
 
@@ -155,7 +207,11 @@ function JsonNode({
   const isComplex = type === "object" || type === "array";
 
   const indent = level * 14; // px
-  const isExpanded = expandedState[path] ?? level < defaultExpandedLevels;
+
+  // When searching, expand all complex nodes so matches are visible.
+  const isExpanded =
+    expandedState[path] ??
+    (filter ? true : level < defaultExpandedLevels);
 
   const label = name !== undefined ? name : undefined;
 
@@ -173,7 +229,7 @@ function JsonNode({
       <div
         style={{ paddingLeft: indent }}
         className={`leading-5 ${
-          filter && filterMatch ? "bg-neutral-800/80" : ""
+          filter && filterMatch ? "bg-amber-900/60" : ""
         }`}
       >
         {label !== undefined && (
@@ -207,7 +263,9 @@ function JsonNode({
       <div
         style={{ paddingLeft: indent }}
         className={`cursor-pointer select-none flex items-start gap-1 rounded-sm ${
-          filter && filterMatch ? "bg-neutral-800/80" : "hover:bg-neutral-800/60"
+          filter && filterMatch
+            ? "bg-amber-900/60"
+            : "hover:bg-neutral-800/60"
         }`}
         onClick={handleToggle}
       >
@@ -296,8 +354,7 @@ function Primitive({ value }: { value: unknown }) {
     return (
       <span className="text-orange-300">
         {String(value)}
-      </span>
-    );
+      </span>;
   }
 
   if (type === "boolean") {
@@ -396,6 +453,7 @@ function matchesFilter(
     return String(value).toLowerCase().includes(needle);
   }
 
+  // Buried / nested values: stringify to search within
   try {
     const asString = JSON.stringify(value);
     return asString.toLowerCase().includes(needle);
