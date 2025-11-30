@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// IMPORTANT: For this version, set INGEST_ENGINE_URL in Vercel to the FULL ingest URL
-// e.g. https://medx-ingest-api.onrender.com/ingest
-// (no trailing ?url=..., just up to /ingest)
+// IMPORTANT: Set this in Vercel, e.g.:
+//   INGEST_ENGINE_URL = https://medx-ingest-api.onrender.com/ingest
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 
 function safeSnippet(t?: string, n = 800) {
@@ -11,7 +10,6 @@ function safeSnippet(t?: string, n = 800) {
 }
 
 // GET /api/v1/ingest/preview?url=<product_url>
-// Pure proxy to the MedicalEx ingest engine (medx-ingest-api).
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const urlParam = request.nextUrl.searchParams.get("url") || undefined;
 
@@ -26,16 +24,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Build the upstream URL based on how INGEST_ENGINE_URL is set.
-  // Expected: INGEST_ENGINE_URL = "https://medx-ingest-api.onrender.com/engest"
+  // Normalize base and build target
   const base = INGEST_ENGINE_URL.replace(/\/+$/, "");
   const sep = base.includes("?") ? "&" : "?";
 
-  // You can bake flags directly into INGEST_ENGINE_URL if you prefer,
-  // or keep them here:
+  // You can tweak flags if needed
   const flags = "browse=true&harvest=true&sanitize=true&markdown=true&pdf=true";
   const target = `${base}${sep}url=${encodeURIComponent(urlParam)}&${flags}`;
 
+  console.log("[preview] engine_url =", INGEST_ENGINE_URL);
   console.log("[preview] calling ingest engine:", target);
 
   try {
@@ -52,6 +49,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!upstream.ok) {
       const snippet = safeSnippet(text);
 
+      // Render “Service Suspended” or similar HTML
       if (
         contentType.includes("text/html") ||
         snippet.toLowerCase().includes("service suspended")
@@ -63,6 +61,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             error: "Upstream ingest engine returned HTML/host error",
             upstream_status: upstream.status,
             upstream_snippet: snippet,
+            engine_url: INGEST_ENGINE_URL,
+            upstream_target: target,
           },
           { status: 502 }
         );
@@ -72,7 +72,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         const j = JSON.parse(text || "{}");
         console.error("[preview] upstream JSON error:", j);
         return NextResponse.json(
-          { ok: false, error: "upstream_error", upstream_status: upstream.status, upstream: j },
+          {
+            ok: false,
+            error: "upstream_error",
+            upstream_status: upstream.status,
+            upstream: j,
+            engine_url: INGEST_ENGINE_URL,
+            upstream_target: target,
+          },
           { status: upstream.status }
         );
       } catch {
@@ -82,6 +89,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             ok: false,
             error: `Upstream error ${upstream.status}`,
             upstream_snippet: snippet,
+            engine_url: INGEST_ENGINE_URL,
+            upstream_target: target,
           },
           { status: upstream.status }
         );
@@ -94,7 +103,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[preview] JSON parse error:", e, "body:", text);
       return NextResponse.json(
-        { ok: false, error: "Upstream returned non-JSON response" },
+        {
+          ok: false,
+          error: "Upstream returned non-JSON response",
+          engine_url: INGEST_ENGINE_URL,
+          upstream_target: target,
+        },
         { status: 200 }
       );
     }
@@ -105,6 +119,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ok: false,
         error: "Failed to contact ingest engine",
         detail: String(err?.message || err),
+        engine_url: INGEST_ENGINE_URL,
+        upstream_target: target,
       },
       { status: 502 }
     );
