@@ -1,21 +1,10 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const auth = getAuth(req as any);
-// with:
-const auth = safeGetAuth(req as any);
-
-// Rest of file unchanged.
-
-
 // TEMPORARY: /api/debug/supabase/profile
 // Protected by x-debug-secret header (DEBUG_SECRET env var).
 // This endpoint returns the Clerk userId (if any) and the result/error of a profiles lookup.
 // Remove this file after debugging.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
@@ -25,8 +14,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Get Clerk auth info (userId)
-  const auth = getAuth(req as any);
+  // Get Clerk auth info (userId) using safeGetAuth inside the handler scope
+  const auth = safeGetAuth(req as any) as { userId?: string | null };
   const userId = auth?.userId || null;
 
   let supabase;
@@ -50,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Attempt profile lookup for this userId (if available)
-    let profileResult = null;
+    let profileResult: any = null;
     let profileError: any = null;
     if (userId) {
       const { data, error } = await supabase
@@ -64,7 +53,7 @@ export async function GET(req: NextRequest) {
       profileError = error || null;
     }
 
-    // Try a simple sanity check on the profiles table (fetch one row)
+    // Try a simple sanity check on the profiles table (fetch a few rows)
     let profilesTableSample: any = null;
     try {
       const { data: pData, error: pErr } = await supabase
