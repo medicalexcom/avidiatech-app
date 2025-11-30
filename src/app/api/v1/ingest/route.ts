@@ -1,3 +1,14 @@
+// Add this import at the top:
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Replace usages like:
+// const { userId } = getAuth(req as any);
+// with:
+const { userId } = safeGetAuth(req as any);
+
+// Rest of file unchanged.
+
+
 // Next.js App Router: POST /api/v1/ingest
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
