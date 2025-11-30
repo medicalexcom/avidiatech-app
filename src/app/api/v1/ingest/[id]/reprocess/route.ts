@@ -1,19 +1,9 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const { userId } = getAuth(req as any);
-// with:
-const { userId } = safeGetAuth(req as any);
-
-// Rest of file unchanged.
-
-
 // POST /api/v1/ingest/:id/reprocess
 // Allows running selected modules on an existing job using saved raw_payload (no re-scrape)
 // This endpoint updates job.flags and options and asks the ingestion engine to run modules
+
 import { NextResponse, type NextRequest } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 
@@ -23,7 +13,8 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
 
 export async function POST(req: NextRequest, context: { params?: any }) {
   try {
-    const { userId } = getAuth(req as any);
+    // Authenticate using safeGetAuth inside handler scope
+    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
     const id = context?.params?.id;
@@ -71,7 +62,10 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     };
 
     // Update DB with new flags/options so audit/billing reflects reprocessing request
-    await supabase.from("product_ingestions").update({ flags: newFlags, options: { ...(job.options || {}), ...(runNowFlags) } }).eq("id", id);
+    await supabase
+      .from("product_ingestions")
+      .update({ flags: newFlags, options: { ...(job.options || {}), ...(runNowFlags) } })
+      .eq("id", id);
 
     // Build payload for engine
     const payload: any = {
