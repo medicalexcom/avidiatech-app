@@ -14,13 +14,13 @@ import Stripe from "stripe";
 (function normalizeClerkEnv() {
   // prefer the canonical name if already present
   if (!process.env.CLERK_SECRET) {
-    // Accept either CLERK_SECRET_KEY or CLERK_SECRET_KEY (some naming variants)
-    const candidate = process.env.CLERK_SECRET_KEY || process.env.CLERK_SECRET_KEY;
+    // Accept either CLERK_SECRET_KEY or CLERK_SECRET (some naming variants)
+    const candidate = process.env.CLERK_SECRET_KEY || process.env.CLERK_SECRET;
     if (candidate) {
       process.env.CLERK_SECRET = candidate;
-      // optional: also set CLERK_API_KEY if you use clerkClient admin ops
-      if (!process.env.CLERK_API_KEY && process.env.CLERK_API_KEY_KEY) {
-        process.env.CLERK_API_KEY = process.env.CLERK_API_KEY_KEY;
+      // optional: also set CLERK_API_KEY if provided under an alternate name
+      if (!process.env.CLERK_API_KEY && (process.env.CLERK_API_KEY_KEY || process.env.CLERK_API)) {
+        process.env.CLERK_API_KEY = process.env.CLERK_API_KEY_KEY || process.env.CLERK_API;
       }
     }
   }
@@ -207,5 +207,5 @@ export default async function middleware(req: NextRequest, ev: any) {
  * Keep minimal set for performance. If you have other pages that call auth() directly, add them here.
  */
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*"],
+  matcher: ["/dashboard/:path*", "/api/:path*"]
 };
