@@ -3,12 +3,19 @@ import type { NextRequest } from "next/server";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/nextjs/server";
 import Stripe from "stripe";
 
+/**
+ * NOTE: This file MUST live at `src/middleware.ts` (because your app uses the src/ app dir).
+ * - Next.js will not pick it up from other locations when using src/.
+ * - After you add or change this file, restart local dev and redeploy.
+ */
+
+// Stripe init (optional)
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
 
-// Allowlist for public routes / API used previously
+// Routes that should be public / allowed even without subscription
 const ALLOWLIST = [
-  "/dashboard",                  // allow dashboard shell
+  "/dashboard", // allow dashboard shell
   "/dashboard/pricing",
   "/dashboard/account",
   "/dashboard/organization",
@@ -26,10 +33,6 @@ function isAllowedPath(pathname: string) {
   return false;
 }
 
-/**
- * Parse OWNER_EMAILS env var into a Set of normalized emails.
- * OWNER_EMAILS expected as CSV, e.g. "regis@avidiatech.com,cofounder@avidiatech.com"
- */
 function getOwnerEmailsSet() {
   const raw = process.env.OWNER_EMAILS || "";
   return new Set(
@@ -40,14 +43,9 @@ function getOwnerEmailsSet() {
   );
 }
 
-/**
- * Returns true if the user should be treated as having an active subscription.
- * Owners (in OWNER_EMAILS or marked in Clerk metadata) bypass Stripe.
- */
 async function userHasActiveSubscription(userId: string | undefined) {
   if (!userId) return false;
 
-  // First, try to fetch Clerk user. If that fails, fall back to Stripe logic below.
   let clerkUser;
   try {
     clerkUser = await clerkClient.users.getUser(userId);
@@ -55,7 +53,6 @@ async function userHasActiveSubscription(userId: string | undefined) {
     console.warn("Unable to fetch Clerk user:", err);
   }
 
-  // OWNER BY EMAIL LIST (env)
   try {
     const ownerEmails = getOwnerEmailsSet();
     if (ownerEmails.size > 0 && clerkUser?.emailAddresses?.length) {
@@ -70,7 +67,6 @@ async function userHasActiveSubscription(userId: string | undefined) {
     console.warn("Owner email check failed:", err);
   }
 
-  // OWNER BY CLERK METADATA (optional)
   try {
     const privateMeta = (clerkUser?.privateMetadata as any) || {};
     const publicMeta = (clerkUser?.publicMetadata as any) || {};
@@ -82,13 +78,11 @@ async function userHasActiveSubscription(userId: string | undefined) {
     console.warn("Clerk metadata owner check failed:", err);
   }
 
-  // If Stripe is not configured, treat as no subscription (conservative)
   if (!stripe) {
     console.warn("Stripe key not set; treating as no subscription.");
     return false;
   }
 
-  // If a stripe customer id is stored in Clerk metadata, use it. Otherwise try email lookup.
   const stripeCustomerId =
     (clerkUser?.privateMetadata as any)?.stripeCustomerId ||
     (clerkUser?.publicMetadata as any)?.stripeCustomerId ||
@@ -128,26 +122,37 @@ async function userHasActiveSubscription(userId: string | undefined) {
   return false;
 }
 
+// Create the clerk middleware instance once
 const clerkMw = clerkMiddleware();
 
+/**
+ * Primary middleware exported function.
+ * We call clerkMiddleware() first so Clerk sets up the auth session context.
+ * Then we run our app-specific allowlist / subscription enforcement.
+ */
 export default async function middleware(req: NextRequest, ev: any) {
+  // 1) run Clerk middleware early (it may return a Response for auth flows)
   try {
     const maybeResponse = await (clerkMw as any)(req, ev);
     if (maybeResponse) return maybeResponse;
   } catch (err) {
+    // Do not fail the request if Clerk middleware throws — log and continue to safe path
     console.warn("clerkMiddleware invocation warning:", err);
   }
 
   const pathname = req.nextUrl.pathname;
 
+  // Only guard dashboard and API routes here (matcher controls which requests hit this middleware)
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
+  // Allow explicitly public paths (shell + sign-in + webhooks, etc.)
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
 
+  // Now that clerkMiddleware ran, getAuth should succeed (it reads the context clerkMiddleware added)
   const { userId } = getAuth(req as any);
 
   if (!userId) {
@@ -156,14 +161,19 @@ export default async function middleware(req: NextRequest, ev: any) {
     return NextResponse.redirect(signInUrl);
   }
 
+  // Check subscription / owner bypass
   const hasActive = await userHasActiveSubscription(userId);
   if (hasActive) return NextResponse.next();
 
-  // Signed-in but unsubscribed -> redirect deep routes to dashboard root (so shell renders)
+  // Signed-in but unsubscribed -> redirect deep dashboard routes to dashboard root (so the shell renders)
   const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
   return NextResponse.redirect(dashboardRoot);
 }
 
+/**
+ * Ensure matcher covers the routes that call auth().
+ * Keep minimal set for performance. If you have other pages that call auth() directly, add them here.
+ */
 export const config = {
   matcher: ["/dashboard/:path*", "/api/:path*"],
 };
