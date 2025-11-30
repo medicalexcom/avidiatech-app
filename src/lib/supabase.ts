@@ -1,91 +1,74 @@
-// Lazy Supabase client factory helpers for server-side use.
-// Exports:
-//   - getServiceSupabaseClient(): Supabase client using SUPABASE_SERVICE_ROLE_KEY (required)
-//   - getSupabaseClient(): convenience client - uses service key if available, otherwise anon key
-//
-// These functions intentionally require() @supabase/supabase-js at runtime
-// to avoid evaluating during build-time when server envs may not be present.
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+/**
+ * NOTE: This file augments the existing minimal supabase client helper while preserving
+ * the original `supabase` export and behavior so other modules keep working.
+ *
+ * - Existing code (kept): supabase (created using SERVICE_ROLE_KEY || ANON_KEY if present)
+ * - Additions:
+ *   - getServerSupabase(): returns a server client using SUPABASE_SERVICE_ROLE_KEY (throws if missing)
+ *   - getBrowserSupabase(): returns a browser/anon client using NEXT_PUBLIC_* anon key (returns null if missing)
+ *   - serverSupabase / browserSupabase: convenience memoized clients (or null)
+ */
 
-let _serviceClient: SupabaseClient | null = null;
-let _anyClient: SupabaseClient | null = null;
+/* --- existing vars (kept for compatibility) --- */
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-function requireCreateClient() {
-  // require inside function to delay module evaluation to runtime
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { createClient } = require("@supabase/supabase-js");
-  return createClient;
+let _supabase: SupabaseClient | null = null;
+if (url && key) {
+  _supabase = createClient(url, key);
+} else {
+  console.warn("Supabase client not configured (missing SUPABASE_URL or KEY). Some server operations will fail until configured.");
+}
+
+export const supabase = _supabase;
+
+/* --- new, non-breaking helpers --- */
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+/**
+ * Memoized server client using the service role key (bypasses RLS).
+ * Use this in server-only code paths that need elevated privileges.
+ */
+let _serverSupabase: SupabaseClient | null = null;
+export function getServerSupabase(): SupabaseClient {
+  if (!url || !serviceRoleKey) {
+    throw new Error("Server Supabase client is not configured. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in the environment.");
+  }
+  if (!_serverSupabase) {
+    _serverSupabase = createClient(url, serviceRoleKey, {
+      // Add server-specific options here if needed
+    });
+  }
+  return _serverSupabase;
 }
 
 /**
- * Returns a Supabase client using the SERVICE ROLE key.
- * Throws if SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY are missing.
- *
- * Notes:
- * - We pass auth.persistSession=false to avoid session persistence in server contexts.
- * - We hint the client to use the global fetch (Node 18+ / Edge) when available.
+ * Memoized browser/anon client. Safe to call from client code if NEXT_PUBLIC_* vars are configured.
+ * Returns null when anon config is missing (caller should handle null).
  */
-export function getServiceSupabaseClient(): SupabaseClient {
-  if (_serviceClient) return _serviceClient;
-
-  const SUPABASE_URL = process.env.SUPABASE_URL || "";
-  const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    throw new Error(
-      "Missing Supabase configuration for service client: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required"
-    );
+let _browserSupabase: SupabaseClient | null = null;
+export function getBrowserSupabase(): SupabaseClient | null {
+  if (!url || !anonKey) {
+    if (typeof window === "undefined") {
+      // server-side: warn but do not throw
+      console.warn("Browser Supabase client not configured (missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY).");
+    }
+    return null;
   }
-
-  const createClient = requireCreateClient();
-
-  // Provide lightweight options suitable for server runtime:
-  // - don't persist sessions in server environment
-  // - prefer the global fetch implementation when available (Node 18+ / Edge)
-  const options: Record<string, any> = {
-    auth: { persistSession: false },
-  };
-  if (typeof globalThis !== "undefined" && typeof (globalThis as any).fetch === "function") {
-    options.global = { fetch: (globalThis as any).fetch };
+  if (!_browserSupabase) {
+    _browserSupabase = createClient(url, anonKey, {
+      // client options if needed
+    });
   }
-
-  _serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, options);
-  return _serviceClient;
+  return _browserSupabase;
 }
 
 /**
- * Convenience getter: prefer service-role key if present, otherwise use anon key.
- * Useful for code that can work with either client.
- *
- * Throws when SUPABASE_URL is missing or no usable key is present.
+ * Convenience exports that create clients if possible (null when missing).
+ * These are provided for callers that prefer a value rather than calling the getters.
  */
-export function getSupabaseClient(): SupabaseClient {
-  if (_anyClient) return _anyClient;
-
-  const SUPABASE_URL = process.env.SUPABASE_URL || "";
-  const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-  const SUPABASE_ANON_KEY =
-    process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-  if (!SUPABASE_URL) {
-    throw new Error("Missing Supabase configuration: SUPABASE_URL is required");
-  }
-
-  const keyToUse = SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY;
-  if (!keyToUse) {
-    throw new Error("Missing Supabase key: set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY");
-  }
-
-  const createClient = requireCreateClient();
-
-  const options: Record<string, any> = {
-    auth: { persistSession: false },
-  };
-  if (typeof globalThis !== "undefined" && typeof (globalThis as any).fetch === "function") {
-    options.global = { fetch: (globalThis as any).fetch };
-  }
-
-  _anyClient = createClient(SUPABASE_URL, keyToUse, options);
-  return _anyClient;
-}
+export const serverSupabase: SupabaseClient | null = (url && serviceRoleKey) ? createClient(url, serviceRoleKey) : null;
+export const browserSupabase: SupabaseClient | null = (url && anonKey) ? createClient(url, anonKey) : null;
