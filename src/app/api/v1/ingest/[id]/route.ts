@@ -3,7 +3,7 @@
 // - If ?url is present: call the ingestion engine's GET /ingest?url=... and return its JSON as a preview
 // - Otherwise: return the DB row for the ingestion id (existing behavior)
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
@@ -13,18 +13,36 @@ function safeSnippet(t?: string, n = 800) {
   return t.length > n ? t.slice(0, n) + "…(truncated)" : t;
 }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const id = params?.id;
-  if (!id) return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 });
+type RouteParams = { id: string };
+
+// NOTE: Next.js 16 expects `context.params` to be a Promise<{ id: string }>
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<RouteParams> }
+): Promise<NextResponse> {
+  let params: RouteParams;
 
   try {
-    const urlObj = new URL(request.url);
-    const urlParam = urlObj.searchParams.get("url") || undefined;
+    params = await context.params;
+  } catch {
+    return NextResponse.json({ ok: false, error: "missing params" }, { status: 400 });
+  }
+
+  const id = params.id;
+  if (!id) {
+    return NextResponse.json({ ok: false, error: "missing id" }, { status: 400 });
+  }
+
+  try {
+    const urlParam = request.nextUrl.searchParams.get("url") || undefined;
 
     // If a URL param is present, try a synchronous preview by calling the ingest engine directly.
     if (urlParam) {
       if (!INGEST_ENGINE_URL) {
-        return NextResponse.json({ ok: false, error: "ingest engine not configured" }, { status: 500 });
+        return NextResponse.json(
+          { ok: false, error: "ingest engine not configured" },
+          { status: 500 }
+        );
       }
 
       const target = `${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(urlParam)}`;
@@ -43,8 +61,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
         if (!upstream.ok) {
           const snippet = safeSnippet(text);
+
           // detect host HTML errors
-          if (contentType.includes("text/html") || snippet.toLowerCase().includes("service suspended")) {
+          if (
+            contentType.includes("text/html") ||
+            snippet.toLowerCase().includes("service suspended")
+          ) {
             return NextResponse.json(
               {
                 ok: false,
@@ -58,9 +80,19 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
           try {
             const j = JSON.parse(text || "{}");
-            return NextResponse.json({ ok: false, upstream: j }, { status: upstream.status });
+            return NextResponse.json(
+              { ok: false, upstream: j },
+              { status: upstream.status }
+            );
           } catch {
-            return NextResponse.json({ ok: false, error: `Upstream error ${upstream.status}`, upstream_snippet: snippet }, { status: upstream.status });
+            return NextResponse.json(
+              {
+                ok: false,
+                error: `Upstream error ${upstream.status}`,
+                upstream_snippet: snippet,
+              },
+              { status: upstream.status }
+            );
           }
         }
 
@@ -70,11 +102,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
           return NextResponse.json(json, { status: 200 });
         } catch {
           // upstream returned non-JSON success body
-          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response" }, { status: 200 });
+          return NextResponse.json(
+            { ok: false, error: "Upstream returned non-JSON response" },
+            { status: 200 }
+          );
         }
       } catch (err: any) {
         console.error("preview fetch failed", err);
-        return NextResponse.json({ ok: false, error: "Failed to contact ingest engine", detail: String(err?.message || err) }, { status: 502 });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Failed to contact ingest engine",
+            detail: String(err?.message || err),
+          },
+          { status: 502 }
+        );
       }
     }
 
@@ -84,18 +126,36 @@ export async function GET(request: Request, { params }: { params: { id: string }
       supabase = getServiceSupabaseClient();
     } catch (err: any) {
       console.error("Supabase config missing", err);
-      return NextResponse.json({ ok: false, error: "server misconfigured" }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "server misconfigured" },
+        { status: 500 }
+      );
     }
 
-    const { data, error } = await supabase.from("product_ingestions").select("*").eq("id", id).single();
+    const { data, error } = await supabase
+      .from("product_ingestions")
+      .select("*")
+      .eq("id", id)
+      .single();
+
     if (error) {
       console.warn("db lookup failed", error);
-      return NextResponse.json({ ok: false, error: "db_lookup_failed" }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "db_lookup_failed" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ ok: true, data }, { status: 200 });
   } catch (err: any) {
     console.error("GET /api/v1/ingest/[id] error", err);
-    return NextResponse.json({ ok: false, error: "internal_error", detail: String(err?.message || err) }, { status: 500 });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "internal_error",
+        detail: String(err?.message || err),
+      },
+      { status: 500 }
+    );
   }
 }
