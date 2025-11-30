@@ -105,7 +105,7 @@ export async function GET(request: NextRequest, context: any) {
               if (debug) console.warn("[ingest-preview] failed to record attempt (non-json)", String(e));
             }
           }
-          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response", upstream_snippet }, { status: 200 });
+          return NextResponse.json({ ok: false, error: "Upstream returned non-JSON response", upstream_snippet: upstreamSnippet }, { status: 200 });
         }
 
         // Try to persist to DB (best-effort). If Supabase not configured or update fails, still return preview.
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest, context: any) {
         if (debug) {
           envelope.__debug = {
             upstream_status,
-            upstream_snippet,
+            upstream_snippet: upstreamSnippet,
             persisted,
             persistError: persistError ? String(persistError) : null,
             etag: upstreamEtag || null,
