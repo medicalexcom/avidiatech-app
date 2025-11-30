@@ -1,17 +1,6 @@
-// Add this import at the top:
-import { safeGetAuth } from "@/lib/clerkSafe";
-
-// Replace usages like:
-// const { userId } = getAuth(req as any);
-// with:
-const { userId } = safeGetAuth(req as any);
-
-// Rest of file unchanged.
-
-
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
-import { getAuth, clerkClient } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", { apiVersion: "2022-11-15" });
 // Prefer server APP_URL when set
@@ -55,10 +44,11 @@ function getBaseUrlFromRequest(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { userId } = getAuth(req as any);
+    // Use safeGetAuth inside handler scope (avoids build-time Clerk detection issues)
+    const { userId } = safeGetAuth(req as any) as { userId?: string | null };
     if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({} as any));
     const billing = (body?.billing || "monthly").toString().toLowerCase();
     const priceId = resolvePriceId(body);
 
@@ -75,7 +65,7 @@ export async function POST(req: Request) {
     ];
     const envMap: Record<string, string | null> = {};
     envKeys.forEach((k) => {
-      envMap[k] = typeof process.env[k] === "string" ? process.env[k]! : null;
+      envMap[k] = typeof process.env[k] === "string" ? (process.env[k] as string) : null;
     });
 
     console.info("checkout session requested", {
@@ -104,9 +94,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Retrieve Clerk user email (optional)
+    // Retrieve Clerk user email (optional) - require dynamically to avoid build-time init
     let email: string | undefined;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { clerkClient } = require("@clerk/nextjs/server");
       const clerkUser = await clerkClient.users.getUser(userId);
       email = clerkUser.emailAddresses?.[0]?.emailAddress;
     } catch (err) {
@@ -114,20 +106,31 @@ export async function POST(req: Request) {
     }
 
     // Find or create Stripe customer
-    let customer;
+    let customer: any | undefined;
     if (email) {
-      const customers = await stripe.customers.list({ email, limit: 1 });
-      customer = customers.data[0];
+      try {
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        customer = customers.data[0];
+      } catch (err) {
+        console.warn("Stripe customer lookup failed:", err);
+      }
     }
     if (!customer) {
-      customer = await stripe.customers.create({
-        email,
-        metadata: { clerkUserId: userId },
-      });
+      try {
+        customer = await stripe.customers.create({
+          email,
+          metadata: { clerkUserId: userId },
+        });
+      } catch (err) {
+        console.error("Failed to create stripe customer:", err);
+        return NextResponse.json({ error: "stripe-customer-create-failed", details: String(err?.message ?? err) }, { status: 500 });
+      }
     }
 
     // Persist stripeCustomerId to Clerk privateMetadata (recommended)
     try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { clerkClient } = require("@clerk/nextjs/server");
       const existing = await clerkClient.users.getUser(userId);
       const prevPrivate = (existing?.privateMetadata as any) || {};
       if (prevPrivate?.stripeCustomerId !== customer.id) {
@@ -143,24 +146,36 @@ export async function POST(req: Request) {
     }
 
     // Create Checkout session with 14-day trial
-    const session = await stripe.checkout.sessions.create({
-      customer: customer.id,
-      mode: "subscription",
-      payment_method_types: ["card"],
-      line_items: [{ price: priceId, quantity: 1 }],
-      allow_promotion_codes: true,
-      subscription_data: {
-        trial_period_days: 14,
+    let session: any;
+    try {
+      const sessionParams: any = {
+        customer: customer.id,
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        allow_promotion_codes: true,
+        subscription_data: {
+          trial_period_days: 14,
+          metadata: { clerkUserId: userId, billing },
+        },
         metadata: { clerkUserId: userId, billing },
-      },
-      metadata: { clerkUserId: userId, billing },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-    });
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      };
+
+      session = await stripe.checkout.sessions.create(sessionParams);
+    } catch (err: any) {
+      console.error("stripe checkout session create failed:", err);
+      return NextResponse.json({ error: "stripe-session-failed", details: String(err?.message ?? err) }, { status: 500 });
+    }
+
+    if (!session || !session.url) {
+      return NextResponse.json({ error: "stripe-session-missing-url" }, { status: 500 });
+    }
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
     console.error("create-checkout-session error:", err);
-    return NextResponse.json({ error: err.message || "stripe error" }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "stripe error" }, { status: 500 });
   }
 }
