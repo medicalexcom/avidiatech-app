@@ -96,7 +96,7 @@ export async function GET(request: NextRequest, context: any) {
                     note: "returned from backup engine",
                   };
                   return NextResponse.json(envelope, { status: 200 });
-                } catch (e) {
+                } catch {
                   // backup returned non-JSON - fall through to DB row fallback
                 }
               }
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest, context: any) {
     }
 
     // no url param -> return DB row
-    return await (async () => return (await returnDbRow()) )();
+    return await returnDbRow();
   } catch (err: any) {
     console.error("GET /api/v1/ingest/[id] unexpected error", err);
     return NextResponse.json({ ok: false, error: "internal_error", detail: String(err?.message || err) }, { status: 500 });
