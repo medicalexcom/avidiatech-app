@@ -1,3 +1,14 @@
+// Add this import at the top:
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Replace usages like:
+// const { userId } = getAuth(req as any);
+// with:
+const { userId } = safeGetAuth(req as any);
+
+// Rest of file unchanged.
+
+
 // POST /api/v1/ingest/:id/reprocess
 // Allows running selected modules on an existing job using saved raw_payload (no re-scrape)
 // This endpoint updates job.flags and options and asks the ingestion engine to run modules
