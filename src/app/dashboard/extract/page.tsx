@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import TabsShell from "@/components/TabsShell";
 import JsonViewer from "@/components/JsonViewer";
@@ -8,20 +8,34 @@ import { useIngestRow } from "@/hooks/useIngestRow";
 import ExtractHeader from "@/components/ExtractHeader";
 
 /**
- * Clean Extract page — simplified:
- * - Uses ExtractHeader component for the single source of truth for submissions.
- * - Shows highlights and normalized JSON on the right.
- * - Scrolling behavior after job creation is preserved.
+ * Extract page:
+ * - ExtractHeader now calls onJobCreated(jobId, url)
+ * - When a job is created we:
+ *   1) set jobId and jobUrl
+ *   2) poll the DB via useIngestRow (existing flow)
+ *   3) attempt a synchronous preview fetch to GET /api/v1/ingest/{jobId}?url=<url>
+ *      If that route returns extracted JSON (like your test curl), we display it immediately
+ *      in the highlights pane and in the JSON viewer as a preview, while DB polling continues.
  */
 export default function ExtractPage() {
   const router = useRouter();
 
   // submission / job state
   const [jobId, setJobId] = useState<string | null>(null);
+  const [jobUrl, setJobUrl] = useState<string | null>(null);
   const { row, loading: rowLoading, error: rowError } = useIngestRow(jobId, 1500);
 
-  // derive payload for highlights
-  const payload = useMemo(() => (row?.normalized_payload ?? row) || null, [row]);
+  // preview state when the synchronous GET returns extraction immediately
+  const [preview, setPreview] = useState<any | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // derive payload for highlights preferring preview -> normalized_payload -> row
+  const payload = useMemo(() => {
+    if (preview) return preview;
+    return (row?.normalized_payload ?? row) || null;
+  }, [preview, row]);
+
   const name = payload?.name_best ?? payload?.name_raw ?? payload?.name;
   const featuresHtml = payload?.features_html ?? payload?.features_structured ?? payload?.features_raw;
   const pdfUrls = payload?.pdf_manual_urls ?? payload?.pdfs ?? payload?.manuals ?? [];
@@ -29,13 +43,74 @@ export default function ExtractPage() {
   const quality = payload?.quality_score;
   const needsReview = payload?.needs_review;
 
-  function onJobCreated(id: string) {
+  function onJobCreated(id: string, url: string) {
     setJobId(String(id));
+    setJobUrl(url);
+    setPreview(null);
+    setPreviewError(null);
+    // scroll to results area
     setTimeout(() => {
       const el = document.getElementById("extract-results");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
   }
+
+  // When jobId+jobUrl set, try the synchronous preview endpoint:
+  // GET /api/v1/ingest/{jobId}?url=<encoded>
+  useEffect(() => {
+    if (!jobId || !jobUrl) return;
+
+    let mounted = true;
+    (async () => {
+      setPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const target = `/api/v1/ingest/${encodeURIComponent(jobId)}?url=${encodeURIComponent(jobUrl)}`;
+        const res = await fetch(target, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+
+        const ct = res.headers.get("content-type") || "";
+        const text = await res.text().catch(() => "");
+
+        if (!mounted) return;
+
+        if (!res.ok) {
+          // the endpoint may return DB job or an error; surface a short message
+          let message = `preview fetch failed (${res.status})`;
+          try {
+            const j = JSON.parse(text || "{}");
+            message = j?.error || message;
+          } catch {
+            // keep message
+          }
+          setPreviewError(message);
+          setPreviewLoading(false);
+          return;
+        }
+
+        // Try parse JSON
+        try {
+          const j = JSON.parse(text || "{}");
+          setPreview(j);
+        } catch {
+          // server returned plain text — show as message
+          setPreviewError("Preview returned non-JSON response");
+        }
+      } catch (err: any) {
+        if (!mounted) return;
+        setPreviewError(String(err?.message || err));
+      } finally {
+        if (mounted) setPreviewLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [jobId, jobUrl]);
 
   return (
     <div className="p-6 space-y-6">
@@ -63,7 +138,11 @@ export default function ExtractPage() {
           </div>
 
           <div className="mt-4">
-            {payload ? (
+            {previewLoading ? (
+              <div className="p-4 rounded border bg-slate-50">Loading preview…</div>
+            ) : previewError ? (
+              <div className="p-4 rounded border-dashed border text-slate-500">Preview: {previewError}</div>
+            ) : payload ? (
               <div className="border rounded-md p-4 bg-slate-50">
                 <div className="flex gap-4">
                   <div style={{ flex: 1 }}>
@@ -123,6 +202,7 @@ export default function ExtractPage() {
           </div>
 
           <div className="mt-4" id="extract-results">
+            {/* TabsShell continues to display DB driven row; preview is shown above to accelerate UX */}
             <TabsShell job={row} loading={rowLoading} error={rowError} noDataMessage="Submit a URL to extract raw data" />
           </div>
         </section>
@@ -140,7 +220,8 @@ export default function ExtractPage() {
           </div>
 
           <div className="mt-4">
-            <JsonViewer data={row?.normalized_payload ?? row ?? {}} loading={!row && !!jobId} />
+            {/* prefer preview over the DB row for immediate UX */}
+            <JsonViewer data={preview ?? (row?.normalized_payload ?? row ?? {})} loading={!row && !!jobId} />
           </div>
         </aside>
       </main>
