@@ -1,22 +1,19 @@
-// Add this import at the top:
+import { NextResponse, NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 
-// Then replace the line that does:
-// const auth = getAuth((req as any));
-// with:
-const auth = safeGetAuth((req as any));
-
-// Rest of file unchanged.
-
-
-import { NextResponse } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
-
-export async function GET(req: Request) {
+/**
+ * Diagnostic route to verify Clerk auth context and middleware behavior.
+ * Returns a minimal auth object or an error. Uses safeGetAuth to avoid
+ * Clerk runtime warnings when middleware detection is imperfect.
+ */
+export async function GET(req: NextRequest) {
   try {
-    const auth = getAuth((req as any));
+    const auth = safeGetAuth(req as any);
     return NextResponse.json({ ok: true, auth });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: String(err?.message || err) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: String(err?.message ?? err) },
+      { status: 500 }
+    );
   }
 }
