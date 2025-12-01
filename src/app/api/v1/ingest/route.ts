@@ -11,11 +11,12 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
 /**
  * POST /api/v1/ingest
  *
- * Accepts:
- *  - fullExtract: boolean (if true, server maps to include* = true)
- *  - options: { includeSeo, includeSpecs, includeDocs, includeVariants } (used when fullExtract is false)
- *  - export_type
+ * - Creates a product_ingestions row immediately (status: pending).
+ * - Sends a POST to the ingestion engine (if configured).
+ * - Writes job_id on the created row (so pollers can find the row by jobId).
+ * - Returns ingestionId (the DB row id) and jobId (same value) so frontend can continue.
  */
+
 export async function POST(req: NextRequest) {
   try {
     // Authenticate using safeGetAuth inside handler scope
@@ -59,7 +60,6 @@ export async function POST(req: NextRequest) {
     // Usage/quota check (unless owner)
     if (role !== "owner") {
       const { data: counters } = await supabase.from("usage_counters").select("*").eq("tenant_id", tenant_id).limit(1).single();
-      // simple check: if absent allow — real logic should check month and quotas
       if (counters && typeof counters.ingest_calls === "number") {
         const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT ? parseInt(process.env.DEFAULT_MONTHLY_INGEST_LIMIT) : 1000;
         if (counters.ingest_calls >= monthlyLimit) {
@@ -101,12 +101,22 @@ export async function POST(req: NextRequest) {
     };
 
     const { data: created, error: insertError } = await supabase.from("product_ingestions").insert(insert).select("*").single();
-    if (insertError) {
+    if (insertError || !created) {
       console.error("failed to create ingestion record", insertError);
       return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
     }
 
-    const jobId = created.id;
+    // Use the created row id as the jobId / ingestionId
+    const ingestionId = created.id;
+    const jobId = ingestionId;
+
+    // Immediately set job_id column on the row so pollers can find it by jobId
+    try {
+      await supabase.from("product_ingestions").update({ job_id: jobId, updated_at: new Date().toISOString() }).eq("id", ingestionId);
+    } catch (e) {
+      // non-fatal: if update fails, we still return ingestionId
+      console.warn("failed to write job_id on ingestion row", e);
+    }
 
     // Build payload to ingestion engine
     const payload = {
@@ -117,7 +127,6 @@ export async function POST(req: NextRequest) {
       options: effectiveOptions,
       export_type,
       callback_url: `${APP_URL}/api/v1/ingest/callback`,
-      // tell engine this is a freshly-created job
       action: "ingest",
     };
 
@@ -149,7 +158,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
+    // Return stable ingestionId and jobId so frontend can continue immediately
+    return NextResponse.json({ ingestionId, jobId, status: "accepted" }, { status: 202 });
   } catch (err: any) {
     console.error("POST /api/v1/ingest error:", err);
     return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
