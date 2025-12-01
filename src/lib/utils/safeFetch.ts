@@ -1,13 +1,15 @@
-export async function safeFetch(input: RequestInfo, init?: RequestInit & { timeoutMs?: number }) {
-  const timeoutMs = init?.timeoutMs ?? 15000;
+// src/lib/utils/safeFetch.ts
+export async function safeFetch(
+  input: RequestInfo | URL,
+  init: RequestInit & { timeoutMs?: number } = {}
+) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const id = setTimeout(() => controller.abort(), init.timeoutMs ?? 15000);
+
   try {
     const res = await fetch(input, { ...init, signal: controller.signal });
-    clearTimeout(id);
     return res;
-  } catch (err) {
+  } finally {
     clearTimeout(id);
-    throw err;
   }
 }
