@@ -1,4 +1,6 @@
-// src/app/api/v1/seo/route.ts
+// Force Node runtime so Clerk auth() has full context (avoids edge hiccups)
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
     const tenantId = orgId;
 
-    // SEO counts against extract quota for now
+    // Count SEO against extract quota for now
     await assertTenantQuota(tenantId, { kind: "extract" });
 
     const body = await req.json();
@@ -93,8 +95,6 @@ export async function POST(req: NextRequest) {
         ? instr
         : "You are AvidiaSEO. Produce strictly-structured, compliant SEO product descriptions from normalized inputs.";
 
-    // assembleSeoPrompt signature in your project supports:
-    // { instructions?: string; extractData?: AnyObj; manufacturerText?: string; }
     const { system, user } = assembleSeoPrompt({
       instructions: instructionsText,
       extractData: {
