@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+// replaced auth() with safeGetAuth(req)
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { postSeoUrlOnlySchema } from "@/lib/seo/validators";
 import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
@@ -79,7 +80,8 @@ async function upsertIngestionForUrl(sb: any, tenantId: string, url: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, orgId } = auth();
+    // use safeGetAuth inside handler scope to avoid Clerk middleware-detection warnings
+    const { userId, orgId } = (safeGetAuth(req as any) as any) ?? {};
     if (!userId || !orgId) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
     const tenantId = orgId as string;
 
