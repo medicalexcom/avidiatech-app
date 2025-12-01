@@ -1,37 +1,56 @@
 /**
- * loadInstructions.ts
+ * loadInstructions.ts (updated)
  *
- * - Provides loadCustomGptInstructions(tenantId?)
- * - Resolution order (best-effort):
- *    1) Tenant-specific override from Supabase (table: tenant_settings/custom_gpt_instructions) — optional
- *    2) Canonical file from the medx-ingest-api repo via raw.githubusercontent.com
- *    3) Returns null if nothing available (callers should fall back to defaults)
+ * Resolution order (best-effort):
+ *  1) Tenant-specific override from Supabase (optional)
+ *  2) Local canonical copy at tools/render-engine/prompts/custom_gpt_instructions.md (preferred)
+ *  3) Canonical file from the medx-ingest-api repo via raw.githubusercontent.com
+ *  4) Return null if nothing available (callers should fall back to defaults)
  *
- * Config (via env):
- * - RENDER_PROMPTS_REPO = "medicalexcom/medx-ingest-api" (default)
- * - RENDER_PROMPTS_COMMIT = commit sha or branch name (defaults to the commitoid embedded below)
- * - RENDER_PROMPTS_TTL_SECONDS = 600 (default cache TTL)
- *
- * Notes:
- * - Using raw.githubusercontent.com is simplest for cross-repo reads at runtime.
- * - You can replace or augment the Supabase tenant lookup to read from object storage or another source.
- * - Keep caching short (minutes) so updates to the canonical prompts can be rolled out by changing commit or TTL.
+ * This makes the runtime robust if the remote repo/commit path is wrong or inaccessible.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import path from "path";
+import fs from "fs/promises";
 
-const DEFAULT_REPO = "medicalexcom/medx-ingest-api";
-// CommitOid you provided as a stable fallback; change via env if you prefer branch (e.g., "main")
-const FALLBACK_COMMIT = "34dd54c508824b84d2ad3cd21d782af219044718";
+const DEFAULT_REPO = process.env.RENDER_PROMPTS_REPO || "medicalexcom/medx-ingest-api";
+const FALLBACK_COMMIT = process.env.RENDER_PROMPTS_COMMIT || "34dd54c508824b84d2ad3cd21d782af219044718";
 const DEFAULT_TTL = parseInt(process.env.RENDER_PROMPTS_TTL_SECONDS || "600", 10);
 
 let cached: { value: string | null; fetchedAt: number } | null = null;
 
+/* Try to read a local file (repo workspace). Returns string or null */
+async function fetchFromLocalPaths(): Promise<string | null> {
+  // candidate paths (repo-root relative)
+  const candidates = [
+    path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions.md"),
+    path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions.txt"),
+    path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions", "custom_gpt_instructions.md"),
+    path.join(process.cwd(), "src", "tools", "render-engine", "prompts", "custom_gpt_instructions.md"),
+  ];
+  for (const p of candidates) {
+    try {
+      const stat = await fs.stat(p).catch(() => null);
+      if (stat && stat.isFile()) {
+        const txt = await fs.readFile(p, { encoding: "utf8" });
+        if (txt && txt.trim().length > 0) {
+          // eslint-disable-next-line no-console
+          console.info("loadInstructions: loaded local prompt from", p);
+          return txt;
+        }
+      }
+    } catch (e: any) {
+      // ignore and continue
+    }
+  }
+  return null;
+}
+
 async function fetchFromGithubRaw(): Promise<string | null> {
   const repo = process.env.RENDER_PROMPTS_REPO || DEFAULT_REPO;
   const ref = process.env.RENDER_PROMPTS_COMMIT || FALLBACK_COMMIT;
-  const path = "tools/render-engine/prompts/custom_gpt_instructions.md";
-  const rawUrl = `https://raw.githubusercontent.com/${repo}/${ref}/${path}`;
+  const pathOnRepo = "tools/render-engine/prompts/custom_gpt_instructions.md";
+  const rawUrl = `https://raw.githubusercontent.com/${repo}/${ref}/${pathOnRepo}`;
 
   try {
     const controller = new AbortController();
@@ -39,7 +58,6 @@ async function fetchFromGithubRaw(): Promise<string | null> {
     const res = await fetch(rawUrl, { signal: controller.signal });
     clearTimeout(timeout);
     if (!res.ok) {
-      // Not found or error
       // eslint-disable-next-line no-console
       console.warn(`loadInstructions: raw fetch failed ${res.status} ${rawUrl}`);
       return null;
@@ -54,37 +72,26 @@ async function fetchFromGithubRaw(): Promise<string | null> {
 }
 
 /**
- * Optional tenant override lookup.
- * This attempts to use Supabase service client if available. It is best-effort;
- * failures fall through to the canonical fetch.
- *
- * The function assumes you have a table (or key) to store per-tenant instructions,
- * e.g., table "tenant_settings" with columns: tenant_id (pk), custom_gpt_instructions (text).
- *
- * You can change the query to match your schema. If you don't want tenant overrides,
- * this function can be a no-op.
+ * Optional tenant override lookup via Supabase.
+ * Best-effort; failure falls through to other sources.
  */
 async function fetchTenantOverride(tenantId?: string | null): Promise<string | null> {
   if (!tenantId) return null;
   try {
-    // lazy require to avoid bundling issues when Supabase client is not available in some runtimes
+    // lazy require to avoid bundling in edge runtimes
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getServiceSupabaseClient } = require("@/lib/supabase");
-    const sb: SupabaseClient = getServiceSupabaseClient();
-    // Adjust table/column names to your project schema if different
+    const sb = getServiceSupabaseClient();
     const { data, error } = await sb
       .from("tenant_settings")
       .select("custom_gpt_instructions")
       .eq("tenant_id", tenantId)
       .limit(1)
       .single();
-
-    if (error || !data) {
-      return null;
-    }
+    if (error || !data) return null;
     const txt = (data as any).custom_gpt_instructions;
-    return typeof txt === "string" && txt.length > 0 ? txt : null;
-  } catch (e) {
+    return typeof txt === "string" && txt.trim().length > 0 ? txt : null;
+  } catch (e: any) {
     // eslint-disable-next-line no-console
     console.warn("loadInstructions: tenant override lookup failed:", String(e));
     return null;
@@ -93,16 +100,14 @@ async function fetchTenantOverride(tenantId?: string | null): Promise<string | n
 
 /**
  * Public loader
- * - tenantId optional; if provided, attempt tenant override first
- * - caches the canonical fetch result for DEFAULT_TTL seconds
  */
 export async function loadCustomGptInstructions(tenantId?: string | null): Promise<string | null> {
   // 1) tenant override
   try {
     const tenantTxt = await fetchTenantOverride(tenantId ?? null);
     if (tenantTxt) return tenantTxt;
-  } catch (e) {
-    // ignore — best-effort
+  } catch {
+    // ignore
   }
 
   // 2) cached canonical fetch
@@ -111,13 +116,27 @@ export async function loadCustomGptInstructions(tenantId?: string | null): Promi
     return cached.value;
   }
 
+  // 3) local file (preferred)
+  try {
+    const local = await fetchFromLocalPaths();
+    if (local) {
+      cached = { value: local, fetchedAt: Date.now() };
+      return local;
+    }
+  } catch (e) {
+    // ignore local read errors
+    // eslint-disable-next-line no-console
+    console.warn("loadInstructions: local read attempt failed:", String(e));
+  }
+
+  // 4) remote fetch from GitHub raw
   const fetched = await fetchFromGithubRaw();
   cached = { value: fetched, fetchedAt: Date.now() };
   return fetched;
 }
 
 /**
- * Utility to clear cache (useful in tests)
+ * Clear cache (for tests / manual refresh)
  */
 export function clearLoadInstructionsCache() {
   cached = null;
