@@ -4,7 +4,8 @@ import { useRef, useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 type AnyObj = Record<string, any>;
-type SeoResult = {
+
+type SeoApiResponse = {
   ok: boolean;
   ingestionId?: string;
   seoId?: string;
@@ -12,91 +13,88 @@ type SeoResult = {
   descriptionHtml?: string;
   seoPayload?: { h1: string; title: string; metaDescription: string };
   features?: string[];
-  autohealLog?: { appliedRules: string[]; notes: string[] };
+  autohealLog?: AnyObj;
   error?: { code: string; message: string };
 };
 
-function normalizeSeoResponse(resp: AnyObj | null | undefined) {
-  if (!resp) return null;
-  const payload = resp?.data ?? resp?.job ?? resp;
-
-  const seoPayload = payload?.seo_payload ?? payload?.seoPayload ?? null;
-  const descriptionHtml = payload?.description_html ?? payload?.descriptionHtml ?? null;
-
-  const sourceSeo =
-    payload?.normalized_payload?.source_seo ??
-    payload?.source_seo ??
-    payload?.sourceSeo ??
-    payload?.normalized_payload ??
-    null;
-
-  const ingestionId = payload?.id ?? payload?.ingestionId ?? payload?.ingestion_id ?? null;
-  const seoId = payload?.seoId ?? payload?.seo_id ?? null;
-
-  return {
-    seo_payload: seoPayload,
-    description_html: descriptionHtml,
-    source_seo: sourceSeo,
-    ingestionId,
-    seoId,
-    raw: payload,
-  };
-}
-
 export default function AvidiaSeoPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const sp = useSearchParams();
 
-  const ingestionIdFromParams = searchParams?.get("ingestionId") || null;
-  const urlParam = searchParams?.get("url") || "";
+  const ingestionIdFromQS = sp?.get("ingestionId") || null;
+  const urlFromQS = sp?.get("url") || "";
 
-  const [ingestionId, setIngestionId] = useState<string | null>(ingestionIdFromParams);
-  const [urlInput, setUrlInput] = useState<string>(urlParam);
-
-  const [job, setJob] = useState<AnyObj | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [ingestionId, setIngestionId] = useState<string | null>(ingestionIdFromQS);
+  const [urlInput, setUrlInput] = useState<string>(urlFromQS);
+  const [result, setResult] = useState<SeoApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // NEW: track which button is generating ("top" | "bottom" | null)
   const [generatingSource, setGeneratingSource] = useState<"top" | "bottom" | null>(null);
   const lockRef = useRef(false);
 
   useEffect(() => {
-    if (ingestionIdFromParams && ingestionIdFromParams !== ingestionId) {
-      setIngestionId(ingestionIdFromParams);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ingestionIdFromParams]);
+    if (ingestionIdFromQS && ingestionIdFromQS !== ingestionId) setIngestionId(ingestionIdFromQS);
+  }, [ingestionIdFromQS, ingestionId]);
 
-  useEffect(() => {
-    if (!ingestionId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
-        const normalized = normalizeSeoResponse(json);
-        if (!cancelled) setJob(normalized?.raw ?? normalized);
-      } catch (err: any) {
-        if (!cancelled) setError(String(err?.message || err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [ingestionId]);
-
-  function buildRedirectPath() {
-    if (typeof window === "undefined") return "/dashboard/seo";
-    return window.location.pathname + window.location.search;
+  function assistantHtml() {
+    const html = result?.descriptionHtml ?? "";
+    if (!result?.ok || !html) return <p className="text-sm text-gray-600">No AvidiaSEO output for this ingestion yet.</p>;
+    return (
+      <div
+        className="rounded border bg-white p-3"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
   }
 
-  async function generateFromIngestion(source: "top" | "bottom") {
+  async function runSeoWithUrl(source: "top" | "bottom") {
     if (lockRef.current) return;
-    if (!ingestionId) { setError("Missing ingestion id"); return; }
+    if (!urlInput?.trim()) { setError("Please enter a product URL."); return; }
+
+    lockRef.current = true;
+    setGeneratingSource(source);
+    setError(null);
+    setResult(null);
+
+    try {
+      // Single call: let /api/v1/seo handle ingest + persist + SEO
+      const res = await fetch("/api/v1/seo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlInput.trim() }),
+      });
+      const json: SeoApiResponse = await res.json();
+
+      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED") {
+        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+        router.push(`/sign-in?redirect=${redirect}`);
+        return;
+      }
+      if (!json.ok) {
+        setError(json?.error?.message || `SEO failed (${res.status})`);
+        return;
+      }
+
+      // Save ingestionId returned by SEO API
+      if (json.ingestionId) {
+        setIngestionId(json.ingestionId);
+        // update URL so a refresh keeps context
+        const qs = new URLSearchParams(window.location.search);
+        qs.set("ingestionId", json.ingestionId);
+        router.replace(`${window.location.pathname}?${qs.toString()}`);
+      }
+
+      setResult(json);
+    } catch (e: any) {
+      setError(String(e?.message || e));
+    } finally {
+      setGeneratingSource(null);
+      lockRef.current = false;
+    }
+  }
+
+  async function runSeoOnExistingIngestion(source: "top" | "bottom") {
+    if (lockRef.current) return;
+    if (!ingestionId) { setError("Missing ingestionId."); return; }
 
     lockRef.current = true;
     setGeneratingSource(source);
@@ -106,193 +104,131 @@ export default function AvidiaSeoPage() {
       const res = await fetch("/api/v1/seo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingestionId, persist: true }),
+        body: JSON.stringify({ ingestionId }),
       });
-      const json = await res.json();
+      const json: SeoApiResponse = await res.json();
 
-      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
-        const redirectPath = buildRedirectPath();
-        router.push(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`);
+      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED") {
+        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+        router.push(`/sign-in?redirect=${redirect}`);
         return;
       }
-      if (!res.ok) {
-        setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
+      if (!json.ok) {
+        setError(json?.error?.message || `SEO failed (${res.status})`);
         return;
       }
 
-      // refresh ingestion to get persisted SEO
-      const refresh = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}`);
-      const refJson = await refresh.json();
-      const normalized = refresh.ok ? normalizeSeoResponse(refJson) : normalizeSeoResponse(json);
-      setJob(normalized?.raw ?? normalized);
-    } catch (err: any) {
-      setError(String(err?.message || err));
+      setResult(json);
+    } catch (e: any) {
+      setError(String(e?.message || e));
     } finally {
       setGeneratingSource(null);
       lockRef.current = false;
     }
   }
 
-  async function generateFromUrlAndSeo(source: "top" | "bottom") {
-    if (lockRef.current) return;
-    if (!urlInput) { setError("Please enter a URL"); return; }
-
-    lockRef.current = true;
-    setGeneratingSource(source);
-    setError(null);
-
-    try {
-      // 1) Ingest
-      const ingestRes = await fetch("/api/v1/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlInput, persist: true }),
-      });
-      const ingestJson = await ingestRes.json();
-      if (ingestRes.status === 401 || ingestJson?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
-        const redirectPath = buildRedirectPath();
-        router.push(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`);
-        return;
-      }
-      if (!ingestRes.ok) { setError(ingestJson?.error?.message || `Ingest failed: ${ingestRes.status}`); return; }
-
-      const newIngestionId =
-        ingestJson?.ingestionId ?? ingestJson?.ingestion_id ?? ingestJson?.id ?? ingestJson?.job?.ingestionId ?? null;
-
-      if (!newIngestionId) { setError("Ingest completed but no ingestionId was returned from the server."); return; }
-
-      setIngestionId(newIngestionId);
-      router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`);
-
-      // 2) SEO
-      const seoRes = await fetch("/api/v1/seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingestionId: newIngestionId, persist: true }),
-      });
-      const seoJson = await seoRes.json();
-      if (seoRes.status === 401 || seoJson?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
-        const redirectPath = buildRedirectPath();
-        router.push(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`);
-        return;
-      }
-      if (!seoRes.ok) { setError(seoJson?.error?.message || `SEO generation failed: ${seoRes.status}`); return; }
-
-      const refresh = await fetch(`/api/v1/ingest/${encodeURIComponent(newIngestionId)}`);
-      const refJson = await refresh.json();
-      const normalized = refresh.ok ? normalizeSeoResponse(refJson) : normalizeSeoResponse(seoJson);
-      setJob(normalized?.raw ?? normalized);
-    } catch (err: any) {
-      setError(String(err?.message || err));
-    } finally {
-      setGeneratingSource(null);
-      lockRef.current = false;
-    }
+  async function handleGenerate(source: "top" | "bottom") {
+    // If we already have an ingestionId, re-run on that. Otherwise, use URL path (single API call).
+    if (ingestionId) return runSeoOnExistingIngestion(source);
+    return runSeoWithUrl(source);
   }
-
-  async function handleGenerateAndSave(source: "top" | "bottom") {
-    setError(null);
-    if (ingestionId) await generateFromIngestion(source);
-    else await generateFromUrlAndSeo(source);
-  }
-
-  const renderPreview = () => {
-    const seoPayload = job?.seo_payload ?? job?.seoPayload ?? null;
-    const descriptionHtml = job?.description_html ?? job?.descriptionHtml ?? null;
-
-    if (!seoPayload && !descriptionHtml) {
-      return <div className="text-gray-600">No AvidiaSEO output for this ingestion yet.</div>;
-    }
-
-    return (
-      <>
-        <h3 className="text-lg font-semibold mb-2">Generated SEO (AvidiaSEO)</h3>
-        {seoPayload && (
-          <div className="text-sm">
-            <div><strong>H1:</strong> {seoPayload.h1 ?? ""}</div>
-            <div><strong>Title:</strong> {seoPayload.title ?? ""}</div>
-            <div><strong>Meta:</strong> {seoPayload.metaDescription ?? ""}</div>
-          </div>
-        )}
-        <h4 className="mt-3 font-medium">HTML Description</h4>
-        <div
-          className="mt-1 rounded border bg-white p-3"
-          dangerouslySetInnerHTML={{ __html: descriptionHtml || "<em>No description generated yet</em>" }}
-        />
-      </>
-    );
-  };
 
   const topLoading = generatingSource === "top";
   const bottomLoading = generatingSource === "bottom";
 
   return (
     <div className="p-6">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-4 flex flex-wrap items-center gap-4">
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="flex items-center gap-3">
           <button
+            onClick={() =>
+              router.push(ingestionId ? `/dashboard/extract?ingestionId=${encodeURIComponent(ingestionId)}` : "/dashboard/extract")
+            }
+            className="rounded border px-3 py-1 text-sm"
             type="button"
-            onClick={() => router.push(ingestionId ? `/dashboard/extract?ingestionId=${encodeURIComponent(ingestionId)}` : "/dashboard/extract")}
-            className="rounded border px-2 py-1 text-sm"
           >
             ← Back to Extract
           </button>
           <h1 className="text-2xl font-semibold">AvidiaSEO</h1>
-          {ingestionId && <span className="text-xs text-gray-600">Ingestion ID: <code>{ingestionId}</code></span>}
         </div>
 
-        {loading && <div className="mb-3 text-sm text-gray-600">Loading ingestion…</div>}
-        {error && <div className="mb-3 text-sm text-red-600"><strong>Error:</strong> {error}</div>}
-
-        {/* Top block: URL flow (only when no ingestionId) */}
-        {!ingestionId && (
-          <div className="mb-6 rounded border bg-white p-4">
-            <h2 className="mb-2 font-semibold">Generate SEO from URL</h2>
-            <p className="mb-3 text-sm text-gray-600">
-              We’ll run <strong>AvidiaExtract</strong> to create an ingestion, then <strong>AvidiaSEO</strong> with your custom instructions.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="url"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://manufacturer.com/product/..."
-                className="min-w-[260px] flex-1 rounded border px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => handleGenerateAndSave("top")}
-                disabled={topLoading}
-                className="rounded bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-60"
-              >
-                {topLoading ? "Generating…" : "Generate & Save"}
-              </button>
-            </div>
-            <p className="mt-2 text-xs text-gray-500">If you’re not authenticated, you’ll be redirected to sign in.</p>
+        {error && (
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <strong>Error:</strong> {error}
           </div>
         )}
 
-        {/* Ingestion context (optional) */}
-        {ingestionId && job && (
-          <div className="rounded border bg-white p-3 text-xs text-gray-700">
-            <strong>Ingestion ready.</strong> You can re-run AvidiaSEO on this ingestion.
-          </div>
-        )}
+        {/* Top card – single form */}
+        <div className="rounded border bg-white p-4 shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold">Generate SEO from URL</h2>
+          <p className="mb-4 text-sm text-gray-600">
+            We’ll run <strong>AvidiaExtract</strong> to create an ingestion, then <strong>AvidiaSEO</strong> with your custom instructions.
+          </p>
 
-        {/* Output block */}
-        <div className="mt-6 rounded border bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-semibold">SEO Output</h2>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleGenerate("top");
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="url"
+              required
+              className="w-full rounded border px-3 py-2"
+              placeholder="https://manufacturer.com/product/ABC123"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-60"
+              disabled={topLoading}
+            >
+              {topLoading ? "Generating…" : "Generate & Save"}
+            </button>
+          </form>
+
+          <p className="mt-2 text-xs text-gray-500">
+            If you’re not authenticated, you’ll be redirected to sign in.
+          </p>
+        </div>
+
+        {/* Bottom card – output + rerun */}
+        <div className="rounded border bg-white p-4 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-lg font-semibold">SEO Output</h3>
             <button
               type="button"
-              onClick={() => handleGenerateAndSave("bottom")}
+              className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-60"
               disabled={bottomLoading || (!ingestionId && !urlInput)}
-              className="rounded bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-60"
+              onClick={() => handleGenerate("bottom")}
             >
               {bottomLoading ? "Generating…" : ingestionId ? "Re-run on this Ingestion" : "Generate & Save"}
             </button>
           </div>
-          {renderPreview()}
+
+          {/* SEO preview */}
+          <div className="space-y-4">
+            {assistantHtml()}
+
+            {result?.ok && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded border p-3">
+                  <div className="mb-2 text-sm font-medium">H1</div>
+                  <div className="text-sm">{result?.seoPayload?.h1 ?? ""}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="mb-2 text-sm font-medium">Title</div>
+                  <div className="text-sm">{result?.seoPayload?.title ?? ""}</div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="mb-2 text-sm font-medium">Meta Description</div>
+                  <div className="text-sm">{result?.seoPayload?.metaDescription ?? ""}</div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
