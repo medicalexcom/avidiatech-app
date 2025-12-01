@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+// use safeGetAuth to avoid clerkMiddleware detection warnings in build/CI
+import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { translateProduct } from "@/lib/translate/translateProduct";
 import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
@@ -15,7 +16,7 @@ import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = auth() as any;
+    const { userId } = (safeGetAuth(req as any) as any) ?? {};
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
