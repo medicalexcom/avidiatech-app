@@ -1,8 +1,11 @@
-// Force Node runtime so Clerk auth() has full context (avoids edge hiccups)
+// Force Node runtime (avoids Edge quirks)
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+// ⬇️ remove direct `auth()` usage
+// import { auth } from "@clerk/nextjs/server";
+import { safeGetAuth } from "@/lib/clerkSafe";
+
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { postSeoUrlOnlySchema, postSeoBodySchema } from "@/lib/seo/validators";
 import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
@@ -14,7 +17,9 @@ import { assertTenantQuota } from "@/lib/usage/quotas";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, orgId } = auth();
+    // ✅ Use your safe helper so we don't depend on Clerk middleware detection
+    const { userId, orgId } = safeGetAuth(req) as { userId?: string | null; orgId?: string | null };
+
     if (!userId || !orgId) {
       return NextResponse.json(
         { ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } },
