@@ -64,17 +64,18 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
-
-    // 3) Instructions + prompt
-    const instrTextOrObj = await loadCustomGptInstructions(tenantId);
-    // assembleSeoPrompt expects object; if we got string, wrap it
-    const instructions =
-      typeof instrTextOrObj === "string"
-        ? { system: instrTextOrObj }
-        : (instrTextOrObj ?? { system: "Write a concise, compliant SEO description." });
-
+    
+    // 3) Instructions (string) + prompt assembly
+    const instr = await loadCustomGptInstructions(tenantId);
+    // assembleSeoPrompt expects a string; if null/obj, fall back to a safe default string
+    const instructionsText =
+      typeof instr === "string" && instr.trim().length > 0
+        ? instr
+        : "You are AvidiaSEO. Produce strictly-structured, compliant SEO product descriptions from normalized inputs.";
+    
+    // NOTE: assembleSeoPrompt({ instructions: string, extractData: {...}, manufacturerText: string, options: {...} })
     const { system, user } = assembleSeoPrompt({
-      instructions,
+      instructions: instructionsText,            // <-- MUST be a string
       extractData: {
         structuredProduct: fullIngestion.structured_product,
         specsNormalized: fullIngestion.specs_normalized,
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
       options: { includeManualsSection: true, includeSpecsSection: true, strictMode: true },
     });
 
+    
     // 4) OpenAI via wrapper (messages array)
     const resp = await callOpenaiChat({
       model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
