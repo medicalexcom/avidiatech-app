@@ -12,6 +12,11 @@ import { useSearchParams, useRouter } from "next/navigation";
  * Notes:
  * - This component tolerates different API shapes (snake_case vs camelCase).
  * - Keeps layout responsive and avoids horizontal scrolling for large JSON / HTML blocks.
+ *
+ * Fixes applied:
+ * - Buttons now explicitly use type="button" to avoid accidental form submit behavior.
+ * - Generation functions are guarded against concurrent runs (check `generating` at start).
+ * - Added defensive logging and clearer error handling so overlapping runs are less likely and easier to debug.
  */
 
 type AnyObj = Record<string, any>;
@@ -89,6 +94,7 @@ export default function AvidiaSeoPage() {
   }, [ingestionId]);
 
   async function generateFromIngestion() {
+    if (generating) return; // guard concurrent runs
     if (!ingestionId) {
       setError("Missing ingestion id");
       return;
@@ -96,6 +102,7 @@ export default function AvidiaSeoPage() {
     setGenerating(true);
     setError(null);
     try {
+      console.debug("generateFromIngestion: starting for", ingestionId);
       const res = await fetch("/api/v1/seo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,6 +111,7 @@ export default function AvidiaSeoPage() {
       const json = await res.json();
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
+        console.warn("generateFromIngestion: error response", { status: res.status, body: json });
         return;
       }
 
@@ -111,12 +119,14 @@ export default function AvidiaSeoPage() {
       const refresh = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}`);
       const refJson = await refresh.json();
       if (!refresh.ok) {
+        // fallback to returned response if re-fetch failed
         const normalized = normalizeSeoResponse(json);
         setJob(normalized?.raw ?? normalized);
       } else {
         setJob(normalizeSeoResponse(refJson)?.raw ?? normalizeSeoResponse(refJson));
       }
     } catch (err: any) {
+      console.error("generateFromIngestion error", err);
       setError(String(err?.message || err));
     } finally {
       setGenerating(false);
@@ -124,6 +134,7 @@ export default function AvidiaSeoPage() {
   }
 
   async function generateFromUrl(saveToIngestion = false) {
+    if (generating) return; // guard concurrent runs
     if (!urlInput) {
       setError("Please enter a URL");
       return;
@@ -131,6 +142,7 @@ export default function AvidiaSeoPage() {
     setGenerating(true);
     setError(null);
     try {
+      console.debug("generateFromUrl: starting", { url: urlInput, persist: saveToIngestion });
       const res = await fetch("/api/v1/seo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -139,11 +151,13 @@ export default function AvidiaSeoPage() {
       const json = await res.json();
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `SEO-from-url failed: ${res.status}`);
+        console.warn("generateFromUrl: error response", { status: res.status, body: json });
         return;
       }
 
       const returnedIngestionId = json?.ingestionId ?? json?.ingestion_id ?? null;
       if (returnedIngestionId) {
+        // navigating away; avoid further state updates
         router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(returnedIngestionId)}`);
         return;
       }
@@ -155,6 +169,7 @@ export default function AvidiaSeoPage() {
         setJob({ seo_payload: json?.seoPayload ?? json?.seo_payload, description_html: json?.descriptionHtml ?? json?.description_html });
       }
     } catch (err: any) {
+      console.error("generateFromUrl error", err);
       setError(String(err?.message || err));
     } finally {
       setGenerating(false);
@@ -190,6 +205,7 @@ export default function AvidiaSeoPage() {
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-wrap items-center gap-4 mb-4">
           <button
+            type="button"
             onClick={() => router.push(`/dashboard/extract${ingestionId ? `?ingestionId=${encodeURIComponent(ingestionId)}` : ""}`)}
             className="px-2 py-1 border rounded"
           >
@@ -215,6 +231,7 @@ export default function AvidiaSeoPage() {
 
             <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
               <button
+                type="button"
                 onClick={generateFromIngestion}
                 disabled={generating}
                 className="px-3 py-2 bg-sky-600 text-white rounded"
@@ -242,14 +259,16 @@ export default function AvidiaSeoPage() {
               type="url"
             />
             <button
-              onClick={() => generateFromUrl(false)}
+              type="button"
+              onClick={(e) => { e.preventDefault(); generateFromUrl(false); }}
               disabled={generating}
               className="px-3 py-2 bg-emerald-500 text-white rounded"
             >
               {generating ? "Generating..." : "Generate (Preview)"}
             </button>
             <button
-              onClick={() => generateFromUrl(true)}
+              type="button"
+              onClick={(e) => { e.preventDefault(); generateFromUrl(true); }}
               disabled={generating}
               className="px-3 py-2 bg-sky-600 text-white rounded"
             >
