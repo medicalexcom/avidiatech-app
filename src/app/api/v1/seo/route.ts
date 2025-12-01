@@ -1,3 +1,4 @@
+// src/app/api/v1/seo/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
@@ -6,16 +7,9 @@ import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
 import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
-// ✅ use the helper your project already exports
-import { callOpenaiChat } from "@/lib/openai";
+import { callOpenaiChat, extractAssistantContent } from "@/lib/openai";
 import { assertTenantQuota } from "@/lib/usage/quotas";
 
-/**
- * v1 behavior:
- * - Accepts either { url } OR { ingestionId }.
- * - If { url }: runs Extract (persist) → loads ingestion → SEO → persist → return.
- * - If { ingestionId }: loads ingestion → SEO → persist → return.
- */
 export async function POST(req: NextRequest) {
   try {
     const { userId, orgId } = auth();
@@ -35,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const sb = getServiceSupabaseClient();
 
-    // 1) Get or create ingestion
+    // 1) Ingest or reuse
     let ingestionId: string;
     if (hasUrl) {
       const { url } = postSeoUrlOnlySchema.parse({ url: body.url });
@@ -52,7 +46,7 @@ export async function POST(req: NextRequest) {
       ingestionId = parsed.ingestionId;
     }
 
-    // 2) Load the ingestion payload for prompt composition
+    // 2) Load ingestion payload for prompt composition
     const { data: fullIngestion, error: ingErr } = await sb
       .from("product_ingestions")
       .select(
@@ -69,10 +63,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3) Custom GPT instructions
+    // 3) Instructions + prompt
     const instructions = await loadCustomGptInstructions(tenantId);
-
-    // 4) Prompt assembly (strict by default)
     const { system, user } = assembleSeoPrompt({
       instructions,
       extractData: {
@@ -87,26 +79,29 @@ export async function POST(req: NextRequest) {
       options: { includeManualsSection: true, includeSpecsSection: true, strictMode: true },
     });
 
-    // 5) OpenAI call via your helper (returns the assistant content string)
-    const assistant = await callOpenaiChat({
+    // 4) OpenAI via wrapper (messages array)
+    const resp = await callOpenaiChat({
       model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
       temperature: 0.2,
-      system,
-      user: JSON.stringify(user),
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(user) },
+      ],
+      max_tokens: 1400,
     });
 
-    // Expect strict JSON
+    const content = extractAssistantContent(resp);
     let out: any;
-    try { out = JSON.parse(assistant || "{}"); } catch { out = {}; }
+    try { out = JSON.parse(content || "{}"); } catch { out = {}; }
 
     const descriptionHtml: string = out.description_html ?? "";
     const seoPayload = out.seo_payload ?? { h1: "", title: "", metaDescription: "" };
     const features: string[] = Array.isArray(out.features) ? out.features : [];
 
-    // 6) Auto-heal
+    // 5) Auto-heal
     const healed = autoHeal(descriptionHtml, seoPayload, features, { strict: true });
 
-    // 7) Persist seo_outputs
+    // 6) Persist seo_outputs
     const { data: inserted, error: insErr } = await sb
       .from("seo_outputs")
       .insert({
@@ -117,7 +112,10 @@ export async function POST(req: NextRequest) {
         seo_payload: healed.seo,
         features: healed.features,
         autoheal_log: healed.log,
-        model_info: { model: process.env.OPENAI_SEO_MODEL || "gpt-4.1" },
+        model_info: {
+          model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
+          usage: resp?.usage ?? null,
+        },
       })
       .select("id, created_at, description_html, seo_payload, features, autoheal_log")
       .single();
