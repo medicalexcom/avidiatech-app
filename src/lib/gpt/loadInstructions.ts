@@ -1,17 +1,18 @@
+// src/lib/gpt/loadInstructions.ts
 /**
  * loadInstructions.ts (updated)
  *
  * Resolution order (best-effort):
- *  1) Tenant-specific override from Supabase (optional)
- *  2) Local canonical copy at tools/render-engine/prompts/custom_gpt_instructions.md (preferred)
- *  3) Canonical file from the medx-ingest-api repo via raw.githubusercontent.com
+ *  1) Tenant-specific override from Supabase (tenant_settings.custom_gpt_instructions or custom_gpt_instructions.instructions)
+ *  2) Local canonical copy at tools/render-engine/prompts/custom_gpt_instructions.{md,txt}
+ *  3) Canonical file from medx-ingest-api repo via raw.githubusercontent.com
  *  4) Return null if nothing available (callers should fall back to defaults)
  *
- * This file now exports:
- * - loadCustomGptInstructions(tenantId?) -> Promise<string|null>  (backwards-compatible)
- * - loadCustomGptInstructionsWithInfo(tenantId?) -> Promise<{ text: string|null, source: "tenant"|"local"|"remote"|"cache"|"none" }>
- *
- * The cache now records source so callers can surface which instruction source was used.
+ * Exports:
+ * - loadCustomGptInstructions(tenantId?) -> Promise<string|null>        // named + default (for backwards-compat)
+ * - loadCustomGptInstructionsWithInfo(tenantId?)
+ *      -> Promise<{ text: string|null, source: "tenant"|"local"|"remote"|"cache"|"none" }>
+ * - clearLoadInstructionsCache()
  */
 
 import path from "path";
@@ -25,7 +26,7 @@ type InstrSource = "tenant" | "local" | "remote" | "cache" | "none";
 
 let cached: { value: string | null; fetchedAt: number; source: InstrSource } | null = null;
 
-/* Try to read a local file (repo workspace). Returns string or null */
+/** Try to read a local file (repo workspace). Returns string or null. */
 async function fetchFromLocalPaths(): Promise<string | null> {
   const candidates = [
     path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions.md"),
@@ -39,13 +40,12 @@ async function fetchFromLocalPaths(): Promise<string | null> {
       if (stat && stat.isFile()) {
         const txt = await fs.readFile(p, { encoding: "utf8" });
         if (txt && txt.trim().length > 0) {
-          // eslint-disable-next-line no-console
           console.info("loadInstructions: loaded local prompt from", p);
           return txt;
         }
       }
-    } catch (e: any) {
-      // ignore and continue
+    } catch {
+      // continue
     }
   }
   return null;
@@ -63,77 +63,83 @@ async function fetchFromGithubRaw(): Promise<string | null> {
     const res = await fetch(rawUrl, { signal: controller.signal });
     clearTimeout(timeout);
     if (!res.ok) {
-      // eslint-disable-next-line no-console
       console.warn(`loadInstructions: raw fetch failed ${res.status} ${rawUrl}`);
       return null;
     }
     const txt = await res.text();
     return txt || null;
   } catch (e: any) {
-    // eslint-disable-next-line no-console
     console.warn("loadInstructions: fetch error", String(e));
     return null;
   }
 }
 
-/**
- * Optional tenant override lookup via Supabase.
- * Best-effort; failure falls through to other sources.
- */
+/** Optional tenant override lookup via Supabase (supports two schemas). */
 async function fetchTenantOverride(tenantId?: string | null): Promise<string | null> {
   if (!tenantId) return null;
   try {
-    // lazy require to avoid bundling in edge runtimes
+    // Lazy require to avoid bundling in edge runtimes
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getServiceSupabaseClient } = require("@/lib/supabase");
     const sb = getServiceSupabaseClient();
-    const { data, error } = await sb
+
+    // 1) New schema: tenant_settings.custom_gpt_instructions (text)
+    const { data: tset, error: tsetErr } = await sb
       .from("tenant_settings")
       .select("custom_gpt_instructions")
       .eq("tenant_id", tenantId)
       .limit(1)
-      .single();
-    if (error || !data) return null;
-    const txt = (data as any).custom_gpt_instructions;
-    return typeof txt === "string" && txt.trim().length > 0 ? txt : null;
+      .maybeSingle();
+
+    if (!tsetErr && tset?.custom_gpt_instructions) {
+      const txt = String(tset.custom_gpt_instructions);
+      return txt.trim().length > 0 ? txt : null;
+    }
+
+    // 2) Legacy schema: custom_gpt_instructions.instructions (jsonb or text)
+    const { data: legacy, error: legErr } = await sb
+      .from("custom_gpt_instructions")
+      .select("instructions")
+      .eq("tenant_id", tenantId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!legErr && legacy?.instructions) {
+      const ins = legacy.instructions;
+      if (typeof ins === "string") return ins.trim().length > 0 ? ins : null;
+      if (typeof ins === "object") {
+        // If it’s a structured doc, stringify it so callers can still pass a single text block to the model
+        const s = JSON.stringify(ins);
+        return s.trim().length > 0 ? s : null;
+      }
+    }
+
+    return null;
   } catch (e: any) {
-    // eslint-disable-next-line no-console
     console.warn("loadInstructions: tenant override lookup failed:", String(e));
     return null;
   }
 }
 
-/**
- * Returns text only (backwards-compatible)
- */
-export default async function loadCustomGptInstructions(tenantId?: string | null): Promise<string | null> {
-  const info = await loadCustomGptInstructionsWithInfo(tenantId);
-  return info.text;
-}
-
-/**
- * New: return text and source info so callers can include debug info in responses.
- */
-export async function loadCustomGptInstructionsWithInfo(tenantId?: string | null): Promise<{ text: string | null; source: InstrSource }> {
-  // 1) tenant override
-  try {
-    const tenantTxt = await fetchTenantOverride(tenantId ?? null);
-    if (tenantTxt) {
-      // update cache
-      cached = { value: tenantTxt, fetchedAt: Date.now(), source: "tenant" };
-      return { text: tenantTxt, source: "tenant" };
-    }
-  } catch {
-    // ignore
+/** New: return text and source info so callers can include debug info in responses. */
+export async function loadCustomGptInstructionsWithInfo(
+  tenantId?: string | null
+): Promise<{ text: string | null; source: InstrSource }> {
+  // 1) Tenant override
+  const tenantTxt = await fetchTenantOverride(tenantId ?? null).catch(() => null);
+  if (tenantTxt) {
+    cached = { value: tenantTxt, fetchedAt: Date.now(), source: "tenant" };
+    return { text: tenantTxt, source: "tenant" };
   }
 
-  // 2) cached canonical fetch
+  // 2) Cached canonical fetch
   const now = Date.now();
   if (cached && (now - cached.fetchedAt) / 1000 < DEFAULT_TTL) {
     return { text: cached.value, source: "cache" };
   }
 
-  // 3) local file (preferred)
+  // 3) Local file (preferred)
   try {
     const local = await fetchFromLocalPaths();
     if (local) {
@@ -141,26 +147,31 @@ export async function loadCustomGptInstructionsWithInfo(tenantId?: string | null
       return { text: local, source: "local" };
     }
   } catch (e) {
-    // ignore local read errors
-    // eslint-disable-next-line no-console
     console.warn("loadInstructions: local read attempt failed:", String(e));
   }
 
-  // 4) remote fetch from GitHub raw
+  // 4) Remote fetch from GitHub raw
   const fetched = await fetchFromGithubRaw();
   if (fetched) {
     cached = { value: fetched, fetchedAt: Date.now(), source: "remote" };
     return { text: fetched, source: "remote" };
   }
 
-  // nothing found
+  // Nothing found
   cached = { value: null, fetchedAt: Date.now(), source: "none" };
   return { text: null, source: "none" };
 }
 
-/**
- * Clear cache (for tests / manual refresh)
- */
+/** Returns text only (named export) */
+export async function loadCustomGptInstructions(tenantId?: string | null): Promise<string | null> {
+  const info = await loadCustomGptInstructionsWithInfo(tenantId);
+  return info.text;
+}
+
+/** Back-compat default export */
+export default loadCustomGptInstructions;
+
+/** Clear cache (for tests / manual refresh) */
 export function clearLoadInstructionsCache() {
   cached = null;
 }
