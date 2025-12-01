@@ -197,14 +197,36 @@ export async function POST(req: NextRequest) {
       instructions = null;
     }
 
-    // If no custom instructions were loaded, prepend a strict JSON-only fallback instruction
-    const strictJsonFallback = `You are AvidiaSEO, an automated SEO content generator. Produce a VALID JSON object and ONLY that object as the full response with no commentary or markdown. The JSON must include these keys:
-- description_html: string (full HTML description)
-- seo_payload: object with keys { h1: string, title: string, metaDescription: string }
-- features: array (can be empty)
-If a field cannot be produced, return empty string or empty array, but still return valid JSON. DO NOT include additional top-level keys.`;
+    // Strong strict JSON fallback and concrete example to bias the model to return the right shape.
+    const strictJsonFallback = `
+You are AvidiaSEO, an automated SEO content generator. MUST FOLLOW THESE RULES:
+1) Output VALID JSON ONLY as the entire response body. No commentary, no markdown, no surrounding text.
+2) JSON OBJECT MUST contain exactly these top-level keys:
+   - description_html: string (HTML snippet)
+   - seo_payload: object with keys { h1: string, title: string, metaDescription: string }
+   - features: array (each feature is a short string) — may be empty
+3) If you don't have data for a field, return an empty string "" or an empty array [].
+4) Do not include any additional top-level keys.
+5) Example of the exact JSON shape to return (use this as a template — replace values accordingly):
 
-    const finalInstructions = instructions ? instructions : strictJsonFallback;
+{
+  "description_html": "<p>Example full HTML product description paragraph. Include key details and benefits.</p>",
+  "seo_payload": {
+    "h1": "Example H1 Product Name",
+    "title": "Example Title — concise, includes primary keywords",
+    "metaDescription": "Short meta description up to ~160 characters."
+  },
+  "features": [
+    "Feature 1",
+    "Feature 2"
+  ]
+}
+
+Return only JSON that matches the example shape.
+`.trim();
+
+    // Use tenant instructions if available; otherwise use strict fallback.
+    const finalInstructions = instructions ? `${instructions}\n\n${strictJsonFallback}` : strictJsonFallback;
 
     // Assemble prompt from available normalized payload (may be null)
     const { system, user } = assembleSeoPrompt({
@@ -213,16 +235,37 @@ If a field cannot be produced, return empty string or empty array, but still ret
       manufacturerText: ingestion?.raw_payload?.manufacturer_text ?? ""
     });
 
-    // Call OpenAI (strict generation expecting JSON)
+    // Build an explicit strict system message that includes the example again to maximize compliance.
+    const exampleResponse = {
+      description_html: "<p>Example full HTML product description paragraph. Include key details and benefits.</p>",
+      seo_payload: {
+        h1: "Example H1 Product Name",
+        title: "Example Title — concise, includes primary keywords",
+        metaDescription: "Short meta description up to ~160 characters."
+      },
+      features: ["Feature 1", "Feature 2"]
+    };
+
+    const strictSystem = `${system || "You are AvidiaSEO."}
+
+IMPORTANT: Return ONLY a VALID JSON object with these keys: description_html, seo_payload, features.
+Here is an example of the exact JSON to return (use it as the template):
+
+${JSON.stringify(exampleResponse, null, 2)}
+
+Do not include any explanation, commentary, or markdown.`;
+
+    // Call OpenAI (strict generation expecting JSON). Lower temperature to 0.0 to reduce hallucination.
     const model = process.env.OPENAI_SEO_MODEL || "gpt-4o";
     const completion = await callOpenaiChat({
       model,
       messages: [
-        { role: "system", content: system },
+        { role: "system", content: strictSystem },
+        // keep the user content but it may be long — stringify to preserve structure
         { role: "user", content: JSON.stringify(user) }
       ],
-      temperature: 0.2,
-      max_tokens: 1200
+      temperature: 0.0,
+      max_tokens: 1400
     });
 
     const raw = completion?.choices?.[0]?.message?.content ?? "";
@@ -231,18 +274,19 @@ If a field cannot be produced, return empty string or empty array, but still ret
     try {
       out = raw ? JSON.parse(raw) : null;
     } catch {
-      // 2) try to extract JSON from text
+      // 2) try to extract JSON from text (handles fenced codeblocks or commentary around JSON)
       out = extractJsonFromText(raw);
     }
 
     if (!out || typeof out !== "object") {
-      // Return detailed diagnostic so you can inspect the raw model output in logs/client
-      console.error("SEO model returned non-JSON output:", { rawPreview: String(raw).slice(0, 2000) });
+      // Record raw model output to logs for debugging and return a helpful error
+      console.error("SEO model returned non-JSON output:", { rawPreview: String(raw).slice(0, 4000) });
       return NextResponse.json(
         {
           error: {
             code: "SEO_MODEL_ERROR",
-            message: "Model returned non-JSON output. See raw for debugging.",
+            message:
+              "Model did not return a valid JSON object. Check server logs for raw model output. To recover quickly, ensure the custom instructions file exists or tune the example/template.",
             raw,
           },
         },
