@@ -1,9 +1,9 @@
+// src/app/api/v1/seo/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { postSeoUrlOnlySchema, postSeoBodySchema } from "@/lib/seo/validators";
 import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
-// ⬇️ use default import so it works whether file exports default or named
 import loadCustomGptInstructions from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
@@ -14,11 +14,14 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, orgId } = auth();
     if (!userId || !orgId) {
-      return NextResponse.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } },
+        { status: 401 }
+      );
     }
     const tenantId = orgId;
 
-    // ⬇️ SEO counts against extract quota for now
+    // SEO counts against extract quota for now
     await assertTenantQuota(tenantId, { kind: "extract" });
 
     const body = await req.json();
@@ -26,7 +29,10 @@ export async function POST(req: NextRequest) {
     const hasIngestionId = typeof body?.ingestionId === "string" && body.ingestionId.length > 0;
 
     if (!hasUrl && !hasIngestionId) {
-      return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST", message: "Provide url or ingestionId." } }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: { code: "BAD_REQUEST", message: "Provide url or ingestionId." } },
+        { status: 400 }
+      );
     }
 
     const sb = getServiceSupabaseClient();
@@ -38,13 +44,22 @@ export async function POST(req: NextRequest) {
       const ingestion = await upsertIngestionForUrl(tenantId, url);
       if (!ingestion?.id) {
         return NextResponse.json(
-          { ok: false, error: { code: "SEO_INGESTION_MISSING_ID", message: "Ingest succeeded but no ingestionId was persisted." } },
+          {
+            ok: false,
+            error: {
+              code: "SEO_INGESTION_MISSING_ID",
+              message: "Ingest succeeded but no ingestionId was persisted.",
+            },
+          },
           { status: 500 }
         );
       }
       ingestionId = ingestion.id;
     } else {
-      const parsed = postSeoBodySchema.parse({ ingestionId: body.ingestionId, options: body.options });
+      const parsed = postSeoBodySchema.parse({
+        ingestionId: body.ingestionId,
+        options: body.options, // tolerated by validator even if unused here
+      });
       ingestionId = parsed.ingestionId;
     }
 
@@ -60,22 +75,28 @@ export async function POST(req: NextRequest) {
 
     if (ingErr || !fullIngestion) {
       return NextResponse.json(
-        { ok: false, error: { code: "SEO_INGESTION_NOT_FOUND", message: "Could not load ingestion payload after persist." } },
+        {
+          ok: false,
+          error: {
+            code: "SEO_INGESTION_NOT_FOUND",
+            message: "Could not load ingestion payload after persist.",
+          },
+        },
         { status: 404 }
       );
     }
-    
+
     // 3) Instructions (string) + prompt assembly
     const instr = await loadCustomGptInstructions(tenantId);
-    // assembleSeoPrompt expects a string; if null/obj, fall back to a safe default string
     const instructionsText =
       typeof instr === "string" && instr.trim().length > 0
         ? instr
         : "You are AvidiaSEO. Produce strictly-structured, compliant SEO product descriptions from normalized inputs.";
-    
-    // NOTE: assembleSeoPrompt({ instructions: string, extractData: {...}, manufacturerText: string, options: {...} })
+
+    // assembleSeoPrompt signature in your project supports:
+    // { instructions?: string; extractData?: AnyObj; manufacturerText?: string; }
     const { system, user } = assembleSeoPrompt({
-      instructions: instructionsText,            // <-- MUST be a string
+      instructions: instructionsText,
       extractData: {
         structuredProduct: fullIngestion.structured_product,
         specsNormalized: fullIngestion.specs_normalized,
@@ -85,10 +106,8 @@ export async function POST(req: NextRequest) {
         sourceSeo: fullIngestion.source_seo,
       },
       manufacturerText: fullIngestion.manufacturer_text ?? "",
-      options: { includeManualsSection: true, includeSpecsSection: true, strictMode: true },
     });
 
-    
     // 4) OpenAI via wrapper (messages array)
     const resp = await callOpenaiChat({
       model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
@@ -102,7 +121,11 @@ export async function POST(req: NextRequest) {
 
     const content = extractAssistantContent(resp);
     let out: any;
-    try { out = JSON.parse(content || "{}"); } catch { out = {}; }
+    try {
+      out = JSON.parse(content || "{}");
+    } catch {
+      out = {};
+    }
 
     const descriptionHtml: string = out.description_html ?? "";
     const seoPayload = out.seo_payload ?? { h1: "", title: "", metaDescription: "" };
