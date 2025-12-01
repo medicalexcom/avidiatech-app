@@ -5,11 +5,10 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  * Polling helper endpoint
  * GET /api/v1/ingest/job/:jobId
  *
- * Note: use Request.url parsing to avoid App Router typing mismatch for context.params.
- *
  * Responses:
- * - 200 OK { ingestionId, normalized_payload, status, source_url } when ingestion row exists
- * - 202 Accepted { jobId, status: "accepted" } when not yet available
+ * - 200 OK { ingestionId, normalized_payload, status, source_url } when ingestion is completed or normalized_payload exists
+ * - 202 Accepted { jobId, status } when ingestion exists but not yet completed
+ * - 202 Accepted { jobId, status: "accepted" } when no row exists yet
  */
 
 export async function GET(request: Request) {
@@ -31,11 +30,23 @@ export async function GET(request: Request) {
       .single();
 
     if (error || !data) {
-      // still processing / not created yet
+      // not yet created / still accepted by engine
       return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
     }
 
-    // Row exists: return ingestion id and normalized_payload (if present)
+    // Determine if ingestion is finished/has usable normalized payload
+    const hasPayload = data.normalized_payload && Object.keys(data.normalized_payload).length > 0;
+    const isCompleted = (data.status && data.status.toLowerCase() === "completed") || !!data.completed_at;
+
+    if (!hasPayload && !isCompleted) {
+      // Still processing: surface current row status but keep HTTP 202 so client keeps polling
+      return NextResponse.json(
+        { jobId, ingestionId: data.id, status: data.status ?? "pending", message: "processing" },
+        { status: 202 }
+      );
+    }
+
+    // Row exists and either normalized_payload is present or status completed: return final data
     return NextResponse.json(
       {
         ingestionId: data.id,
