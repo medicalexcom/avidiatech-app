@@ -6,17 +6,16 @@ import { useSearchParams, useRouter } from "next/navigation";
  * AvidiaSEO page (client)
  *
  * - Works with ?ingestionId=... OR ?url=...
- * - If ingestionId is present: loads job and allows generating & saving seo_payload/description_html
- * - If url is present: allows on-the-fly generation of SEO from URL (no ingest required)
+ * - Single primary action: "Generate & Save" (will persist when possible)
+ *   - If user is not authenticated / tenant-backed, user is redirected to sign-in
+ * - Preview still supported via in-place display when no persistence occurs
  *
- * Notes:
- * - This component tolerates different API shapes (snake_case vs camelCase).
- * - Keeps layout responsive and avoids horizontal scrolling for large JSON / HTML blocks.
- *
- * Fixes applied:
- * - Buttons now explicitly use type="button" to avoid accidental form submit behavior.
- * - Generation functions are guarded against concurrent runs (check `generating` at start).
- * - Added defensive logging and clearer error handling so overlapping runs are less likely and easier to debug.
+ * Improvements in this version:
+ * - One primary button (Generate & Save) to match the requested single-flow UX.
+ * - If no tenant/ingestion context is present, the route will attempt to create and persist the ingestion.
+ *   If the backend rejects due to missing auth/tenant (401 / UNAUTHORIZED_TO_PERSIST), the client redirects to /sign-in and preserves the current path as a redirect.
+ * - Guard against concurrent runs and accidental form submits.
+ * - Added better console logging for debugging model/server responses.
  */
 
 type AnyObj = Record<string, any>;
@@ -106,9 +105,15 @@ export default function AvidiaSeoPage() {
       const res = await fetch("/api/v1/seo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingestionId }),
+        body: JSON.stringify({ ingestionId, persist: true }),
       });
       const json = await res.json();
+      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
+        // Redirect to sign-in preserving current path
+        const redirectPath = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/dashboard/seo";
+        router.push(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`);
+        return;
+      }
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
         console.warn("generateFromIngestion: error response", { status: res.status, body: json });
@@ -133,7 +138,7 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  async function generateFromUrl(saveToIngestion = false) {
+  async function generateFromUrl(saveToIngestion = true) {
     if (generating) return; // guard concurrent runs
     if (!urlInput) {
       setError("Please enter a URL");
@@ -149,6 +154,14 @@ export default function AvidiaSeoPage() {
         body: JSON.stringify({ url: urlInput, persist: !!saveToIngestion }),
       });
       const json = await res.json();
+
+      // If attempt to persist but unauthenticated -> redirect to sign-in
+      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
+        const redirectPath = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/dashboard/seo";
+        router.push(`/sign-in?redirect=${encodeURIComponent(redirectPath)}`);
+        return;
+      }
+
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `SEO-from-url failed: ${res.status}`);
         console.warn("generateFromUrl: error response", { status: res.status, body: json });
@@ -173,6 +186,18 @@ export default function AvidiaSeoPage() {
       setError(String(err?.message || err));
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // Primary single-flow action: either generate & save for ingestion context,
+  // or generate & save for URL (will redirect to sign-in if backend requires auth).
+  async function handleGenerateAndSave() {
+    if (generating) return;
+    setError(null);
+    if (ingestionId) {
+      await generateFromIngestion();
+    } else {
+      await generateFromUrl(true);
     }
   }
 
@@ -232,13 +257,13 @@ export default function AvidiaSeoPage() {
             <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
               <button
                 type="button"
-                onClick={generateFromIngestion}
+                onClick={handleGenerateAndSave}
                 disabled={generating}
                 className="px-3 py-2 bg-sky-600 text-white rounded"
               >
-                {generating ? "Generating..." : "Generate SEO Description"}
+                {generating ? "Generating..." : "Generate & Save"}
               </button>
-              <span style={{ color: "#666" }}>AvidiaSEO will generate H1, title, meta description and a full HTML description.</span>
+              <span style={{ color: "#666" }}>Generate and persist AvidiaSEO for this ingestion (requires authentication).</span>
             </div>
 
             <hr style={{ margin: "16px 0" }} />
@@ -247,7 +272,7 @@ export default function AvidiaSeoPage() {
           </div>
         )}
 
-        {/* If no ingestion or direct URL flow: show URL input and on-the-fly generation */}
+        {/* If no ingestion or direct URL flow: show URL input and single primary action */}
         <div style={{ marginTop: 16 }}>
           <h3>Generate SEO from a URL (no extract required)</h3>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -260,25 +285,17 @@ export default function AvidiaSeoPage() {
             />
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); generateFromUrl(false); }}
-              disabled={generating}
-              className="px-3 py-2 bg-emerald-500 text-white rounded"
-            >
-              {generating ? "Generating..." : "Generate (Preview)"}
-            </button>
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); generateFromUrl(true); }}
+              onClick={(e) => { e.preventDefault(); handleGenerateAndSave(); }}
               disabled={generating}
               className="px-3 py-2 bg-sky-600 text-white rounded"
             >
-              {generating ? "Generating..." : "Generate & Save to Ingestion"}
+              {generating ? "Generating..." : "Generate & Save"}
             </button>
           </div>
 
           <div style={{ marginTop: 12 }}>
             <small style={{ color: "#666" }}>
-              "Generate (Preview)" will run AvidiaSEO in-memory and display the result here. "Generate & Save to Ingestion" will persist the result to a new product_ingestions row and navigate you to that ingestion.
+              Clicking "Generate & Save" will attempt to create and persist an ingestion and its AvidiaSEO output. If you're not signed in or tenant-backed the app will redirect you to sign-in so the result can be saved. If you want to preview without saving, clear the URL and use the non-persist endpoint directly (or I can add a separate "Preview only" action).
             </small>
           </div>
 
