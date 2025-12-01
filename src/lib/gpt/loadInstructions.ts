@@ -7,7 +7,11 @@
  *  3) Canonical file from the medx-ingest-api repo via raw.githubusercontent.com
  *  4) Return null if nothing available (callers should fall back to defaults)
  *
- * This makes the runtime robust if the remote repo/commit path is wrong or inaccessible.
+ * This file now exports:
+ * - loadCustomGptInstructions(tenantId?) -> Promise<string|null>  (backwards-compatible)
+ * - loadCustomGptInstructionsWithInfo(tenantId?) -> Promise<{ text: string|null, source: "tenant"|"local"|"remote"|"cache"|"none" }>
+ *
+ * The cache now records source so callers can surface which instruction source was used.
  */
 
 import path from "path";
@@ -17,11 +21,12 @@ const DEFAULT_REPO = process.env.RENDER_PROMPTS_REPO || "medicalexcom/medx-inges
 const FALLBACK_COMMIT = process.env.RENDER_PROMPTS_COMMIT || "34dd54c508824b84d2ad3cd21d782af219044718";
 const DEFAULT_TTL = parseInt(process.env.RENDER_PROMPTS_TTL_SECONDS || "600", 10);
 
-let cached: { value: string | null; fetchedAt: number } | null = null;
+type InstrSource = "tenant" | "local" | "remote" | "cache" | "none";
+
+let cached: { value: string | null; fetchedAt: number; source: InstrSource } | null = null;
 
 /* Try to read a local file (repo workspace). Returns string or null */
 async function fetchFromLocalPaths(): Promise<string | null> {
-  // candidate paths (repo-root relative)
   const candidates = [
     path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions.md"),
     path.join(process.cwd(), "tools", "render-engine", "prompts", "custom_gpt_instructions.txt"),
@@ -99,13 +104,25 @@ async function fetchTenantOverride(tenantId?: string | null): Promise<string | n
 }
 
 /**
- * Public loader
+ * Returns text only (backwards-compatible)
  */
-export async function loadCustomGptInstructions(tenantId?: string | null): Promise<string | null> {
+export default async function loadCustomGptInstructions(tenantId?: string | null): Promise<string | null> {
+  const info = await loadCustomGptInstructionsWithInfo(tenantId);
+  return info.text;
+}
+
+/**
+ * New: return text and source info so callers can include debug info in responses.
+ */
+export async function loadCustomGptInstructionsWithInfo(tenantId?: string | null): Promise<{ text: string | null; source: InstrSource }> {
   // 1) tenant override
   try {
     const tenantTxt = await fetchTenantOverride(tenantId ?? null);
-    if (tenantTxt) return tenantTxt;
+    if (tenantTxt) {
+      // update cache
+      cached = { value: tenantTxt, fetchedAt: Date.now(), source: "tenant" };
+      return { text: tenantTxt, source: "tenant" };
+    }
   } catch {
     // ignore
   }
@@ -113,15 +130,15 @@ export async function loadCustomGptInstructions(tenantId?: string | null): Promi
   // 2) cached canonical fetch
   const now = Date.now();
   if (cached && (now - cached.fetchedAt) / 1000 < DEFAULT_TTL) {
-    return cached.value;
+    return { text: cached.value, source: "cache" };
   }
 
   // 3) local file (preferred)
   try {
     const local = await fetchFromLocalPaths();
     if (local) {
-      cached = { value: local, fetchedAt: Date.now() };
-      return local;
+      cached = { value: local, fetchedAt: Date.now(), source: "local" };
+      return { text: local, source: "local" };
     }
   } catch (e) {
     // ignore local read errors
@@ -131,8 +148,14 @@ export async function loadCustomGptInstructions(tenantId?: string | null): Promi
 
   // 4) remote fetch from GitHub raw
   const fetched = await fetchFromGithubRaw();
-  cached = { value: fetched, fetchedAt: Date.now() };
-  return fetched;
+  if (fetched) {
+    cached = { value: fetched, fetchedAt: Date.now(), source: "remote" };
+    return { text: fetched, source: "remote" };
+  }
+
+  // nothing found
+  cached = { value: null, fetchedAt: Date.now(), source: "none" };
+  return { text: null, source: "none" };
 }
 
 /**
@@ -141,5 +164,3 @@ export async function loadCustomGptInstructions(tenantId?: string | null): Promi
 export function clearLoadInstructionsCache() {
   cached = null;
 }
-
-export default loadCustomGptInstructions;
