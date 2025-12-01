@@ -6,10 +6,8 @@ import { useSearchParams, useRouter } from "next/navigation";
  * AvidiaSEO page (client)
  *
  * - Works with ?ingestionId=... OR ?url=...
- * - Enforces ingest-first behavior:
- *   - If ingestionId present -> call /api/v1/seo with ingestionId
- *   - If no ingestionId and URL provided -> POST /api/v1/ingest (persist:true), then POST /api/v1/seo with returned ingestionId
- * - Single primary action: "Generate & Save"
+ * - If ingest returns jobId (202), poll /api/v1/ingest/job/:jobId until ingestion row appears.
+ * - Then call /api/v1/seo with ingestionId.
  */
 
 type AnyObj = Record<string, any>;
@@ -27,8 +25,9 @@ export default function AvidiaSeoPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // NEW: raw ingest response debug state
+  // Debug / polling state
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
+  const [pollingState, setPollingState] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ingestionId) return;
@@ -70,7 +69,6 @@ export default function AvidiaSeoPage() {
         setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
         return;
       }
-      // refresh ingestion display by navigating to same page with ingestionId
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
     } catch (err: any) {
       setError(String(err?.message || err));
@@ -79,13 +77,38 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  // Safer ingestion + generate flow with debug logging
+  // Polling helper: polls /api/v1/ingest/job/:jobId until ingestion row appears or timeout
+  async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
+    const start = Date.now();
+    setPollingState(`polling job ${jobId}`);
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
+        if (res.status === 200) {
+          const j = await res.json();
+          setPollingState(`completed: ingestionId=${j.ingestionId}`);
+          return j; // { ingestionId, normalized_payload, status }
+        }
+        // still pending
+        setPollingState(`waiting... ${(Math.floor((Date.now()-start)/1000))}s`);
+      } catch (e) {
+        console.warn("pollForIngestion error", e);
+        setPollingState(`error polling: ${String(e)}`);
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    setPollingState("timeout");
+    throw new Error("Ingestion did not complete within timeout");
+  }
+
+  // Safer ingestion + generate flow
   async function createIngestionThenGenerate(url: string) {
     if (generating) return;
     if (!url) { setError("Please enter a URL"); return; }
     setGenerating(true);
     setError(null);
-    setRawIngestResponse(null); // clear previous raw
+    setRawIngestResponse(null);
+    setPollingState(null);
     try {
       // 1) create ingestion (persist:true)
       const res = await fetch("/api/v1/ingest", {
@@ -95,7 +118,6 @@ export default function AvidiaSeoPage() {
       });
       const json = await res.json().catch(() => null);
       console.debug("POST /api/v1/ingest response:", res.status, json);
-      // surface raw response for debugging when missing ingestionId
       setRawIngestResponse({ status: res.status, body: json });
 
       if (!res.ok) {
@@ -103,28 +125,50 @@ export default function AvidiaSeoPage() {
         return;
       }
 
-      // Accept many possible shapes for ingestion id returned by different backend implementations
-      const newIngestionId =
+      // If ingest returned a synchronous ingestionId, use it
+      const possibleIngestionId =
         json?.ingestionId ??
         json?.id ??
         json?.data?.id ??
         json?.data?.ingestionId ??
-        json?.result?.id ??
-        json?.payload?.id ??
         null;
 
-      if (!newIngestionId) {
-        setError("Ingest did not return an ingestionId. See debug pane below.");
+      if (possibleIngestionId) {
+        router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(possibleIngestionId)}`);
+        await generateFromIngestion(possibleIngestionId);
         return;
       }
 
-      // update URL to reflect ingestion and generate SEO
+      // Otherwise, if ingest returned a jobId (async), poll for ingestion
+      const jobId = json?.jobId ?? json?.job?.id ?? null;
+      if (!jobId) {
+        setError("Ingest did not return an ingestionId or jobId. See debug pane.");
+        return;
+      }
+
+      // Poll for ingestion row
+      let pollResult;
+      try {
+        pollResult = await pollForIngestion(jobId, 120_000, 3000);
+      } catch (e: any) {
+        setError(String(e?.message || e));
+        return;
+      }
+
+      const newIngestionId = pollResult?.ingestionId ?? pollResult?.id ?? null;
+      if (!newIngestionId) {
+        setError("Polling returned no ingestionId. See debug pane.");
+        return;
+      }
+
+      // update route and call SEO
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`);
       await generateFromIngestion(newIngestionId);
     } catch (err: any) {
       setError(String(err?.message || err));
     } finally {
       setGenerating(false);
+      setPollingState(null);
     }
   }
 
@@ -169,11 +213,11 @@ export default function AvidiaSeoPage() {
         {loading && <p>Loading ingestion...</p>}
         {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
 
-        {/* Show raw ingest response debug pane if present */}
         {rawIngestResponse && (
           <div style={{ marginTop: 12, background: "#fff8", padding: 12, borderRadius: 6 }}>
             <h4>Raw /api/v1/ingest response (debug)</h4>
             <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(rawIngestResponse, null, 2)}</pre>
+            {pollingState && <div style={{ marginTop: 8 }}><strong>Polling:</strong> {pollingState}</div>}
           </div>
         )}
 
