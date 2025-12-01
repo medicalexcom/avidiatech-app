@@ -12,6 +12,14 @@ import { callOpenaiChat } from "@/lib/openai";
 const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
 const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440", 10);
 
+// minimal timeout helper
+function timeoutPromise<T>(p: Promise<T>, ms = 8000): Promise<T> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  // @ts-ignore - signal passed below
+  return p.finally(() => clearTimeout(id));
+}
+
 /* Helper: attempt to extract a JSON object from text (strip fences, extract {...} block) */
 function extractJsonFromText(raw: string): any | null {
   if (!raw || typeof raw !== "string") return null;
@@ -37,6 +45,67 @@ function extractJsonFromText(raw: string): any | null {
   }
 }
 
+/* Heuristic: is the model output meaningful (non-empty) */
+function isMeaningfulOutput(out: any) {
+  if (!out || typeof out !== "object") return false;
+  const desc = (out.description_html ?? "") + "";
+  const h1 = (out.seo_payload?.h1 ?? "") + "";
+  const title = (out.seo_payload?.title ?? "") + "";
+  return (desc.trim().length > 30) || (h1.trim().length > 3) || (title.trim().length > 10) || (Array.isArray(out.features) && out.features.length > 0);
+}
+
+/* Lightweight HTML scraping fallback to extract title/meta/first h1/first p */
+async function scrapePageFallback(url: string) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "AvidiaSeoFallback/1.0 (+https://avidiatech.com)" } });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const text = await res.text();
+    // naive extraction
+    const getTag = (tag: string) => {
+      const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
+      const m = text.match(re);
+      return m ? m[1].replace(/\s+/g, " ").trim() : "";
+    };
+    const getMeta = (name: string) => {
+      const re = new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i");
+      const m = text.match(re);
+      return m ? m[1].trim() : "";
+    };
+    const title = getTag("title") || getMeta("og:title") || "";
+    const metaDesc = getMeta("description") || getMeta("og:description") || "";
+    const h1 = getTag("h1") || "";
+    // first paragraph
+    const pRe = /<p[^>]*>([\s\S]*?)<\/p>/i;
+    const pMatch = text.match(pRe);
+    const firstP = pMatch ? pMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() : "";
+    return { title, metaDesc, h1, firstP, raw: text.slice(0, 30_000) };
+  } catch (e) {
+    console.warn("scrapePageFallback failed:", String(e));
+    return null;
+  }
+}
+
+/* Build deterministic fallback SEO from a small payload */
+function fallbackFromExtracted(ex: any, url: string) {
+  const brandTitle = ex.title || ex.h1 || url.replace(/^https?:\/\//, "").split("/")[0];
+  const descText = ex.firstP || ex.metaDesc || (ex.raw ? ex.raw.slice(0, 300).replace(/\s+/g, " ") : "Product overview");
+  const meta = (ex.metaDesc || descText).slice(0, 160);
+  const seoPayload = {
+    h1: ex.h1 || brandTitle,
+    title: brandTitle.length > 65 ? brandTitle.slice(0, 62) + "..." : brandTitle,
+    metaDescription: meta,
+  };
+  const description_html = `<p>${escapeHtml(descText)}</p>`;
+  return { description_html, seo_payload: seoPayload, features: [] };
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /**
  * If we have a tenantId, persist and/or upsert a product_ingestions row and
  * (optionally) call the ingest engine to obtain a normalized preview. If no
@@ -48,10 +117,12 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
     // preview-only path: call ingest engine directly (best-effort)
     if (!INGEST_ENGINE_URL) return null;
     try {
-      const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
+      const res = await timeoutPromise(fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, { method: "GET", headers: { Accept: "application/json" } }), 8000);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.warn("ingest engine returned non-ok:", res.status, text?.slice(0,200));
+        return null;
+      }
       const text = await res.text().catch(() => "");
       let parsed: any = null;
       try {
@@ -67,14 +138,8 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
         raw_payload: null,
       };
     } catch (e: any) {
-      return {
-        id: null,
-        tenant_id: null,
-        source_url: url,
-        normalized_payload: null,
-        raw_payload: null,
-        last_error: String(e?.message ?? e),
-      };
+      console.warn("ingest call failed:", String(e));
+      return null;
     }
   }
 
@@ -112,10 +177,11 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
   // 3) call ingest engine synchronously to obtain normalized preview (best-effort)
   if (!INGEST_ENGINE_URL) return inserted;
   try {
-    const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
+    const res = await timeoutPromise(fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, { method: "GET", headers: { Accept: "application/json" } }), 8000);
+    if (!res.ok) {
+      await sb.from("product_ingestions").update({ last_error: `ingest_failed_${res.status}`, updated_at: new Date().toISOString() }).eq("id", inserted.id).catch(() => null);
+      return inserted;
+    }
     const text = await res.text().catch(() => "");
     let parsed: any = null;
     try { parsed = text ? JSON.parse(text) : null; } catch {}
@@ -142,6 +208,22 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
   }
 }
 
+/* Repair prompt helper */
+function makeRepairUserPrompt(previousRaw: string, extractDataPreview: any) {
+  return `The model returned invalid or empty JSON previously. Previous output (verbatim):
+---
+${previousRaw}
+---
+
+Using ONLY the provided extractData (below), return STRICTLY a single JSON object with these keys:
+- description_html: string (full HTML description)
+- seo_payload: object { h1: string, title: string, metaDescription: string }
+- features: array of short strings (may be empty)
+
+If a field cannot be grounded from the provided extractData, return an empty string "" or empty array [] (do not invent facts). Provide no commentary, no markdown, no fences. ExtractData:
+${JSON.stringify(extractDataPreview ?? {}, null, 2)}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Use safeGetAuth inside handler (avoids Clerk middleware-detection warnings)
@@ -154,7 +236,6 @@ export async function POST(req: NextRequest) {
     }
     const { url, persist } = parsed.data as { url: string; persist?: boolean };
 
-    // Resolve tenantId:
     let tenantId: string | null = orgId ?? null;
     let sbForProfile: any = null;
     if (!tenantId && userId) {
@@ -170,7 +251,6 @@ export async function POST(req: NextRequest) {
           tenantId = profileData.tenant_id;
         }
       } catch (e) {
-        // supabase service client missing or profile lookup failed; continue defensively
         console.warn("profile lookup failed while resolving tenantId:", String(e));
       }
     }
@@ -183,12 +263,28 @@ export async function POST(req: NextRequest) {
     const sb = tenantId ? (sbForProfile ?? getServiceSupabaseClient()) : null;
 
     // Obtain ingestion (either tenant-backed upsert OR preview via ingest engine)
-    const ingestion = await upsertIngestionForUrlIfTenant(sb, tenantId, url);
-    if (!ingestion && wantsPersist) {
-      return NextResponse.json({ error: { code: "SEO_INGESTION_FAILED", message: "Ingestion not created" } }, { status: 500 });
+    let ingestion = await upsertIngestionForUrlIfTenant(sb, tenantId, url);
+
+    // If ingestion missing, we'll attempt to scrape the page directly as a fallback preview source
+    let extractDataForPrompt: any = ingestion?.normalized_payload ?? null;
+    if (!extractDataForPrompt) {
+      // Try a direct lightweight scrape
+      const scraped = await scrapePageFallback(url);
+      if (scraped) {
+        extractDataForPrompt = {
+          title: scraped.title,
+          metaDescription: scraped.metaDesc,
+          name: scraped.h1 || scraped.title,
+          description_raw: scraped.firstP,
+          browsed_text: scraped.raw ? scraped.raw.slice(0, 30_000) : undefined,
+          source: url
+        };
+      } else {
+        extractDataForPrompt = null;
+      }
     }
 
-    // Load tenant instructions — if fetch fails, fall back to empty/default instructions
+    // Load tenant instructions — if fetch fails, fall back to strict fallback text
     let instructions: string | null = null;
     try {
       instructions = await loadCustomGptInstructions(tenantId ?? null);
@@ -197,7 +293,6 @@ export async function POST(req: NextRequest) {
       instructions = null;
     }
 
-    // Strong strict JSON fallback and placeholders (no concrete example text to avoid copy/paste bias).
     const strictJsonFallback = `
 You are AvidiaSEO, an automated SEO content generator. MUST FOLLOW THESE RULES:
 1) Return VALID JSON ONLY as the entire response body. No commentary, no markdown, no surrounding text.
@@ -206,42 +301,29 @@ You are AvidiaSEO, an automated SEO content generator. MUST FOLLOW THESE RULES:
    - seo_payload: object with keys { h1: string, title: string, metaDescription: string }
    - features: array (can be empty)
 3) If a field cannot be produced from the provided input, return an empty string "" or an empty array [].
-4) Use ONLY the provided extractData and manufacturerText. Do NOT invent facts or add content not present in the input.
-5) DO NOT COPY OR REUSE ANY SAMPLE VALUES — the snippet below is a TEMPLATE showing shape only. Replace placeholders with content derived from the input.
-TEMPLATE (placeholders only):
-{
-  "description_html": "<p>{DESCRIPTION_HTML}</p>",
-  "seo_payload": {
-    "h1": "{H1_TEXT}",
-    "title": "{TITLE_TEXT}",
-    "metaDescription": "{META_TEXT}"
-  },
-  "features": ["{FEATURE_1}", "{FEATURE_2}"]
-}
+4) Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
+5) DO NOT COPY OR REUSE ANY SAMPLE VALUES — placeholders are templates only.
 `.trim();
 
-    // Combine tenant instructions (if present) with strict fallback — place the strict rules AFTER tenant instructions
     const finalInstructions = instructions ? `${instructions}\n\n${strictJsonFallback}` : strictJsonFallback;
 
-    // Assemble prompt from available normalized payload (may be null)
+    // Assemble prompt
     const { system, user } = assembleSeoPrompt({
       instructions: finalInstructions,
-      extractData: ingestion?.normalized_payload ?? {},
-      manufacturerText: ingestion?.raw_payload?.manufacturer_text ?? ""
+      extractData: extractDataForPrompt ?? {},
+      manufacturerText: extractDataForPrompt?.manufacturer_text ?? ""
     });
 
-    // Build an explicit strict system message that reiterates placeholders and DO NOT COPY rule
     const strictSystem = `${system || "You are AvidiaSEO."}
 
-IMPORTANT RULES (repeat):
-- Return ONLY a VALID JSON object with keys: description_html, seo_payload, features.
-- Do NOT reuse placeholder example text; placeholders in examples are templates only.
-- Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
-- If a field is missing in input, return "" or [] (empty array).`;
+IMPORTANT: Return ONLY a VALID JSON object with keys: description_html, seo_payload, features.
+Do NOT reuse placeholder example text; placeholders in examples are templates only.
+Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
+If you cannot produce a field from the input, return an empty string or empty array.`;
 
-    // Call OpenAI (strict generation expecting JSON). Keep temperature low for determinism.
+    // First model call
     const model = process.env.OPENAI_SEO_MODEL || "gpt-4o";
-    const completion = await callOpenaiChat({
+    const initialCompletion = await callOpenaiChat({
       model,
       messages: [
         { role: "system", content: strictSystem },
@@ -251,34 +333,69 @@ IMPORTANT RULES (repeat):
       max_tokens: 1400
     });
 
-    const raw = completion?.choices?.[0]?.message?.content ?? "";
-    // 1) try JSON.parse
+    const raw = initialCompletion?.choices?.[0]?.message?.content ?? "";
     let out: any = null;
     try {
       out = raw ? JSON.parse(raw) : null;
     } catch {
-      // 2) try to extract JSON from text (handles fenced codeblocks or commentary around JSON)
       out = extractJsonFromText(raw);
     }
 
-    // If invalid, return detailed diagnostic (and when SEO_DEBUG enabled include raw and normalized payload)
-    const seoDebug = process.env.SEO_DEBUG === "true" || process.env.SEO_DEBUG === "1";
-    if (!out || typeof out !== "object") {
-      console.error("SEO model returned non-JSON output:", { rawPreview: String(raw).slice(0, 4000) });
-      const resp: any = {
-        error: {
-          code: "SEO_MODEL_ERROR",
-          message:
-            "Model did not return a valid JSON object. Check server logs for raw model output. Ensure custom_gpt_instructions exists and is strict.",
-          raw,
-        },
-      };
-      if (seoDebug) {
-        resp.debug = {
-          ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
+    // If output not meaningful, attempt a single repair retry with explicit REPAIR prompt
+    if (!isMeaningfulOutput(out)) {
+      try {
+        const repairPrompt = makeRepairUserPrompt(raw, extractDataForPrompt);
+        const repairCompletion = await callOpenaiChat({
+          model,
+          messages: [
+            { role: "system", content: strictSystem },
+            { role: "user", content: repairPrompt }
+          ],
+          temperature: 0.0,
+          max_tokens: 1400
+        });
+        const repairRaw = repairCompletion?.choices?.[0]?.message?.content ?? "";
+        let reparsed: any = null;
+        try {
+          reparsed = repairRaw ? JSON.parse(repairRaw) : null;
+        } catch {
+          reparsed = extractJsonFromText(repairRaw);
+        }
+        if (isMeaningfulOutput(reparsed)) {
+          out = reparsed;
+        } else {
+          // leave out as whatever parsed (likely empty)
+          out = reparsed ?? out;
+        }
+      } catch (e) {
+        console.warn("repair attempt failed:", String(e));
+      }
+    }
+
+    // If still empty or not meaningful -> deterministic fallback from scraped data (if available)
+    if (!isMeaningfulOutput(out)) {
+      if (extractDataForPrompt) {
+        const scraped = extractDataForPrompt;
+        const fallback = fallbackFromExtracted({
+          title: scraped.title,
+          metaDesc: scraped.metaDescription || scraped.metaDesc,
+          h1: scraped.name || scraped.h1,
+          firstP: scraped.description_raw || scraped.firstP,
+          raw: scraped.browsed_text || scraped.raw
+        }, url);
+        out = {
+          description_html: fallback.description_html,
+          seo_payload: fallback.seo_payload,
+          features: fallback.features
+        };
+      } else {
+        // nothing to fall back to; return minimal product overview
+        out = {
+          description_html: "<p>Product overview</p>",
+          seo_payload: { h1: "", title: "", metaDescription: "" },
+          features: []
         };
       }
-      return NextResponse.json(resp, { status: 502 });
     }
 
     const descriptionHtml = out.description_html ?? "";
@@ -322,12 +439,13 @@ IMPORTANT RULES (repeat):
       createdAt: inserted?.created_at ?? new Date().toISOString()
     };
 
-    // When debugging, include raw model output and normalized payload for inspection
+    // Debug information when enabled
+    const seoDebug = process.env.SEO_DEBUG === "true" || process.env.SEO_DEBUG === "1";
     if (seoDebug) {
       responseBody._debug = {
         rawModelOutput: raw,
         parsedModelOutput: out,
-        ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
+        ingestion_normalized_payload: ingestion?.normalized_payload ?? null
       };
     }
 
