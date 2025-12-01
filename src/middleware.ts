@@ -19,9 +19,19 @@ import { safeGetAuth } from "@/lib/clerkSafe";
   }
 })();
 
-// Require Clerk helpers after env normalization.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { clerkMiddleware, clerkClient } = require("@clerk/nextjs/server");
+/* Try to require Clerk helpers; fail gracefully if unavailable in this environment. */
+let clerkMw: any = null;
+let clerkClient: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const clerk = require("@clerk/nextjs/server");
+  clerkMw = typeof clerk.clerkMiddleware === "function" ? clerk.clerkMiddleware() : null;
+  clerkClient = clerk.clerkClient ?? null;
+} catch (err) {
+  // Likely running in a build/CI environment where Clerk can't initialize. Continue defensively.
+  // eslint-disable-next-line no-console
+  console.warn("Clerk package unavailable at require time (this may be expected in build/CI):", String(err));
+}
 
 /* Stripe init (optional) */
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
@@ -63,7 +73,12 @@ async function userHasActiveSubscription(userId: string | undefined) {
 
   let clerkUser;
   try {
-    clerkUser = await clerkClient.users.getUser(userId);
+    if (!clerkClient) {
+      // clerkClient is not available in this runtime; bail to false
+      console.warn("clerkClient not available when checking subscription for user:", userId);
+    } else {
+      clerkUser = await clerkClient.users.getUser(userId);
+    }
   } catch (err) {
     console.warn("Unable to fetch Clerk user:", err);
   }
@@ -137,17 +152,21 @@ async function userHasActiveSubscription(userId: string | undefined) {
   return false;
 }
 
-/* Create the clerk middleware instance once */
-const clerkMw = clerkMiddleware();
-
-/* Exported middleware: call clerkMiddleware directly and use safeGetAuth to avoid detection issues */
+/* Exported middleware: call clerkMiddleware directly when available and use safeGetAuth to avoid detection issues */
 export default async function middleware(req: NextRequest, ev: any) {
-  try {
-    // Call clerkMiddleware directly (avoid indirection) so Clerk can detect middleware usage.
-    const maybeResponse = await clerkMw(req, ev);
-    if (maybeResponse) return maybeResponse;
-  } catch (err) {
-    console.warn("clerkMiddleware invocation warning:", err);
+  // If clerkMiddleware is available, invoke it first so Clerk can attach session/context.
+  if (clerkMw) {
+    try {
+      const maybeResponse = await clerkMw(req, ev);
+      if (maybeResponse) return maybeResponse;
+    } catch (err) {
+      // If clerkMiddleware errors, log and continue to our custom checks.
+      console.warn("clerkMiddleware invocation warning:", String(err));
+    }
+  } else {
+    // If clerkMiddleware is missing, log once (avoid spamming)
+    // eslint-disable-next-line no-console
+    console.warn("clerkMiddleware is not available in this runtime; proceeding with safeGetAuth checks.");
   }
 
   const pathname = req.nextUrl.pathname;
@@ -163,7 +182,8 @@ export default async function middleware(req: NextRequest, ev: any) {
   }
 
   // Use safeGetAuth so an unexpected missing middleware doesn't throw the Clerk warning.
-  const { userId } = safeGetAuth(req as any);
+  // safeGetAuth returns { userId: null } on failure, so this is safe in build/CI contexts.
+  const { userId } = safeGetAuth(req as any) as { userId?: string | null };
 
   if (!userId) {
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
