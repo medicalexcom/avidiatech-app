@@ -1,20 +1,25 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
  * Polling helper endpoint
  * GET /api/v1/ingest/job/:jobId
  *
- * Response:
- * - 200 OK { ingestionId, normalized_payload, status } when ingestion row exists
+ * Note: use Request.url parsing to avoid App Router typing mismatch for context.params.
+ *
+ * Responses:
+ * - 200 OK { ingestionId, normalized_payload, status, source_url } when ingestion row exists
  * - 202 Accepted { jobId, status: "accepted" } when not yet available
  */
 
-export async function GET(request: NextRequest, { params }: { params: { jobId?: string } }) {
+export async function GET(request: Request) {
   try {
-    const jobId = params?.jobId;
+    // Extract jobId from the request URL path (last path segment)
+    const url = new URL(request.url);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const jobId = segments[segments.length - 1];
     if (!jobId) {
-      return NextResponse.json({ error: { code: "MISSING_JOB_ID", message: "jobId param required" } }, { status: 400 });
+      return NextResponse.json({ error: { code: "MISSING_JOB_ID", message: "jobId path param required" } }, { status: 400 });
     }
 
     const sb = getServiceSupabaseClient();
@@ -26,11 +31,11 @@ export async function GET(request: NextRequest, { params }: { params: { jobId?: 
       .single();
 
     if (error || !data) {
-      // not yet created / still processing
+      // still processing / not created yet
       return NextResponse.json({ jobId, status: "accepted" }, { status: 202 });
     }
 
-    // If row exists return ingestion id and normalized payload
+    // Row exists: return ingestion id and normalized_payload (if present)
     return NextResponse.json(
       {
         ingestionId: data.id,
