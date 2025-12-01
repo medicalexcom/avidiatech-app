@@ -1,10 +1,10 @@
-// src/app/api/v1/seo/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { postSeoUrlOnlySchema, postSeoBodySchema } from "@/lib/seo/validators";
 import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
-import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
+// ⬇️ use default import so it works whether file exports default or named
+import loadCustomGptInstructions from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
 import { callOpenaiChat, extractAssistantContent } from "@/lib/openai";
@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } }, { status: 401 });
     }
     const tenantId = orgId;
-    await assertTenantQuota(tenantId, { kind: "seo" });
+
+    // ⬇️ SEO counts against extract quota for now
+    await assertTenantQuota(tenantId, { kind: "extract" });
 
     const body = await req.json();
     const hasUrl = typeof body?.url === "string" && body.url.length > 0;
@@ -64,7 +66,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) Instructions + prompt
-    const instructions = await loadCustomGptInstructions(tenantId);
+    const instrTextOrObj = await loadCustomGptInstructions(tenantId);
+    // assembleSeoPrompt expects object; if we got string, wrap it
+    const instructions =
+      typeof instrTextOrObj === "string"
+        ? { system: instrTextOrObj }
+        : (instrTextOrObj ?? { system: "Write a concise, compliant SEO description." });
+
     const { system, user } = assembleSeoPrompt({
       instructions,
       extractData: {
