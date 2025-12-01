@@ -1,373 +1,139 @@
+// src/app/api/v1/seo/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-// Use safeGetAuth to avoid Clerk middleware-detection warnings
-import { safeGetAuth } from "@/lib/clerkSafe";
+import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { postSeoUrlOnlySchema } from "@/lib/seo/validators";
-import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
+import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
+import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
-import { callOpenaiChat } from "@/lib/openai";
-import { applySeoPostprocessing } from "@/lib/seo/postprocess";
-
-const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
-const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440", 10);
-
-/* Helper: attempt to extract a JSON object from text (strip fences, extract {...} block) */
-function extractJsonFromText(raw: string): any | null {
-  if (!raw || typeof raw !== "string") return null;
-  // strip markdown code fences with optional language
-  let t = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-  t = t.replace(/```(?:json)?/gi, "").replace(/```/g, "");
-  // find first {...} block
-  const first = t.indexOf("{");
-  const last = t.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) {
-    const candidate = t.slice(first, last + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // fallthrough
-    }
-  }
-  // try full cleaned text
-  try {
-    return JSON.parse(t);
-  } catch {
-    return null;
-  }
-}
-
-/* Heuristic: is the model output meaningful (non-empty) */
-function isMeaningfulOutput(out: any) {
-  if (!out || typeof out !== "object") return false;
-  const desc = (out.description_html ?? "") + "";
-  const h1 = (out.seo_payload?.h1 ?? "") + "";
-  const title = (out.seo_payload?.title ?? "") + "";
-  return (desc.trim().length > 30) || (h1.trim().length > 3) || (title.trim().length > 10) || (Array.isArray(out.features) && out.features.length > 0);
-}
-
-/* Lightweight HTML scraping fallback to extract title/meta/first h1/first p */
-async function scrapePageFallback(url: string) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "AvidiaSeoFallback/1.0 (+https://avidiatech.com)" } });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const text = await res.text();
-    // naive extraction
-    const getTag = (tag: string) => {
-      const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
-      const m = text.match(re);
-      return m ? m[1].replace(/\s+/g, " ").trim() : "";
-    };
-    const getMeta = (name: string) => {
-      const re = new RegExp(`<meta[^>]+(?:name|property)=["']${name}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i");
-      const m = text.match(re);
-      return m ? m[1].trim() : "";
-    };
-    const title = getTag("title") || getMeta("og:title") || "";
-    const metaDesc = getMeta("description") || getMeta("og:description") || "";
-    const h1 = getTag("h1") || "";
-    // first paragraph
-    const pRe = /<p[^>]*>([\s\S]*?)<\/p>/i;
-    const pMatch = text.match(pRe);
-    const firstP = pMatch ? pMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() : "";
-    return { title, metaDesc, h1, firstP, raw: text.slice(0, 30_000) };
-  } catch (e) {
-    console.warn("scrapePageFallback failed:", String(e));
-    return null;
-  }
-}
-
-/* Build deterministic fallback SEO from a small payload */
-function fallbackFromExtracted(ex: any, url: string) {
-  const brandTitle = ex.title || ex.h1 || url.replace(/^https?:\/\//, "").split("/")[0];
-  const descText = ex.firstP || ex.metaDesc || (ex.raw ? ex.raw.slice(0, 300).replace(/\s+/g, " ") : "Product overview");
-  const meta = (ex.metaDesc || descText).slice(0, 160);
-  const seoPayload = {
-    h1: ex.h1 || brandTitle,
-    title: brandTitle.length > 65 ? brandTitle.slice(0, 62) + "..." : brandTitle,
-    metaDescription: meta,
-  };
-  const description_html = `<p>${escapeHtml(descText)}</p>`;
-  return { description_html, seo_payload: seoPayload, features: [] };
-}
-
-function escapeHtml(s: string) {
-  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/* Repair prompt helper */
-function makeRepairUserPrompt(previousRaw: string, extractDataPreview: any) {
-  return `The model returned invalid or empty JSON previously. Previous output (verbatim):
----
-${previousRaw}
----
-
-Using ONLY the provided extractData (below), return STRICTLY a single JSON object with these keys:
-- description_html: string (full HTML description)
-- seo_payload: object { h1: string, title: string, metaDescription: string }
-- features: array of short strings (may be empty)
-
-If a field cannot be grounded from the provided extractData, return an empty string "" or empty array [] (do not invent facts). Provide no commentary, no markdown, no fences. ExtractData:
-${JSON.stringify(extractDataPreview ?? {}, null, 2)}`;
-}
+import { openai } from "@/lib/openai";
+import { assertTenantQuota } from "@/lib/usage/quotas";
 
 export async function POST(req: NextRequest) {
   try {
-    // Use safeGetAuth inside handler (avoids Clerk middleware-detection warnings)
-    const { userId, orgId } = (safeGetAuth(req as any) as any) ?? {};
-    // Parse body early so we can support unauthenticated preview requests
-    const body = await req.json().catch(() => ({}));
-    const parsed = postSeoUrlOnlySchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: { code: "SEO_INVALID_URL", detail: parsed.error.flatten() } }, { status: 400 });
+    const { userId, orgId } = auth();
+    if (!userId || !orgId) {
+      return NextResponse.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } }, { status: 401 });
     }
-    const { url, persist } = parsed.data as { url: string; persist?: boolean };
+    const tenantId = orgId;
 
-    // Resolve tenantId:
-    let tenantId: string | null = orgId ?? null;
-    let sbForProfile: any = null;
-    if (!tenantId && userId) {
-      try {
-        sbForProfile = getServiceSupabaseClient();
-        const { data: profileData, error: profileError } = await sbForProfile
-          .from("profiles")
-          .select("tenant_id")
-          .eq("user_id", userId)
-          .limit(1)
-          .single();
-        if (!profileError && profileData?.tenant_id) {
-          tenantId = profileData.tenant_id;
-        }
-      } catch (e) {
-        console.warn("profile lookup failed while resolving tenantId:", String(e));
-      }
+    const body = await req.json();
+    const { url } = postSeoUrlOnlySchema.parse(body);
+
+    await assertTenantQuota(tenantId, { kind: "seo" });
+
+    // 1) Ingest (reuse fresh or create new) and guarantee we have a DB id
+    const ingestion = await upsertIngestionForUrl(tenantId, url);
+    if (!ingestion?.id) {
+      return NextResponse.json(
+        { ok: false, error: { code: "SEO_INGESTION_MISSING_ID", message: "Ingest succeeded but no ingestionId was persisted." } },
+        { status: 500 }
+      );
     }
 
-    const wantsPersist = !!persist;
-    if (wantsPersist && !tenantId) {
-      return NextResponse.json({ error: { code: "UNAUTHORIZED_TO_PERSIST", message: "Authentication or tenant required to persist SEO output" } }, { status: 401 });
+    // 2) Load the ingestion payload for prompt composition
+    const sb = getServiceSupabaseClient();
+    const { data: fullIngestion, error: ingErr } = await sb
+      .from("product_ingestions")
+      .select(
+        "id, structured_product, specs_normalized, manuals_normalized, variants_normalized, images_normalized, source_seo, manufacturer_text"
+      )
+      .eq("tenant_id", tenantId)
+      .eq("id", ingestion.id)
+      .single();
+
+    if (ingErr || !fullIngestion) {
+      return NextResponse.json(
+        { ok: false, error: { code: "SEO_INGESTION_NOT_FOUND", message: "Could not load ingestion payload after persist." } },
+        { status: 404 }
+      );
     }
 
-    const sb = tenantId ? (sbForProfile ?? getServiceSupabaseClient()) : null;
+    // 3) Custom GPT instructions
+    const instructions = await loadCustomGptInstructions(tenantId);
 
-    // Obtain ingestion (either tenant-backed upsert OR preview via ingest engine)
-    let ingestion: any = null;
-    if (INGEST_ENGINE_URL) {
-      try {
-        const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`);
-        if (res.ok) {
-          const text = await res.text().catch(() => "");
-          try {
-            ingestion = { normalized_payload: text ? JSON.parse(text) : null };
-          } catch {
-            // not JSON, ignore
-            ingestion = { normalized_payload: null };
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    // If ingestion missing, we'll attempt to scrape the page directly as a fallback preview source
-    let extractDataForPrompt: any = ingestion?.normalized_payload ?? null;
-    if (!extractDataForPrompt) {
-      const scraped = await scrapePageFallback(url);
-      if (scraped) {
-        extractDataForPrompt = {
-          title: scraped.title,
-          metaDescription: scraped.metaDesc,
-          name: scraped.h1 || scraped.title,
-          description_raw: scraped.firstP,
-          browsed_text: scraped.raw ? scraped.raw.slice(0, 30_000) : undefined,
-          source: url
-        };
-      } else {
-        extractDataForPrompt = null;
-      }
-    }
-
-    // Load tenant/canonical instructions with source info
-    let instructionsInfo = { text: null as string | null, source: "none" as any };
-    try {
-      instructionsInfo = await loadCustomGptInstructionsWithInfo(tenantId ?? null);
-    } catch (insErr) {
-      console.warn("loadCustomGptInstructionsWithInfo failed:", String(insErr));
-      instructionsInfo = { text: null, source: "none" };
-    }
-    const instructions = instructionsInfo.text;
-
-    const strictJsonFallback = `
-You are AvidiaSEO, an automated SEO content generator. MUST FOLLOW THESE RULES:
-1) Return VALID JSON ONLY as the entire response body. No commentary, no markdown, no surrounding text.
-2) JSON OBJECT MUST contain exactly these top-level keys:
-   - description_html: string (full HTML description)
-   - seo_payload: object with keys { h1: string, title: string, metaDescription: string }
-   - features: array (can be empty)
-3) If a field cannot be produced from the provided input, return an empty string "" or an empty array [].
-4) Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
-5) DO NOT COPY OR REUSE ANY SAMPLE VALUES — placeholders are templates only.
-`.trim();
-
-    const finalInstructions = instructions ? `${instructions}\n\n${strictJsonFallback}` : strictJsonFallback;
-
-    // Assemble prompt
+    // 4) Prompt assembly (strict by default)
     const { system, user } = assembleSeoPrompt({
-      instructions: finalInstructions,
-      extractData: extractDataForPrompt ?? {},
-      manufacturerText: extractDataForPrompt?.manufacturer_text ?? ""
+      instructions,
+      extractData: {
+        structuredProduct: fullIngestion.structured_product,
+        specsNormalized: fullIngestion.specs_normalized,
+        manualsNormalized: fullIngestion.manuals_normalized,
+        variantsNormalized: fullIngestion.variants_normalized,
+        imagesNormalized: fullIngestion.images_normalized,
+        sourceSeo: fullIngestion.source_seo,
+      },
+      manufacturerText: fullIngestion.manufacturer_text ?? "",
+      options: { includeManualsSection: true, includeSpecsSection: true, strictMode: true },
     });
 
-    const strictSystem = `${system || "You are AvidiaSEO."}
-
-IMPORTANT: Return ONLY a VALID JSON object with keys: description_html, seo_payload, features.
-Do NOT reuse placeholder example text; placeholders in examples are templates only.
-Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
-If you cannot produce a field from the input, return an empty string or empty array.`;
-
-    // First model call
-    const model = process.env.OPENAI_SEO_MODEL || "gpt-4o";
-    const initialCompletion = await callOpenaiChat({
-      model,
+    // 5) OpenAI
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
+      temperature: 0.2,
       messages: [
-        { role: "system", content: strictSystem },
-        { role: "user", content: JSON.stringify(user) }
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(user) },
       ],
-      temperature: 0.0,
-      max_tokens: 1400
     });
 
-    const raw = initialCompletion?.choices?.[0]?.message?.content ?? "";
-    let out: any = null;
+    const raw = completion.choices?.[0]?.message?.content || "{}";
+    let out: any;
     try {
-      out = raw ? JSON.parse(raw) : null;
+      out = JSON.parse(raw);
     } catch {
-      out = extractJsonFromText(raw);
+      out = {};
     }
 
-    // If output not meaningful, attempt a single repair retry with explicit REPAIR prompt
-    if (!isMeaningfulOutput(out)) {
-      try {
-        const repairPrompt = makeRepairUserPrompt(raw, extractDataForPrompt);
-        const repairCompletion = await callOpenaiChat({
-          model,
-          messages: [
-            { role: "system", content: strictSystem },
-            { role: "user", content: repairPrompt }
-          ],
-          temperature: 0.0,
-          max_tokens: 1400
-        });
-        const repairRaw = repairCompletion?.choices?.[0]?.message?.content ?? "";
-        let reparsed: any = null;
-        try {
-          reparsed = repairRaw ? JSON.parse(repairRaw) : null;
-        } catch {
-          reparsed = extractJsonFromText(repairRaw);
-        }
-        if (isMeaningfulOutput(reparsed)) {
-          out = reparsed;
-        } else {
-          out = reparsed ?? out;
-        }
-      } catch (e) {
-        console.warn("repair attempt failed:", String(e));
-      }
-    }
-
-    // If still empty or not meaningful -> deterministic fallback from scraped data (if available)
-    if (!isMeaningfulOutput(out)) {
-      if (extractDataForPrompt) {
-        const scraped = extractDataForPrompt;
-        const fallback = fallbackFromExtracted({
-          title: scraped.title,
-          metaDesc: scraped.metaDescription || scraped.metaDesc,
-          h1: scraped.name || scraped.h1,
-          firstP: scraped.description_raw || scraped.firstP,
-          raw: scraped.browsed_text || scraped.raw
-        }, url);
-        out = {
-          description_html: fallback.description_html,
-          seo_payload: fallback.seo_payload,
-          features: fallback.features
-        };
-      } else {
-        out = {
-          description_html: "<p>Product overview</p>",
-          seo_payload: { h1: "", title: "", metaDescription: "" },
-          features: []
-        };
-      }
-    }
-
-    const descriptionHtml = out.description_html ?? "";
+    const descriptionHtml: string = out.description_html ?? "";
     const seoPayload = out.seo_payload ?? { h1: "", title: "", metaDescription: "" };
-    const features = Array.isArray(out.features) ? out.features : [];
+    const features: string[] = Array.isArray(out.features) ? out.features : [];
 
-    // Auto-heal the output
+    // 6) Auto-heal
     const healed = autoHeal(descriptionHtml, seoPayload, features, { strict: true });
 
-    // Apply post-processing (enforce title suffix, H1 length, metaDescription length)
-    const post = applySeoPostprocessing(healed.seo, healed.html, healed.features, { siteSuffix: " | MedicalEx" });
-
-    // Persist seo_outputs if tenant-backed and requested
-    let inserted: any = null;
-    if (tenantId) {
-      const insertBody: any = {
+    // 7) Persist seo_outputs
+    const { data: inserted, error: insErr } = await sb
+      .from("seo_outputs")
+      .insert({
         tenant_id: tenantId,
-        ingestion_id: ingestion?.id ?? null,
-        input_snapshot: { url, normalized_snapshot_keys: Object.keys(ingestion?.normalized_payload ?? {}) },
-        description_html: post.description_html,
-        seo_payload: post.seo_payload,
+        ingestion_id: fullIngestion.id,
+        input_snapshot: user,
+        description_html: healed.html,
+        seo_payload: healed.seo,
         features: healed.features,
         autoheal_log: healed.log,
-        model_info: { model }
-      };
+        model_info: { model: process.env.OPENAI_SEO_MODEL || "gpt-4.1" },
+      })
+      .select("id, created_at, description_html, seo_payload, features, autoheal_log")
+      .single();
 
-      const { data: insData, error: insErr } = await sb.from("seo_outputs").insert(insertBody).select("*").single().catch((e: any) => ({ data: null, error: e }));
-      if (insErr) {
-        console.error("Failed to persist seo_outputs:", insErr);
-        return NextResponse.json({ error: { code: "SEO_DB_ERROR", message: insErr.message || String(insErr) } }, { status: 500 });
-      }
-      inserted = insData;
+    if (insErr || !inserted?.id) {
+      return NextResponse.json(
+        { ok: false, error: { code: "SEO_DB_ERROR", message: insErr?.message || "Could not insert SEO output." } },
+        { status: 500 }
+      );
     }
 
-    const responseBody: any = {
-      seoId: inserted?.id ?? null,
-      tenantId: tenantId,
-      ingestionId: ingestion?.id ?? null,
+    // Optionally increment usage here
+    // await incrementTenantUsage(tenantId, { kind: "seo" });
+
+    return NextResponse.json({
+      ok: true,
+      ingestionId: fullIngestion.id,
+      seoId: inserted.id,
       url,
-      descriptionHtml: inserted?.description_html ?? post.description_html,
-      seoPayload: inserted?.seo_payload ?? post.seo_payload,
-      features: inserted?.features ?? healed.features,
-      autohealLog: inserted?.autoheal_log ?? healed.log,
-      createdAt: inserted?.created_at ?? new Date().toISOString()
-    };
-
-    // Debug information when enabled
-    const seoDebug = process.env.SEO_DEBUG === "true" || process.env.SEO_DEBUG === "1";
-    if (seoDebug) {
-      responseBody._debug = {
-        rawModelOutput: raw,
-        parsedModelOutput: out,
-        ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
-        instructionsSource: instructionsInfo.source,
-        instructionsPreview: instructionsInfo.text ? (instructionsInfo.text.slice(0, 1000)) : null,
-        postprocessing: {
-          appliedSeoPayload: post.seo_payload,
-          descriptionHtml: post.description_html
-        }
-      };
-    }
-
-    return NextResponse.json(responseBody, { status: 200 });
-
+      descriptionHtml: inserted.description_html,
+      seoPayload: inserted.seo_payload,
+      features: inserted.features,
+      autohealLog: inserted.autoheal_log,
+      createdAt: inserted.created_at,
+    });
   } catch (e: any) {
-    console.error("POST /api/v1/seo error", e);
-    return NextResponse.json({ error: { code: "SEO_MODEL_ERROR", message: String(e?.message || e) } }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: { code: "SEO_MODEL_ERROR", message: String(e?.message || e) } },
+      { status: 500 }
+    );
   }
 }
