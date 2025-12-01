@@ -8,6 +8,7 @@ import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
 import { callOpenaiChat } from "@/lib/openai";
+import { applySeoPostprocessing } from "@/lib/seo/postprocess";
 
 const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
 const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440", 10);
@@ -69,6 +70,7 @@ async function scrapePageFallback(url: string) {
     const title = getTag("title") || getMeta("og:title") || "";
     const metaDesc = getMeta("description") || getMeta("og:description") || "";
     const h1 = getTag("h1") || "";
+    // first paragraph
     const pRe = /<p[^>]*>([\s\S]*?)<\/p>/i;
     const pMatch = text.match(pRe);
     const firstP = pMatch ? pMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() : "";
@@ -94,7 +96,7 @@ function fallbackFromExtracted(ex: any, url: string) {
 }
 
 function escapeHtml(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /* Repair prompt helper */
@@ -125,6 +127,7 @@ export async function POST(req: NextRequest) {
     }
     const { url, persist } = parsed.data as { url: string; persist?: boolean };
 
+    // Resolve tenantId:
     let tenantId: string | null = orgId ?? null;
     let sbForProfile: any = null;
     if (!tenantId && userId) {
@@ -153,19 +156,20 @@ export async function POST(req: NextRequest) {
 
     // Obtain ingestion (either tenant-backed upsert OR preview via ingest engine)
     let ingestion: any = null;
-    if (sb || INGEST_ENGINE_URL) {
-      // call helper that lives elsewhere in your codebase - kept as-is
-      // NOTE: if you copied this file, ensure upsertIngestionForUrlIfTenant is available
-      // For brevity in this snippet we attempt a light call to your ingest endpoint
+    if (INGEST_ENGINE_URL) {
       try {
-        if (INGEST_ENGINE_URL) {
-          const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`);
-          if (res.ok) {
-            ingestion = await res.json().catch(() => null);
+        const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`);
+        if (res.ok) {
+          const text = await res.text().catch(() => "");
+          try {
+            ingestion = { normalized_payload: text ? JSON.parse(text) : null };
+          } catch {
+            // not JSON, ignore
+            ingestion = { normalized_payload: null };
           }
         }
       } catch (e) {
-        // continue
+        // ignore
       }
     }
 
@@ -307,6 +311,9 @@ If you cannot produce a field from the input, return an empty string or empty ar
     // Auto-heal the output
     const healed = autoHeal(descriptionHtml, seoPayload, features, { strict: true });
 
+    // Apply post-processing (enforce title suffix, H1 length, metaDescription length)
+    const post = applySeoPostprocessing(healed.seo, healed.html, healed.features, { siteSuffix: " | MedicalEx" });
+
     // Persist seo_outputs if tenant-backed and requested
     let inserted: any = null;
     if (tenantId) {
@@ -314,8 +321,8 @@ If you cannot produce a field from the input, return an empty string or empty ar
         tenant_id: tenantId,
         ingestion_id: ingestion?.id ?? null,
         input_snapshot: { url, normalized_snapshot_keys: Object.keys(ingestion?.normalized_payload ?? {}) },
-        description_html: healed.html,
-        seo_payload: healed.seo,
+        description_html: post.description_html,
+        seo_payload: post.seo_payload,
         features: healed.features,
         autoheal_log: healed.log,
         model_info: { model }
@@ -334,8 +341,8 @@ If you cannot produce a field from the input, return an empty string or empty ar
       tenantId: tenantId,
       ingestionId: ingestion?.id ?? null,
       url,
-      descriptionHtml: inserted?.description_html ?? healed.html,
-      seoPayload: inserted?.seo_payload ?? healed.seo,
+      descriptionHtml: inserted?.description_html ?? post.description_html,
+      seoPayload: inserted?.seo_payload ?? post.seo_payload,
       features: inserted?.features ?? healed.features,
       autohealLog: inserted?.autoheal_log ?? healed.log,
       createdAt: inserted?.created_at ?? new Date().toISOString()
@@ -349,7 +356,11 @@ If you cannot produce a field from the input, return an empty string or empty ar
         parsedModelOutput: out,
         ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
         instructionsSource: instructionsInfo.source,
-        instructionsPreview: instructionsInfo.text ? (instructionsInfo.text.slice(0, 1000)) : null
+        instructionsPreview: instructionsInfo.text ? (instructionsInfo.text.slice(0, 1000)) : null,
+        postprocessing: {
+          appliedSeoPayload: post.seo_payload,
+          descriptionHtml: post.description_html
+        }
       };
     }
 
