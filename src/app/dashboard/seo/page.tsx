@@ -27,6 +27,9 @@ export default function AvidiaSeoPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // NEW: raw ingest response debug state
+  const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
+
   useEffect(() => {
     if (!ingestionId) return;
     let cancelled = false;
@@ -67,7 +70,7 @@ export default function AvidiaSeoPage() {
         setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
         return;
       }
-      // refresh ingestion display
+      // refresh ingestion display by navigating to same page with ingestionId
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
     } catch (err: any) {
       setError(String(err?.message || err));
@@ -76,7 +79,7 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  // (excerpt) replace the createIngestionThenGenerate function in src/app/dashboard/seo/page.tsx with this version
+  // Safer ingestion + generate flow with debug logging
   async function createIngestionThenGenerate(url: string) {
     if (generating) return;
     if (!url) { setError("Please enter a URL"); return; }
@@ -92,15 +95,15 @@ export default function AvidiaSeoPage() {
       });
       const json = await res.json().catch(() => null);
       console.debug("POST /api/v1/ingest response:", res.status, json);
-      // show raw response in the UI when missing ingestionId
+      // surface raw response for debugging when missing ingestionId
       setRawIngestResponse({ status: res.status, body: json });
-  
+
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
         return;
       }
-  
-      // try several common fields for ingestion id
+
+      // Accept many possible shapes for ingestion id returned by different backend implementations
       const newIngestionId =
         json?.ingestionId ??
         json?.id ??
@@ -109,15 +112,14 @@ export default function AvidiaSeoPage() {
         json?.result?.id ??
         json?.payload?.id ??
         null;
-  
+
       if (!newIngestionId) {
         setError("Ingest did not return an ingestionId. See debug pane below.");
         return;
       }
-  
-      // update url to reflect ingestion
+
+      // update URL to reflect ingestion and generate SEO
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`);
-      // 2) call SEO on ingestion
       await generateFromIngestion(newIngestionId);
     } catch (err: any) {
       setError(String(err?.message || err));
@@ -125,7 +127,7 @@ export default function AvidiaSeoPage() {
       setGenerating(false);
     }
   }
-    
+
   async function handleGenerateAndSave() {
     setError(null);
     if (ingestionId) {
@@ -166,6 +168,14 @@ export default function AvidiaSeoPage() {
 
         {loading && <p>Loading ingestion...</p>}
         {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
+
+        {/* Show raw ingest response debug pane if present */}
+        {rawIngestResponse && (
+          <div style={{ marginTop: 12, background: "#fff8", padding: 12, borderRadius: 6 }}>
+            <h4>Raw /api/v1/ingest response (debug)</h4>
+            <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(rawIngestResponse, null, 2)}</pre>
+          </div>
+        )}
 
         {job && ingestionId && (
           <div style={{ marginTop: 12 }}>
