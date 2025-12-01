@@ -1,15 +1,21 @@
-// src/app/api/v1/seo/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
-import { postSeoUrlOnlySchema } from "@/lib/seo/validators";
+import { postSeoUrlOnlySchema, postSeoBodySchema } from "@/lib/seo/validators";
 import { upsertIngestionForUrl } from "@/lib/ingest/upsertIngestionForUrl";
 import { loadCustomGptInstructions } from "@/lib/gpt/loadInstructions";
 import { assembleSeoPrompt } from "@/lib/seo/assemblePrompt";
 import { autoHeal } from "@/lib/seo/autoHeal";
-import { openai } from "@/lib/openai";
+// ✅ use the helper your project already exports
+import { callOpenaiChat } from "@/lib/openai";
 import { assertTenantQuota } from "@/lib/usage/quotas";
 
+/**
+ * v1 behavior:
+ * - Accepts either { url } OR { ingestionId }.
+ * - If { url }: runs Extract (persist) → loads ingestion → SEO → persist → return.
+ * - If { ingestionId }: loads ingestion → SEO → persist → return.
+ */
 export async function POST(req: NextRequest) {
   try {
     const { userId, orgId } = auth();
@@ -17,30 +23,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: { code: "UNAUTHORIZED", message: "Authentication required." } }, { status: 401 });
     }
     const tenantId = orgId;
-
-    const body = await req.json();
-    const { url } = postSeoUrlOnlySchema.parse(body);
-
     await assertTenantQuota(tenantId, { kind: "seo" });
 
-    // 1) Ingest (reuse fresh or create new) and guarantee we have a DB id
-    const ingestion = await upsertIngestionForUrl(tenantId, url);
-    if (!ingestion?.id) {
-      return NextResponse.json(
-        { ok: false, error: { code: "SEO_INGESTION_MISSING_ID", message: "Ingest succeeded but no ingestionId was persisted." } },
-        { status: 500 }
-      );
+    const body = await req.json();
+    const hasUrl = typeof body?.url === "string" && body.url.length > 0;
+    const hasIngestionId = typeof body?.ingestionId === "string" && body.ingestionId.length > 0;
+
+    if (!hasUrl && !hasIngestionId) {
+      return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST", message: "Provide url or ingestionId." } }, { status: 400 });
+    }
+
+    const sb = getServiceSupabaseClient();
+
+    // 1) Get or create ingestion
+    let ingestionId: string;
+    if (hasUrl) {
+      const { url } = postSeoUrlOnlySchema.parse({ url: body.url });
+      const ingestion = await upsertIngestionForUrl(tenantId, url);
+      if (!ingestion?.id) {
+        return NextResponse.json(
+          { ok: false, error: { code: "SEO_INGESTION_MISSING_ID", message: "Ingest succeeded but no ingestionId was persisted." } },
+          { status: 500 }
+        );
+      }
+      ingestionId = ingestion.id;
+    } else {
+      const parsed = postSeoBodySchema.parse({ ingestionId: body.ingestionId, options: body.options });
+      ingestionId = parsed.ingestionId;
     }
 
     // 2) Load the ingestion payload for prompt composition
-    const sb = getServiceSupabaseClient();
     const { data: fullIngestion, error: ingErr } = await sb
       .from("product_ingestions")
       .select(
-        "id, structured_product, specs_normalized, manuals_normalized, variants_normalized, images_normalized, source_seo, manufacturer_text"
+        "id, url, structured_product, specs_normalized, manuals_normalized, variants_normalized, images_normalized, source_seo, manufacturer_text"
       )
       .eq("tenant_id", tenantId)
-      .eq("id", ingestion.id)
+      .eq("id", ingestionId)
       .single();
 
     if (ingErr || !fullIngestion) {
@@ -68,23 +87,17 @@ export async function POST(req: NextRequest) {
       options: { includeManualsSection: true, includeSpecsSection: true, strictMode: true },
     });
 
-    // 5) OpenAI
-    const completion = await openai.chat.completions.create({
+    // 5) OpenAI call via your helper (returns the assistant content string)
+    const assistant = await callOpenaiChat({
       model: process.env.OPENAI_SEO_MODEL || "gpt-4.1",
       temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: JSON.stringify(user) },
-      ],
+      system,
+      user: JSON.stringify(user),
     });
 
-    const raw = completion.choices?.[0]?.message?.content || "{}";
+    // Expect strict JSON
     let out: any;
-    try {
-      out = JSON.parse(raw);
-    } catch {
-      out = {};
-    }
+    try { out = JSON.parse(assistant || "{}"); } catch { out = {}; }
 
     const descriptionHtml: string = out.description_html ?? "";
     const seoPayload = out.seo_payload ?? { h1: "", title: "", metaDescription: "" };
@@ -116,14 +129,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Optionally increment usage here
-    // await incrementTenantUsage(tenantId, { kind: "seo" });
-
     return NextResponse.json({
       ok: true,
       ingestionId: fullIngestion.id,
       seoId: inserted.id,
-      url,
+      url: fullIngestion.url,
       descriptionHtml: inserted.description_html,
       seoPayload: inserted.seo_payload,
       features: inserted.features,
