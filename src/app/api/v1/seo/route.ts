@@ -12,6 +12,31 @@ import { callOpenaiChat } from "@/lib/openai";
 const INGEST_ENGINE_URL = (process.env.INGEST_ENGINE_URL || "").replace(/\/+$/, "");
 const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440", 10);
 
+/* Helper: attempt to extract a JSON object from text (strip fences, extract {...} block) */
+function extractJsonFromText(raw: string): any | null {
+  if (!raw || typeof raw !== "string") return null;
+  // strip markdown code fences with optional language
+  let t = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+  t = t.replace(/```(?:json)?/gi, "").replace(/```/g, "");
+  // find first {...} block
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    const candidate = t.slice(first, last + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // fallthrough
+    }
+  }
+  // try full cleaned text
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * If we have a tenantId, persist and/or upsert a product_ingestions row and
  * (optionally) call the ingest engine to obtain a normalized preview. If no
@@ -20,8 +45,7 @@ const INGEST_CACHE_MINUTES = parseInt(process.env.INGEST_CACHE_MINUTES || "1440"
  */
 async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, url: string) {
   if (!tenantId) {
-    // preview-only path: call ingest engine directly (best-effort) and return an object shaped
-    // similarly to persisted ingestion rows (no id).
+    // preview-only path: call ingest engine directly (best-effort)
     if (!INGEST_ENGINE_URL) return null;
     try {
       const res = await fetch(`${INGEST_ENGINE_URL}/ingest?url=${encodeURIComponent(url)}`, {
@@ -54,7 +78,6 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
     }
   }
 
-  // tenant-backed path: try to upsert / reuse a recent ingestion and persist it.
   const freshnessThreshold = new Date(Date.now() - INGEST_CACHE_MINUTES * 60_000).toISOString();
 
   // 1) check fresh ingestion
@@ -95,8 +118,11 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
     });
     const text = await res.text().catch(() => "");
     let parsed: any = null;
-    try { parsed = text ? JSON.parse(text) : null; } catch {}
-    // persist normalized pieces if present
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = null;
+    }
     const updates: any = { updated_at: new Date().toISOString() };
     if (parsed) {
       updates.normalized_payload = parsed;
@@ -132,8 +158,6 @@ export async function POST(req: NextRequest) {
     const { url, persist } = parsed.data as { url: string; persist?: boolean };
 
     // Resolve tenantId:
-    // - prefer orgId from Clerk (when users are in org context)
-    // - otherwise, if userId present, try to look up profiles. If no profile/tenant found, tenantId remains null.
     let tenantId: string | null = orgId ?? null;
     let sbForProfile: any = null;
     if (!tenantId && userId) {
@@ -149,32 +173,31 @@ export async function POST(req: NextRequest) {
           tenantId = profileData.tenant_id;
         }
       } catch (e) {
-        // supabase service client missing or profile lookup failed; continue defensively
         console.warn("profile lookup failed while resolving tenantId:", String(e));
       }
     }
 
-    // If the request wants to persist results (or create an ingestion row), require a tenant/user.
     const wantsPersist = !!persist;
     if (wantsPersist && !tenantId) {
-      // user not authorized to persist without tenant context
       return NextResponse.json({ error: { code: "UNAUTHORIZED_TO_PERSIST", message: "Authentication or tenant required to persist SEO output" } }, { status: 401 });
     }
 
-    // If we need SB for tenant-backed operations, ensure we have it
     const sb = tenantId ? (sbForProfile ?? getServiceSupabaseClient()) : null;
 
     // Obtain ingestion (either tenant-backed upsert OR preview via ingest engine)
     const ingestion = await upsertIngestionForUrlIfTenant(sb, tenantId, url);
-    if (!ingestion) {
-      // For preview-only, we may still proceed with normalized_payload null; for tenant-backed persist this is an error.
-      if (wantsPersist) {
-        return NextResponse.json({ error: { code: "SEO_INGESTION_FAILED", message: "Ingestion not created" } }, { status: 500 });
-      }
+    if (!ingestion && wantsPersist) {
+      return NextResponse.json({ error: { code: "SEO_INGESTION_FAILED", message: "Ingestion not created" } }, { status: 500 });
     }
 
-    // Load tenant instructions (allow empty/default when tenantId missing)
-    const instructions = await loadCustomGptInstructions(tenantId ?? null);
+    // Load tenant instructions — if fetch fails, fall back to empty/default instructions
+    let instructions: string | null = null;
+    try {
+      instructions = await loadCustomGptInstructions(tenantId ?? null);
+    } catch (insErr) {
+      console.warn("loadCustomGptInstructions: failed, falling back to default instructions:", String(insErr));
+      instructions = null;
+    }
 
     // Assemble prompt from available normalized payload (may be null)
     const { system, user } = assembleSeoPrompt({
@@ -195,11 +218,29 @@ export async function POST(req: NextRequest) {
       max_tokens: 1200
     });
 
-    const raw = completion?.choices?.[0]?.message?.content ?? "{}";
-    let out: any = {};
-    try { out = JSON.parse(raw); } catch (e) {
-      // Return a useful error for the client
-      return NextResponse.json({ error: { code: "SEO_MODEL_ERROR", message: "Model returned non-JSON", raw } }, { status: 500 });
+    const raw = completion?.choices?.[0]?.message?.content ?? "";
+    // 1) try JSON.parse
+    let out: any = null;
+    try {
+      out = raw ? JSON.parse(raw) : null;
+    } catch {
+      // 2) try to extract JSON from text
+      out = extractJsonFromText(raw);
+    }
+
+    if (!out || typeof out !== "object") {
+      // Return detailed diagnostic so you can inspect the raw model output in logs/client
+      console.error("SEO model returned non-JSON output:", { rawPreview: String(raw).slice(0, 2000) });
+      return NextResponse.json(
+        {
+          error: {
+            code: "SEO_MODEL_ERROR",
+            message: "Model returned non-JSON output. See raw for debugging.",
+            raw,
+          },
+        },
+        { status: 502 }
+      );
     }
 
     const descriptionHtml = out.description_html ?? "";
@@ -225,12 +266,12 @@ export async function POST(req: NextRequest) {
 
       const { data: insData, error: insErr } = await sb.from("seo_outputs").insert(insertBody).select("*").single().catch((e: any) => ({ data: null, error: e }));
       if (insErr) {
+        console.error("Failed to persist seo_outputs:", insErr);
         return NextResponse.json({ error: { code: "SEO_DB_ERROR", message: insErr.message || String(insErr) } }, { status: 500 });
       }
       inserted = insData;
     }
 
-    // Return response shaped for the dashboard UI. If persisted -> include ids, otherwise return preview fields.
     return NextResponse.json({
       seoId: inserted?.id ?? null,
       tenantId: tenantId,
