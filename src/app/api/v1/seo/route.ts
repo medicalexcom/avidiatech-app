@@ -76,13 +76,17 @@ export async function POST(req: NextRequest) {
 
     // Use a Supabase service client to read ingestion row (must exist)
     const sb = getServiceSupabaseClient();
-    const { data: ingestionRow, error: ingestionErr } = await sb
-      .from("product_ingestions")
-      .select("*")
-      .eq("id", ingestionId)
-      .limit(1)
-      .single()
-      .catch((e: any) => ({ data: null, error: e }));
+
+    let ingestionRow: any = null;
+    let ingestionErr: any = null;
+    try {
+      const res = await sb.from("product_ingestions").select("*").eq("id", ingestionId).limit(1).single();
+      ingestionRow = res.data;
+      ingestionErr = res.error;
+    } catch (e) {
+      ingestionRow = null;
+      ingestionErr = e;
+    }
 
     if (ingestionErr || !ingestionRow) {
       return NextResponse.json({ error: { code: "SEO_INGESTION_NOT_FOUND", message: "ingestionId not found" } }, { status: 404 });
@@ -170,18 +174,23 @@ You are AvidiaSEO. MUST:
         model_info: { model }
       };
 
-      const { data: insData, error: insErr } = await sb.from("seo_outputs").insert(insertBody).select("*").single().catch((e: any) => ({ data: null, error: e }));
-      if (insErr) {
-        console.error("Failed to persist seo_outputs:", insErr);
-        // continue — still return the generated payload
-      } else {
-        insertedSeo = insData;
-        // Optionally update the ingestion row with seo fields (non-destructive)
-        await sb.from("product_ingestions").update({
-          normalized_payload: ingestionRow.normalized_payload ?? ingestionRow.normalized_payload,
-          updated_at: new Date().toISOString(),
-          // you can store seo summary fields on the ingestion if desired, e.g. seo_summary
-        }).eq("id", ingestionId).catch(()=>null);
+      try {
+        const res = await sb.from("seo_outputs").insert(insertBody).select("*").single();
+        if (res.error) {
+          console.error("Failed to persist seo_outputs:", res.error);
+        } else {
+          insertedSeo = res.data;
+          // Optionally update ingestion row metadata (non-destructive)
+          try {
+            await sb.from("product_ingestions").update({
+              updated_at: new Date().toISOString()
+            }).eq("id", ingestionId);
+          } catch {
+            // ignore update failures
+          }
+        }
+      } catch (e) {
+        console.error("Failed to persist seo_outputs:", e);
       }
     }
 
