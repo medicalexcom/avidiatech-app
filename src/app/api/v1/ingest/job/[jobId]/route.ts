@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
@@ -10,7 +10,7 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  * - 202 Accepted { jobId, status: "accepted" } when not yet available
  */
 
-export async function GET(req: Request, { params }: { params: { jobId?: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { jobId?: string } }) {
   try {
     const jobId = params?.jobId;
     if (!jobId) {
@@ -34,7 +34,7 @@ export async function GET(req: Request, { params }: { params: { jobId?: string }
     return NextResponse.json(
       {
         ingestionId: data.id,
-        status: data.status || "completed",
+        status: data.status ?? "completed",
         normalized_payload: data.normalized_payload ?? null,
         source_url: data.source_url ?? null
       },
