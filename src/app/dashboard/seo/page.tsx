@@ -76,11 +76,13 @@ export default function AvidiaSeoPage() {
     }
   }
 
+  // (excerpt) replace the createIngestionThenGenerate function in src/app/dashboard/seo/page.tsx with this version
   async function createIngestionThenGenerate(url: string) {
     if (generating) return;
     if (!url) { setError("Please enter a URL"); return; }
     setGenerating(true);
     setError(null);
+    setRawIngestResponse(null); // clear previous raw
     try {
       // 1) create ingestion (persist:true)
       const res = await fetch("/api/v1/ingest", {
@@ -88,17 +90,31 @@ export default function AvidiaSeoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, persist: true })
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
+      console.debug("POST /api/v1/ingest response:", res.status, json);
+      // show raw response in the UI when missing ingestionId
+      setRawIngestResponse({ status: res.status, body: json });
+  
       if (!res.ok) {
         setError(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
         return;
       }
-      const newIngestionId = json?.ingestionId ?? json?.id ?? json?.data?.id ?? null;
+  
+      // try several common fields for ingestion id
+      const newIngestionId =
+        json?.ingestionId ??
+        json?.id ??
+        json?.data?.id ??
+        json?.data?.ingestionId ??
+        json?.result?.id ??
+        json?.payload?.id ??
+        null;
+  
       if (!newIngestionId) {
-        setError("Ingest did not return an ingestionId");
+        setError("Ingest did not return an ingestionId. See debug pane below.");
         return;
       }
-
+  
       // update url to reflect ingestion
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`);
       // 2) call SEO on ingestion
@@ -109,7 +125,7 @@ export default function AvidiaSeoPage() {
       setGenerating(false);
     }
   }
-
+    
   async function handleGenerateAndSave() {
     setError(null);
     if (ingestionId) {
