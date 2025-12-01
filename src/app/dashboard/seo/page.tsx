@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
  *
  * - Works with ?ingestionId=... OR ?url=...
  * - If ingest returns jobId (202), poll /api/v1/ingest/job/:jobId until ingestion row appears.
- * - Then call /api/v1/seo with ingestionId.
+ * - Then call /api/v1/seo with ingestionId. If persist denied (401), fall back to preview (persist:false).
  */
 
 type AnyObj = Record<string, any>;
@@ -29,6 +29,9 @@ export default function AvidiaSeoPage() {
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
   const [pollingState, setPollingState] = useState<string | null>(null);
 
+  // track whether current seo result is preview (not persisted)
+  const [isPreviewResult, setIsPreviewResult] = useState(false);
+
   useEffect(() => {
     if (!ingestionId) return;
     let cancelled = false;
@@ -49,29 +52,87 @@ export default function AvidiaSeoPage() {
     return () => { cancelled = true; };
   }, [ingestionId]);
 
-  async function generateFromIngestion(id: string) {
+  async function generateFromIngestion(id: string, tryPersist = true) {
     if (generating) return;
     setGenerating(true);
     setError(null);
+    setIsPreviewResult(false);
+
+    // Helper to call SEO endpoint and return parsed JSON + raw
+    async function callSeo(persistFlag: boolean) {
+      try {
+        const res = await fetch("/api/v1/seo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ingestionId: id, persist: persistFlag }),
+        });
+        const json = await res.json().catch(() => null);
+        return { status: res.status, ok: res.ok, json, rawStatus: res.status };
+      } catch (err) {
+        return { status: 0, ok: false, json: null, error: String(err) };
+      }
+    }
+
     try {
-      const res = await fetch("/api/v1/seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingestionId: id, persist: true }),
-      });
-      const json = await res.json();
-      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED_TO_PERSIST") {
-        const redirectPath = typeof window !== "undefined" ? window.location.pathname + window.location.search : "/dashboard/seo";
-        window.location.href = `/sign-in?redirect=${encodeURIComponent(redirectPath)}`;
+      // Attempt persisted generation first if requested
+      if (tryPersist) {
+        const first = await callSeo(true);
+        console.debug("POST /api/v1/seo (persist:true) =>", first);
+        // If success (200), refresh page/insertion
+        if (first.ok) {
+          // persisted result returned; reload ingestion view
+          router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
+          return;
+        }
+
+        // If unauthorized-to-persist or 401, gracefully fall back to preview
+        const code = first.json?.error?.code ?? "";
+        if (first.status === 401 || code === "UNAUTHORIZED_TO_PERSIST" || first.status === 403) {
+          // fallback to preview generation (persist:false)
+          const preview = await callSeo(false);
+          console.debug("POST /api/v1/seo (persist:false) =>", preview);
+          if (preview.ok) {
+            setIsPreviewResult(true);
+            // update job preview state so UI shows generated SEO
+            const previewBody = preview.json;
+            // normalize fields into job-like shape expected by UI
+            const previewJob = {
+              seo_payload: previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
+              description_html: previewBody?.descriptionHtml ?? previewBody?.description_html ?? previewBody?.descriptionHtml ?? previewBody?.description_html,
+              _debug: previewBody?._debug ?? null
+            };
+            setJob(previewJob);
+            // surface a helpful next step
+            setError("Preview generated. Sign in to persist SEO for this ingestion.");
+            return;
+          } else {
+            // preview failed too
+            setError(preview.json?.error?.message ?? `Preview failed: ${preview.status}`);
+            return;
+          }
+        }
+
+        // if other non-ok status, surface the error and show raw debug
+        setError(first.json?.error?.message ?? `SEO generation failed: ${first.status}`);
         return;
       }
-      if (!res.ok) {
-        setError(json?.error?.message || json?.error || `SEO generation failed: ${res.status}`);
-        return;
+
+      // If tryPersist was false, call persist:false directly
+      const result = await callSeo(false);
+      console.debug("POST /api/v1/seo (persist:false) =>", result);
+      if (result.ok) {
+        setIsPreviewResult(true);
+        const previewBody = result.json;
+        const previewJob = {
+          seo_payload: previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
+          description_html: previewBody?.descriptionHtml ?? previewBody?.description_html ?? previewBody
+        };
+        setJob(previewJob);
+      } else {
+        setError(result.json?.error?.message ?? `SEO preview failed: ${result.status}`);
       }
-      router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
-    } catch (err: any) {
-      setError(String(err?.message || err));
+    } catch (e: any) {
+      setError(String(e?.message || e));
     } finally {
       setGenerating(false);
     }
@@ -101,7 +162,7 @@ export default function AvidiaSeoPage() {
     throw new Error("Ingestion did not complete within timeout");
   }
 
-  // Safer ingestion + generate flow
+  // Safer ingestion + generate flow (handles sync id, or jobId via polling)
   async function createIngestionThenGenerate(url: string) {
     if (generating) return;
     if (!url) { setError("Please enter a URL"); return; }
@@ -135,7 +196,8 @@ export default function AvidiaSeoPage() {
 
       if (possibleIngestionId) {
         router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(possibleIngestionId)}`);
-        await generateFromIngestion(possibleIngestionId);
+        // call SEO and let the function handle persist fallback
+        await generateFromIngestion(possibleIngestionId, true);
         return;
       }
 
@@ -161,9 +223,9 @@ export default function AvidiaSeoPage() {
         return;
       }
 
-      // update route and call SEO
+      // update route and call SEO (persist:true by default — will fallback to preview if unauthorized)
       router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`);
-      await generateFromIngestion(newIngestionId);
+      await generateFromIngestion(newIngestionId, true);
     } catch (err: any) {
       setError(String(err?.message || err));
     } finally {
@@ -175,7 +237,7 @@ export default function AvidiaSeoPage() {
   async function handleGenerateAndSave() {
     setError(null);
     if (ingestionId) {
-      await generateFromIngestion(ingestionId);
+      await generateFromIngestion(ingestionId, true);
     } else {
       await createIngestionThenGenerate(urlInput);
     }
@@ -186,7 +248,7 @@ export default function AvidiaSeoPage() {
     const descriptionHtml = job?.description_html ?? job?.descriptionHtml ?? null;
     return (
       <>
-        <h3>Generated SEO (AvidiaSEO)</h3>
+        <h3>Generated SEO (AvidiaSEO){isPreviewResult ? " — Preview (not saved)" : ""}</h3>
         {seoPayload ? (
           <div>
             <div><strong>H1:</strong> {seoPayload.h1 ?? seoPayload.name_best ?? ""}</div>
@@ -194,6 +256,14 @@ export default function AvidiaSeoPage() {
             <div><strong>Meta:</strong> {seoPayload.metaDescription ?? seoPayload.meta_description ?? ""}</div>
             <h4 style={{ marginTop: 8 }}>HTML Description</h4>
             <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere", border: "1px solid #eee", padding: 12, background: "#fff" }} dangerouslySetInnerHTML={{ __html: descriptionHtml || "<em>No description generated yet</em>" }} />
+            {isPreviewResult && (
+              <div style={{ marginTop: 8, color: "#444" }}>
+                <em>This is a preview. Sign in to persist this SEO to the ingestion.</em>
+                <div style={{ marginTop: 6 }}>
+                  <button onClick={() => window.location.href = `/sign-in?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`} className="px-3 py-2 bg-sky-600 text-white rounded">Sign in to Save</button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ color: "#666" }}>No AvidiaSEO generated for this ingestion yet.</div>
