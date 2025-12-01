@@ -1,3 +1,4 @@
+// src/app/dashboard/seo/page.tsx
 "use client";
 
 import { useRef, useState, useEffect } from "react";
@@ -26,115 +27,100 @@ export default function AvidiaSeoPage() {
 
   const [ingestionId, setIngestionId] = useState<string | null>(ingestionIdFromQS);
   const [urlInput, setUrlInput] = useState<string>(urlFromQS);
+
   const [result, setResult] = useState<SeoApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [generatingSource, setGeneratingSource] = useState<"top" | "bottom" | null>(null);
+
+  // which button is running: "top" | "bottom" | null
+  const [generating, setGenerating] = useState<"top" | "bottom" | null>(null);
   const lockRef = useRef(false);
 
   useEffect(() => {
     if (ingestionIdFromQS && ingestionIdFromQS !== ingestionId) setIngestionId(ingestionIdFromQS);
   }, [ingestionIdFromQS, ingestionId]);
 
-  function assistantHtml() {
+  const previewHtml = () => {
     const html = result?.descriptionHtml ?? "";
     if (!result?.ok || !html) return <p className="text-sm text-gray-600">No AvidiaSEO output for this ingestion yet.</p>;
-    return (
-      <div
-        className="rounded border bg-white p-3"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    );
+    return <div className="rounded border bg-white p-3" dangerouslySetInnerHTML={{ __html: html }} />;
+  };
+
+  async function callSeo(body: AnyObj) {
+    const res = await fetch("/api/v1/seo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json: SeoApiResponse = await res.json();
+
+    if (res.status === 401 || json?.error?.code === "UNAUTHORIZED") {
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      router.push(`/sign-in?redirect=${redirect}`);
+      return { ok: false } as SeoApiResponse;
+    }
+    return json;
   }
 
-  async function runSeoWithUrl(source: "top" | "bottom") {
+  async function runFromUrl(source: "top" | "bottom") {
     if (lockRef.current) return;
     if (!urlInput?.trim()) { setError("Please enter a product URL."); return; }
 
     lockRef.current = true;
-    setGeneratingSource(source);
+    setGenerating(source);
     setError(null);
     setResult(null);
 
     try {
-      // Single call: let /api/v1/seo handle ingest + persist + SEO
-      const res = await fetch("/api/v1/seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlInput.trim() }),
-      });
-      const json: SeoApiResponse = await res.json();
-
-      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED") {
-        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-        router.push(`/sign-in?redirect=${redirect}`);
-        return;
-      }
+      const json = await callSeo({ url: urlInput.trim() });
       if (!json.ok) {
-        setError(json?.error?.message || `SEO failed (${res.status})`);
+        setError(json?.error?.message || "SEO failed.");
         return;
       }
-
-      // Save ingestionId returned by SEO API
       if (json.ingestionId) {
         setIngestionId(json.ingestionId);
-        // update URL so a refresh keeps context
         const qs = new URLSearchParams(window.location.search);
         qs.set("ingestionId", json.ingestionId);
         router.replace(`${window.location.pathname}?${qs.toString()}`);
       }
-
       setResult(json);
     } catch (e: any) {
       setError(String(e?.message || e));
     } finally {
-      setGeneratingSource(null);
+      setGenerating(null);
       lockRef.current = false;
     }
   }
 
-  async function runSeoOnExistingIngestion(source: "top" | "bottom") {
+  async function runFromIngestion(source: "top" | "bottom") {
     if (lockRef.current) return;
     if (!ingestionId) { setError("Missing ingestionId."); return; }
 
     lockRef.current = true;
-    setGeneratingSource(source);
+    setGenerating(source);
     setError(null);
 
     try {
-      const res = await fetch("/api/v1/seo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ingestionId }),
-      });
-      const json: SeoApiResponse = await res.json();
-
-      if (res.status === 401 || json?.error?.code === "UNAUTHORIZED") {
-        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
-        router.push(`/sign-in?redirect=${redirect}`);
-        return;
-      }
+      const json = await callSeo({ ingestionId });
       if (!json.ok) {
-        setError(json?.error?.message || `SEO failed (${res.status})`);
+        setError(json?.error?.message || "SEO failed.");
         return;
       }
-
       setResult(json);
     } catch (e: any) {
       setError(String(e?.message || e));
     } finally {
-      setGeneratingSource(null);
+      setGenerating(null);
       lockRef.current = false;
     }
   }
 
   async function handleGenerate(source: "top" | "bottom") {
-    // If we already have an ingestionId, re-run on that. Otherwise, use URL path (single API call).
-    if (ingestionId) return runSeoOnExistingIngestion(source);
-    return runSeoWithUrl(source);
+    if (ingestionId) return runFromIngestion(source);
+    return runFromUrl(source);
   }
 
-  const topLoading = generatingSource === "top";
-  const bottomLoading = generatingSource === "bottom";
+  const topLoading = generating === "top";
+  const bottomLoading = generating === "bottom";
 
   return (
     <div className="p-6">
@@ -150,6 +136,7 @@ export default function AvidiaSeoPage() {
             ← Back to Extract
           </button>
           <h1 className="text-2xl font-semibold">AvidiaSEO</h1>
+          {ingestionId && <span className="text-xs text-gray-600">Ingestion ID: <code>{ingestionId}</code></span>}
         </div>
 
         {error && (
@@ -158,7 +145,7 @@ export default function AvidiaSeoPage() {
           </div>
         )}
 
-        {/* Top card – single form */}
+        {/* Top card – single input */}
         <div className="rounded border bg-white p-4 shadow-sm">
           <h2 className="mb-2 text-lg font-semibold">Generate SEO from URL</h2>
           <p className="mb-4 text-sm text-gray-600">
@@ -189,9 +176,7 @@ export default function AvidiaSeoPage() {
             </button>
           </form>
 
-          <p className="mt-2 text-xs text-gray-500">
-            If you’re not authenticated, you’ll be redirected to sign in.
-          </p>
+          <p className="mt-2 text-xs text-gray-500">If you’re not authenticated, you’ll be redirected to sign in.</p>
         </div>
 
         {/* Bottom card – output + rerun */}
@@ -208,23 +193,22 @@ export default function AvidiaSeoPage() {
             </button>
           </div>
 
-          {/* SEO preview */}
+          {/* Preview */}
           <div className="space-y-4">
-            {assistantHtml()}
-
+            {previewHtml()}
             {result?.ok && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded border p-3">
                   <div className="mb-2 text-sm font-medium">H1</div>
-                  <div className="text-sm">{result?.seoPayload?.h1 ?? ""}</div>
+                  <div className="text-sm">{result?.seoPayload?.h1}</div>
                 </div>
                 <div className="rounded border p-3">
                   <div className="mb-2 text-sm font-medium">Title</div>
-                  <div className="text-sm">{result?.seoPayload?.title ?? ""}</div>
+                  <div className="text-sm">{result?.seoPayload?.title}</div>
                 </div>
                 <div className="rounded border p-3">
                   <div className="mb-2 text-sm font-medium">Meta Description</div>
-                  <div className="text-sm">{result?.seoPayload?.metaDescription ?? ""}</div>
+                  <div className="text-sm">{result?.seoPayload?.metaDescription}</div>
                 </div>
               </div>
             )}
