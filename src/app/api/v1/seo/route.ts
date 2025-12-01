@@ -118,11 +118,8 @@ async function upsertIngestionForUrlIfTenant(sb: any, tenantId: string | null, u
     });
     const text = await res.text().catch(() => "");
     let parsed: any = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      parsed = null;
-    }
+    try { parsed = text ? JSON.parse(text) : null; } catch {}
+    // persist normalized pieces if present
     const updates: any = { updated_at: new Date().toISOString() };
     if (parsed) {
       updates.normalized_payload = parsed;
@@ -173,6 +170,7 @@ export async function POST(req: NextRequest) {
           tenantId = profileData.tenant_id;
         }
       } catch (e) {
+        // supabase service client missing or profile lookup failed; continue defensively
         console.warn("profile lookup failed while resolving tenantId:", String(e));
       }
     }
@@ -199,9 +197,18 @@ export async function POST(req: NextRequest) {
       instructions = null;
     }
 
+    // If no custom instructions were loaded, prepend a strict JSON-only fallback instruction
+    const strictJsonFallback = `You are AvidiaSEO, an automated SEO content generator. Produce a VALID JSON object and ONLY that object as the full response with no commentary or markdown. The JSON must include these keys:
+- description_html: string (full HTML description)
+- seo_payload: object with keys { h1: string, title: string, metaDescription: string }
+- features: array (can be empty)
+If a field cannot be produced, return empty string or empty array, but still return valid JSON. DO NOT include additional top-level keys.`;
+
+    const finalInstructions = instructions ? instructions : strictJsonFallback;
+
     // Assemble prompt from available normalized payload (may be null)
     const { system, user } = assembleSeoPrompt({
-      instructions,
+      instructions: finalInstructions,
       extractData: ingestion?.normalized_payload ?? {},
       manufacturerText: ingestion?.raw_payload?.manufacturer_text ?? ""
     });
