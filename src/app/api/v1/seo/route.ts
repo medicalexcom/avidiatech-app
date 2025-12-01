@@ -197,35 +197,30 @@ export async function POST(req: NextRequest) {
       instructions = null;
     }
 
-    // Strong strict JSON fallback and concrete example to bias the model to return the right shape.
+    // Strong strict JSON fallback and placeholders (no concrete example text to avoid copy/paste bias).
     const strictJsonFallback = `
 You are AvidiaSEO, an automated SEO content generator. MUST FOLLOW THESE RULES:
-1) Output VALID JSON ONLY as the entire response body. No commentary, no markdown, no surrounding text.
+1) Return VALID JSON ONLY as the entire response body. No commentary, no markdown, no surrounding text.
 2) JSON OBJECT MUST contain exactly these top-level keys:
-   - description_html: string (HTML snippet)
+   - description_html: string (full HTML description)
    - seo_payload: object with keys { h1: string, title: string, metaDescription: string }
-   - features: array (each feature is a short string) — may be empty
-3) If you don't have data for a field, return an empty string "" or an empty array [].
-4) Do not include any additional top-level keys.
-5) Example of the exact JSON shape to return (use this as a template — replace values accordingly):
-
+   - features: array (can be empty)
+3) If a field cannot be produced from the provided input, return an empty string "" or an empty array [].
+4) Use ONLY the provided extractData and manufacturerText. Do NOT invent facts or add content not present in the input.
+5) DO NOT COPY OR REUSE ANY SAMPLE VALUES — the snippet below is a TEMPLATE showing shape only. Replace placeholders with content derived from the input.
+TEMPLATE (placeholders only):
 {
-  "description_html": "<p>Example full HTML product description paragraph. Include key details and benefits.</p>",
+  "description_html": "<p>{DESCRIPTION_HTML}</p>",
   "seo_payload": {
-    "h1": "Example H1 Product Name",
-    "title": "Example Title — concise, includes primary keywords",
-    "metaDescription": "Short meta description up to ~160 characters."
+    "h1": "{H1_TEXT}",
+    "title": "{TITLE_TEXT}",
+    "metaDescription": "{META_TEXT}"
   },
-  "features": [
-    "Feature 1",
-    "Feature 2"
-  ]
+  "features": ["{FEATURE_1}", "{FEATURE_2}"]
 }
-
-Return only JSON that matches the example shape.
 `.trim();
 
-    // Use tenant instructions if available; otherwise use strict fallback.
+    // Combine tenant instructions (if present) with strict fallback — place the strict rules AFTER tenant instructions
     const finalInstructions = instructions ? `${instructions}\n\n${strictJsonFallback}` : strictJsonFallback;
 
     // Assemble prompt from available normalized payload (may be null)
@@ -235,33 +230,21 @@ Return only JSON that matches the example shape.
       manufacturerText: ingestion?.raw_payload?.manufacturer_text ?? ""
     });
 
-    // Build an explicit strict system message that includes the example again to maximize compliance.
-    const exampleResponse = {
-      description_html: "<p>Example full HTML product description paragraph. Include key details and benefits.</p>",
-      seo_payload: {
-        h1: "Example H1 Product Name",
-        title: "Example Title — concise, includes primary keywords",
-        metaDescription: "Short meta description up to ~160 characters."
-      },
-      features: ["Feature 1", "Feature 2"]
-    };
-
+    // Build an explicit strict system message that reiterates placeholders and DO NOT COPY rule
     const strictSystem = `${system || "You are AvidiaSEO."}
 
-IMPORTANT: Return ONLY a VALID JSON object with these keys: description_html, seo_payload, features.
-Here is an example of the exact JSON to return (use it as the template):
+IMPORTANT RULES (repeat):
+- Return ONLY a VALID JSON object with keys: description_html, seo_payload, features.
+- Do NOT reuse placeholder example text; placeholders in examples are templates only.
+- Use ONLY the provided extractData and manufacturerText. Do NOT invent facts.
+- If a field is missing in input, return "" or [] (empty array).`;
 
-${JSON.stringify(exampleResponse, null, 2)}
-
-Do not include any explanation, commentary, or markdown.`;
-
-    // Call OpenAI (strict generation expecting JSON). Lower temperature to 0.0 to reduce hallucination.
+    // Call OpenAI (strict generation expecting JSON). Keep temperature low for determinism.
     const model = process.env.OPENAI_SEO_MODEL || "gpt-4o";
     const completion = await callOpenaiChat({
       model,
       messages: [
         { role: "system", content: strictSystem },
-        // keep the user content but it may be long — stringify to preserve structure
         { role: "user", content: JSON.stringify(user) }
       ],
       temperature: 0.0,
@@ -278,20 +261,24 @@ Do not include any explanation, commentary, or markdown.`;
       out = extractJsonFromText(raw);
     }
 
+    // If invalid, return detailed diagnostic (and when SEO_DEBUG enabled include raw and normalized payload)
+    const seoDebug = process.env.SEO_DEBUG === "true" || process.env.SEO_DEBUG === "1";
     if (!out || typeof out !== "object") {
-      // Record raw model output to logs for debugging and return a helpful error
       console.error("SEO model returned non-JSON output:", { rawPreview: String(raw).slice(0, 4000) });
-      return NextResponse.json(
-        {
-          error: {
-            code: "SEO_MODEL_ERROR",
-            message:
-              "Model did not return a valid JSON object. Check server logs for raw model output. To recover quickly, ensure the custom instructions file exists or tune the example/template.",
-            raw,
-          },
+      const resp: any = {
+        error: {
+          code: "SEO_MODEL_ERROR",
+          message:
+            "Model did not return a valid JSON object. Check server logs for raw model output. Ensure custom_gpt_instructions exists and is strict.",
+          raw,
         },
-        { status: 502 }
-      );
+      };
+      if (seoDebug) {
+        resp.debug = {
+          ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
+        };
+      }
+      return NextResponse.json(resp, { status: 502 });
     }
 
     const descriptionHtml = out.description_html ?? "";
@@ -323,7 +310,7 @@ Do not include any explanation, commentary, or markdown.`;
       inserted = insData;
     }
 
-    return NextResponse.json({
+    const responseBody: any = {
       seoId: inserted?.id ?? null,
       tenantId: tenantId,
       ingestionId: ingestion?.id ?? null,
@@ -333,7 +320,18 @@ Do not include any explanation, commentary, or markdown.`;
       features: inserted?.features ?? healed.features,
       autohealLog: inserted?.autoheal_log ?? healed.log,
       createdAt: inserted?.created_at ?? new Date().toISOString()
-    }, { status: 200 });
+    };
+
+    // When debugging, include raw model output and normalized payload for inspection
+    if (seoDebug) {
+      responseBody._debug = {
+        rawModelOutput: raw,
+        parsedModelOutput: out,
+        ingestion_normalized_payload: ingestion?.normalized_payload ?? null,
+      };
+    }
+
+    return NextResponse.json(responseBody, { status: 200 });
 
   } catch (e: any) {
     console.error("POST /api/v1/seo error", e);
