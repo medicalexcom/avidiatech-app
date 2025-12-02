@@ -15,6 +15,9 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
  * - Sends a POST to the ingestion engine (if configured).
  * - Writes job_id on the created row (so pollers can find the row by jobId).
  * - Returns ingestionId (the DB row id) and jobId (same value) so frontend can continue.
+ *
+ * NOTE: this version includes explicit logging of the ingestion-engine response body and status
+ * so you can diagnose whether the engine accepted the job or returned an error.
  */
 
 export async function POST(req: NextRequest) {
@@ -110,7 +113,7 @@ export async function POST(req: NextRequest) {
     const ingestionId = created.id;
     const jobId = ingestionId;
 
-    // Immediately set job_id column on the row so pollers can find it by jobId
+    // Immediately set job_id column on the row so pollers can find it by jobId (if job_id exists)
     try {
       await supabase.from("product_ingestions").update({ job_id: jobId, updated_at: new Date().toISOString() }).eq("id", ingestionId);
     } catch (e) {
@@ -147,10 +150,15 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify(payload),
         });
 
+        // ALWAYS read response body for logging/diagnostics
+        const text = await res.text().catch(() => "");
+        // Detailed log to help diagnose engine acceptance or failure
+        console.info("[ingest] engine call status=", res.status, "body=", text);
+
         if (!res.ok) {
-          const text = await res.text().catch(() => "");
+          // Log warning so operator can see non-200 responses in function logs
           console.warn("ingest engine responded non-OK", res.status, text);
-          // optionally update DB to mark engine call failed
+          // Optionally: you could update DB to mark engine call failed; currently we leave job pending for retry
         }
       } catch (err) {
         console.error("failed to call ingest engine", err);
