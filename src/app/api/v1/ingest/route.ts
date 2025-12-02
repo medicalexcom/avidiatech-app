@@ -12,12 +12,11 @@ const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http:
  * POST /api/v1/ingest
  *
  * - Creates a product_ingestions row immediately (status: pending).
- * - Sends a POST to the ingestion engine (if configured).
- * - Writes job_id on the created row (so pollers can find the row by jobId).
- * - Returns ingestionId (the DB row id) and jobId (same value) so frontend can continue.
+ * - Attempts POST to ingestion engine (if configured).
+ * - Persist engine call diagnostics into product_ingestions.diagnostics so we can inspect attempts.
+ * - Returns ingestionId and jobId (202 Accepted).
  *
- * NOTE: this version includes explicit logging of the ingestion-engine response body and status
- * so you can diagnose whether the engine accepted the job or returned an error.
+ * This is safe to deploy to production for debugging — diagnostics are stored per-row.
  */
 
 export async function POST(req: NextRequest) {
@@ -113,11 +112,10 @@ export async function POST(req: NextRequest) {
     const ingestionId = created.id;
     const jobId = ingestionId;
 
-    // Immediately set job_id column on the row so pollers can find it by jobId (if job_id exists)
+    // Save job_id (if the column exists) - non-fatal
     try {
       await supabase.from("product_ingestions").update({ job_id: jobId, updated_at: new Date().toISOString() }).eq("id", ingestionId);
     } catch (e) {
-      // non-fatal: if update fails, we still return ingestionId
       console.warn("failed to write job_id on ingestion row", e);
     }
 
@@ -136,9 +134,30 @@ export async function POST(req: NextRequest) {
     // Sign payload
     const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
 
+    // Default diagnostics entry we'll save back to the row (so we can inspect from SQL)
+    const engineCallRecordBase = {
+      attempted_at: new Date().toISOString(),
+      engine_url: INGEST_ENGINE_URL || null,
+      attempted_payload_summary: {
+        job_id: jobId,
+        url,
+        options: effectiveOptions,
+        callback_url: `${APP_URL}/api/v1/ingest/callback`,
+      },
+    };
+
     // Post to ingestion engine (async fire-and-forget preferred)
     if (!INGEST_ENGINE_URL) {
       console.warn("INGEST_ENGINE_URL not configured; ingestion engine call skipped");
+      // persist diagnostic that we skipped calling the engine
+      try {
+        await supabase.from("product_ingestions").update({
+          diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, skipped: true, reason: "INGEST_ENGINE_URL not configured" } },
+          updated_at: new Date().toISOString()
+        }).eq("id", ingestionId);
+      } catch (uErr) {
+        console.warn("failed to persist engine_call diagnostics (skipped)", uErr);
+      }
     } else {
       try {
         const res = await fetch(INGEST_ENGINE_URL, {
@@ -152,16 +171,35 @@ export async function POST(req: NextRequest) {
 
         // ALWAYS read response body for logging/diagnostics
         const text = await res.text().catch(() => "");
-        // Detailed log to help diagnose engine acceptance or failure
+
+        // Log to function logs too (helps when Vercel logs are visible)
         console.info("[ingest] engine call status=", res.status, "body=", text);
 
+        // persist engine response into diagnostics so we can inspect via SQL
+        try {
+          await supabase.from("product_ingestions").update({
+            diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, statusCode: res.status, responseBody: text } },
+            updated_at: new Date().toISOString()
+          }).eq("id", ingestionId);
+        } catch (uErr) {
+          console.warn("failed to persist engine_call diagnostics", uErr);
+        }
+
         if (!res.ok) {
-          // Log warning so operator can see non-200 responses in function logs
           console.warn("ingest engine responded non-OK", res.status, text);
-          // Optionally: you could update DB to mark engine call failed; currently we leave job pending for retry
+          // we do not fail the ingest creation: job exists and engine can be retried externally
         }
       } catch (err) {
         console.error("failed to call ingest engine", err);
+        // Persist the error to diagnostics
+        try {
+          await supabase.from("product_ingestions").update({
+            diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, error: String(err) } },
+            updated_at: new Date().toISOString()
+          }).eq("id", ingestionId);
+        } catch (uErr) {
+          console.warn("failed to persist engine_call error diagnostic", uErr);
+        }
         // continue: job exists and engine can be retried externally
       }
     }
