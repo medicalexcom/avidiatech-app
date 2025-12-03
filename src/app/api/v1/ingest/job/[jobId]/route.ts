@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
- * Robust polling: check product_ingestions.id OR product_ingestions.job_id (defensive).
+ * Robust polling: check product_ingestions.id OR product_ingestions.job_id.
  * Returns 202 until normalized_payload exists OR status is not pending/processing.
  */
 
