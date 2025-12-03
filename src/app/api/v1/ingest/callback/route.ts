@@ -1,4 +1,3 @@
-// POST /api/v1/ingest/callback - ingestion engine calls back here with results
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { verifySignature } from "@/lib/ingest/signature";
@@ -7,88 +6,130 @@ const INGEST_SECRET = process.env.INGEST_SECRET || "";
 
 export async function POST(req: NextRequest) {
   try {
-    const sig = req.headers.get("x-avidiatech-signature") || "";
-    const bodyText = await req.text();
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-avidiatech-signature") || "";
 
-    if (!verifySignature(bodyText, sig, INGEST_SECRET)) {
-      console.warn("invalid ingest callback signature");
+    if (!INGEST_SECRET) {
+      console.error("INGEST_SECRET not configured on callback");
+      return NextResponse.json(
+        { error: "server_misconfigured" },
+        { status: 500 }
+      );
+    }
+
+    const valid = verifySignature(rawBody, signature, INGEST_SECRET);
+    if (!valid) {
+      console.warn("ingest callback invalid signature");
       return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
     }
 
-    const body = JSON.parse(bodyText);
-    const { job_id, correlation_id, status, normalized_payload, diagnostics, started_at } = body;
-
-    if (!job_id) {
-      return NextResponse.json({ error: "missing job_id" }, { status: 400 });
-    }
-
-    // Create supabase client lazily and using service role key (throws if misconfigured)
-    let supabase;
-    try {
-      supabase = getServiceSupabaseClient();
-    } catch (err: any) {
-      console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
-    }
-
-    // Build update payload defensively
-    const updatePayload: any = {
-      status: status || "completed",
-      normalized_payload: normalized_payload ?? null,
-      diagnostics: diagnostics ?? null,
-      completed_at: new Date().toISOString(),
+    const body = JSON.parse(rawBody || "{}") as {
+      job_id: string;
+      status?: string;
+      normalized_payload?: any;
+      error?: string | null;
+      diagnostics?: any;
     };
 
-    // If started_at is provided by engine, persist it (useful for debugging)
-    if (started_at) updatePayload.started_at = started_at;
-
-    // Also update attempts_count/last_attempt_at if diagnostics indicate retry count (defensive)
-    try {
-      // read existing attempts_count and diagnostics
-      const { data: existing } = await supabase.from("product_ingestions").select("attempts_count, diagnostics").eq("id", job_id).single();
-      const prevAttempts = (existing?.attempts_count || 0);
-      updatePayload.attempts_count = prevAttempts + 1;
-      updatePayload.last_attempt_at = new Date().toISOString();
-    } catch (e) {
-      // ignore read errors, still proceed with update
+    const jobId = body.job_id;
+    if (!jobId) {
+      return NextResponse.json(
+        { error: "missing job_id" },
+        { status: 400 }
+      );
     }
 
-    const { error } = await supabase.from("product_ingestions").update(updatePayload).eq("id", job_id);
-    if (error) {
-      console.error("failed to update product_ingestions from callback", error);
-      return NextResponse.json({ error: "db_update_failed" }, { status: 500 });
+    const supabase = getServiceSupabaseClient();
+
+    // Load existing row for diagnostics merging, attempts_count, etc.
+    const { data: existing, error: loadErr } = await supabase
+      .from("product_ingestions")
+      .select(
+        "id, status, diagnostics, attempts_count, last_error, created_at"
+      )
+      .or(`id.eq.${jobId},job_id.eq.${jobId}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (loadErr) {
+      console.error(
+        "ingest callback: failed to load product_ingestions",
+        loadErr.message || loadErr
+      );
+      return NextResponse.json(
+        { error: "db_error" },
+        { status: 500 }
+      );
     }
 
-    // Increment usage_counters and write usage_logs based on diagnostics or options.
-    // For demo: increment ingest_calls
-    try {
-      const { data: ing } = await supabase.from("product_ingestions").select("tenant_id").eq("id", job_id).single();
-      const tenant_id = ing?.tenant_id;
-      if (tenant_id) {
-        const month = new Date().toISOString().slice(0, 7);
-        // Upsert: add one ingest call (simple approach). For production, use atomic increment SQL or tx.
-        await supabase.from("usage_counters").upsert(
-          { tenant_id, month, ingest_calls: 1 },
-          { onConflict: "tenant_id" }
-        );
-        await supabase.from("usage_logs").insert({
-          tenant_id,
-          user_id: (body as any).user_id || null,
-          product_ingestion_id: job_id,
-          event: "ingest",
-          payload: { correlation_id },
-          count: 1,
-          created_at: new Date().toISOString(),
-        });
+    if (!existing) {
+      console.warn(
+        "ingest callback: no product_ingestions row found for job_id=",
+        jobId
+      );
+      return NextResponse.json(
+        { error: "not_found" },
+        { status: 404 }
+      );
+    }
+
+    const currentAttempts = existing.attempts_count || 0;
+    const existingDiagnostics = (existing.diagnostics as any) || {};
+
+    const callbackDiagnostics = {
+      ...(existingDiagnostics.ingest_callback || {}),
+      last_callback_at: new Date().toISOString(),
+      status: body.status || "completed",
+      error: body.error || null,
+      raw_diagnostics: body.diagnostics || null,
+    };
+
+    const updatedDiagnostics = {
+      ...existingDiagnostics,
+      ingest_callback: callbackDiagnostics,
+    };
+
+    const nextStatus = body.status || "completed";
+    const updatePatch: any = {
+      diagnostics: updatedDiagnostics,
+      attempts_count: currentAttempts + 1,
+      last_error: body.error || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (body.normalized_payload) {
+      updatePatch.normalized_payload = body.normalized_payload;
+      updatePatch.status = nextStatus;
+      updatePatch.completed_at = new Date().toISOString();
+    } else {
+      // If no normalized_payload, we still record callback but may keep status as-is
+      if (nextStatus !== "completed") {
+        updatePatch.status = nextStatus;
       }
-    } catch (err) {
-      console.warn("usage increment failed", err);
     }
 
-    console.info(`[ingest/callback] processed job_id=${job_id} status=${updatePayload.status}`);
+    const { error: updErr } = await supabase
+      .from("product_ingestions")
+      .update(updatePatch)
+      .eq("id", existing.id);
+
+    if (updErr) {
+      console.error(
+        "ingest callback: failed to update product_ingestions",
+        updErr.message || updErr
+      );
+      return NextResponse.json(
+        { error: "db_update_failed" },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {
-    console.error("ingest callback error:", err);
-    return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
+    console.error("POST /api/v1/ingest/callback error:", err);
+    return NextResponse.json(
+      { error: err?.message || "internal_error" },
+      { status: 500 }
+    );
   }
 }
