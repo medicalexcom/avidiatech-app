@@ -1,3 +1,7 @@
+// Next.js App Router: POST /api/v1/ingest
+// Creates product_ingestions row, sets job_id, calls ingestion engine,
+// and persists engine_call diagnostics.
+
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
@@ -155,7 +159,6 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", ingestionId);
     } catch (e) {
-      // ignore if column doesn't exist yet
       console.warn("job_id update failed (column may not exist yet)", e);
     }
 
@@ -249,6 +252,16 @@ export async function POST(req: NextRequest) {
             res.status,
             text || "<empty>"
           );
+        } else {
+          // Optionally mark as "processing" once engine accepted the job
+          await supabase
+            .from("product_ingestions")
+            .update({
+              status: "processing",
+              started_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", ingestionId);
         }
       } catch (err) {
         console.error("failed to call ingest engine", err);
