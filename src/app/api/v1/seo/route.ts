@@ -1,211 +1,237 @@
-// Next.js App Router: POST /api/v1/ingest
-// This variant ensures every newly created product_ingestions row includes an initial diagnostics object
-// so that you always have a non-null diagnostics value to inspect even if subsequent engine-call writes fail.
-//
-// Behavior:
-// - Creates a product_ingestions row (status: pending) and includes initial diagnostics
-// - Attempts POST to ingestion engine and persists engine_call diagnostics back into the row
-// - Returns ingestionId and jobId (202 Accepted)
-//
-// Safe to deploy: the added diagnostics on insert is minimal and non-destructive.
-
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
-import { signPayload } from "@/lib/ingest/signature";
 
-const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
-const INGEST_SECRET = process.env.INGEST_SECRET || "";
-const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
+const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
+
+async function callSeoModel(normalizedPayload: any, correlationId?: string) {
+  if (!CENTRAL_GPT_URL || !CENTRAL_GPT_KEY) {
+    console.warn(
+      "[api/v1/seo] CENTRAL_GPT_URL/CENTRAL_GPT_KEY not set; returning normalizedPayload as seo output"
+    );
+    // Fallback: treat normalized payload as already SEO-ready
+    return {
+      seo_payload: normalizedPayload,
+      description_html: normalizedPayload?.description_html || "",
+      features: normalizedPayload?.features || null,
+    };
+  }
+
+  const body = {
+    module: "seo",
+    payload: normalizedPayload,
+    correlation_id: correlationId || undefined,
+  };
+
+  const res = await fetch(CENTRAL_GPT_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${CENTRAL_GPT_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  let json: any = null;
+
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // ignore; we'll surface raw body below
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      `central GPT seo error: ${res.status} ${
+        json ? JSON.stringify(json) : text
+      }`
+    );
+  }
+
+  // Expected structure:
+  // {
+  //   seo: {
+  //     title, meta_title, meta_description, h1, ...
+  //   },
+  //   description_html: "<p>...</p>",
+  //   features: [ "..." ]
+  // }
+  const seoPayload = json?.seo ?? json ?? normalizedPayload;
+  const descriptionHtml =
+    json?.description_html ??
+    json?.description ??
+    normalizedPayload?.description_html ??
+    "";
+  const features = json?.features ?? normalizedPayload?.features ?? null;
+
+  return {
+    seo_payload: seoPayload,
+    description_html: descriptionHtml,
+    features,
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    const { userId } =
+      ((safeGetAuth(req as any) as { userId?: string | null }) as {
+        userId?: string | null;
+      }) || {};
 
-    const body = await req.json().catch(() => ({} as any));
-    const url = (body?.url || "").toString();
-    const clientOptions = body?.options || {};
-    const fullExtract = !!body?.fullExtract;
-    const export_type = body?.export_type || "JSON";
-    const correlation_id = body?.correlationId || `corr_${Date.now()}`;
+    if (!userId) {
+      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    }
 
-    if (!url) return NextResponse.json({ error: "missing url" }, { status: 400 });
+    const body = (await req.json().catch(() => ({}))) as any;
+    const ingestionId = body?.ingestionId?.toString() || "";
+    if (!ingestionId) {
+      return NextResponse.json(
+        { error: "missing_ingestionId" },
+        { status: 400 }
+      );
+    }
 
-    // create supabase client (service role)
-    let supabase: any;
+    const supabase = getServiceSupabaseClient();
+
+    // Load ingestion row
+    const { data: ingestion, error: loadErr } = await supabase
+      .from("product_ingestions")
+      .select(
+        "id, tenant_id, user_id, normalized_payload, seo_payload, description_html, features, correlation_id, diagnostics, status"
+      )
+      .eq("id", ingestionId)
+      .maybeSingle();
+
+    if (loadErr) {
+      console.error(
+        "[api/v1/seo] failed to load product_ingestions",
+        loadErr.message || loadErr
+      );
+      return NextResponse.json(
+        { error: "db_error" },
+        { status: 500 }
+      );
+    }
+
+    if (!ingestion) {
+      return NextResponse.json(
+        { error: "ingestion_not_found" },
+        { status: 404 }
+      );
+    }
+
+    // (Optional) tenant/user guard: only owner of ingestion can run SEO
+    if (ingestion.user_id && ingestion.user_id !== userId) {
+      return NextResponse.json(
+        { error: "forbidden" },
+        { status: 403 }
+      );
+    }
+
+    if (!ingestion.normalized_payload) {
+      return NextResponse.json(
+        { error: "ingestion_not_ready" },
+        { status: 409 }
+      );
+    }
+
+    // If we already have SEO, you can choose to:
+    // - return existing, or
+    // - regenerate. Here we regenerate on demand.
+    const normalized = ingestion.normalized_payload as any;
+
+    const startedAt = new Date().toISOString();
+
+    let seoResult: {
+      seo_payload: any;
+      description_html: string;
+      features: any;
+    };
+
     try {
-      supabase = getServiceSupabaseClient();
+      seoResult = await callSeoModel(
+        normalized,
+        ingestion.correlation_id || undefined
+      );
     } catch (err: any) {
-      console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
+      console.error("[api/v1/seo] seo model error:", err?.message || err);
+
+      const existingDiagnostics = (ingestion.diagnostics as any) || {};
+      const updatedDiagnostics = {
+        ...existingDiagnostics,
+        seo_call: {
+          ...(existingDiagnostics.seo_call || {}),
+          last_error: String(err?.message || err),
+          last_error_at: new Date().toISOString(),
+          last_started_at: startedAt,
+        },
+      };
+
+      await supabase
+        .from("product_ingestions")
+        .update({
+          diagnostics: updatedDiagnostics,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", ingestion.id);
+
+      return NextResponse.json(
+        { error: "seo_generation_failed" },
+        { status: 500 }
+      );
     }
 
-    // Resolve profile / tenant
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, tenant_id, role")
-      .eq("user_id", userId)
-      .limit(1)
-      .single();
-
-    if (profileError) {
-      console.warn("profile lookup failed", profileError);
-      return NextResponse.json({ error: "profile lookup failed" }, { status: 500 });
-    }
-
-    const tenant_id = profileData?.tenant_id || null;
-    const role = profileData?.role || "user";
-
-    // Usage/quota check (unless owner)
-    if (role !== "owner") {
-      const { data: counters } = await supabase.from("usage_counters").select("*").eq("tenant_id", tenant_id).limit(1).single();
-      if (counters && typeof counters.ingest_calls === "number") {
-        const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT ? parseInt(process.env.DEFAULT_MONTHLY_INGEST_LIMIT) : 1000;
-        if (counters.ingest_calls >= monthlyLimit) {
-          return NextResponse.json({ error: "quota_exceeded" }, { status: 402 });
-        }
-      }
-    }
-
-    // Build effective options
-    const effectiveOptions = fullExtract
-      ? { includeSeo: true, includeSpecs: true, includeDocs: true, includeVariants: true }
-      : {
-          includeSeo: !!clientOptions.includeSeo,
-          includeSpecs: !!clientOptions.includeSpecs,
-          includeDocs: !!clientOptions.includeDocs,
-          includeVariants: !!clientOptions.includeVariants,
-        };
-
-    const flags = {
-      full_extract: fullExtract,
-      includeSeo: !!effectiveOptions.includeSeo,
-      includeSpecs: !!effectiveOptions.includeSpecs,
-      includeDocs: !!effectiveOptions.includeDocs,
-      includeVariants: !!effectiveOptions.includeVariants,
-    };
-
-    // Initial diagnostics object (ensures diagnostics is non-null on insert)
-    const initialDiagnostics = {
-      created_by: "ingest-route",
-      created_at: new Date().toISOString(),
-      engine_call: null, // will be updated after engine attempt
-    };
-
-    // Create product_ingestions row (status: pending) with initial diagnostics
-    const insert = {
-      tenant_id,
-      user_id: userId,
-      source_url: url,
-      status: "pending",
-      options: effectiveOptions,
-      flags,
-      export_type,
-      correlation_id,
-      diagnostics: initialDiagnostics,
-      created_at: new Date().toISOString(),
-    };
-
-    const { data: created, error: insertError } = await supabase.from("product_ingestions").insert(insert).select("*").single();
-    if (insertError || !created) {
-      console.error("failed to create ingestion record", insertError);
-      return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
-    }
-
-    // Use created id as jobId
-    const ingestionId = created.id;
-    const jobId = ingestionId;
-
-    // Try to save job_id if table has column (non-fatal)
-    try {
-      await supabase.from("product_ingestions").update({ job_id: jobId, updated_at: new Date().toISOString() }).eq("id", ingestionId);
-    } catch (e) {
-      // ignore if column missing or update fails
-    }
-
-    // Prepare payload to ingestion engine
-    const payload = {
-      correlation_id,
-      job_id: jobId,
-      tenant_id,
-      url,
-      options: effectiveOptions,
-      export_type,
-      callback_url: `${APP_URL}/api/v1/ingest/callback`,
-      action: "ingest",
-    };
-
-    const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
-
-    const engineCallRecordBase = {
-      attempted_at: new Date().toISOString(),
-      engine_url: INGEST_ENGINE_URL || null,
-      attempted_payload_summary: {
-        job_id: jobId,
-        url,
-        options: effectiveOptions,
-        callback_url: `${APP_URL}/api/v1/ingest/callback`,
+    const existingDiagnostics = (ingestion.diagnostics as any) || {};
+    const updatedDiagnostics = {
+      ...existingDiagnostics,
+      seo_call: {
+        ...(existingDiagnostics.seo_call || {}),
+        last_success_at: new Date().toISOString(),
+        last_started_at: startedAt,
       },
     };
 
-    // Attempt to call ingestion engine and persist diagnostics
-    if (!INGEST_ENGINE_URL) {
-      console.warn("INGEST_ENGINE_URL not configured; ingestion engine call skipped");
-      try {
-        await supabase.from("product_ingestions").update({
-          diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, skipped: true, reason: "INGEST_ENGINE_URL not configured" } },
-          updated_at: new Date().toISOString(),
-        }).eq("id", ingestionId);
-      } catch (uErr) {
-        console.warn("failed to persist engine_call diagnostics (skipped)", uErr);
-      }
-    } else {
-      try {
-        const res = await fetch(INGEST_ENGINE_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-avidiatech-signature": signature,
-          },
-          body: JSON.stringify(payload),
-        });
+    // IMPORTANT: we do NOT flip `status` back to "pending".
+    // Ingestion status stays whatever it was (usually 'completed').
+    const { error: updErr } = await supabase
+      .from("product_ingestions")
+      .update({
+        seo_payload: seoResult.seo_payload,
+        description_html: seoResult.description_html,
+        features: seoResult.features,
+        seo_generated_at: new Date().toISOString(),
+        diagnostics: updatedDiagnostics,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ingestion.id);
 
-        const text = await res.text().catch(() => "");
-
-        // Log for function logs
-        console.info("[ingest] engine call status=", res.status, "body=", text);
-
-        // Persist the engine response into diagnostics
-        try {
-          await supabase.from("product_ingestions").update({
-            diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, statusCode: res.status, responseBody: text } },
-            updated_at: new Date().toISOString(),
-          }).eq("id", ingestionId);
-        } catch (uErr) {
-          console.warn("failed to persist engine_call diagnostics", uErr);
-        }
-
-        if (!res.ok) {
-          console.warn("ingest engine responded non-OK", res.status, text);
-        }
-      } catch (err) {
-        console.error("failed to call ingest engine", err);
-        try {
-          await supabase.from("product_ingestions").update({
-            diagnostics: { ...(created.diagnostics || {}), engine_call: { ...engineCallRecordBase, error: String(err) } },
-            updated_at: new Date().toISOString(),
-          }).eq("id", ingestionId);
-        } catch (uErr) {
-          console.warn("failed to persist engine_call error diagnostic", uErr);
-        }
-      }
+    if (updErr) {
+      console.error(
+        "[api/v1/seo] failed to update product_ingestions with seo",
+        updErr.message || updErr
+      );
+      return NextResponse.json(
+        { error: "db_update_failed" },
+        { status: 500 }
+      );
     }
 
-    // Return ingestionId and jobId for frontend
-    return NextResponse.json({ ingestionId, jobId, status: "accepted" }, { status: 202 });
+    return NextResponse.json(
+      {
+        ingestionId: ingestion.id,
+        seo_payload: seoResult.seo_payload,
+        description_html: seoResult.description_html,
+        features: seoResult.features,
+      },
+      { status: 200 }
+    );
   } catch (err: any) {
-    console.error("POST /api/v1/ingest error:", err);
-    return NextResponse.json({ error: err.message || "internal_error" }, { status: 500 });
+    console.error("POST /api/v1/seo error:", err);
+    return NextResponse.json(
+      { error: err?.message || "internal_error" },
+      { status: 500 }
+    );
   }
 }
