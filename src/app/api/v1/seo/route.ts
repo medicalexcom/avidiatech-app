@@ -1,30 +1,11 @@
 // src/app/api/v1/seo/route.ts
 
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { safeGetAuth } from "@/lib/clerkSafe";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 
-// Central GPT config
 const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
 const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
-
-// Supabase service-role client (bypasses RLS for server-side updates)
-function getSupabaseServiceClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceKey) {
-    throw new Error(
-      "supabase_service_not_configured: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing"
-    );
-  }
-
-  return createClient(url, serviceKey, {
-    auth: {
-      persistSession: false,
-    },
-  });
-}
 
 async function callSeoModel(
   normalizedPayload: any,
@@ -128,7 +109,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceClient();
+    const supabase = getServiceSupabaseClient();
 
     // 3) Load ingestion row
     const { data: ingestion, error: loadErr } = await supabase
@@ -156,14 +137,6 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
-
-    // Optional: enforce ownership (commented for now; service client bypasses RLS)
-    // if (ingestion.user_id && ingestion.user_id !== userId) {
-    //   return NextResponse.json(
-    //     { error: "forbidden_ingestion" },
-    //     { status: 403 }
-    //   );
-    // }
 
     if (!ingestion.normalized_payload) {
       return NextResponse.json(
@@ -210,7 +183,7 @@ export async function POST(req: NextRequest) {
     };
 
     // 6) Persist SEO into product_ingestions
-    const { error: updErr } = await supabase
+    const { data: updatedRows, error: updErr } = await supabase
       .from("product_ingestions")
       .update({
         seo_payload: seoResult.seo_payload,
@@ -220,7 +193,9 @@ export async function POST(req: NextRequest) {
         diagnostics: updatedDiagnostics,
         updated_at: finishedAt,
       })
-      .eq("id", ingestion.id);
+      .eq("id", ingestion.id)
+      .select("id, seo_payload, description_html, features")
+      .maybeSingle();
 
     if (updErr) {
       console.error("[api/v1/seo] failed to update ingestion with SEO", {
@@ -228,18 +203,28 @@ export async function POST(req: NextRequest) {
         error: updErr,
       });
       return NextResponse.json(
-        { error: "seo_persist_failed" },
+        { error: "seo_persist_failed", detail: updErr.message || updErr },
         { status: 500 }
       );
     }
+
+    console.log("[api/v1/seo] SEO persisted", {
+      ingestionId: ingestion.id,
+      hasSeo: !!updatedRows?.seo_payload,
+      hasDescription: !!updatedRows?.description_html,
+      featuresCount: Array.isArray(updatedRows?.features)
+        ? updatedRows?.features.length
+        : null,
+    });
 
     // 7) Return SEO to frontend
     return NextResponse.json(
       {
         ingestionId: ingestion.id,
-        seo_payload: seoResult.seo_payload,
-        description_html: seoResult.description_html,
-        features: seoResult.features,
+        seo_payload: updatedRows?.seo_payload ?? seoResult.seo_payload,
+        description_html:
+          updatedRows?.description_html ?? seoResult.description_html,
+        features: updatedRows?.features ?? seoResult.features,
       },
       { status: 200 }
     );
