@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 /**
@@ -32,25 +32,40 @@ export default function AvidiaSeoPage() {
   // track whether current seo result is preview (not persisted)
   const [isPreviewResult, setIsPreviewResult] = useState(false);
 
+  const fetchIngestionData = useCallback(async (
+    id: string,
+    isCancelled: () => boolean = () => false
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`
+        );
+      }
+      if (!isCancelled()) {
+        setJob(json);
+      }
+    } catch (err: any) {
+      if (!isCancelled()) {
+        setError(String(err?.message || err));
+      }
+    } finally {
+      if (!isCancelled()) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!ingestionId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    (async () => {
-      try {
-        const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
-        if (!cancelled) setJob(json);
-      } catch (err: any) {
-        if (!cancelled) setError(String(err?.message || err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    fetchIngestionData(ingestionId, () => cancelled);
     return () => { cancelled = true; };
-  }, [ingestionId]);
+  }, [fetchIngestionData, ingestionId]);
 
   async function generateFromIngestion(id: string, tryPersist = true) {
     if (generating) return;
@@ -76,6 +91,23 @@ export default function AvidiaSeoPage() {
       if (tryPersist) {
         const first = await callSeo(true);
         if (first.ok) {
+          setIsPreviewResult(false);
+          const seoPayload = first.json?.seo_payload ?? first.json?.seoPayload ?? null;
+          const descriptionHtml =
+            first.json?.description_html ??
+            first.json?.descriptionHtml ??
+            null;
+          const features = first.json?.features ?? null;
+          if (seoPayload || descriptionHtml || features) {
+            setJob((prev) => ({
+              ...(prev || {}),
+              seo_payload: seoPayload ?? (prev as AnyObj)?.seo_payload ?? null,
+              description_html:
+                descriptionHtml ?? (prev as AnyObj)?.description_html ?? null,
+              features: features ?? (prev as AnyObj)?.features ?? null,
+            }));
+          }
+          await fetchIngestionData(id);
           router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
           return;
         }
