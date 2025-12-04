@@ -24,6 +24,7 @@ export default function AvidiaSeoPage() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
     "idle"
@@ -41,6 +42,7 @@ export default function AvidiaSeoPage() {
     async (id: string, isCancelled: () => boolean = () => false) => {
       setLoading(true);
       setError(null);
+      setStatusMessage("Refreshing ingestion");
       try {
         const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
         const json = await res.json();
@@ -51,10 +53,12 @@ export default function AvidiaSeoPage() {
         }
         if (!isCancelled()) {
           setJob(json);
+          setStatusMessage("Ingestion ready");
         }
       } catch (err: any) {
         if (!isCancelled()) {
           setError(String(err?.message || err));
+          setStatusMessage(null);
         }
       } finally {
         if (!isCancelled()) {
@@ -68,6 +72,7 @@ export default function AvidiaSeoPage() {
   useEffect(() => {
     if (!ingestionId) return;
     let cancelled = false;
+    setStatusMessage("Loading ingestion");
     fetchIngestionData(ingestionId, () => cancelled);
     return () => {
       cancelled = true;
@@ -79,6 +84,7 @@ export default function AvidiaSeoPage() {
     setGenerating(true);
     setError(null);
     setIsPreviewResult(false);
+    setStatusMessage("Generating AvidiaSEO");
 
     async function callSeo(persistFlag: boolean) {
       try {
@@ -113,6 +119,7 @@ export default function AvidiaSeoPage() {
                 descriptionHtml ?? (prev as AnyObj)?.description_html ?? null,
               features: features ?? (prev as AnyObj)?.features ?? null,
             }));
+            setStatusMessage("SEO persisted to Supabase");
           }
           await fetchIngestionData(id);
           router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
@@ -126,6 +133,7 @@ export default function AvidiaSeoPage() {
             setIsPreviewResult(true);
             const previewBody = preview.json;
             const previewJob = {
+              ...(job || {}),
               seo_payload:
                 previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
               description_html:
@@ -139,11 +147,13 @@ export default function AvidiaSeoPage() {
             setError(
               "Preview generated. Sign in to persist SEO for this ingestion."
             );
+            setStatusMessage("Preview SEO ready");
             return;
           } else {
             setError(
               preview.json?.error?.message ?? `Preview failed: ${preview.status}`
             );
+            setStatusMessage(null);
             return;
           }
         }
@@ -151,6 +161,7 @@ export default function AvidiaSeoPage() {
         setError(
           first.json?.error?.message ?? `SEO generation failed: ${first.status}`
         );
+        setStatusMessage(null);
         return;
       }
 
@@ -159,16 +170,20 @@ export default function AvidiaSeoPage() {
         setIsPreviewResult(true);
         const previewBody = result.json;
         const previewJob = {
+          ...(job || {}),
           seo_payload: previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
           description_html:
             previewBody?.descriptionHtml ?? previewBody?.description_html ?? previewBody,
         };
         setJob(previewJob);
+        setStatusMessage("Preview SEO ready");
       } else {
         setError(result.json?.error?.message ?? `SEO preview failed: ${result.status}`);
+        setStatusMessage(null);
       }
     } catch (e: any) {
       setError(String(e?.message || e));
+      setStatusMessage(null);
     } finally {
       setGenerating(false);
     }
@@ -182,6 +197,7 @@ export default function AvidiaSeoPage() {
   ) {
     const start = Date.now();
     setPollingState(`polling job ${jobId}`);
+    setStatusMessage("Scraping & normalizing");
     while (Date.now() - start < timeoutMs) {
       try {
         const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
@@ -189,6 +205,7 @@ export default function AvidiaSeoPage() {
         if (res.status === 200) {
           const j = await res.json();
           setPollingState(`completed: ingestionId=${j.ingestionId}`);
+          setStatusMessage("Ingestion completed");
           return j; // { ingestionId, normalized_payload, status }
         }
         // still pending
@@ -197,10 +214,12 @@ export default function AvidiaSeoPage() {
       } catch (e) {
         console.warn("pollForIngestion error", e);
         setPollingState(`error polling: ${String(e)}`);
+        setStatusMessage(null);
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
     setPollingState("timeout");
+    setStatusMessage(null);
     throw new Error("Ingestion did not complete within timeout");
   }
 
@@ -215,6 +234,7 @@ export default function AvidiaSeoPage() {
     setError(null);
     setRawIngestResponse(null);
     setPollingState(null);
+    setStatusMessage("Submitting ingestion");
     try {
       // 1) create ingestion (persist:true) and request SEO extraction
       const res = await fetch("/api/v1/ingest", {
@@ -229,6 +249,7 @@ export default function AvidiaSeoPage() {
       const json = await res.json().catch(() => null);
       console.debug("POST /api/v1/ingest response:", res.status, json);
       setRawIngestResponse({ status: res.status, body: json });
+      setStatusMessage("Ingestion accepted; waiting for callback");
 
       if (!res.ok) {
         setError(
@@ -433,6 +454,11 @@ export default function AvidiaSeoPage() {
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               Live status
             </span>
+            {statusMessage && (
+              <span className="px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm text-slate-700">
+                {statusMessage}
+              </span>
+            )}
             {ingestionId && (
               <span className="px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-medium">
                 Ingestion {ingestionId.slice(0, 8)}…
