@@ -90,6 +90,7 @@ async function callSeoModel(
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("[api/v1/seo] POST called");
     // 1) Auth (Clerk)
     const auth = safeGetAuth(req as any) as { userId?: string | null } | null;
     const userId = auth?.userId ?? null;
