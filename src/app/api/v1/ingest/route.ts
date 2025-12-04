@@ -1,7 +1,3 @@
-// Next.js App Router: POST /api/v1/ingest
-// Creates product_ingestions row, sets job_id, calls ingestion engine,
-// and persists engine_call diagnostics.
-
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
@@ -25,6 +21,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
 
+    // Hard fail if the ingest engine is not configured.
+    if (!INGEST_ENGINE_URL || !INGEST_SECRET) {
+      console.error(
+        "INGEST_ENGINE_URL or INGEST_SECRET not configured. Cannot start ingestion."
+      );
+      return NextResponse.json(
+        {
+          error: "ingest_engine_not_configured",
+          detail:
+            "INGEST_ENGINE_URL and INGEST_SECRET must be set in the server environment.",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = (await req.json().catch(() => ({}))) as any;
     const url = (body?.url || "").toString();
     const clientOptions = body?.options || {};
@@ -43,7 +54,7 @@ export async function POST(req: NextRequest) {
     } catch (err: any) {
       console.error("Supabase configuration missing", err?.message || err);
       return NextResponse.json(
-        { error: "server misconfigured: missing Supabase envs" },
+        { error: "server_misconfigured_supabase" },
         { status: 500 }
       );
     }
@@ -59,7 +70,7 @@ export async function POST(req: NextRequest) {
     if (profileError) {
       console.warn("profile lookup failed", profileError);
       return NextResponse.json(
-        { error: "profile lookup failed" },
+        { error: "profile_lookup_failed" },
         { status: 500 }
       );
     }
@@ -148,21 +159,27 @@ export async function POST(req: NextRequest) {
 
     const ingestionId = created.id;
     const jobId = ingestionId;
+    const callbackUrl = `${APP_URL}/api/v1/ingest/callback`;
 
     // Best-effort save of job_id if column exists
     try {
-      await supabase
+      const { error: jobErr } = await supabase
         .from("product_ingestions")
         .update({
           job_id: jobId,
           updated_at: new Date().toISOString(),
         })
         .eq("id", ingestionId);
-    } catch (e) {
-      console.warn("job_id update failed (column may not exist yet)", e);
-    }
 
-    const callbackUrl = `${APP_URL}/api/v1/ingest/callback`;
+      if (jobErr) {
+        console.warn(
+          "job_id update failed (column may not exist or RLS issue)",
+          jobErr.message || jobErr
+        );
+      }
+    } catch (e) {
+      console.warn("job_id update threw", e);
+    }
 
     const payload = {
       correlation_id,
@@ -175,11 +192,9 @@ export async function POST(req: NextRequest) {
       action: "ingest",
     };
 
-    const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
-
-    const engineCallRecordBase = {
+    let engineDiagnostics: any = {
       attempted_at: new Date().toISOString(),
-      engine_url: INGEST_ENGINE_URL || null,
+      engine_url: INGEST_ENGINE_URL,
       attempted_payload_summary: {
         job_id: jobId,
         url,
@@ -188,104 +203,83 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    if (!INGEST_ENGINE_URL) {
-      console.warn(
-        "INGEST_ENGINE_URL not configured; ingestion engine call skipped"
-      );
-      try {
-        await supabase
+    try {
+      const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
+
+      const res = await fetch(INGEST_ENGINE_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-avidiatech-signature": signature,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text().catch(() => "");
+      console.info("[ingest] engine call status=", res.status, "body=", text);
+
+      engineDiagnostics = {
+        ...engineDiagnostics,
+        statusCode: res.status,
+        responseBody: text,
+      };
+
+      if (!res.ok) {
+        console.warn(
+          "ingest engine responded non-OK",
+          res.status,
+          text || "<empty>"
+        );
+      } else {
+        // mark as processing if engine accepted the job
+        const { error: statusErr } = await supabase
           .from("product_ingestions")
           .update({
-            diagnostics: {
-              ...(created.diagnostics || {}),
-              engine_call: {
-                ...engineCallRecordBase,
-                skipped: true,
-                reason: "INGEST_ENGINE_URL not configured",
-              },
-            },
+            status: "processing",
+            started_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
           .eq("id", ingestionId);
-      } catch (uErr) {
-        console.warn(
-          "failed to persist engine_call diagnostics (skipped)",
-          uErr
-        );
-      }
-    } else {
-      try {
-        const res = await fetch(INGEST_ENGINE_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-avidiatech-signature": signature,
-          },
-          body: JSON.stringify(payload),
-        });
 
-        const text = await res.text().catch(() => "");
-        console.info("[ingest] engine call status=", res.status, "body=", text);
-
-        try {
-          await supabase
-            .from("product_ingestions")
-            .update({
-              diagnostics: {
-                ...(created.diagnostics || {}),
-                engine_call: {
-                  ...engineCallRecordBase,
-                  statusCode: res.status,
-                  responseBody: text,
-                },
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", ingestionId);
-        } catch (uErr) {
-          console.warn("failed to persist engine_call diagnostics", uErr);
-        }
-
-        if (!res.ok) {
+        if (statusErr) {
           console.warn(
-            "ingest engine responded non-OK",
-            res.status,
-            text || "<empty>"
-          );
-        } else {
-          // Optionally mark as "processing" once engine accepted the job
-          await supabase
-            .from("product_ingestions")
-            .update({
-              status: "processing",
-              started_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", ingestionId);
-        }
-      } catch (err) {
-        console.error("failed to call ingest engine", err);
-        try {
-          await supabase
-            .from("product_ingestions")
-            .update({
-              diagnostics: {
-                ...(created.diagnostics || {}),
-                engine_call: {
-                  ...engineCallRecordBase,
-                  error: String(err),
-                },
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", ingestionId);
-        } catch (uErr) {
-          console.warn(
-            "failed to persist engine_call error diagnostic",
-            uErr
+            "failed to update status to processing",
+            statusErr.message || statusErr
           );
         }
       }
+    } catch (err) {
+      console.error("failed to call ingest engine", err);
+      engineDiagnostics = {
+        ...engineDiagnostics,
+        error: String(err),
+      };
+    }
+
+    // Persist engine_call diagnostics — if THIS fails, we now return 500
+    const { error: diagErr } = await supabase
+      .from("product_ingestions")
+      .update({
+        diagnostics: {
+          ...(created.diagnostics || {}),
+          engine_call: engineDiagnostics,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", ingestionId);
+
+    if (diagErr) {
+      console.error(
+        "failed to persist engine_call diagnostics",
+        diagErr.message || diagErr
+      );
+      return NextResponse.json(
+        {
+          error: "diagnostics_update_failed",
+          detail: diagErr.message || String(diagErr),
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(
