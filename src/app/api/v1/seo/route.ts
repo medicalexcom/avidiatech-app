@@ -9,14 +9,21 @@ const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
  * Call the central GPT / custom_gpt_instructions engine to generate SEO
  * for a given normalized ingestion payload.
  *
- * We no longer silently fall back to normalizedPayload. If CENTRAL_GPT
- * is not configured or returns an error, we fail loudly so you notice
- * and fix config instead of shipping stub SEO.
+ * If CENTRAL_GPT is not configured or returns an error, we fail loudly
+ * so you see it in Vercel logs / UI instead of silently shipping stub SEO.
  */
-async function callSeoModel(normalizedPayload: any, correlationId?: string) {
+async function callSeoModel(
+  normalizedPayload: any,
+  correlationId?: string,
+  sourceUrl?: string
+): Promise<{
+  seo_payload: any;
+  description_html: string | null;
+  features: string[] | null;
+}> {
   if (!CENTRAL_GPT_URL || !CENTRAL_GPT_KEY) {
     throw new Error(
-      "central_gpt_not_configured: CENTRAL_GPT_URL/CENTRAL_GPT_KEY must be set for AvidiaSEO to use custom_gpt_instructions."
+      "central_gpt_not_configured: CENTRAL_GPT_URL / CENTRAL_GPT_KEY missing"
     );
   }
 
@@ -36,36 +43,50 @@ async function callSeoModel(normalizedPayload: any, correlationId?: string) {
   });
 
   const text = await res.text();
-  let json: any = null;
-
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    // leave json = null, we'll surface raw text in error if needed
-  }
 
   if (!res.ok) {
+    console.error(
+      "[api/v1/seo] central GPT responded with non-200",
+      res.status,
+      text
+    );
     throw new Error(
-      `central_gpt_seo_error: ${res.status} ${
-        json ? JSON.stringify(json) : text
-      }`
+      `central_gpt_seo_error: ${res.status} ${text || "(empty body)"}`
     );
   }
 
-  // Expected structure from central GPT:
-  // {
-  //   seo: { h1, pageTitle, metaDescription, seoShortDescription, ... },
-  //   description_html: "<p>...</p>",
-  //   features: [ "..." ],
-  //   normalizedPayload?: {...}
-  // }
-  const seoPayload = json?.seo ?? json ?? normalizedPayload;
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch (err: any) {
+    console.error(
+      "[api/v1/seo] central GPT returned non-JSON body",
+      err?.message || err,
+      "raw=",
+      text.slice(0, 500)
+    );
+    throw new Error("central_gpt_invalid_json");
+  }
+
+  // Normalize the shape from central-gpt
+  const normalized = normalizedPayload || {};
+  const seoPayload = json?.seo || normalized?.seo || {};
   const descriptionHtml =
-    json?.description_html ??
-    json?.description ??
-    normalizedPayload?.description_html ??
-    "";
-  const features = json?.features ?? normalizedPayload?.features ?? null;
+    json?.description_html ||
+    json?.description ||
+    normalized?.description_html ||
+    null;
+  const features = Array.isArray(json?.features)
+    ? json.features
+    : normalized?.features ?? null;
+
+  // Tiny debug log so we can see that something came back
+  console.log("[api/v1/seo] central GPT SEO summary", {
+    hasSeo: !!seoPayload,
+    hasDescription: !!descriptionHtml,
+    featuresCount: Array.isArray(features) ? features.length : null,
+    sourceUrl: sourceUrl || null,
+  });
 
   return {
     seo_payload: seoPayload,
@@ -76,6 +97,7 @@ async function callSeoModel(normalizedPayload: any, correlationId?: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 1) Auth via Clerk
     const { userId } =
       ((safeGetAuth(req as any) as { userId?: string | null }) as {
         userId?: string | null;
@@ -85,6 +107,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
 
+    // 2) Grab ingestionId from JSON body
     const body = (await req.json().catch(() => ({}))) as any;
     const ingestionId = body?.ingestionId?.toString() || "";
     if (!ingestionId) {
@@ -96,22 +119,22 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServiceSupabaseClient();
 
-    // Load ingestion row
+    // 3) Load ingestion row
     const { data: ingestion, error: loadErr } = await supabase
       .from("product_ingestions")
       .select(
-        "id, tenant_id, user_id, normalized_payload, seo_payload, description_html, features, correlation_id, diagnostics, status"
+        "id, tenant_id, user_id, source_url, normalized_payload, seo_payload, description_html, features, correlation_id, diagnostics, status"
       )
       .eq("id", ingestionId)
       .maybeSingle();
 
     if (loadErr) {
-      console.error(
-        "[api/v1/seo] failed to load product_ingestions",
-        loadErr.message || loadErr
-      );
+      console.error("[api/v1/seo] failed to load ingestion", {
+        ingestionId,
+        error: loadErr,
+      });
       return NextResponse.json(
-        { error: "db_error" },
+        { error: "ingestion_load_failed" },
         { status: 500 }
       );
     }
@@ -123,13 +146,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // (Optional) tenant/user guard: only owner of ingestion can run SEO
-    if (ingestion.user_id && ingestion.user_id !== userId) {
-      return NextResponse.json(
-        { error: "forbidden" },
-        { status: 403 }
-      );
-    }
+    // Optionally ensure the ingestion belongs to this user.
+    // If you want strict ownership, uncomment this:
+    // if (ingestion.user_id && ingestion.user_id !== userId) {
+    //   return NextResponse.json(
+    //     { error: "forbidden_ingestion" },
+    //     { status: 403 }
+    //   );
+    // }
 
     if (!ingestion.normalized_payload) {
       return NextResponse.json(
@@ -141,89 +165,71 @@ export async function POST(req: NextRequest) {
     const normalized = ingestion.normalized_payload as any;
     const startedAt = new Date().toISOString();
 
+    // 4) Call central GPT SEO engine
     let seoResult: {
       seo_payload: any;
-      description_html: string;
-      features: any;
+      description_html: string | null;
+      features: string[] | null;
     };
 
     try {
       seoResult = await callSeoModel(
         normalized,
-        ingestion.correlation_id || undefined
+        ingestion.correlation_id || undefined,
+        ingestion.source_url || undefined
       );
     } catch (err: any) {
       console.error("[api/v1/seo] seo model error:", err?.message || err);
-
-      const existingDiagnostics = (ingestion.diagnostics as any) || {};
-      const updatedDiagnostics = {
-        ...existingDiagnostics,
-        seo_call: {
-          ...(existingDiagnostics.seo_call || {}),
-          last_error: String(err?.message || err),
-          last_error_at: new Date().toISOString(),
-          last_started_at: startedAt,
-        },
-      };
-
-      await supabase
-        .from("product_ingestions")
-        .update({
-          diagnostics: updatedDiagnostics,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", ingestion.id);
-
-      // Surface a specific error if central GPT isn't configured
-      if (
-        typeof err?.message === "string" &&
-        err.message.startsWith("central_gpt_not_configured")
-      ) {
-        return NextResponse.json(
-          { error: "central_gpt_not_configured" },
-          { status: 500 }
-        );
-      }
-
       return NextResponse.json(
-        { error: "seo_generation_failed" },
+        {
+          error: "seo_model_failed",
+          detail: err?.message || String(err),
+        },
         { status: 500 }
       );
     }
 
-    const existingDiagnostics = (ingestion.diagnostics as any) || {};
-    const updatedDiagnostics = {
-      ...existingDiagnostics,
-      seo_call: {
-        ...(existingDiagnostics.seo_call || {}),
-        last_success_at: new Date().toISOString(),
-        last_started_at: startedAt,
-      },
+    const finishedAt = new Date().toISOString();
+
+    // 5) Merge diagnostics
+    const diagnostics = ingestion.diagnostics || {};
+    const seoDiagnostics = {
+      ...(diagnostics.seo || {}),
+      last_run_at: finishedAt,
+      started_at: startedAt,
+      status: "completed",
     };
 
+    const updatedDiagnostics = {
+      ...diagnostics,
+      seo: seoDiagnostics,
+    };
+
+    // 6) Persist SEO into product_ingestions
     const { error: updErr } = await supabase
       .from("product_ingestions")
       .update({
         seo_payload: seoResult.seo_payload,
         description_html: seoResult.description_html,
         features: seoResult.features,
-        seo_generated_at: new Date().toISOString(),
+        seo_generated_at: finishedAt,
         diagnostics: updatedDiagnostics,
-        updated_at: new Date().toISOString(),
+        updated_at: finishedAt,
       })
       .eq("id", ingestion.id);
 
     if (updErr) {
-      console.error(
-        "[api/v1/seo] failed to update product_ingestions with seo",
-        updErr.message || updErr
-      );
+      console.error("[api/v1/seo] failed to update ingestion with SEO", {
+        ingestionId: ingestion.id,
+        error: updErr,
+      });
       return NextResponse.json(
-        { error: "db_update_failed" },
+        { error: "seo_persist_failed" },
         { status: 500 }
       );
     }
 
+    // 7) Return SEO payload to the dashboard
     return NextResponse.json(
       {
         ingestionId: ingestion.id,
