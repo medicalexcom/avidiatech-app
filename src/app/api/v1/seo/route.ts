@@ -5,52 +5,16 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
 const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
 const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
 
-/**
- * Given the normalized_payload from the ingest engine, produce:
- * - seo_payload: object with SEO fields (from CENTRAL_GPT or engine)
- * - description_html: HTML string
- * - features: optional features array
- */
 async function callSeoModel(normalizedPayload: any, correlationId?: string) {
   if (!CENTRAL_GPT_URL || !CENTRAL_GPT_KEY) {
     console.warn(
-      "[api/v1/seo] CENTRAL_GPT_URL/CENTRAL_GPT_KEY not set; returning normalizedPayload-derived SEO output"
+      "[api/v1/seo] CENTRAL_GPT_URL/CENTRAL_GPT_KEY not set; returning normalizedPayload as seo output"
     );
-
-    // Engine-first mapping:
-    // Your normalized_payload currently looks like:
-    // {
-    //   seo: {
-    //     h1, title, metaTitle, pageTitle, metaDescription, seoShortDescription
-    //   },
-    //   description_html: "<p>...</p>",
-    //   features: [ ... ],
-    //   source_url: "...",
-    //   normalizedPayload: { name, brand, specs, format }
-    // }
-    const engineSeo = normalizedPayload?.seo ?? normalizedPayload ?? {};
-
-    const descriptionHtml =
-      normalizedPayload?.description_html ??
-      normalizedPayload?.descriptionHtml ??
-      "";
-
-    const features =
-      Array.isArray(normalizedPayload?.features) &&
-      normalizedPayload.features.length > 0
-        ? normalizedPayload.features
-        : null;
-
+    // Fallback: treat normalized payload as already SEO-ready
     return {
-      seo_payload: {
-        ...engineSeo,
-        __source: "engine_normalized_payload",
-        source_url: normalizedPayload?.source_url ?? null,
-        normalized_name: normalizedPayload?.normalizedPayload?.name ?? null,
-        format: normalizedPayload?.normalizedPayload?.format ?? "avidia_standard",
-      },
-      description_html: descriptionHtml,
-      features,
+      seo_payload: normalizedPayload,
+      description_html: normalizedPayload?.description_html || "",
+      features: normalizedPayload?.features || null,
     };
   }
 
@@ -86,9 +50,11 @@ async function callSeoModel(normalizedPayload: any, correlationId?: string) {
     );
   }
 
-  // Expected structure from CENTRAL_GPT:
+  // Expected structure:
   // {
-  //   seo: { title, meta_title, meta_description, h1, ... },
+  //   seo: {
+  //     title, meta_title, meta_description, h1, ...
+  //   },
   //   description_html: "<p>...</p>",
   //   features: [ "..." ]
   // }
@@ -159,7 +125,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (!ingestion.normalized_payload) {
-      // Ingest engine hasn't filled normalized_payload yet
       return NextResponse.json(
         { error: "ingestion_not_ready" },
         { status: 409 }
@@ -218,24 +183,28 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    const nowIso = new Date().toISOString();
+    // Build updates so we can also flip status → "completed"
+    const updates: any = {
+      seo_payload: seoResult.seo_payload,
+      description_html: seoResult.description_html,
+      features: seoResult.features,
+      seo_generated_at: new Date().toISOString(),
+      diagnostics: updatedDiagnostics,
+      updated_at: new Date().toISOString(),
+    };
 
-    // IMPORTANT: we now *finalize* the ingestion if it was stuck in "processing"
-    // We never flip back to "pending"; we only upgrade "processing" -> "completed".
-    const nextStatus =
-      ingestion.status === "processing" ? "completed" : ingestion.status;
+    // If this row is still pending/processing, treat SEO as the final step
+    if (
+      !ingestion.status ||
+      ingestion.status === "pending" ||
+      ingestion.status === "processing"
+    ) {
+      updates.status = "completed";
+    }
 
     const { error: updErr } = await supabase
       .from("product_ingestions")
-      .update({
-        seo_payload: seoResult.seo_payload,
-        description_html: seoResult.description_html,
-        features: seoResult.features,
-        seo_generated_at: nowIso,
-        diagnostics: updatedDiagnostics,
-        status: nextStatus,
-        updated_at: nowIso,
-      })
+      .update(updates)
       .eq("id", ingestion.id);
 
     if (updErr) {
