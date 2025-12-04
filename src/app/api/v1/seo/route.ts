@@ -50,14 +50,6 @@ async function callSeoModel(normalizedPayload: any, correlationId?: string) {
     );
   }
 
-  // Expected structure:
-  // {
-  //   seo: {
-  //     title, meta_title, meta_description, h1, ...
-  //   },
-  //   description_html: "<p>...</p>",
-  //   features: [ "..." ]
-  // }
   const seoPayload = json?.seo ?? json ?? normalizedPayload;
   const descriptionHtml =
     json?.description_html ??
@@ -95,7 +87,6 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServiceSupabaseClient();
 
-    // Load ingestion row
     const { data: ingestion, error: loadErr } = await supabase
       .from("product_ingestions")
       .select(
@@ -119,7 +110,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // (Optional) tenant/user guard: only owner of ingestion can run SEO
     if (ingestion.user_id && ingestion.user_id !== userId) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
@@ -183,7 +173,6 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Build updates so we can also flip status → "completed"
     const updates: any = {
       seo_payload: seoResult.seo_payload,
       description_html: seoResult.description_html,
@@ -193,7 +182,7 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    // If this row is still pending/processing, treat SEO as the final step
+    // ✅ Flip status to "completed" if it's still pending/processing
     if (
       !ingestion.status ||
       ingestion.status === "pending" ||
