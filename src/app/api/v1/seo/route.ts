@@ -1,21 +1,35 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { safeGetAuth } from "@/lib/clerkSafe";
-import { getServiceSupabaseClient } from "@/lib/supabase";
+// src/app/api/v1/seo/route.ts
 
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { safeGetAuth } from "@/lib/clerkSafe";
+
+// Central GPT config
 const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
 const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
 
-/**
- * Call the central GPT / custom_gpt_instructions engine to generate SEO
- * for a given normalized ingestion payload.
- *
- * If CENTRAL_GPT is not configured or returns an error, we fail loudly
- * so you see it in Vercel logs / UI instead of silently shipping stub SEO.
- */
+// Supabase service-role client (bypasses RLS for server-side updates)
+function getSupabaseServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    throw new Error(
+      "supabase_service_not_configured: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing"
+    );
+  }
+
+  return createClient(url, serviceKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
+}
+
 async function callSeoModel(
   normalizedPayload: any,
-  correlationId?: string,
-  sourceUrl?: string
+  correlationId?: string | null,
+  sourceUrl?: string | null
 ): Promise<{
   seo_payload: any;
   description_html: string | null;
@@ -46,29 +60,28 @@ async function callSeoModel(
 
   if (!res.ok) {
     console.error(
-      "[api/v1/seo] central GPT responded with non-200",
+      "[api/v1/seo] central GPT non-200",
       res.status,
-      text
+      text?.slice(0, 500)
     );
     throw new Error(
       `central_gpt_seo_error: ${res.status} ${text || "(empty body)"}`
     );
   }
 
-  let json: any = null;
+  let json: any;
   try {
     json = JSON.parse(text);
   } catch (err: any) {
     console.error(
-      "[api/v1/seo] central GPT returned non-JSON body",
+      "[api/v1/seo] central GPT returned non-JSON",
       err?.message || err,
       "raw=",
-      text.slice(0, 500)
+      text?.slice(0, 500)
     );
     throw new Error("central_gpt_invalid_json");
   }
 
-  // Normalize the shape from central-gpt
   const normalized = normalizedPayload || {};
   const seoPayload = json?.seo || normalized?.seo || {};
   const descriptionHtml =
@@ -80,7 +93,6 @@ async function callSeoModel(
     ? json.features
     : normalized?.features ?? null;
 
-  // Tiny debug log so we can see that something came back
   console.log("[api/v1/seo] central GPT SEO summary", {
     hasSeo: !!seoPayload,
     hasDescription: !!descriptionHtml,
@@ -97,19 +109,18 @@ async function callSeoModel(
 
 export async function POST(req: NextRequest) {
   try {
-    // 1) Auth via Clerk
-    const { userId } =
-      ((safeGetAuth(req as any) as { userId?: string | null }) as {
-        userId?: string | null;
-      }) || {};
+    // 1) Auth (Clerk)
+    const auth = safeGetAuth(req as any) as { userId?: string | null } | null;
+    const userId = auth?.userId ?? null;
 
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
 
-    // 2) Grab ingestionId from JSON body
+    // 2) Parse body
     const body = (await req.json().catch(() => ({}))) as any;
     const ingestionId = body?.ingestionId?.toString() || "";
+
     if (!ingestionId) {
       return NextResponse.json(
         { error: "missing_ingestionId" },
@@ -117,7 +128,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = getServiceSupabaseClient();
+    const supabase = getSupabaseServiceClient();
 
     // 3) Load ingestion row
     const { data: ingestion, error: loadErr } = await supabase
@@ -146,8 +157,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Optionally ensure the ingestion belongs to this user.
-    // If you want strict ownership, uncomment this:
+    // Optional: enforce ownership (commented for now; service client bypasses RLS)
     // if (ingestion.user_id && ingestion.user_id !== userId) {
     //   return NextResponse.json(
     //     { error: "forbidden_ingestion" },
@@ -165,18 +175,13 @@ export async function POST(req: NextRequest) {
     const normalized = ingestion.normalized_payload as any;
     const startedAt = new Date().toISOString();
 
-    // 4) Call central GPT SEO engine
-    let seoResult: {
-      seo_payload: any;
-      description_html: string | null;
-      features: string[] | null;
-    };
-
+    // 4) Call central GPT
+    let seoResult;
     try {
       seoResult = await callSeoModel(
         normalized,
-        ingestion.correlation_id || undefined,
-        ingestion.source_url || undefined
+        ingestion.correlation_id || null,
+        ingestion.source_url || null
       );
     } catch (err: any) {
       console.error("[api/v1/seo] seo model error:", err?.message || err);
@@ -199,7 +204,6 @@ export async function POST(req: NextRequest) {
       started_at: startedAt,
       status: "completed",
     };
-
     const updatedDiagnostics = {
       ...diagnostics,
       seo: seoDiagnostics,
@@ -229,7 +233,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 7) Return SEO payload to the dashboard
+    // 7) Return SEO to frontend
     return NextResponse.json(
       {
         ingestionId: ingestion.id,
