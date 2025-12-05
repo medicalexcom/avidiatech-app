@@ -39,6 +39,9 @@ export default function AvidiaSeoPage() {
   // track whether current seo result is preview (not persisted)
   const [isPreviewResult, setIsPreviewResult] = useState(false);
 
+  // Remember the URL that came from query params; used to decide if we should reuse ingestionId
+  const [initialUrl] = useState(urlParam || "");
+
   const fetchIngestionData = useCallback(
     async (id: string, isCancelled: () => boolean = () => false) => {
       setLoading(true);
@@ -360,12 +363,20 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  // ONE-CLICK CASCADE: always treat Generate & Save as a full ingest → poll → SEO run,
-  // regardless of any existing ingestionId in the URL.
   async function handleGenerateAndSave() {
     setError(null);
 
-    // Clear any previous run (for both same URL re-run and new URLs)
+    // If we have an ingestionId AND the URL hasn't changed from the original,
+    // treat this as "re-run SEO on existing ingestion."
+    const isSameAsInitial = initialUrl && urlInput === initialUrl;
+
+    if (ingestionId && isSameAsInitial) {
+      await generateFromIngestion(ingestionId, true);
+      return;
+    }
+
+    // Otherwise, always treat as a brand-new run:
+    // clear previous data and kick off full ingest → poll → SEO cascade.
     setJob(null);
     setIsPreviewResult(false);
     setRawIngestResponse(null);
@@ -640,10 +651,6 @@ export default function AvidiaSeoPage() {
                     {descriptionHtml ? (
                       <article
                         className="prose-headings:scroll-mt-20 prose-h2:mt-6 prose-h3:mt-4 prose-ul:list-disc prose-li:marker:text-slate-400"
-                        style={{
-                          fontFamily:
-                            "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                        }}
                         dangerouslySetInnerHTML={{
                           __html: highlightedDescription,
                         }}
@@ -842,7 +849,7 @@ export default function AvidiaSeoPage() {
                   Generate SEO from a URL
                 </h4>
                 <span className="text-xs text-slate-500">
-                  End-to-end from manufacturer URL
+                  No extract required
                 </span>
               </div>
               <div className="space-y-2">
@@ -878,8 +885,8 @@ export default function AvidiaSeoPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500">
-                  One click: we scrape the manufacturer URL, save normalized
-                  data, and generate SEO with our custom GPT instructions.
+                  Best practice: keep the manufacturer URL and action together
+                  so users launch ingestion without scanning the page.
                 </p>
                 <p className="text-xs text-slate-500">
                   We’ll create an ingestion and then run AvidiaSEO. You’ll be
