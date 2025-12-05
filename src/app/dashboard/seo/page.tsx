@@ -341,9 +341,19 @@ export default function AvidiaSeoPage() {
   }, [job]);
 
   const seoPayload = jobData?.seo_payload ?? jobData?.seoPayload ?? null;
-  const descriptionHtml =
+
+  const rawDescriptionHtml =
     jobData?.description_html ?? jobData?.descriptionHtml ?? jobData?._debug?.description_html ?? null;
-  const features = jobData?.features ?? null;
+  const descriptionHtml =
+    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0
+      ? rawDescriptionHtml
+      : null;
+
+  const features = useMemo(() => {
+    if (Array.isArray(jobData?.features)) return jobData.features;
+    if (Array.isArray(jobData?.seo_payload?.features)) return jobData.seo_payload.features;
+    return null;
+  }, [jobData]);
 
   const highlightedDescription = useMemo(() => {
     if (!descriptionHtml) return "<em>No description generated yet</em>";
@@ -690,7 +700,12 @@ export default function AvidiaSeoPage() {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setUrlInput(next);
+                      setError(null);
+                      setStatusMessage(null);
+                    }}
                     placeholder="https://manufacturer.com/product..."
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     type="url"
