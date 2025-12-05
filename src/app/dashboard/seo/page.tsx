@@ -52,7 +52,9 @@ export default function AvidiaSeoPage() {
         const json = await res.json();
         if (!res.ok) {
           throw new Error(
-            json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`
+            json?.error?.message ||
+              json?.error ||
+              `Ingest fetch failed: ${res.status}`
           );
         }
         if (!isCancelled()) {
@@ -113,7 +115,9 @@ export default function AvidiaSeoPage() {
           const seoPayload =
             first.json?.seo_payload ?? first.json?.seoPayload ?? null;
           const descriptionHtml =
-            first.json?.description_html ?? first.json?.descriptionHtml ?? null;
+            first.json?.description_html ??
+            first.json?.descriptionHtml ??
+            null;
           const features = first.json?.features ?? null;
           if (seoPayload || descriptionHtml || features) {
             setJob((prev) => ({
@@ -384,14 +388,32 @@ export default function AvidiaSeoPage() {
 
   const jobData = useMemo(() => {
     if (!job) return null;
-    if (job?.data && job?.ok !== undefined) return job.data;
+    // allow shapes: { ok, data }, { data }, plain row, or nested { data: { data } }
+    if (job?.data?.data) return job.data.data;
+    if (job?.data) return job.data;
     return job;
   }, [job]);
 
   const seoPayload = jobData?.seo_payload ?? jobData?.seoPayload ?? null;
+
+  const rawDescriptionHtml =
+    jobData?.description_html ??
+    jobData?.descriptionHtml ??
+    jobData?.seo_payload?.description_html ??
+    jobData?._debug?.description_html ??
+    null;
   const descriptionHtml =
-    jobData?.description_html ?? jobData?.descriptionHtml ?? null;
-  const features = jobData?.features ?? null;
+    typeof rawDescriptionHtml === "string" &&
+    rawDescriptionHtml.trim().length > 0
+      ? rawDescriptionHtml
+      : null;
+
+  const features = useMemo(() => {
+    if (Array.isArray(jobData?.features)) return jobData.features;
+    if (Array.isArray(jobData?.seo_payload?.features))
+      return jobData.seo_payload.features;
+    return null;
+  }, [jobData]);
 
   const highlightedDescription = useMemo(() => {
     if (!descriptionHtml) return "<em>No description generated yet</em>";
@@ -401,7 +423,7 @@ export default function AvidiaSeoPage() {
       const regex = new RegExp(`(${escaped})`, "gi");
       return descriptionHtml.replace(
         regex,
-        '<mark className="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
+        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
       );
     } catch (err) {
       console.warn("Unable to highlight search term", err);
@@ -425,7 +447,9 @@ export default function AvidiaSeoPage() {
   const parkedExtras = useMemo(() => {
     if (!seoPayload || typeof seoPayload !== "object")
       return [] as [string, any][];
-    return Object.entries(seoPayload).filter(([key]) => !knownSeoKeys.includes(key));
+    return Object.entries(seoPayload).filter(
+      ([key]) => !knownSeoKeys.includes(key)
+    );
   }, [seoPayload]);
 
   const handleCopyDescription = async () => {
@@ -462,8 +486,8 @@ export default function AvidiaSeoPage() {
           loading || pollingState
             ? "active"
             : jobData?.status === "completed" || jobData?.normalized_payload
-              ? "done"
-              : "idle",
+            ? "done"
+            : "idle",
         hint: pollingState || jobData?.status || "waiting",
       },
       {
@@ -473,8 +497,8 @@ export default function AvidiaSeoPage() {
         hint: generating
           ? "Calling central GPT"
           : hasSeo
-            ? "SEO saved"
-            : "ready",
+          ? "SEO saved"
+          : "ready",
       },
       {
         key: "review",
@@ -483,7 +507,16 @@ export default function AvidiaSeoPage() {
         hint: hasSeo ? "Rendered" : "awaiting generation",
       },
     ];
-  }, [descriptionHtml, features, generating, jobData?.normalized_payload, jobData?.status, loading, pollingState, seoPayload]);
+  }, [
+    descriptionHtml,
+    features,
+    generating,
+    jobData?.normalized_payload,
+    jobData?.status,
+    loading,
+    pollingState,
+    seoPayload,
+  ]);
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
@@ -495,7 +528,9 @@ export default function AvidiaSeoPage() {
               onClick={() =>
                 router.push(
                   `/dashboard/extract${
-                    ingestionId ? `?ingestionId=${encodeURIComponent(ingestionId)}` : ""
+                    ingestionId
+                      ? `?ingestionId=${encodeURIComponent(ingestionId)}`
+                      : ""
                   }`
                 )
               }
@@ -504,8 +539,12 @@ export default function AvidiaSeoPage() {
               ← Back to Extract
             </button>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-500 m-0">AvidiaSEO Studio</p>
-              <h2 className="text-2xl font-semibold text-slate-900 m-0">Human-Ready SEO Canvas</h2>
+              <p className="text-xs uppercase tracking-wide text-slate-500 m-0">
+                AvidiaSEO Studio
+              </p>
+              <h2 className="text-2xl font-semibold text-slate-900 m-0">
+                Human-Ready SEO Canvas
+              </h2>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm text-slate-600">
@@ -537,10 +576,16 @@ export default function AvidiaSeoPage() {
             <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl p-6 border border-slate-800">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-300 mb-1">Description window</p>
-                  <h3 className="text-3xl font-semibold mb-2">Premium HTML Viewer</h3>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-300 mb-1">
+                    Description window
+                  </p>
+                  <h3 className="text-3xl font-semibold mb-2">
+                    Premium HTML Viewer
+                  </h3>
                   <p className="text-slate-300 text-sm max-w-2xl">
-                    See the generated marketing narrative exactly as your customers will. Search, copy, download, and curate—all within the canvas.
+                    See the generated marketing narrative exactly as your
+                    customers will. Search, copy, download, and curate—all
+                    within the canvas.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -550,7 +595,11 @@ export default function AvidiaSeoPage() {
                     disabled={!descriptionHtml}
                     className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white hover:bg-white/20 disabled:opacity-50"
                   >
-                    {copyState === "copied" ? "Copied!" : copyState === "error" ? "Copy failed" : "Copy description"}
+                    {copyState === "copied"
+                      ? "Copied!"
+                      : copyState === "error"
+                      ? "Copy failed"
+                      : "Copy description"}
                   </button>
                   <button
                     type="button"
@@ -584,9 +633,12 @@ export default function AvidiaSeoPage() {
                 <div className="rounded-xl bg-white text-slate-900 shadow-inner border border-slate-100 overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">Rendered description</p>
+                      <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">
+                        Rendered description
+                      </p>
                       <p className="text-sm text-slate-600 m-0">
-                        Mirrors our custom GPT instructions layout; highlights show your search focus.
+                        Mirrors our custom GPT instructions layout; highlights
+                        show your search focus.
                       </p>
                     </div>
                     {isPreviewResult && (
@@ -595,13 +647,20 @@ export default function AvidiaSeoPage() {
                       </span>
                     )}
                   </div>
-                  <div
-                    className="prose prose-slate max-w-none px-6 py-5"
-                    style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "anywhere" }}
-                    dangerouslySetInnerHTML={{
-                      __html: highlightedDescription,
-                    }}
-                  />
+                  <div className="prose prose-slate max-w-none px-6 py-5">
+                    {descriptionHtml ? (
+                      <article
+                        className="prose-headings:scroll-mt-20 prose-h2:mt-6 prose-h3:mt-4 prose-ul:list-disc prose-li:marker:text-slate-400"
+                        dangerouslySetInnerHTML={{
+                          __html: highlightedDescription,
+                        }}
+                      />
+                    ) : (
+                      <div className="text-slate-500 text-sm italic">
+                        No description generated yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -609,33 +668,63 @@ export default function AvidiaSeoPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">SEO structure</h4>
-                  <span className="text-xs text-slate-500">Aligned to custom instructions</span>
+                  <h4 className="text-lg font-semibold text-slate-900">
+                    SEO structure
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    Aligned to custom instructions
+                  </span>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
                     <p className="text-xs uppercase text-slate-500 mb-1">H1</p>
-                    <p className="font-semibold text-slate-900">{seoPayload?.h1 ?? seoPayload?.name_best ?? "Not yet generated"}</p>
+                    <p className="font-semibold text-slate-900">
+                      {seoPayload?.h1 ??
+                        seoPayload?.name_best ??
+                        "Not yet generated"}
+                    </p>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">Page Title</p>
-                    <p className="font-semibold text-slate-900">{seoPayload?.pageTitle ?? seoPayload?.title ?? "Not yet generated"}</p>
+                    <p className="text-xs uppercase text-slate-500 mb-1">
+                      Page Title
+                    </p>
+                    <p className="font-semibold text-slate-900">
+                      {seoPayload?.pageTitle ??
+                        seoPayload?.title ??
+                        "Not yet generated"}
+                    </p>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">Meta Description</p>
-                    <p className="text-slate-800 leading-relaxed">{seoPayload?.metaDescription ?? seoPayload?.meta_description ?? "Not yet generated"}</p>
+                    <p className="text-xs uppercase text-slate-500 mb-1">
+                      Meta Description
+                    </p>
+                    <p className="text-slate-800 leading-relaxed">
+                      {seoPayload?.metaDescription ??
+                        seoPayload?.meta_description ??
+                        "Not yet generated"}
+                    </p>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">Short Description</p>
-                    <p className="text-slate-800">{seoPayload?.seoShortDescription ?? seoPayload?.seo_short_description ?? "Not yet generated"}</p>
+                    <p className="text-xs uppercase text-slate-500 mb-1">
+                      Short Description
+                    </p>
+                    <p className="text-slate-800">
+                      {seoPayload?.seoShortDescription ??
+                        seoPayload?.seo_short_description ??
+                        "Not yet generated"}
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">Feature bullets</h4>
-                  <span className="text-xs text-slate-500">What the enforcer kept</span>
+                  <h4 className="text-lg font-semibold text-slate-900">
+                    Feature bullets
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    What the enforcer kept
+                  </span>
                 </div>
                 {Array.isArray(features) && features.length > 0 ? (
                   <ul className="list-disc list-inside space-y-1 text-slate-800">
@@ -644,7 +733,9 @@ export default function AvidiaSeoPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-slate-500 text-sm">No features captured yet.</p>
+                  <p className="text-slate-500 text-sm">
+                    No features captured yet.
+                  </p>
                 )}
 
                 {parkedExtras.length > 0 && (
@@ -654,11 +745,16 @@ export default function AvidiaSeoPage() {
                       onClick={() => setShowRawExtras((v) => !v)}
                       className="text-sm text-sky-700 underline"
                     >
-                      {showRawExtras ? "Hide" : "Show"} parked extras ({parkedExtras.length})
+                      {showRawExtras ? "Hide" : "Show"} parked extras (
+                      {parkedExtras.length})
                     </button>
                     {showRawExtras && (
                       <pre className="mt-2 p-3 rounded-lg bg-slate-50 text-xs text-slate-700 border border-slate-100 overflow-auto">
-                        {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
+                        {JSON.stringify(
+                          Object.fromEntries(parkedExtras),
+                          null,
+                          2
+                        )}
                       </pre>
                     )}
                   </div>
@@ -670,8 +766,12 @@ export default function AvidiaSeoPage() {
           <div className="space-y-4">
             <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-lg font-semibold text-slate-900">Pipeline status</h4>
-                {loading && <span className="text-xs text-slate-500">Loading…</span>}
+                <h4 className="text-lg font-semibold text-slate-900">
+                  Pipeline status
+                </h4>
+                {loading && (
+                  <span className="text-xs text-slate-500">Loading…</span>
+                )}
               </div>
               <div className="space-y-3">
                 {statusPills.map((pill) => (
@@ -681,8 +781,8 @@ export default function AvidiaSeoPage() {
                       pill.state === "done"
                         ? "bg-emerald-50 border-emerald-100 text-emerald-700"
                         : pill.state === "active"
-                          ? "bg-amber-50 border-amber-100 text-amber-700"
-                          : "bg-slate-50 border-slate-100 text-slate-600"
+                        ? "bg-amber-50 border-amber-100 text-amber-700"
+                        : "bg-slate-50 border-slate-100 text-slate-600"
                     }`}
                   >
                     <div className="flex items-center gap-2">
@@ -691,11 +791,13 @@ export default function AvidiaSeoPage() {
                           pill.state === "done"
                             ? "bg-emerald-500"
                             : pill.state === "active"
-                              ? "bg-amber-400 animate-pulse"
-                              : "bg-slate-300"
+                            ? "bg-amber-400 animate-pulse"
+                            : "bg-slate-300"
                         }`}
                       />
-                      <span className="font-medium text-sm">{pill.label}</span>
+                      <span className="font-medium text-sm">
+                        {pill.label}
+                      </span>
                     </div>
                     <span className="text-xs">{pill.hint}</span>
                   </div>
@@ -706,11 +808,19 @@ export default function AvidiaSeoPage() {
             {jobData && ingestionId && (
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">Source SEO (scraped)</h4>
-                  <span className="text-xs text-slate-500">Live from ingestion</span>
+                  <h4 className="text-lg font-semibold text-slate-900">
+                    Source SEO (scraped)
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    Live from ingestion
+                  </span>
                 </div>
                 <pre className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs text-slate-700 whitespace-pre-wrap break-words">
-                  {JSON.stringify(jobData.normalized_payload ?? jobData, null, 2)}
+                  {JSON.stringify(
+                    jobData.normalized_payload ?? jobData,
+                    null,
+                    2
+                  )}
                 </pre>
               </div>
             )}
@@ -718,8 +828,14 @@ export default function AvidiaSeoPage() {
             {rawIngestResponse && (
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">Raw /api/v1/ingest response</h4>
-                  {pollingState && <span className="text-xs text-slate-500">{pollingState}</span>}
+                  <h4 className="text-lg font-semibold text-slate-900">
+                    Raw /api/v1/ingest response
+                  </h4>
+                  {pollingState && (
+                    <span className="text-xs text-slate-500">
+                      {pollingState}
+                    </span>
+                  )}
                 </div>
                 <pre className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs text-slate-700 whitespace-pre-wrap break-words">
                   {JSON.stringify(rawIngestResponse, null, 2)}
@@ -729,8 +845,12 @@ export default function AvidiaSeoPage() {
 
             <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-slate-900">Generate SEO from a URL</h4>
-                <span className="text-xs text-slate-500">No extract required</span>
+                <h4 className="text-lg font-semibold text-slate-900">
+                  Generate SEO from a URL
+                </h4>
+                <span className="text-xs text-slate-500">
+                  No extract required
+                </span>
               </div>
               <div className="space-y-2">
                 <div className="flex flex-col sm:flex-row gap-2">
@@ -765,19 +885,31 @@ export default function AvidiaSeoPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Best practice: keep the manufacturer URL and action together so users launch ingestion without scanning the page.
+                  Best practice: keep the manufacturer URL and action together
+                  so users launch ingestion without scanning the page.
                 </p>
                 <p className="text-xs text-slate-500">
-                  We’ll create an ingestion and then run AvidiaSEO. You’ll be redirected here once ready.
+                  We’ll create an ingestion and then run AvidiaSEO. You’ll be
+                  redirected here once ready.
                 </p>
                 {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
                   <div className="border-t border-slate-100 pt-3 space-y-2 text-sm">
-                    <h5 className="text-sm font-semibold text-slate-900">Preview Generated SEO</h5>
-                    <p><strong>H1:</strong> {(job.seo_payload ?? job.seoPayload)?.h1 ?? ""}</p>
-                    <p><strong>Title:</strong> {(job.seo_payload ?? job.seoPayload)?.title ?? ""}</p>
+                    <h5 className="text-sm font-semibold text-slate-900">
+                      Preview Generated SEO
+                    </h5>
                     <p>
-                      <strong>Meta:</strong> {(job.seo_payload ?? job.seoPayload)?.meta_description ??
-                        (job.seo_payload ?? job.seoPayload)?.metaDescription ?? ""}
+                      <strong>H1:</strong>{" "}
+                      {(job.seo_payload ?? job.seoPayload)?.h1 ?? ""}
+                    </p>
+                    <p>
+                      <strong>Title:</strong>{" "}
+                      {(job.seo_payload ?? job.seoPayload)?.title ?? ""}
+                    </p>
+                    <p>
+                      <strong>Meta:</strong>{" "}
+                      {(job.seo_payload ?? job.seoPayload)?.meta_description ??
+                        (job.seo_payload ?? job.seoPayload)?.metaDescription ??
+                        ""}
                     </p>
                     <div
                       className="rounded-lg border border-slate-100 bg-slate-50 p-3"
