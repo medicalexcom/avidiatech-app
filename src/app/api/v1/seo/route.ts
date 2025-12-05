@@ -1,8 +1,12 @@
 // src/app/api/v1/seo/route.ts
 
+import fs from "fs";
+import path from "path";
+import { pathToFileURL } from "url";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
+import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 
 const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
 const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
@@ -10,7 +14,8 @@ const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
 async function callSeoModel(
   normalizedPayload: any,
   correlationId?: string | null,
-  sourceUrl?: string | null
+  sourceUrl?: string | null,
+  tenantId?: string | null
 ): Promise<{
   seo_payload: any;
   description_html: string | null;
@@ -22,11 +27,79 @@ async function callSeoModel(
     );
   }
 
-  const body = {
-    module: "seo",
-    payload: normalizedPayload,
-    correlation_id: correlationId || undefined,
+  const { text: instructions, source: instructionsSource } =
+    await loadCustomGptInstructionsWithInfo(tenantId ?? null);
+
+  const defaultBuildSeoRequestBody = ({
+    module = "seo",
+    payload,
+    correlationId,
+    customInstructions,
+    instructionsSource,
+  }: {
+    module?: string;
+    payload: any;
+    correlationId?: string | null;
+    customInstructions?: string | null;
+    instructionsSource?: string | null;
+  }) => {
+    const trimmedInstructions =
+      typeof customInstructions === "string" ? customInstructions.trim() : "";
+
+    return {
+      module,
+      payload,
+      correlation_id: correlationId || undefined,
+      custom_gpt_instructions:
+        trimmedInstructions.length > 0 ? trimmedInstructions : undefined,
+      instruction_source: instructionsSource || undefined,
+      enforce_instructions: trimmedInstructions.length > 0,
+      audit: { format: "avidia_seo_v1" },
+    };
   };
+
+  let buildSeoRequestBody: ((opts: any) => any) | null = defaultBuildSeoRequestBody;
+  try {
+    const enforcerPath = path.join(
+      process.cwd(),
+      "../medx-ingest-api/tools/render-engine/gptInstructionsEnforcer.mjs"
+    );
+    if (fs.existsSync(enforcerPath)) {
+      const enforcerModulePath = pathToFileURL(enforcerPath).toString();
+      const enforcerModule = await import(enforcerModulePath);
+      buildSeoRequestBody =
+        (enforcerModule as any).buildSeoRequestBody ||
+        (enforcerModule as any).default?.buildSeoRequestBody ||
+        buildSeoRequestBody;
+      console.log("[api/v1/seo] using shared gptInstructionsEnforcer module");
+    } else {
+      console.log(
+        "[api/v1/seo] shared gptInstructionsEnforcer not present; using built-in body builder"
+      );
+    }
+  } catch (err: any) {
+    console.warn(
+      "[api/v1/seo] unable to load shared gptInstructionsEnforcer",
+      err?.message || err
+    );
+  }
+
+  const body = buildSeoRequestBody
+    ? buildSeoRequestBody({
+        module: "seo",
+        payload: normalizedPayload,
+        correlationId: correlationId || undefined,
+        customInstructions: instructions,
+        instructionsSource,
+      })
+    : {
+        module: "seo",
+        payload: normalizedPayload,
+        correlation_id: correlationId || undefined,
+        custom_gpt_instructions: instructions || undefined,
+        instruction_source: instructionsSource || undefined,
+        enforce_instructions: Boolean(instructions),
+      };
 
   const res = await fetch(CENTRAL_GPT_URL, {
     method: "POST",
@@ -64,21 +137,38 @@ async function callSeoModel(
   }
 
   const normalized = normalizedPayload || {};
-  const seoPayload = json?.seo || normalized?.seo || {};
+  const seoPayload =
+    json?.seo ||
+    json?.seo_payload ||
+    normalized?.seo_payload ||
+    normalized?.seo ||
+    {};
   const descriptionHtml =
     json?.description_html ||
     json?.description ||
+    json?.seo?.description_html ||
+    json?.seo_payload?.description_html ||
     normalized?.description_html ||
+    normalized?.seo_payload?.description_html ||
     null;
   const features = Array.isArray(json?.features)
     ? json.features
-    : normalized?.features ?? null;
+    : Array.isArray(json?.seo?.features)
+      ? json.seo.features
+      : Array.isArray(json?.seo_payload?.features)
+        ? json.seo_payload.features
+        : Array.isArray(normalized?.features)
+          ? normalized.features
+          : Array.isArray(normalized?.seo_payload?.features)
+            ? normalized.seo_payload.features
+            : null;
 
   console.log("[api/v1/seo] central GPT SEO summary", {
     hasSeo: !!seoPayload,
     hasDescription: !!descriptionHtml,
     featuresCount: Array.isArray(features) ? features.length : null,
     sourceUrl: sourceUrl || null,
+    instructionsSource: instructionsSource || null,
   });
 
   return {
@@ -90,6 +180,7 @@ async function callSeoModel(
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("[api/v1/seo] POST called");
     // 1) Auth (Clerk)
     const auth = safeGetAuth(req as any) as { userId?: string | null } | null;
     const userId = auth?.userId ?? null;
@@ -154,7 +245,8 @@ export async function POST(req: NextRequest) {
       seoResult = await callSeoModel(
         normalized,
         ingestion.correlation_id || null,
-        ingestion.source_url || null
+        ingestion.source_url || null,
+        ingestion.tenant_id || null
       );
     } catch (err: any) {
       console.error("[api/v1/seo] seo model error:", err?.message || err);
