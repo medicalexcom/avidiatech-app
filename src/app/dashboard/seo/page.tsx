@@ -519,18 +519,31 @@ export default function AvidiaSeoPage() {
 
   const demoUrl = "https://www.apple.com/iphone-17/";
 
+  // Small labels that feed the hero metric chips
+  const modeLabel = ingestionId ? "Existing ingestion" : "New URL run";
+  const pipelineLabel = generating
+    ? "Running cascade"
+    : loading || pollingState
+    ? "Ingest in progress"
+    : hasSeo
+    ? "SEO ready"
+    : "Idle";
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
-        {/* Hero + header */}
-        <div className="rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(56,189,248,0.15)] p-5 lg:p-7">
-          <div className="flex flex-col gap-6">
-            {/* Top row: title + right cards */}
+        {/* HERO */}
+        <div className="relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(56,189,248,0.25)] p-5 lg:p-7">
+          {/* Ambient glows */}
+          <div className="pointer-events-none absolute -top-32 right-0 h-72 w-72 rounded-full bg-cyan-500/25 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-40 left-10 h-80 w-80 rounded-full bg-sky-500/10 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6">
             <div className="flex flex-wrap items-start justify-between gap-6">
-              {/* Left: title + badges */}
-              <div className="flex-1 min-w-[260px] space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-200">
+              {/* LEFT: narrative + chips */}
+              <div className="flex-1 min-w-[260px] space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/40 bg-cyan-500/15 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-100">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
                     AvidiaSEO • Beta
                   </span>
@@ -550,45 +563,75 @@ export default function AvidiaSeoPage() {
                     ← Back to Extract
                   </button>
                   {ingestionId && (
-                    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-300">
+                    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[11px] text-slate-200">
                       Ingestion {ingestionId.slice(0, 8)}…
                     </span>
                   )}
                 </div>
-                <div>
+
+                <div className="space-y-2">
                   <h1 className="text-2xl lg:text-3xl font-semibold text-slate-50">
-                    Turn any manufacturer URL into a human-ready SEO page
+                    Turn any{" "}
+                    <span className="text-cyan-300">
+                      manufacturer URL
+                    </span>{" "}
+                    into a human-ready SEO page
                   </h1>
-                  <p className="mt-1 text-sm text-slate-300 max-w-2xl">
-                    Paste a product URL, and AvidiaSEO handles scraping, cleanup,
-                    and compliant copy in one click. No prompts, no copy-paste
-                    between tools.
+                  <p className="text-sm text-slate-300 max-w-2xl">
+                    Paste a product URL once. AvidiaSEO handles scraping,
+                    cleanup, and compliant copy in a single cascade—no prompts,
+                    no copy-paste between tools.
                   </p>
                 </div>
+
+                {/* Tiny metric chips */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+                  <div className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1.5 flex flex-col">
+                    <span className="text-slate-400">Mode</span>
+                    <span className="text-slate-100 font-medium">
+                      {modeLabel}
+                    </span>
+                  </div>
+                  <div className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1.5 flex flex-col">
+                    <span className="text-slate-400">Pipeline</span>
+                    <span className="text-slate-100 font-medium">
+                      {pipelineLabel}
+                    </span>
+                  </div>
+                  <div className="rounded-full border border-slate-700 bg-slate-950/70 px-3 py-1.5 flex flex-col">
+                    <span className="text-slate-400">Output</span>
+                    <span className="text-slate-100 font-medium">
+                      HTML + SEO JSON
+                    </span>
+                  </div>
+                </div>
+
+                {/* Selling chips */}
                 <div className="flex flex-wrap gap-3 text-[11px] text-slate-300">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-3 py-1 border border-slate-700/60">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/70 px-3 py-1 border border-slate-700/60">
                     ⚡ Zero-config: wired into your ingest engine
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-3 py-1 border border-slate-700/60">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/70 px-3 py-1 border border-slate-700/60">
                     🧩 Opinionated layout, custom GPT instructions
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-3 py-1 border border-slate-700/60">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/70 px-3 py-1 border border-slate-700/60">
                     🔒 Persist to Supabase or preview when signed out
                   </span>
                 </div>
+
                 {statusMessage && (
-                  <div className="inline-flex items-center gap-2 text-[11px] text-cyan-100 bg-slate-900/70 border border-cyan-500/30 rounded-full px-3 py-1">
+                  <div className="inline-flex items-center gap-2 text-[11px] text-cyan-100 bg-slate-950/80 border border-cyan-500/40 rounded-full px-3 py-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
                     {statusMessage}
                   </div>
                 )}
               </div>
 
-              {/* Right: 3-step flow + live pipeline side by side */}
-              <div className="w-full lg:w-[430px] xl:w-[500px]">
-                <div className="flex flex-col md:flex-row gap-3">
+              {/* RIGHT: 3-step flow + live status, side by side */}
+              <div className="w-full lg:w-[430px] xl:w-[520px]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* 3-step visual flow */}
-                  <div className="flex-1 rounded-2xl bg-slate-900/80 border border-slate-700/80 px-4 py-3 space-y-2">
+                  <div className="rounded-2xl bg-slate-950/80 border border-slate-700/80 px-4 py-3 space-y-2">
                     <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
                       3-step visual flow
                     </p>
@@ -640,7 +683,7 @@ export default function AvidiaSeoPage() {
                   </div>
 
                   {/* Live pipeline status */}
-                  <div className="flex-1 rounded-2xl bg-slate-900/80 border border-slate-700/80 px-4 py-3">
+                  <div className="rounded-2xl bg-slate-950/80 border border-slate-700/80 px-4 py-3">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
                         Live pipeline status
@@ -684,15 +727,14 @@ export default function AvidiaSeoPage() {
               </div>
             </div>
 
-            {/* Small hint row under hero */}
-            <div className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-400">
               Paste a manufacturer URL below to see the full pipeline light up
               in real time.
-            </div>
+            </p>
           </div>
         </div>
 
-        {/* Error banner */}
+        {/* ERROR BANNER */}
         {error && (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-950/60 text-rose-50 px-4 py-3 text-sm shadow-lg shadow-rose-900/40">
             {error}
@@ -700,9 +742,9 @@ export default function AvidiaSeoPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
-          {/* Main work column */}
+          {/* MAIN COLUMN */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Primary action: URL + Generate (right under hero) */}
+            {/* URL + BUTTON */}
             <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 lg:p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -774,7 +816,7 @@ export default function AvidiaSeoPage() {
               </div>
             </div>
 
-            {/* Premium HTML viewer */}
+            {/* PREMIUM VIEWER */}
             <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-2xl shadow-slate-950/70 p-6 border border-slate-700/80">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -871,9 +913,9 @@ export default function AvidiaSeoPage() {
             </div>
           </div>
 
-          {/* Side column: structure, features, debug */}
+          {/* SIDE COLUMN */}
           <div className="space-y-4">
-            {/* SEO structure */}
+            {/* SEO STRUCTURE */}
             <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-slate-50">
@@ -927,7 +969,7 @@ export default function AvidiaSeoPage() {
               </div>
             </div>
 
-            {/* Features + parked extras */}
+            {/* FEATURES + PARKED EXTRAS */}
             <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-slate-50">
@@ -973,7 +1015,7 @@ export default function AvidiaSeoPage() {
               )}
             </div>
 
-            {/* Debug: Source SEO */}
+            {/* SOURCE SEO */}
             {jobData && ingestionId && (
               <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -994,7 +1036,7 @@ export default function AvidiaSeoPage() {
               </div>
             )}
 
-            {/* Debug: raw ingest response */}
+            {/* RAW INGEST RESPONSE */}
             {rawIngestResponse && (
               <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1013,7 +1055,7 @@ export default function AvidiaSeoPage() {
               </div>
             )}
 
-            {/* Inline preview if no ingestionId but we got a payload */}
+            {/* INLINE PREVIEW (no ingestionId) */}
             {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
               <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-2 text-xs text-slate-100">
                 <h5 className="text-xs font-semibold text-slate-50">
