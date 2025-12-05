@@ -39,6 +39,9 @@ export default function AvidiaSeoPage() {
   // track whether current seo result is preview (not persisted)
   const [isPreviewResult, setIsPreviewResult] = useState(false);
 
+  // Remember the URL that came from query params; used to decide if we should reuse ingestionId
+  const [initialUrl] = useState(urlParam || "");
+
   const fetchIngestionData = useCallback(
     async (id: string, isCancelled: () => boolean = () => false) => {
       setLoading(true);
@@ -363,7 +366,16 @@ export default function AvidiaSeoPage() {
   async function handleGenerateAndSave() {
     setError(null);
 
-    // Always treat as a brand-new run:
+    // If we have an ingestionId AND the URL hasn't changed from the original,
+    // treat this as "re-run SEO on existing ingestion."
+    const isSameAsInitial = initialUrl && urlInput === initialUrl;
+
+    if (ingestionId && isSameAsInitial) {
+      await generateFromIngestion(ingestionId, true);
+      return;
+    }
+
+    // Otherwise, always treat as a brand-new run:
     // clear previous data and kick off full ingest → poll → SEO cascade.
     setJob(null);
     setIsPreviewResult(false);
