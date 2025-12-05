@@ -521,6 +521,7 @@ export default function AvidiaSeoPage() {
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
       <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
@@ -547,7 +548,7 @@ export default function AvidiaSeoPage() {
               </h2>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-sm text-slate-600">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               Live status
@@ -565,6 +566,7 @@ export default function AvidiaSeoPage() {
           </div>
         </div>
 
+        {/* Error banner */}
         {error && (
           <div className="p-4 rounded-lg bg-rose-50 border border-rose-100 text-rose-800">
             {error}
@@ -572,7 +574,108 @@ export default function AvidiaSeoPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Main work column */}
           <div className="lg:col-span-2 space-y-4">
+            {/* Primary action: URL + Generate */}
+            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-lg font-semibold text-slate-900">
+                    One-click AvidiaSEO
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Step 1 — paste the manufacturer URL. Step 2 — run the full
+                    ingest → poll → SEO cascade with{" "}
+                    <span className="font-medium">Generate &amp; Save</span>.
+                  </p>
+                </div>
+                <span className="hidden sm:inline-flex text-xs text-slate-500 px-2 py-1 rounded-full bg-slate-50 border border-slate-200">
+                  Works with new or existing ingestions
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={urlInput}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setUrlInput(next);
+
+                      // User is preparing a new run: clear previous outputs
+                      setJob(null);
+                      setIsPreviewResult(false);
+                      setRawIngestResponse(null);
+                      setPollingState(null);
+                      setStatusMessage(null);
+                      setError(null);
+                    }}
+                    placeholder="https://manufacturer.com/product..."
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    type="url"
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleGenerateAndSave();
+                    }}
+                    disabled={generating}
+                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-sky-600 text-white font-semibold shadow hover:bg-sky-500 disabled:opacity-60"
+                  >
+                    {generating ? "Generating…" : "Generate & Save"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  This always runs the full cascade for the current URL. If the
+                  URL matches an existing ingestion, we reuse it; otherwise we
+                  create a fresh one.
+                </p>
+              </div>
+            </div>
+
+            {/* Pipeline status */}
+            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-lg font-semibold text-slate-900">
+                  Pipeline status
+                </h4>
+                {loading && (
+                  <span className="text-xs text-slate-500">Loading…</span>
+                )}
+              </div>
+              <div className="space-y-3">
+                {statusPills.map((pill) => (
+                  <div
+                    key={pill.key}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
+                      pill.state === "done"
+                        ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                        : pill.state === "active"
+                        ? "bg-amber-50 border-amber-100 text-amber-700"
+                        : "bg-slate-50 border-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          pill.state === "done"
+                            ? "bg-emerald-500"
+                            : pill.state === "active"
+                            ? "bg-amber-400 animate-pulse"
+                            : "bg-slate-300"
+                        }`}
+                      />
+                      <span className="font-medium text-sm">
+                        {pill.label}
+                      </span>
+                    </div>
+                    <span className="text-xs">{pill.hint}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Premium HTML viewer */}
             <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl p-6 border border-slate-800">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -664,147 +767,108 @@ export default function AvidiaSeoPage() {
                 </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">
-                    SEO structure
-                  </h4>
-                  <span className="text-xs text-slate-500">
-                    Aligned to custom instructions
-                  </span>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">H1</p>
-                    <p className="font-semibold text-slate-900">
-                      {seoPayload?.h1 ??
-                        seoPayload?.name_best ??
-                        "Not yet generated"}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">
-                      Page Title
-                    </p>
-                    <p className="font-semibold text-slate-900">
-                      {seoPayload?.pageTitle ??
-                        seoPayload?.title ??
-                        "Not yet generated"}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">
-                      Meta Description
-                    </p>
-                    <p className="text-slate-800 leading-relaxed">
-                      {seoPayload?.metaDescription ??
-                        seoPayload?.meta_description ??
-                        "Not yet generated"}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
-                    <p className="text-xs uppercase text-slate-500 mb-1">
-                      Short Description
-                    </p>
-                    <p className="text-slate-800">
-                      {seoPayload?.seoShortDescription ??
-                        seoPayload?.seo_short_description ??
-                        "Not yet generated"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-900">
-                    Feature bullets
-                  </h4>
-                  <span className="text-xs text-slate-500">
-                    What the enforcer kept
-                  </span>
-                </div>
-                {Array.isArray(features) && features.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1 text-slate-800">
-                    {features.map((feat: string, idx: number) => (
-                      <li key={idx}>{feat}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-slate-500 text-sm">
-                    No features captured yet.
-                  </p>
-                )}
-
-                {parkedExtras.length > 0 && (
-                  <div className="mt-3 border-t border-slate-100 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowRawExtras((v) => !v)}
-                      className="text-sm text-sky-700 underline"
-                    >
-                      {showRawExtras ? "Hide" : "Show"} parked extras (
-                      {parkedExtras.length})
-                    </button>
-                    {showRawExtras && (
-                      <pre className="mt-2 p-3 rounded-lg bg-slate-50 text-xs text-slate-700 border border-slate-100 overflow-auto">
-                        {JSON.stringify(
-                          Object.fromEntries(parkedExtras),
-                          null,
-                          2
-                        )}
-                      </pre>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
 
+          {/* Side column: structure, features, debug */}
           <div className="space-y-4">
-            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4">
-              <div className="flex items-center justify-between mb-3">
+            {/* SEO structure */}
+            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
+              <div className="flex items-center justify-between">
                 <h4 className="text-lg font-semibold text-slate-900">
-                  Pipeline status
+                  SEO structure
                 </h4>
-                {loading && (
-                  <span className="text-xs text-slate-500">Loading…</span>
-                )}
+                <span className="text-xs text-slate-500">
+                  Aligned to custom instructions
+                </span>
               </div>
-              <div className="space-y-3">
-                {statusPills.map((pill) => (
-                  <div
-                    key={pill.key}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
-                      pill.state === "done"
-                        ? "bg-emerald-50 border-emerald-100 text-emerald-700"
-                        : pill.state === "active"
-                        ? "bg-amber-50 border-amber-100 text-amber-700"
-                        : "bg-slate-50 border-slate-100 text-slate-600"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          pill.state === "done"
-                            ? "bg-emerald-500"
-                            : pill.state === "active"
-                            ? "bg-amber-400 animate-pulse"
-                            : "bg-slate-300"
-                        }`}
-                      />
-                      <span className="font-medium text-sm">
-                        {pill.label}
-                      </span>
-                    </div>
-                    <span className="text-xs">{pill.hint}</span>
-                  </div>
-                ))}
+              <div className="space-y-2 text-sm">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs uppercase text-slate-500 mb-1">H1</p>
+                  <p className="font-semibold text-slate-900">
+                    {seoPayload?.h1 ??
+                      seoPayload?.name_best ??
+                      "Not yet generated"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs uppercase text-slate-500 mb-1">
+                    Page Title
+                  </p>
+                  <p className="font-semibold text-slate-900">
+                    {seoPayload?.pageTitle ??
+                      seoPayload?.title ??
+                      "Not yet generated"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs uppercase text-slate-500 mb-1">
+                    Meta Description
+                  </p>
+                  <p className="text-slate-800 leading-relaxed">
+                    {seoPayload?.metaDescription ??
+                      seoPayload?.meta_description ??
+                      "Not yet generated"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                  <p className="text-xs uppercase text-slate-500 mb-1">
+                    Short Description
+                  </p>
+                  <p className="text-slate-800">
+                    {seoPayload?.seoShortDescription ??
+                      seoPayload?.seo_short_description ??
+                      "Not yet generated"}
+                  </p>
+                </div>
               </div>
             </div>
 
+            {/* Features + parked extras */}
+            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-slate-900">
+                  Feature bullets
+                </h4>
+                <span className="text-xs text-slate-500">
+                  What the enforcer kept
+                </span>
+              </div>
+              {Array.isArray(features) && features.length > 0 ? (
+                <ul className="list-disc list-inside space-y-1 text-slate-800">
+                  {features.map((feat: string, idx: number) => (
+                    <li key={idx}>{feat}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-slate-500 text-sm">
+                  No features captured yet.
+                </p>
+              )}
+
+              {parkedExtras.length > 0 && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowRawExtras((v) => !v)}
+                    className="text-sm text-sky-700 underline"
+                  >
+                    {showRawExtras ? "Hide" : "Show"} parked extras (
+                    {parkedExtras.length})
+                  </button>
+                  {showRawExtras && (
+                    <pre className="mt-2 p-3 rounded-lg bg-slate-50 text-xs text-slate-700 border border-slate-100 overflow-auto">
+                      {JSON.stringify(
+                        Object.fromEntries(parkedExtras),
+                        null,
+                        2
+                      )}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Debug: Source SEO */}
             {jobData && ingestionId && (
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -825,6 +889,7 @@ export default function AvidiaSeoPage() {
               </div>
             )}
 
+            {/* Debug: raw ingest response */}
             {rawIngestResponse && (
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -843,87 +908,37 @@ export default function AvidiaSeoPage() {
               </div>
             )}
 
-            <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-lg font-semibold text-slate-900">
-                  Generate SEO from a URL
-                </h4>
-                <span className="text-xs text-slate-500">
-                  No extract required
-                </span>
-              </div>
-              <div className="space-y-2">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    value={urlInput}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setUrlInput(next);
-
-                      // User is preparing a new run: clear previous outputs
-                      setJob(null);
-                      setIsPreviewResult(false);
-                      setRawIngestResponse(null);
-                      setPollingState(null);
-                      setStatusMessage(null);
-                      setError(null);
-                    }}
-                    placeholder="https://manufacturer.com/product..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                    type="url"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleGenerateAndSave();
-                    }}
-                    disabled={generating}
-                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-sky-600 text-white font-semibold shadow hover:bg-sky-500 disabled:opacity-60"
-                  >
-                    {generating ? "Generating…" : "Generate & Save"}
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Best practice: keep the manufacturer URL and action together
-                  so users launch ingestion without scanning the page.
+            {/* Inline preview if no ingestionId but we got a payload */}
+            {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
+              <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-2 text-sm">
+                <h5 className="text-sm font-semibold text-slate-900">
+                  Preview Generated SEO
+                </h5>
+                <p>
+                  <strong>H1:</strong>{" "}
+                  {(job.seo_payload ?? job.seoPayload)?.h1 ?? ""}
                 </p>
-                <p className="text-xs text-slate-500">
-                  We’ll create an ingestion and then run AvidiaSEO. You’ll be
-                  redirected here once ready.
+                <p>
+                  <strong>Title:</strong>{" "}
+                  {(job.seo_payload ?? job.seoPayload)?.title ?? ""}
                 </p>
-                {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
-                  <div className="border-t border-slate-100 pt-3 space-y-2 text-sm">
-                    <h5 className="text-sm font-semibold text-slate-900">
-                      Preview Generated SEO
-                    </h5>
-                    <p>
-                      <strong>H1:</strong>{" "}
-                      {(job.seo_payload ?? job.seoPayload)?.h1 ?? ""}
-                    </p>
-                    <p>
-                      <strong>Title:</strong>{" "}
-                      {(job.seo_payload ?? job.seoPayload)?.title ?? ""}
-                    </p>
-                    <p>
-                      <strong>Meta:</strong>{" "}
-                      {(job.seo_payload ?? job.seoPayload)?.meta_description ??
-                        (job.seo_payload ?? job.seoPayload)?.metaDescription ??
-                        ""}
-                    </p>
-                    <div
-                      className="rounded-lg border border-slate-100 bg-slate-50 p-3"
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          job.description_html ||
-                          job.descriptionHtml ||
-                          "<em>No description generated</em>",
-                      }}
-                    />
-                  </div>
-                )}
+                <p>
+                  <strong>Meta:</strong>{" "}
+                  {(job.seo_payload ?? job.seoPayload)?.meta_description ??
+                    (job.seo_payload ?? job.seoPayload)?.metaDescription ??
+                    ""}
+                </p>
+                <div
+                  className="rounded-lg border border-slate-100 bg-slate-50 p-3"
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      job.description_html ||
+                      job.descriptionHtml ||
+                      "<em>No description generated</em>",
+                  }}
+                />
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
