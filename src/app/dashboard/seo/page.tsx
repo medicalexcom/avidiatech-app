@@ -39,6 +39,9 @@ export default function AvidiaSeoPage() {
   // track whether current seo result is preview (not persisted)
   const [isPreviewResult, setIsPreviewResult] = useState(false);
 
+  // Remember the URL that came from query params; used to decide if we should reuse ingestionId
+  const [initialUrl] = useState(urlParam || "");
+
   const fetchIngestionData = useCallback(
     async (id: string, isCancelled: () => boolean = () => false) => {
       setLoading(true);
@@ -107,18 +110,20 @@ export default function AvidiaSeoPage() {
         const first = await callSeo(true);
         if (first.ok) {
           setIsPreviewResult(false);
-          const seoPayload = first.json?.seo_payload ?? first.json?.seoPayload ?? null;
+          const seoPayload =
+            first.json?.seo_payload ?? first.json?.seoPayload ?? null;
           const descriptionHtml =
-            first.json?.description_html ??
-            first.json?.descriptionHtml ??
-            null;
+            first.json?.description_html ?? first.json?.descriptionHtml ?? null;
           const features = first.json?.features ?? null;
           if (seoPayload || descriptionHtml || features) {
             setJob((prev) => ({
               ...(prev || {}),
-              seo_payload: seoPayload ?? (prev as AnyObj)?.seo_payload ?? null,
+              seo_payload:
+                seoPayload ?? (prev as AnyObj)?.seo_payload ?? null,
               description_html:
-                descriptionHtml ?? (prev as AnyObj)?.description_html ?? null,
+                descriptionHtml ??
+                (prev as AnyObj)?.description_html ??
+                null,
               features: features ?? (prev as AnyObj)?.features ?? null,
             }));
             setStatusMessage("SEO persisted to Supabase");
@@ -141,7 +146,9 @@ export default function AvidiaSeoPage() {
             const previewJob = {
               ...(job || {}),
               seo_payload:
-                previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
+                previewBody?.seoPayload ??
+                previewBody?.seo_payload ??
+                previewBody,
               description_html:
                 previewBody?.descriptionHtml ??
                 previewBody?.description_html ??
@@ -157,7 +164,8 @@ export default function AvidiaSeoPage() {
             return;
           } else {
             setError(
-              preview.json?.error?.message ?? `Preview failed: ${preview.status}`
+              preview.json?.error?.message ??
+                `Preview failed: ${preview.status}`
             );
             setStatusMessage(null);
             return;
@@ -165,7 +173,8 @@ export default function AvidiaSeoPage() {
         }
 
         setError(
-          first.json?.error?.message ?? `SEO generation failed: ${first.status}`
+          first.json?.error?.message ??
+            `SEO generation failed: ${first.status}`
         );
         setStatusMessage(null);
         return;
@@ -177,14 +186,22 @@ export default function AvidiaSeoPage() {
         const previewBody = result.json;
         const previewJob = {
           ...(job || {}),
-          seo_payload: previewBody?.seoPayload ?? previewBody?.seo_payload ?? previewBody,
+          seo_payload:
+            previewBody?.seoPayload ??
+            previewBody?.seo_payload ??
+            previewBody,
           description_html:
-            previewBody?.descriptionHtml ?? previewBody?.description_html ?? previewBody,
+            previewBody?.descriptionHtml ??
+            previewBody?.description_html ??
+            previewBody,
         };
         setJob(previewJob);
         setStatusMessage("Preview SEO ready");
       } else {
-        setError(result.json?.error?.message ?? `SEO preview failed: ${result.status}`);
+        setError(
+          result.json?.error?.message ??
+            `SEO preview failed: ${result.status}`
+        );
         setStatusMessage(null);
       }
     } catch (e: any) {
@@ -275,8 +292,6 @@ export default function AvidiaSeoPage() {
         null;
 
       if (possibleIngestionId) {
-        // If the response included normalized_payload and status completed, we could call SEO immediately,
-        // but we will prefer to poll the job endpoint to confirm ingestion completed with normalized_payload.
         router.push(
           `/dashboard/seo?ingestionId=${encodeURIComponent(
             possibleIngestionId
@@ -346,11 +361,25 @@ export default function AvidiaSeoPage() {
 
   async function handleGenerateAndSave() {
     setError(null);
-    if (ingestionId) {
+
+    // If we have an ingestionId AND the URL hasn't changed from the original,
+    // treat this as "re-run SEO on existing ingestion."
+    const isSameAsInitial = initialUrl && urlInput === initialUrl;
+
+    if (ingestionId && isSameAsInitial) {
       await generateFromIngestion(ingestionId, true);
-    } else {
-      await createIngestionThenGenerate(urlInput);
+      return;
     }
+
+    // Otherwise, always treat as a brand-new run:
+    // clear previous data and kick off full ingest → poll → SEO cascade.
+    setJob(null);
+    setIsPreviewResult(false);
+    setRawIngestResponse(null);
+    setPollingState(null);
+    setStatusMessage(null);
+
+    await createIngestionThenGenerate(urlInput);
   }
 
   const jobData = useMemo(() => {
@@ -372,7 +401,7 @@ export default function AvidiaSeoPage() {
       const regex = new RegExp(`(${escaped})`, "gi");
       return descriptionHtml.replace(
         regex,
-        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
+        '<mark className="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
       );
     } catch (err) {
       console.warn("Unable to highlight search term", err);
@@ -394,7 +423,8 @@ export default function AvidiaSeoPage() {
   ];
 
   const parkedExtras = useMemo(() => {
-    if (!seoPayload || typeof seoPayload !== "object") return [] as [string, any][];
+    if (!seoPayload || typeof seoPayload !== "object")
+      return [] as [string, any][];
     return Object.entries(seoPayload).filter(([key]) => !knownSeoKeys.includes(key));
   }, [seoPayload]);
 
@@ -706,7 +736,18 @@ export default function AvidiaSeoPage() {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setUrlInput(next);
+
+                      // User is preparing a new run: clear previous outputs
+                      setJob(null);
+                      setIsPreviewResult(false);
+                      setRawIngestResponse(null);
+                      setPollingState(null);
+                      setStatusMessage(null);
+                      setError(null);
+                    }}
                     placeholder="https://manufacturer.com/product..."
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     type="url"
