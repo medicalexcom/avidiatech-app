@@ -52,7 +52,8 @@ export default function AvidiaSeoPage() {
           );
         }
         if (!isCancelled()) {
-          setJob(json);
+          // API returns either the row directly or wrapped in { data }
+          setJob(json?.data ?? json);
           setStatusMessage("Ingestion ready");
         }
       } catch (err: any) {
@@ -331,9 +332,16 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  const seoPayload = job?.seo_payload ?? job?.seoPayload ?? null;
-  const descriptionHtml = job?.description_html ?? job?.descriptionHtml ?? null;
-  const features = job?.features ?? null;
+  const jobData = useMemo(() => {
+    if (!job) return null;
+    if (job?.data && job?.ok !== undefined) return job.data;
+    return job;
+  }, [job]);
+
+  const seoPayload = jobData?.seo_payload ?? jobData?.seoPayload ?? null;
+  const descriptionHtml =
+    jobData?.description_html ?? jobData?.descriptionHtml ?? null;
+  const features = jobData?.features ?? null;
 
   const highlightedDescription = useMemo(() => {
     if (!descriptionHtml) return "<em>No description generated yet</em>";
@@ -402,10 +410,10 @@ export default function AvidiaSeoPage() {
         state:
           loading || pollingState
             ? "active"
-            : job?.status === "completed" || job?.normalized_payload
+            : jobData?.status === "completed" || jobData?.normalized_payload
               ? "done"
               : "idle",
-        hint: pollingState || job?.status || "waiting",
+        hint: pollingState || jobData?.status || "waiting",
       },
       {
         key: "seo",
@@ -424,7 +432,7 @@ export default function AvidiaSeoPage() {
         hint: hasSeo ? "Rendered" : "awaiting generation",
       },
     ];
-  }, [descriptionHtml, features, generating, job?.normalized_payload, job?.status, loading, pollingState, seoPayload]);
+  }, [descriptionHtml, features, generating, jobData?.normalized_payload, jobData?.status, loading, pollingState, seoPayload]);
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
@@ -642,29 +650,16 @@ export default function AvidiaSeoPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleGenerateAndSave}
-                  disabled={generating}
-                  className="w-full px-4 py-3 rounded-lg bg-sky-600 text-white font-semibold shadow hover:bg-sky-500 disabled:opacity-60"
-                >
-                  {generating ? "Scraping & generating…" : "Generate & Save"}
-                </button>
-                <p className="text-xs text-slate-500 mt-2">
-                  We persist directly into Supabase via the service role, then refresh this canvas automatically.
-                </p>
-              </div>
             </div>
 
-            {job && ingestionId && (
+            {jobData && ingestionId && (
               <div className="rounded-xl bg-white border border-slate-100 shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-slate-900">Source SEO (scraped)</h4>
                   <span className="text-xs text-slate-500">Live from ingestion</span>
                 </div>
                 <pre className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs text-slate-700 whitespace-pre-wrap break-words">
-                  {JSON.stringify(job.normalized_payload ?? job, null, 2)}
+                  {JSON.stringify(jobData.normalized_payload ?? jobData, null, 2)}
                 </pre>
               </div>
             )}
@@ -686,25 +681,30 @@ export default function AvidiaSeoPage() {
                 <h4 className="text-lg font-semibold text-slate-900">Generate SEO from a URL</h4>
                 <span className="text-xs text-slate-500">No extract required</span>
               </div>
-              <div className="flex flex-col gap-3">
-                <input
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://manufacturer.com/product..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  type="url"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleGenerateAndSave();
-                  }}
-                  disabled={generating}
-                  className="w-full px-4 py-3 rounded-lg bg-sky-600 text-white font-semibold shadow hover:bg-sky-500 disabled:opacity-60"
-                >
-                  {generating ? "Generating…" : "Generate & Save"}
-                </button>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://manufacturer.com/product..."
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    type="url"
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleGenerateAndSave();
+                    }}
+                    disabled={generating}
+                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-sky-600 text-white font-semibold shadow hover:bg-sky-500 disabled:opacity-60"
+                  >
+                    {generating ? "Generating…" : "Generate & Save"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Best practice: keep the manufacturer URL and action together so users launch ingestion without scanning the page.
+                </p>
                 <p className="text-xs text-slate-500">
                   We’ll create an ingestion and then run AvidiaSEO. You’ll be redirected here once ready.
                 </p>
