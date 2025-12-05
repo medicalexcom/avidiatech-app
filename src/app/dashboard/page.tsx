@@ -8,11 +8,13 @@ const primaryModules = [
     name: "AvidiaExtract",
     href: "/dashboard/extract",
     badge: "Ingestion",
-    description: "Turn any manufacturer URL into normalized JSON for the whole stack.",
+    description:
+      "Turn any manufacturer URL into normalized JSON for the whole stack.",
     accentBg: "from-cyan-500/15 via-sky-500/10 to-emerald-500/10",
     border: "border-cyan-500/50",
     dot: "bg-cyan-400",
     glow: "shadow-[0_0_40px_rgba(56,189,248,0.35)]",
+    status: "live" as const,
   },
   {
     name: "AvidiaDescribe",
@@ -24,6 +26,7 @@ const primaryModules = [
     border: "border-fuchsia-500/50",
     dot: "bg-fuchsia-400",
     glow: "shadow-[0_0_40px_rgba(236,72,153,0.35)]",
+    status: "live" as const,
   },
   {
     name: "AvidiaSEO",
@@ -35,46 +38,148 @@ const primaryModules = [
     border: "border-emerald-500/50",
     dot: "bg-emerald-400",
     glow: "shadow-[0_0_40px_rgba(16,185,129,0.35)]",
+    status: "live" as const,
   },
 ];
 
-const secondaryModules = [
+type ModuleStatus = "live" | "beta" | "soon";
+
+const secondaryModules: {
+  group: string;
+  items: {
+    name: string;
+    href: string;
+    tag: string;
+    status: ModuleStatus;
+  }[];
+}[] = [
   {
     group: "AI Extraction & Content",
     items: [
-      { name: "Translate", href: "/dashboard/translate", tag: "Multi-language" },
-      { name: "Cluster", href: "/dashboard/cluster", tag: "Similarity & groups" },
-      { name: "Studio", href: "/dashboard/studio", tag: "Experiments" },
+      {
+        name: "Translate",
+        href: "/dashboard/translate",
+        tag: "Multi-language",
+        status: "beta",
+      },
+      {
+        name: "Cluster",
+        href: "/dashboard/cluster",
+        tag: "Similarity & groups",
+        status: "beta",
+      },
+      {
+        name: "Studio",
+        href: "/dashboard/studio",
+        tag: "Experiments",
+        status: "soon",
+      },
     ],
   },
   {
     group: "Data Intelligence",
     items: [
-      { name: "Match", href: "/dashboard/match", tag: "Catalog mapping" },
-      { name: "Variants", href: "/dashboard/variants", tag: "Variations" },
-      { name: "Specs", href: "/dashboard/specs", tag: "Attributes" },
-      { name: "Docs", href: "/dashboard/docs", tag: "Manuals" },
-      { name: "Images", href: "/dashboard/images", tag: "Visuals" },
+      {
+        name: "Match",
+        href: "/dashboard/match",
+        tag: "Catalog mapping",
+        status: "beta",
+      },
+      {
+        name: "Variants",
+        href: "/dashboard/variants",
+        tag: "Variations",
+        status: "beta",
+      },
+      {
+        name: "Specs",
+        href: "/dashboard/specs",
+        tag: "Attributes",
+        status: "beta",
+      },
+      {
+        name: "Docs",
+        href: "/dashboard/docs",
+        tag: "Manuals & PDFs",
+        status: "soon",
+      },
+      {
+        name: "Images",
+        href: "/dashboard/images",
+        tag: "Visual library",
+        status: "soon",
+      },
     ],
   },
   {
     group: "Commerce & Automation",
     items: [
-      { name: "Import", href: "/dashboard/import", tag: "Sync in" },
-      { name: "Audit", href: "/dashboard/audit", tag: "QA & scoring" },
-      { name: "Price", href: "/dashboard/price", tag: "Pricing rules" },
-      { name: "Feeds", href: "/dashboard/feeds", tag: "Outbound feeds" },
-      { name: "Monitor", href: "/dashboard/monitor", tag: "Health" },
+      {
+        name: "Import",
+        href: "/dashboard/import",
+        tag: "Sync in",
+        status: "live",
+      },
+      {
+        name: "Audit",
+        href: "/dashboard/audit",
+        tag: "QA & scoring",
+        status: "beta",
+      },
+      {
+        name: "Price",
+        href: "/dashboard/price",
+        tag: "Pricing rules",
+        status: "soon",
+      },
+      {
+        name: "Feeds",
+        href: "/dashboard/feeds",
+        tag: "Outbound feeds",
+        status: "soon",
+      },
+      {
+        name: "Monitor",
+        href: "/dashboard/monitor",
+        tag: "Pipeline health",
+        status: "soon",
+      },
     ],
   },
   {
     group: "Developer Tools",
     items: [
-      { name: "Browser", href: "/dashboard/browser", tag: "Scraper tools" },
-      { name: "API", href: "/dashboard/api", tag: "API access" },
+      {
+        name: "Browser",
+        href: "/dashboard/browser",
+        tag: "Scraper tools",
+        status: "beta",
+      },
+      {
+        name: "API",
+        href: "/dashboard/api",
+        tag: "API access",
+        status: "live",
+      },
     ],
   },
 ];
+
+function statusPillClasses(status: ModuleStatus) {
+  if (status === "live") {
+    return "bg-emerald-500/15 text-emerald-200 border border-emerald-400/40";
+  }
+  if (status === "beta") {
+    return "bg-amber-500/10 text-amber-200 border border-amber-400/40";
+  }
+  return "bg-slate-700/40 text-slate-200 border border-slate-600/70";
+}
+
+function statusLabel(status: ModuleStatus) {
+  if (status === "live") return "Live";
+  if (status === "beta") return "Beta";
+  return "Coming soon";
+}
 
 /**
  * Dashboard root: main signed-in landing.
@@ -114,9 +219,10 @@ export default function DashboardPage() {
                   .
                 </h1>
                 <p className="text-sm text-slate-300 max-w-xl">
-                  See your ingestion engine, content generation, and automation
-                  tools in one place. Start with Extract, Describe, or SEO —
-                  then plug everything into your store, PIM, or internal APIs.
+                  This is the hub for everything AvidiaTech: ingestion, content,
+                  SEO, intelligence, automation, and developer tools. Start with
+                  Extract, Describe, or SEO — then layer the rest as your stack
+                  matures.
                 </p>
               </div>
 
@@ -130,13 +236,13 @@ export default function DashboardPage() {
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-fuchsia-500/40 px-3 py-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
                   <span className="text-slate-200">
-                    Custom GPT instructions drive Describe & SEO.
+                    Custom GPT instructions power Describe & SEO.
                   </span>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-emerald-500/40 px-3 py-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span className="text-slate-200">
-                    Built to sync with MedicalEx and any future stores.
+                    More modules are live, in beta, or under construction.
                   </span>
                 </div>
               </div>
@@ -183,8 +289,8 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-500 pt-1">
-                  These cards can later show real counts for ingests, SEO jobs,
-                  and audits once wired to Supabase.
+                  Later, wire these to live counts from Supabase: ingests, SEO
+                  jobs, audits, and failures.
                 </p>
               </div>
             </div>
@@ -210,6 +316,8 @@ export default function DashboardPage() {
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/80 border border-slate-700 px-2.5 py-1 text-[10px] text-slate-300">
                   <span className={`h-1.5 w-1.5 rounded-full ${mod.dot}`} />
                   <span>{mod.badge}</span>
+                  <span className="h-1 w-px bg-slate-700" />
+                  <span className="text-emerald-200 font-semibold">Live</span>
                 </div>
                 <div>
                   <h2 className="text-sm lg:text-base font-semibold text-slate-50">
@@ -237,7 +345,7 @@ export default function DashboardPage() {
           ))}
         </section>
 
-        {/* SECONDARY MODULE GRID */}
+        {/* SECONDARY MODULE GRID + GUIDANCE */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {secondaryModules.map((group) => (
             <div
@@ -250,33 +358,53 @@ export default function DashboardPage() {
                     {group.group}
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Jump into the specialized tools once your core flows are
-                    stable.
+                    Modules in this group can be rolled in as your workflows
+                    mature.
                   </p>
                 </div>
               </div>
               <ul className="space-y-1.5">
-                {group.items.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="flex items-center justify-between rounded-xl px-3 py-2 text-[11px] bg-slate-950/80 border border-slate-800 hover:border-slate-600 hover:bg-slate-900/90 transition-colors"
-                    >
-                      <span className="text-slate-200">{item.name}</span>
-                      <span className="text-[10px] text-slate-500">
-                        {item.tag}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
+                {group.items.map((item) => {
+                  const isSoon = item.status === "soon";
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={isSoon ? "#" : item.href}
+                        aria-disabled={isSoon}
+                        className={[
+                          "flex items-center justify-between rounded-xl px-3 py-2 text-[11px] border transition-colors",
+                          "bg-slate-950/80",
+                          isSoon
+                            ? "border-slate-800 text-slate-500 cursor-not-allowed opacity-70"
+                            : "border-slate-800 hover:border-slate-600 hover:bg-slate-900/90 text-slate-200",
+                        ].join(" ")}
+                      >
+                        <span>{item.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">
+                            {item.tag}
+                          </span>
+                          <span
+                            className={[
+                              "inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[9px] font-semibold",
+                              statusPillClasses(item.status),
+                            ].join(" ")}
+                          >
+                            {statusLabel(item.status)}
+                          </span>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
 
-          {/* RIGHT COLUMN: helper / guidance */}
+          {/* RIGHT COLUMN: helper / roadmap */}
           <div className="rounded-2xl bg-slate-900/90 border border-slate-800/80 p-4 lg:p-5 space-y-3">
             <h3 className="text-xs font-semibold text-slate-100 uppercase tracking-[0.18em]">
-              How to use this dashboard
+              How to grow into all modules
             </h3>
             <ol className="space-y-2 text-[11px] text-slate-300 list-decimal list-inside">
               <li>
@@ -303,18 +431,24 @@ export default function DashboardPage() {
                 your store.
               </li>
               <li>
-                Hook{" "}
+                Layer in{" "}
+                <span className="font-semibold text-slate-100">Variants</span>,{" "}
                 <span className="font-semibold text-slate-100">Audit</span>,{" "}
-                <span className="font-semibold text-slate-100">Variants</span>,
-                and{" "}
-                <span className="font-semibold text-slate-100">Feeds</span> in
-                later to automate QA and publishing.
+                <span className="font-semibold text-slate-100">Feeds</span>, and{" "}
+                <span className="font-semibold text-slate-100">Monitor</span>{" "}
+                as you move to full automation.
               </li>
             </ol>
-            <p className="text-[10px] text-slate-500 pt-1">
-              PlanModal will sit on top of this page for unsubscribed tenants,
-              but the layout and navigation stay the same.
-            </p>
+            <div className="pt-2 border-t border-slate-800 mt-2">
+              <p className="text-[10px] text-slate-500">
+                More modules are on the roadmap (Validate, Agency, Bulk Ops,
+                Description Formats, and others). They&apos;ll appear here as{" "}
+                <span className="font-semibold text-slate-300">Coming soon</span>{" "}
+                first, then flip to{" "}
+                <span className="font-semibold text-emerald-300">Live</span>{" "}
+                once wired.
+              </p>
+            </div>
           </div>
         </section>
       </div>
