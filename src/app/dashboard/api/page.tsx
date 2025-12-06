@@ -13,8 +13,8 @@ export default function ApiPage() {
     <main className="min-h-screen bg-slate-950 text-slate-50 relative overflow-hidden">
       {/* Ambient background */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/26 blur-3xl" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-violet-500/22 blur-3xl" />
+        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-violet-500/26 blur-3xl" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-500/22 blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.06] mix-blend-soft-light">
           <div className="h-full w-full bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:46px_46px]" />
@@ -24,21 +24,21 @@ export default function ApiPage() {
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
         {/* HEADER / HERO */}
         <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-cyan-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(34,211,238,0.35)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+          <div className="relative overflow-hidden rounded-3xl border border-violet-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(167,139,250,0.35)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               {/* Left: title + description */}
               <div className="space-y-3 max-w-2xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
                   Developer Tools · AvidiaAPI
                   <span className="h-1 w-px bg-slate-700" />
-                  <span className="text-cyan-200">Unified product data API</span>
+                  <span className="text-violet-200">Unified product data API</span>
                 </div>
 
                 <div className="space-y-2">
                   <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">
                     Ship on top of{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-sky-200 to-violet-200">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-300 via-sky-200 to-emerald-200">
                       Avidia’s product data engine.
                     </span>
                   </h1>
@@ -51,14 +51,14 @@ export default function ApiPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-cyan-500/60 px-3 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-violet-500/60 px-3 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
                     <span className="text-slate-200">
                       Unified REST surface across Extract, Describe, SEO, Audit, and more.
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-violet-500/55 px-3 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-cyan-500/55 px-3 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
                     <span className="text-slate-200">
                       Tenant-scoped API keys with role-aware permissions and quotas.
                     </span>
@@ -81,8 +81,8 @@ export default function ApiPage() {
                         Module status
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
-                        <span className="text-sm font-semibold text-cyan-200">
+                        <span className="inline-flex h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.9)]" />
+                        <span className="text-sm font-semibold text-violet-200">
                           Endpoint design locked · Beta client planned
                         </span>
                       </div>
@@ -146,7 +146,7 @@ Content-Type: application/json
 
               <ul className="mt-4 space-y-2 text-sm text-slate-300">
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-violet-400" />
                   <span>
                     <span className="font-medium">Unified product API:</span> list, filter,
                     and page through normalized products across brands, catalogs, and
@@ -154,7 +154,7 @@ Content-Type: application/json
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-violet-400" />
                   <span>
                     <span className="font-medium">Action endpoints:</span> trigger ingest,
                     Describe / SEO runs, Audit passes, or Import exports directly from
@@ -162,7 +162,7 @@ Content-Type: application/json
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-violet-400" />
                   <span>
                     <span className="font-medium">Tenant-bound API keys:</span> keys are
                     tied to workspaces and roles so you can separate staging, production,
@@ -170,7 +170,7 @@ Content-Type: application/json
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-violet-400" />
                   <span>
                     <span className="font-medium">Enterprise-ready behaviors:</span> rate
                     limiting, audit logs, and predictable error shapes for robust
@@ -186,7 +186,7 @@ Content-Type: application/json
               </h3>
               <div className="mt-3 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
                     Custom internal tools
                   </div>
                   <p className="mt-1.5">
@@ -196,7 +196,7 @@ Content-Type: application/json
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
                     Platform integrations
                   </div>
                   <p className="mt-1.5">
@@ -217,7 +217,7 @@ Content-Type: application/json
               </h2>
               <ol className="mt-3 space-y-3 text-sm text-slate-300">
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-cyan-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-violet-300">
                     1
                   </div>
                   <div>
@@ -229,11 +229,13 @@ Content-Type: application/json
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-cyan-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-violet-300">
                     2
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">Call ingestion &amp; content endpoints</div>
+                    <div className="font-medium text-slate-100">
+                      Call ingestion &amp; content endpoints
+                    </div>
                     <p className="text-xs text-slate-400">
                       Use the REST endpoints to ingest URLs, fetch job status, retrieve
                       normalized payloads, and request Describe / SEO / Audit runs as part
@@ -242,11 +244,13 @@ Content-Type: application/json
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-cyan-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-violet-300">
                     3
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">Listen for events &amp; sync</div>
+                    <div className="font-medium text-slate-100">
+                      Listen for events &amp; sync
+                    </div>
                     <p className="text-xs text-slate-400">
                       Subscribe to webhooks for job completion, audit results, and export
                       readiness, then sync into your store, PIM, or analytics stack.
@@ -258,7 +262,7 @@ Content-Type: application/json
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(34,211,238,0.55)] hover:bg-cyan-400"
+                  className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(167,139,250,0.55)] hover:bg-violet-400"
                   disabled
                 >
                   API keys &amp; docs (coming soon)
