@@ -9,7 +9,7 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
  * implemented to handle parsing of CSV/XLSX files and queuing ingestion jobs.
  */
 export async function POST(request: Request) {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
