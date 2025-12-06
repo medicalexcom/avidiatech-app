@@ -7,9 +7,9 @@
  * product pages. It puts you in control of content and layout.
  */
 
-export const dynamic = "force-dynamic";
-
 import React from "react";
+
+export const dynamic = "force-dynamic";
 
 const templatePresets = [
   {
@@ -50,36 +50,8 @@ export default function StudioPage() {
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
-        {/* SHARED MODULE HEADER (matches Describe / Translate / Cluster) */}
-        <header className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1.5">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Workspace tool
-            </p>
-            <h1 className="text-2xl font-semibold sm:text-3xl text-slate-900 dark:text-slate-50">
-              Studio
-            </h1>
-            <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-              AvidiaStudio sits on top of Extract, Describe, and SEO so you can
-              visually assemble product pages, tweak copy, and preview layouts
-              before you publish them back into your storefront or CMS.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-fuchsia-300/70 bg-white/85 px-3 py-1.5 shadow-sm dark:border-fuchsia-500/60 dark:bg-slate-950/80">
-              <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
-              Visual layout layer
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/70 bg-slate-100/90 px-3 py-1.5 shadow-sm dark:border-cyan-500/50 dark:bg-slate-950/80">
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-              Powered by AvidiaExtract &amp; AvidiaSEO
-            </span>
-          </div>
-        </header>
-
-        {/* HERO ROW */}
-        <section className="relative overflow-hidden rounded-3xl border border-fuchsia-500/40 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 shadow-[0_0_80px_rgba(236,72,153,0.25)] px-5 py-6 lg:px-7 lg:py-7">
+        {/* HERO ROW (no extra workspace header, no frame card) */}
+        <section className="relative">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
             {/* Left copy */}
             <div className="flex-1 min-w-[260px] space-y-4">
@@ -95,14 +67,13 @@ export default function StudioPage() {
               </div>
 
               <div className="space-y-2">
-                {/* H1 → H2, text unchanged, H1 lives in shared header */}
-                <h2 className="text-2xl lg:text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
+                <h1 className="text-2xl lg:text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
                   Design{" "}
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-fuchsia-500 via-cyan-500 to-sky-500 dark:from-fuchsia-300 dark:via-cyan-300 dark:to-sky-300">
                     conversion-ready product pages
                   </span>{" "}
                   without leaving your data stack.
-                </h2>
+                </h1>
                 <p className="text-sm text-slate-600 max-w-xl dark:text-slate-300">
                   AvidiaStudio sits on top of Extract, Describe, and SEO so you
                   can adjust copy, rearrange blocks, and preview layout before
