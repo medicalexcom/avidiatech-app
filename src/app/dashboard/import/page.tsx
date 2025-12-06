@@ -11,40 +11,42 @@
 
 export default function ImportPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 relative overflow-hidden">
+    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
       {/* Background gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-500/25 blur-3xl" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.06]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:46px_46px]" />
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-500/25" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/30 blur-3xl dark:bg-cyan-500/20" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
         {/* Header / hero row */}
         <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-sky-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(56,189,248,0.45)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+          <div className="relative overflow-hidden rounded-3xl border border-sky-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(56,189,248,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-sky-500/45 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(56,189,248,0.45)]">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               {/* Left: title + copy */}
               <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
                   Commerce &amp; Automation · AvidiaImport
-                  <span className="h-1 w-px bg-slate-700" />
-                  <span className="text-sky-200">Export &amp; connector engine</span>
+                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+                  <span className="text-sky-600 dark:text-sky-200">
+                    Export &amp; connector engine
+                  </span>
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">
+                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn your unified Avidia JSON into{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-300 via-cyan-300 to-emerald-300">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 dark:from-sky-300 dark:via-cyan-300 dark:to-emerald-300">
                       platform-perfect import files
                     </span>
                     .
                   </h1>
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
                     AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract,
                     Describe, SEO, Specs, and Variants have done their work, Import reshapes that
                     single product model into Shopify, BigCommerce, WooCommerce, and feed-ready
@@ -53,19 +55,19 @@ export default function ImportPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-sky-500/60 px-3 py-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/60 dark:text-slate-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span className="text-slate-200">Export profiles tuned per platform schema.</span>
+                    <span>Export profiles tuned per platform schema.</span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-cyan-500/55 px-3 py-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/55 dark:text-slate-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span className="text-slate-200">
+                    <span>
                       One normalized source model, many downstream destinations.
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-emerald-500/55 px-3 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                    <span className="text-slate-200">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/55 dark:text-slate-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span>
                       Designed for future direct API pushes, not just CSVs.
                     </span>
                   </div>
@@ -74,59 +76,70 @@ export default function ImportPage() {
 
               {/* Right: module status + export preview skeleton */}
               <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 sm:px-5 sm:py-4 space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                         Module status
                       </p>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="inline-flex h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
-                        <span className="text-sm font-semibold text-sky-200">
+                        <span className="text-sm font-semibold text-sky-700 dark:text-sky-200">
                           Export profiles in design · Connectors planned
                         </span>
                       </div>
                     </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-900 border border-slate-700 px-2.5 py-0.5 text-[10px] text-slate-300">
+                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
                       Export engine
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
                     AvidiaImport will be your final hop from AvidiaTech&apos;s unified model into
                     stores, feeds, and marketplaces.
                   </p>
                 </div>
 
                 {/* Static export-profile skeleton */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400 mb-2">
+                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
                     Export profile preview
                   </p>
                   <div className="space-y-2 text-[11px]">
-                    <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2">
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
                       <div className="flex flex-col">
-                        <span className="font-medium text-slate-100">Shopify · Full products</span>
-                        <span className="text-slate-500">CSV · Title, variants, SEO, images</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-100">
+                          Shopify · Full products
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-500">
+                          CSV · Title, variants, SEO, images
+                        </span>
                       </div>
-                      <span className="rounded-full border border-sky-500/60 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-200">
+                      <span className="rounded-full border border-sky-400/60 bg-sky-100/80 px-2 py-0.5 text-[10px] text-sky-700 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
                         Profile
                       </span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2">
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
                       <div className="flex flex-col">
-                        <span className="font-medium text-slate-100">BigCommerce · MedicalEx</span>
-                        <span className="text-slate-500">JSON · Variants + custom fields</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-100">
+                          BigCommerce · MedicalEx
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-500">
+                          JSON · Variants + custom fields
+                        </span>
                       </div>
-                      <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">
+                      <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                         Draft
                       </span>
                     </div>
-                    <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-800 bg-slate-950 px-3 py-2">
-                      <span className="text-slate-500">+ Add WooCommerce or custom feed profile</span>
+                    <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+                      <span className="text-slate-500 dark:text-slate-500">
+                        + Add WooCommerce or custom feed profile
+                      </span>
                     </div>
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-500">
-                    Planned: choose a profile, preview mapped fields, then download or push via API.
+                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                    Planned: choose a profile, preview mapped fields, then download or push via
+                    API.
                   </p>
                 </div>
               </div>
@@ -138,18 +151,18 @@ export default function ImportPage() {
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)]">
           {/* Left column: what it does / value */}
           <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5 shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-[0_18px_45px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
                 Platform-ready exports from your master JSON
               </h2>
-              <p className="mt-2 text-sm text-slate-300">
+              <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
                 AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract, Describe,
                 SEO, Specs, and Variants have done their work, Import converts that unified
                 product model into the exact schema required by each commerce platform or feed
                 target.
               </p>
 
-              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-300">
                 <li className="flex gap-2">
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
@@ -184,13 +197,13 @@ export default function ImportPage() {
               </ul>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
                 Why Import / Export matters
               </h3>
-              <div className="mt-3 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">
+              <div className="mt-3 grid gap-3 text-xs text-slate-700 sm:grid-cols-2 dark:text-slate-300">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-300">
                     Less CSV pain
                   </div>
                   <p className="mt-1.5">
@@ -198,8 +211,8 @@ export default function ImportPage() {
                     export profiles that always match the latest platform schema.
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-300">
                     Single source of truth
                   </div>
                   <p className="mt-1.5">
@@ -213,30 +226,34 @@ export default function ImportPage() {
 
           {/* Right column: planned workflow / integration story */}
           <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
                 Planned workflow · how AvidiaImport will run
               </h2>
-              <ol className="mt-3 space-y-3 text-sm text-slate-300">
+              <ol className="mt-3 space-y-3 text-sm text-slate-700 dark:text-slate-300">
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
                     1
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">Pick a dataset</div>
-                    <p className="text-xs text-slate-400">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                      Pick a dataset
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
                       Choose a slice of your catalog from AvidiaExtract / SEO (e.g., a brand,
                       collection, or recently ingested batch) as the export source.
                     </p>
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
                     2
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">Select export profile</div>
-                    <p className="text-xs text-slate-400">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                      Select export profile
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
                       Pick an export profile like &quot;Shopify – Full Products&quot; or
                       &quot;BigCommerce – MedicalEx&quot;. Each profile knows exactly how to map
                       Avidia fields into platform fields.
@@ -244,14 +261,14 @@ export default function ImportPage() {
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
                     3
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">
                       Download or push via API
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
                       Download a CSV/JSON file ready to upload, or (in later phases) push
                       directly to Shopify, BigCommerce, or WooCommerce with one click.
                     </p>
@@ -262,42 +279,54 @@ export default function ImportPage() {
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(56,189,248,0.55)] hover:bg-sky-400 disabled:opacity-70"
+                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-50 shadow-[0_12px_32px_rgba(56,189,248,0.55)] hover:bg-sky-400 disabled:opacity-70 dark:text-slate-950"
                   disabled
                 >
                   Export workspace (coming soon)
                 </button>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-600 dark:text-slate-400">
                   A dedicated Import / Export workspace will let you preview payloads, tweak
                   mappings, and schedule recurring exports for specific destinations.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/70 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/70">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                 Planned integrations
               </h3>
-              <ul className="mt-2 space-y-1.5 text-xs text-slate-400">
+              <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                 <li>
-                  • <span className="font-medium text-slate-200">Shopify</span> — product &amp;
-                  variant CSVs, plus future direct API sync.
+                  •{" "}
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    Shopify
+                  </span>{" "}
+                  — product &amp; variant CSVs, plus future direct API sync.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-200">BigCommerce</span> — JSON &amp;
-                  CSV exports tuned for MedicalEx plus other BC stores.
+                  •{" "}
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    BigCommerce
+                  </span>{" "}
+                  — JSON &amp; CSV exports tuned for MedicalEx plus other BC stores.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-200">WooCommerce</span> — CSV exports
-                  aligned to Woo&apos;s core product schema.
+                  •{" "}
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    WooCommerce
+                  </span>{" "}
+                  — CSV exports aligned to Woo&apos;s core product schema.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-200">Feeds &amp; marketplaces</span> —
-                  Google Shopping, marketplaces, and custom feeds based on the same export
+                  •{" "}
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    Feeds &amp; marketplaces
+                  </span>{" "}
+                  — Google Shopping, marketplaces, and custom feeds based on the same export
                   engine.
                 </li>
               </ul>
-              <p className="mt-3 text-[10px] text-slate-500">
+              <p className="mt-3 text-[10px] text-slate-500 dark:text-slate-500">
                 Over time, AvidiaImport becomes the single connector layer between AvidiaTech and
                 every storefront, feed, and marketplace you care about.
               </p>
