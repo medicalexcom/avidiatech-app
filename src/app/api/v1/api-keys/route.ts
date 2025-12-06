@@ -11,10 +11,10 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
  * authenticated Clerk user. Tenant context is resolved from the current
  * membership, optionally filtered by a provided tenant_id or x-tenant-id.
  */
-export async function GET(request: Request) {
-  const { userId, sessionClaims } = auth();
+  export async function GET(request: Request) {
+  const { userId, sessionClaims } = await auth();
   if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
