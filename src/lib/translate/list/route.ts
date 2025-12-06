@@ -11,7 +11,7 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  */
 export async function GET(req: Request) {
   try {
-    const { userId } = auth() as any;
+    const { userId } = await auth() as any;
     if (!userId && process.env.TRANSLATE_ALLOW_PUBLIC !== "1") {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
