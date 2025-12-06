@@ -19,14 +19,9 @@ export default async function DescribePage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 lg:px-8">
-        {/* HERO */}
-        <section className="relative overflow-hidden rounded-3xl border border-fuchsia-300/40 bg-gradient-to-br from-slate-50 via-white to-slate-50 p-6 shadow-[0_0_72px_rgba(236,72,153,0.2)] lg:p-8 dark:border-fuchsia-500/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_120px_rgba(236,72,153,0.28)]">
-          {/* Subtle grid */}
-          <div className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.07]">
-            <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
-          </div>
-
-          {/* Floating cards */}
+        {/* HERO (no framed banner, open row like Translate) */}
+        <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
+          {/* Floating cards (keep as subtle decoration) */}
           <div className="pointer-events-none absolute -right-10 top-10 hidden xl:block">
             <div className="w-60 rotate-3 rounded-2xl border border-sky-300/40 bg-white/95 px-4 py-3 shadow-[0_0_40px_rgba(56,189,248,0.25)] dark:border-sky-500/30 dark:bg-slate-950/90 dark:shadow-[0_0_60px_rgba(56,189,248,0.4)]">
               <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">
@@ -51,199 +46,197 @@ export default async function DescribePage() {
             </div>
           </div>
 
-          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch">
-            {/* LEFT: identity + story */}
-            <div className="min-w-[260px] flex-1 space-y-6">
-              {/* Identity row */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/50 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-fuchsia-700 shadow-sm dark:border-fuchsia-500/50 dark:bg-slate-950/90 dark:text-fuchsia-100">
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-fuchsia-400/70 bg-slate-100 dark:bg-slate-900">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-400" />
-                  </span>
-                  AvidiaTech • AvidiaDescribe
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Render + GPT • Custom instructions
+          {/* LEFT: identity + story */}
+          <div className="min-w-[260px] flex-1 space-y-6">
+            {/* Identity row */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/50 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-fuchsia-700 shadow-sm dark:border-fuchsia-500/50 dark:bg-slate-950/90 dark:text-fuchsia-100">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-fuchsia-400/70 bg-slate-100 dark:bg-slate-900">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-400" />
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/70 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700 shadow-sm dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100">
-                  ✨ From rough notes to production copy
+                AvidiaTech • AvidiaDescribe
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Render + GPT • Custom instructions
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/70 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-700 shadow-sm dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-100">
+                ✨ From rough notes to production copy
+              </span>
+            </div>
+
+            {/* Headline */}
+            <div className="space-y-3">
+              <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl dark:text-slate-50">
+                Describe the product in{" "}
+                <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
+                  your own words
                 </span>
-              </div>
+                . We turn it into a store-ready page.
+              </h1>
+              <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
+                Type a few lines of context — model, audience, key claims,
+                disclaimers. AvidiaDescribe runs your custom instructions and
+                returns SEO-ready copy that matches your brands and channels.
+              </p>
+            </div>
 
-              {/* Headline */}
-              <div className="space-y-3">
-                <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl dark:text-slate-50">
-                  Describe the product in{" "}
-                  <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
-                    your own words
-                  </span>
-                  . We turn it into a store-ready page.
-                </h1>
-                <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
-                  Type a few lines of context — model, audience, key claims,
-                  disclaimers. AvidiaDescribe runs your custom instructions and
-                  returns SEO-ready copy that matches your brands and channels.
-                </p>
-              </div>
-
-              {/* Value props */}
-              <div className="flex flex-wrap gap-3 text-[11px]">
-                <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
-                  <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-fuchsia-400/60 bg-fuchsia-100 text-[12px] text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-slate-50">
-                    1
-                  </div>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      Works from tiny prompts
-                    </p>
-                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                      Bullet points, loose paragraphs, even sales notes become
-                      structured descriptions.
-                    </p>
-                  </div>
+            {/* Value props */}
+            <div className="flex flex-wrap gap-3 text-[11px]">
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
+                <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-fuchsia-400/60 bg-fuchsia-100 text-[12px] text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-slate-50">
+                  1
                 </div>
-
-                <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
-                  <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-sky-400/60 bg-sky-100 text-[12px] text-sky-700 dark:bg-sky-500/15 dark:text-slate-50">
-                    2
-                  </div>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      Enforces your rules
-                    </p>
-                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                      H1, meta, bullets, manuals, disclaimers — all shaped by
-                      the same instruction sheet you use elsewhere.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
-                  <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-emerald-400/60 bg-emerald-100 text-[12px] text-emerald-700 dark:bg-emerald-500/15 dark:text-slate-50">
-                    3
-                  </div>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      Multi-channel friendly
-                    </p>
-                    <p className="text-[10px] text-slate-600 dark:text-slate-400">
-                      Output works for BigCommerce, your JSON pipelines,
-                      marketplaces and print sheets.
-                    </p>
-                  </div>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    Works from tiny prompts
+                  </p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                    Bullet points, loose paragraphs, even sales notes become
+                    structured descriptions.
+                  </p>
                 </div>
               </div>
 
-              {/* Steps + hint */}
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/50 bg-white/95 px-3 py-1.5 shadow-sm dark:border-fuchsia-400/40 dark:bg-slate-950/90">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700 dark:text-fuchsia-200">
-                    Step 1
-                  </span>
-                  <span className="text-[11px] text-slate-700 dark:text-slate-300">
-                    Fill the{" "}
-                    <span className="font-semibold text-fuchsia-700 dark:text-fuchsia-200">
-                      Describe panel on the left
-                    </span>{" "}
-                    with a few sentences.
-                  </span>
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
+                <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-sky-400/60 bg-sky-100 text-[12px] text-sky-700 dark:bg-sky-500/15 dark:text-slate-50">
+                  2
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-200">
-                    Step 2
-                  </span>
-                  <span className="text-[11px] text-slate-700 dark:text-slate-300">
-                    Review the live{" "}
-                    <span className="font-semibold text-sky-600 dark:text-sky-200">
-                      description canvas
-                    </span>{" "}
-                    on the right.
-                  </span>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    Enforces your rules
+                  </p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                    H1, meta, bullets, manuals, disclaimers — all shaped by
+                    the same instruction sheet you use elsewhere.
+                  </p>
+                </div>
+              </div>
+
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90">
+                <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-emerald-400/60 bg-emerald-100 text-[12px] text-emerald-700 dark:bg-emerald-500/15 dark:text-slate-50">
+                  3
+                </div>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    Multi-channel friendly
+                  </p>
+                  <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                    Output works for BigCommerce, your JSON pipelines,
+                    marketplaces and print sheets.
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* RIGHT: static "Describe brain" panel */}
-            <div className="mt-4 w-full lg:mt-0 lg:w-[420px] xl:w-[480px]">
-              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-[0_0_60px_rgba(148,163,184,0.35)] dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_60px_rgba(15,23,42,0.9)]">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Describe engine snapshot
+            {/* Steps + hint */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/50 bg-white/95 px-3 py-1.5 shadow-sm dark:border-fuchsia-400/40 dark:bg-slate-950/90">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-700 dark:text-fuchsia-200">
+                  Step 1
+                </span>
+                <span className="text-[11px] text-slate-700 dark:text-slate-300">
+                  Fill the{" "}
+                  <span className="font-semibold text-fuchsia-700 dark:text-fuchsia-200">
+                    Describe panel on the left
+                  </span>{" "}
+                  with a few sentences.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-200">
+                  Step 2
+                </span>
+                <span className="text-[11px] text-slate-700 dark:text-slate-300">
+                  Review the live{" "}
+                  <span className="font-semibold text-sky-600 dark:text-sky-200">
+                    description canvas
+                  </span>{" "}
+                  on the right.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: static "Describe engine" snapshot */}
+          <div className="mt-4 w-full lg:mt-0 lg:w-[420px] xl:w-[480px]">
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-[0_0_60px_rgba(148,163,184,0.35)] dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_60px_rgba(15,23,42,0.9)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                  Describe engine snapshot
+                </p>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Render + GPT stack
+                </span>
+              </div>
+
+              {/* three lanes */}
+              <div className="space-y-3 text-[11px]">
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
+                  <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-fuchsia-400/50 bg-white dark:bg-slate-950">
+                    <span className="h-3 w-3 rounded-full bg-fuchsia-400" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
+                      Input channel
+                    </p>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Short notes, sales copy, tech specs, even support replies
+                      — all acceptable inputs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
+                  <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-sky-400/50 bg-white dark:bg-slate-950">
+                    <span className="h-3 w-3 rounded-full bg-sky-400" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
+                      Instruction profile
+                    </p>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Locks to your global custom GPT instructions: tone,
+                      sections, SEO, disclaimers and manual links.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
+                  <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/50 bg-white dark:bg-slate-950">
+                    <span className="h-3 w-3 rounded-full bg-emerald-400" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
+                      Output canvas
+                    </p>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Structured JSON + HTML that your BigCommerce / AvidiaSEO
+                      flows can consume immediately.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tiny "profiles" row */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <div className="min-w-[130px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Brand profiles
                   </p>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Render + GPT stack
-                  </span>
+                  <p className="text-[11px] text-slate-700 dark:text-slate-200">
+                    MedicalEx, BD, UMF and more — Describe respects your
+                    brand-specific rules.
+                  </p>
                 </div>
-
-                {/* three lanes */}
-                <div className="space-y-3 text-[11px]">
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
-                    <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-fuchsia-400/50 bg-white dark:bg-slate-950">
-                      <span className="h-3 w-3 rounded-full bg-fuchsia-400" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-slate-900 dark:text-slate-50">
-                        Input channel
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Short notes, sales copy, tech specs, even support
-                        replies — all acceptable inputs.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
-                    <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-sky-400/50 bg-white dark:bg-slate-950">
-                      <span className="h-3 w-3 rounded-full bg-sky-400" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-slate-900 dark:text-slate-50">
-                        Instruction profile
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Locks to your global custom GPT instructions: tone,
-                        sections, SEO, disclaimers and manual links.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/80">
-                    <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/50 bg-white dark:bg-slate-950">
-                      <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-slate-900 dark:text-slate-50">
-                        Output canvas
-                      </p>
-                      <p className="text-slate-600 dark:text-slate-400">
-                        Structured JSON + HTML that your BigCommerce / AvidiaSEO
-                        flows can consume immediately.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tiny "profiles" row */}
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <div className="min-w-[130px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
-                    <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Brand profiles
-                    </p>
-                    <p className="text-[11px] text-slate-700 dark:text-slate-200">
-                      MedicalEx, BD, UMF and more — Describe respects your
-                      brand-specific rules.
-                    </p>
-                  </div>
-                  <div className="min-w-[130px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
-                    <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Channels
-                    </p>
-                    <p className="text-[11px] text-slate-700 dark:text-slate-200">
-                      Product page, marketplace, email — one source of truth,
-                      multiple surfaces.
-                    </p>
-                  </div>
+                <div className="min-w-[130px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Channels
+                  </p>
+                  <p className="text-[11px] text-slate-700 dark:text-slate-200">
+                    Product page, marketplace, email — one source of truth,
+                    multiple surfaces.
+                  </p>
                 </div>
               </div>
             </div>
