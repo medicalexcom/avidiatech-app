@@ -68,12 +68,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <TopNav />
 
       {/* Shell layout: render your Sidebar component (short sidebar) and main content */}
-      <div className="min-h-[calc(100vh-56px)] flex">
+      <div className="dashboard-shell min-h-[calc(100vh-56px)] flex overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
         <aside className="hidden md:block">
           <Sidebar />
         </aside>
 
-        <main className="flex-1 bg-slate-50 dark:bg-slate-950 p-6">
+        <main className="flex-1">
           {children}
         </main>
       </div>

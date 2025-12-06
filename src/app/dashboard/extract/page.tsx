@@ -162,31 +162,6 @@ export default function ExtractPage() {
       <div className="relative mx-auto max-w-7xl space-y-8 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO: Extract identity + ExtractHeader (no framed banner) */}
         <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
-          {/* floating cards on the right */}
-          <div className="pointer-events-none absolute -right-4 -top-4 hidden xl:block">
-            <div className="w-64 rotate-3 rounded-2xl border border-cyan-300/50 bg-white/95 px-4 py-3 text-slate-800 shadow-[0_0_40px_rgba(56,189,248,0.35)] dark:border-cyan-400/40 dark:bg-slate-950/95 dark:text-slate-100 dark:shadow-[0_0_50px_rgba(56,189,248,0.55)]">
-              <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">
-                Example extraction
-              </p>
-              <p className="text-[11px] leading-relaxed">
-                Unified JSON with name, brand, attributes, features, manuals,
-                images, and normalized specs — ready for any downstream module.
-              </p>
-            </div>
-          </div>
-          <div className="pointer-events-none absolute -right-10 bottom-4 hidden xl:block">
-            <div className="w-64 -rotate-2 rounded-2xl border border-emerald-300/50 bg-white/95 px-4 py-3 text-slate-800 shadow-[0_0_40px_rgba(16,185,129,0.35)] dark:border-emerald-400/40 dark:bg-slate-950/95 dark:text-slate-100 dark:shadow-[0_0_50px_rgba(16,185,129,0.55)]">
-              <p className="mb-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                Feeds the stack
-              </p>
-              <ul className="list-inside list-disc space-y-1 text-[11px]">
-                <li>AvidiaDescribe for copy-first flows</li>
-                <li>AvidiaSEO for URL-first SEO pages</li>
-                <li>Any external store / PIM as JSON</li>
-              </ul>
-            </div>
-          </div>
-
           {/* LEFT: headline + story + status chips */}
           <div className="min-w-[260px] flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-3">
@@ -224,6 +199,28 @@ export default function ExtractPage() {
                 JSON-first view that plugs into SEO, Describe, and any
                 ecommerce stack.
               </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-cyan-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-200">
+                  Example extraction
+                </p>
+                <p className="leading-relaxed">
+                  Unified JSON with name, brand, attributes, features, manuals,
+                  images, and normalized specs — ready for any downstream module.
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/50 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
+                  Feeds the stack
+                </p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>AvidiaDescribe for copy-first flows</li>
+                  <li>AvidiaSEO for URL-first SEO pages</li>
+                  <li>Any external store / PIM as JSON</li>
+                </ul>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3 text-[11px]">
