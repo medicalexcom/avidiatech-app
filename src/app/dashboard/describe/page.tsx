@@ -15,19 +15,6 @@ export default async function DescribePage() {
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* Background treatment aligned with Cluster */}
       <div className="pointer-events-none absolute inset-0">
-        <div
-          className="absolute -top-40 -left-24 h-80 w-80 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/15"
-        />
-        <div
-          className="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15"
-        />
-        <div
-          className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]"
-        />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
-          <div
-            className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]"
-          />
         <div className="absolute -top-40 -left-24 h-80 w-80 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/15" />
         <div className="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
@@ -38,11 +25,7 @@ export default async function DescribePage() {
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO (no framed banner, open row like Translate) */}
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
-
           {/* LEFT: identity + story */}
           <div className="min-w-[260px] flex-1 space-y-6">
             {/* Identity row */}
@@ -64,7 +47,6 @@ export default async function DescribePage() {
 
             {/* Headline */}
             <div className="space-y-3">
-              <h1 className="text-xl font-semibold leading-tight text-slate-900 lg:text-2xl dark:text-slate-50">
               <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 Describe the product in{" "}
                 <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
@@ -79,13 +61,15 @@ export default async function DescribePage() {
               </p>
             </div>
 
+            {/* Example input / output cards */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-sky-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-sky-400/50 dark:bg-slate-950/90 dark:text-slate-100">
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200">
                   Example input
                 </p>
                 <p className="leading-relaxed">
-                  “Lightweight aluminum walker with wheels, good for small apartments, need to highlight safety and Medicare coverage.”
+                  “Lightweight aluminum walker with wheels, good for small
+                  apartments, need to highlight safety and Medicare coverage.”
                 </p>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/50 dark:bg-slate-950/90 dark:text-slate-100">
@@ -93,7 +77,7 @@ export default async function DescribePage() {
                   AvidiaDescribe Output
                 </p>
                 <ul className="list-inside list-disc space-y-1">
-                  <li>Structured H1, page title & meta</li>
+                  <li>Structured H1, page title &amp; meta</li>
                   <li>Benefit-first feature bullets</li>
                   <li>Compliance and disclaimers baked in</li>
                 </ul>
