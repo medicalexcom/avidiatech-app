@@ -39,7 +39,7 @@ export default function ImportPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn your unified Avidia JSON into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 dark:from-sky-300 dark:via-cyan-300 dark:to-emerald-300">
                       platform-perfect import files

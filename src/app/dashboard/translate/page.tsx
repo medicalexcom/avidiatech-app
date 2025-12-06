@@ -83,7 +83,7 @@ export default function TranslateListPage() {
 
             <div className="space-y-3">
               {/* Hero typography scaled down to match Cluster */}
-              <h1 className="text-2xl font-semibold leading-tight sm:text-3xl lg:text-3xl text-slate-900 dark:text-slate-50">
+              <h1 className="text-xl font-semibold leading-tight sm:text-2xl lg:text-2xl text-slate-900 dark:text-slate-50">
                 Translate your entire catalog without breaking{" "}
                 <span className="bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-fuchsia-300 dark:to-emerald-200">
                   structure, SEO, or compliance.

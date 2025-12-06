@@ -65,7 +65,7 @@ export default function ClusterPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+                <h1 className="text-xl font-semibold leading-tight text-slate-900 lg:text-2xl dark:text-slate-50">
                   Cluster your catalog into{" "}
                   <span className="bg-gradient-to-r from-violet-500 via-sky-500 to-cyan-400 bg-clip-text text-transparent dark:from-violet-300 dark:via-sky-300 dark:to-cyan-300">
                     clean, explainable product groups

@@ -10,7 +10,7 @@
 export default function ApiKeysPage() {
   return (
     <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">API Keys</h1>
+      <h1 className="text-2xl font-semibold mb-4">API Keys</h1>
       <p className="mb-4">
         Manage your API keys for programmatic access to AvidiaTech.  API keys
         authenticate external clients and map calls back to your tenant【962839935143576†L136-L149】.

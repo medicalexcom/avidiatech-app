@@ -20,7 +20,7 @@ export default function RolesPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
               Workspace settings
             </p>
-            <h1 className="text-2xl font-semibold sm:text-3xl text-slate-900 dark:text-slate-50">
+            <h1 className="text-xl font-semibold sm:text-2xl text-slate-900 dark:text-slate-50">
               Roles &amp; Permissions
             </h1>
             <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">

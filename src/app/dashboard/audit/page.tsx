@@ -38,7 +38,7 @@ export default function AuditPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl dark:text-slate-50">
+                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
                     Turn your product rules into a{" "}
                     <span className="bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-300 bg-clip-text text-transparent dark:from-amber-300 dark:via-amber-200 dark:to-emerald-200">
                       measurable, enforceable audit score
