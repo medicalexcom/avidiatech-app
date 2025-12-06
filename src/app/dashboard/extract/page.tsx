@@ -20,6 +20,8 @@ import ExtractHeader from "@/components/ExtractHeader";
  *   - Fall back to DB row (normalized_payload if available).
  */
 
+export const dynamic = "force-dynamic";
+
 export default function ExtractPage() {
   const router = useRouter();
 

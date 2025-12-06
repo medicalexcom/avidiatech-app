@@ -8,6 +8,8 @@ import DescribeOutput from "@/components/describe/DescribeOutput";
  * - Hero row focuses on "from rough notes to production-ready SEO" story.
  */
 
+export const dynamic = "force-dynamic";
+
 export default async function DescribePage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
