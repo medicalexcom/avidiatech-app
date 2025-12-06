@@ -35,7 +35,7 @@ try {
 
 /* Stripe init (optional) */
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
-const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2022-11-15" }) : null;
+const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" }) : null;
 
 /* allowlist and helpers (unchanged logic) */
 const ALLOWLIST = [
