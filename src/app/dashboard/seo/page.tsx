@@ -676,8 +676,7 @@ export default function AvidiaSeoPage() {
                             className={[
                               "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold shadow-sm",
                               isDone
-                                ? "bg-emerald-400 text-slate-9
-00 border-emerald-300 shadow-emerald-500/40"
+                                ? "bg-emerald-400 text-slate-900 border-emerald-300 shadow-emerald-500/40"
                                 : isActive
                                 ? "bg-cyan-500 text-slate-900 border-cyan-300 animate-pulse shadow-cyan-500/40"
                                 : "bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-600",
@@ -985,8 +984,7 @@ export default function AvidiaSeoPage() {
                   <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     Short description
                   </p>
-                  <p className="text-slate-8
-00 dark:text-slate-100">
+                  <p className="text-slate-800 dark:text-slate-100">
                     {seoPayload?.seoShortDescription ??
                       seoPayload?.seo_short_description ??
                       "Not yet generated"}
