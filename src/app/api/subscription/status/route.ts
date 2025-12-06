@@ -3,7 +3,7 @@ import { safeGetAuth } from "@/lib/clerkSafe";
 import Stripe from "stripe";
 
 const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2022-11-15" })
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" })
   : null;
 
 /**
