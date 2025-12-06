@@ -109,48 +109,52 @@ const ACCENTS = {
 function getAccentClasses(name: string) {
   const key = name.toLowerCase();
 
-  // Cyan family: matches Extract & Specs hero chips
+  // Cyan: Extract + Specs (ingestion + structured specs)
   if (key === "extract" || key === "specs") {
     return ACCENTS.cyan;
   }
 
-  // Fuchsia family: creative content tooling
+  // Fuchsia: Describe + Studio (creative content / layout)
   if (key === "describe" || key === "studio") {
     return ACCENTS.fuchsia;
   }
 
-  // Emerald family: SEO / matching / pricing / API & images
+  // Emerald: SEO + Match + Images + Price (performance, trust, optimization)
   if (
     key === "seo" ||
     key === "match" ||
     key === "images" ||
-    key === "price" ||
-    key === "api"
+    key === "price"
   ) {
     return ACCENTS.emerald;
   }
 
-  // Sky family: language and channel export (Translate + Import + Feeds)
+  // Sky: Translate + Import + Feeds (channels / languages / distribution)
   if (key === "translate" || key === "import" || key === "feeds") {
     return ACCENTS.sky;
   }
 
-  // Violet family: docs / manuals / clustering / browser tooling
-  if (key === "docs" || key === "cluster" || key === "browser") {
+  // Violet: Docs + Cluster + Browser + API (deep data / developer tooling)
+  if (
+    key === "docs" ||
+    key === "cluster" ||
+    key === "browser" ||
+    key === "api"
+  ) {
     return ACCENTS.violet;
   }
 
-  // Amber family: variant logic + audits (same as Variants & Audit hero)
+  // Amber: Variants + Audit (structure, policy, catalog rules)
   if (key === "variants" || key === "audit") {
     return ACCENTS.amber;
   }
 
-  // Rose family: monitoring / alerts (forward-looking for Monitor hero design)
+  // Rose: Monitor (alerts, changes, watchdog)
   if (key === "monitor") {
     return ACCENTS.rose;
   }
 
-  // Fallback neutral
+  // Fallback neutral style
   return ACCENTS.neutral;
 }
 
