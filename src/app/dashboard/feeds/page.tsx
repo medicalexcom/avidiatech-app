@@ -14,7 +14,7 @@ export default function FeedsPage() {
       {/* Ambient background: sky/emerald bias for feeds & automations */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-28 -left-24 h-72 w-72 rounded-full bg-sky-500/25 blur-3xl" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-emerald-500/18 blur-3xl" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.06] mix-blend-soft-light">
           <div className="h-full w-full bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:46px_46px]" />
@@ -24,21 +24,21 @@ export default function FeedsPage() {
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
         {/* HEADER / HERO */}
         <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-sky-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(56,189,248,0.4)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+          <div className="relative overflow-hidden rounded-3xl border border-emerald-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(16,185,129,0.45)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               {/* Left: title + description */}
               <div className="space-y-3 max-w-2xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
+                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
                   Commerce &amp; Automation · AvidiaFeeds
                   <span className="h-1 w-px bg-slate-700" />
-                  <span className="text-sky-200">Feeds pipeline</span>
+                  <span className="text-emerald-200">Feeds pipeline</span>
                 </div>
 
                 <div className="space-y-2">
                   <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">
                     One{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-300 via-sky-200 to-emerald-200">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 via-sky-200 to-emerald-200">
                       clean feed
                     </span>{" "}
                     for every channel you care about.
@@ -52,14 +52,14 @@ export default function FeedsPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-sky-500/60 px-3 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-emerald-500/60 px-3 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                     <span className="text-slate-200">
                       Normalize multiple supplier feeds into one canonical catalog.
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-emerald-500/55 px-3 py-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-sky-500/55 px-3 py-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
                     <span className="text-slate-200">
                       Fill gaps with AvidiaExtract and AvidiaSEO when fields are missing.
                     </span>
@@ -82,8 +82,8 @@ export default function FeedsPage() {
                         Module status
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
-                        <span className="text-sm font-semibold text-sky-200">
+                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
+                        <span className="text-sm font-semibold text-emerald-200">
                           Feed model in design · Connectors planned
                         </span>
                       </div>
@@ -118,7 +118,7 @@ export default function FeedsPage() {
                     </div>
                     <div className="mt-2 flex items-center justify-between border-t border-slate-800 pt-2">
                       <span className="text-slate-300">Ready for export</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 border border-sky-400/70 px-2.5 py-0.5 text-xs font-semibold text-sky-300">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-400/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
                         11,972 rows
                       </span>
                     </div>
@@ -150,28 +150,28 @@ export default function FeedsPage() {
 
               <ul className="mt-4 space-y-2 text-sm text-slate-300">
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
                     Consolidates <span className="font-medium">supplier and distributor feeds</span>{" "}
                     into one canonical feed instead of siloed spreadsheets.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
                     Detects <span className="font-medium">missing or mismatched fields</span> and fills
                     gaps using AvidiaExtract, AvidiaSpecs, and AvidiaSEO when possible.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
                     Applies your <span className="font-medium">taxonomies and category mappings</span>{" "}
                     so every incoming source inherits your structure, not theirs.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
                     Outputs <span className="font-medium">ready-to-import feeds</span> for Shopify,
                     BigCommerce, WooCommerce, and marketplaces without duplicating mapping logic.
@@ -186,7 +186,7 @@ export default function FeedsPage() {
               </h3>
               <div className="mt-3 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
                     Multi-supplier catalogs
                   </div>
                   <p className="mt-1.5">
@@ -195,7 +195,7 @@ export default function FeedsPage() {
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
                     Channel &amp; marketplace feeds
                   </div>
                   <p className="mt-1.5">
@@ -216,7 +216,7 @@ export default function FeedsPage() {
               </h2>
               <ol className="mt-3 space-y-3 text-sm text-slate-300">
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
                     1
                   </div>
                   <div>
@@ -228,7 +228,7 @@ export default function FeedsPage() {
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
                     2
                   </div>
                   <div>
@@ -242,7 +242,7 @@ export default function FeedsPage() {
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-sky-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
                     3
                   </div>
                   <div>
@@ -260,7 +260,7 @@ export default function FeedsPage() {
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(56,189,248,0.55)] hover:bg-sky-400 disabled:opacity-70"
+                  className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(16,185,129,0.55)] hover:bg-emerald-400 disabled:opacity-70"
                   disabled
                 >
                   Feeds workspace (coming soon)
