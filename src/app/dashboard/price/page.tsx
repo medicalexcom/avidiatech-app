@@ -11,40 +11,40 @@
 
 export default function PricePage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 relative overflow-hidden">
+    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
       {/* Ambient background: emerald bias for pricing */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-28 -left-24 h-72 w-72 rounded-full bg-emerald-500/25 blur-3xl" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-sky-500/18 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.06] mix-blend-soft-light">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:46px_46px]" />
+        <div className="absolute -top-28 -left-24 h-72 w-72 rounded-full bg-emerald-300/26 blur-3xl dark:bg-emerald-500/25" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-sky-300/24 blur-3xl dark:bg-sky-500/18" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06] mix-blend-soft-light">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
         {/* HEADER / HERO */}
         <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-emerald-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(16,185,129,0.4)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+          <div className="relative overflow-hidden rounded-3xl border border-emerald-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(16,185,129,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-emerald-500/45 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(16,185,129,0.4)]">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               {/* Left: title + description */}
               <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
                   Commerce &amp; Automation · AvidiaPrice
-                  <span className="h-1 w-px bg-slate-700" />
-                  <span className="text-emerald-200">Pricing engine</span>
+                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+                  <span className="text-emerald-700 dark:text-emerald-200">Pricing engine</span>
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">
+                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn raw costs into{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-300 via-emerald-200 to-sky-200">
+                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-emerald-400 to-sky-400 dark:from-emerald-300 dark:via-emerald-200 dark:to-sky-200">
                       policy-aligned, profitable prices
                     </span>
                     .
                   </h1>
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
                     Use AvidiaPrice to transform cost data, shipping buffers, and margin rules
                     into consistent recommendations with clear math. No one-off spreadsheets—
                     just a repeatable pricing engine that can scale with your catalog.
@@ -52,78 +52,84 @@ export default function PricePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-emerald-500/60 px-3 py-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/60 dark:text-slate-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-slate-200">
+                    <span>
                       Cost, shipping, and fees rolled into one price you can explain.
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-sky-500/55 px-3 py-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/55 dark:text-slate-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span className="text-slate-200">
-                      Batch-mode runs for brand, category, or ingest batches.
-                    </span>
+                    <span>Batch-mode runs for brand, category, or ingest batches.</span>
                   </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-slate-700/70 px-3 py-1.5">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-slate-300/80 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-slate-700/70 dark:text-slate-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    <span className="text-slate-200">
-                      Export-aware: prices stay in sync with Import / Export.
-                    </span>
+                    <span>Export-aware: prices stay in sync with Import / Export.</span>
                   </div>
                 </div>
               </div>
 
               {/* Right: module status + snapshot */}
               <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 sm:px-5 sm:py-4 space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                         Module status
                       </p>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
-                        <span className="text-sm font-semibold text-emerald-200">
+                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
                           Pricing rules defined · Engine wiring in progress
                         </span>
                       </div>
                     </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-900 border border-slate-700 px-2.5 py-0.5 text-[10px] text-slate-300">
+                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
                       Pricing engine
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
                     AvidiaPrice will sit next to AvidiaExtract and Import to keep MedicalEx
                     and other stores priced with the same, transparent logic.
                   </p>
                 </div>
 
                 {/* Static pricing snapshot */}
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400 mb-2">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-950/90">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
                     Sample pricing snapshot
                   </p>
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-300">Cost</span>
-                      <span className="text-slate-200 font-medium">$112.00</span>
+                      <span className="text-slate-500 dark:text-slate-300">Cost</span>
+                      <span className="text-slate-800 font-medium dark:text-slate-200">
+                        $112.00
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-300">Shipping / buffer</span>
-                      <span className="text-slate-200 font-medium">$18.00</span>
+                      <span className="text-slate-500 dark:text-slate-300">
+                        Shipping / buffer
+                      </span>
+                      <span className="text-slate-800 font-medium dark:text-slate-200">
+                        $18.00
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-300">Target margin</span>
-                      <span className="text-emerald-300 font-medium">38%</span>
+                      <span className="text-slate-500 dark:text-slate-300">Target margin</span>
+                      <span className="text-emerald-600 font-medium dark:text-emerald-300">
+                        38%
+                      </span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between border-t border-slate-800 pt-2">
-                      <span className="text-slate-300">Suggested price</span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-400/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                    <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 dark:border-slate-800">
+                      <span className="text-slate-500 dark:text-slate-300">
+                        Suggested price
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:border-emerald-400/70 dark:text-emerald-300">
                         $209.00
                       </span>
                     </div>
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-500">
+                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
                     UI will let you tweak rules and see margin math for each product or batch.
                   </p>
                 </div>
@@ -137,18 +143,18 @@ export default function PricePage() {
           {/* LEFT: what it does / scenarios */}
           <div className="space-y-4">
             {/* What it does */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5 shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-[0_18px_45px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
                 Turn messy cost data into consistent prices
               </h2>
-              <p className="mt-2 text-sm text-slate-300">
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                 AvidiaPrice takes your cost, shipping assumptions, and margin targets and
                 calculates recommended selling prices that stay within your business rules.
                 No more one-off spreadsheets—just a repeatable pricing engine that can scale
                 with your catalog.
               </p>
 
-              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                 <li className="flex gap-2">
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
@@ -185,13 +191,13 @@ export default function PricePage() {
             </div>
 
             {/* Scenarios */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
                 Pricing scenarios AvidiaPrice supports
               </h3>
-              <div className="mt-3 grid gap-3 text-xs text-slate-300 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+              <div className="mt-3 grid gap-3 text-xs text-slate-600 sm:grid-cols-2 dark:text-slate-300">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
                     Cost-plus with buffers
                   </div>
                   <p className="mt-1.5">
@@ -199,8 +205,8 @@ export default function PricePage() {
                     layer in platform fees so every SKU has an honest margin baked in.
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
                     Catalog-wide updates
                   </div>
                   <p className="mt-1.5">
@@ -215,32 +221,34 @@ export default function PricePage() {
           {/* RIGHT: workflow + integrations */}
           <div className="space-y-4">
             {/* Workflow */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-4 sm:p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
                 Planned workflow · how AvidiaPrice will run
               </h2>
-              <ol className="mt-3 space-y-3 text-sm text-slate-300">
+              <ol className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-emerald-700 dark:bg-slate-800 dark:text-emerald-300">
                     1
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">Define pricing rules</div>
-                    <p className="text-xs text-slate-400">
+                    <div className="font-medium text-slate-800 dark:text-slate-100">
+                      Define pricing rules
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Configure default margin targets, shipping buffers, fee assumptions,
                       and min/max thresholds for your store, brand, or category.
                     </p>
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-emerald-700 dark:bg-slate-800 dark:text-emerald-300">
                     2
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">
+                    <div className="font-medium text-slate-800 dark:text-slate-100">
                       Run calculator or batch jobs
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Use the single-SKU calculator for quick scenarios, or send entire
                       batches from AvidiaExtract / Import for bulk calculations with the
                       same rules.
@@ -248,14 +256,14 @@ export default function PricePage() {
                   </div>
                 </li>
                 <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-emerald-300">
+                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-emerald-700 dark:bg-slate-800 dark:text-emerald-300">
                     3
                   </div>
                   <div>
-                    <div className="font-medium text-slate-100">
+                    <div className="font-medium text-slate-800 dark:text-slate-100">
                       Review, adjust, and export
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Review suggested prices, inspect margin/profit details, override edge
                       cases if needed, then push final prices into exports or directly into
                       connected stores.
@@ -272,7 +280,7 @@ export default function PricePage() {
                 >
                   Pricing workspace (coming soon)
                 </button>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   A dedicated Pricing workspace will let you simulate scenarios, run batch
                   pricing jobs, and preview impact before anything syncs to MedicalEx or
                   other storefronts.
@@ -281,25 +289,27 @@ export default function PricePage() {
             </div>
 
             {/* Integrations */}
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/70 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/70">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                 Planned integrations
               </h3>
-              <ul className="mt-2 space-y-1.5 text-xs text-slate-400">
+              <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                 <li>
-                  • <span className="font-medium text-slate-200">AvidiaExtract</span> — pull
+                  • <span className="font-medium text-slate-800 dark:text-slate-200">AvidiaExtract</span> — pull
                   cost, brand, and category info to seed pricing runs.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-200">AvidiaImport</span> — inject
+                  • <span className="font-medium text-slate-800 dark:text-slate-200">AvidiaImport</span> — inject
                   calculated prices into export payloads automatically.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-200">Dashboards / Analytics</span>{" "}
+                  • <span className="font-medium text-slate-800 dark:text-slate-200">
+                      Dashboards / Analytics
+                    </span>{" "}
                   — feed pricing outputs into future reporting on margin and profitability.
                 </li>
               </ul>
-              <p className="mt-3 text-[10px] text-slate-500">
+              <p className="mt-3 text-[10px] text-slate-500 dark:text-slate-500">
                 Over time, AvidiaPrice becomes the control tower for margin: every product,
                 every brand, same rules, fully transparent math.
               </p>
