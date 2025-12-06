@@ -159,9 +159,9 @@ export default function ExtractPage() {
       </div>
 
       {/* Wrapper aligned with Describe/Translate (starts higher) */}
-      <div className="relative mx-auto max-w-7xl space-y-8 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO: Extract identity + ExtractHeader (no framed banner) */}
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           {/* LEFT: headline + story + status chips */}
           <div className="min-w-[260px] flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-3">

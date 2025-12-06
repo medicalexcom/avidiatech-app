@@ -18,9 +18,9 @@ export default async function DescribePage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 lg:px-8">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO (no framed banner, open row like Translate) */}
-        <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           {/* LEFT: identity + story */}
           <div className="min-w-[260px] flex-1 space-y-6">
             {/* Identity row */}
