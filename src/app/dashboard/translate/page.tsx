@@ -69,7 +69,7 @@ export default function TranslateListPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-6 py-8 lg:py-10">
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-6 py-8 lg:py-10">
         {/* HEADER / HERO */}
         <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
@@ -80,7 +80,7 @@ export default function TranslateListPage() {
               <span>AvidiaTranslate · Multilingual product catalogs</span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl text-slate-900 dark:text-slate-50">
                 Translate your entire catalog without breaking{" "}
                 <span className="bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-fuchsia-300 dark:to-emerald-200">
@@ -88,29 +88,28 @@ export default function TranslateListPage() {
                 </span>
               </h1>
               <p className="max-w-2xl text-sm text-slate-600 sm:text-base dark:text-slate-200">
-                AvidiaTranslate takes your structured product data from
-                AvidiaExtract and AvidiaDescribe, then localizes names,
-                descriptions, and key attributes—keeping specs intact and SEO
-                signals aligned across languages.
+                AvidiaTranslate localizes names, descriptions, and key attributes
+                from AvidiaExtract and AvidiaDescribe while preserving structured
+                specs and SEO signals across languages.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm">
-              <Link
-                href="/dashboard/extract"
-                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 font-semibold text-slate-50 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
-              >
-                Start from Extracted Products
-              </Link>
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs sm:text-sm">
               <Link
                 href="/dashboard/translate/new"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/70 px-5 py-2.5 font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 font-semibold text-slate-50 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
               >
                 Create New Translation Job
               </Link>
-              <p className="text-slate-500 dark:text-slate-400">
-                Plug in any supported language pair. AvidiaTech handles the
-                routing and audit trail.
+              <Link
+                href="/dashboard/extract"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/70 px-5 py-2.5 font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
+              >
+                Start from Extracted Products
+              </Link>
+              <p className="max-w-xs text-slate-500 dark:text-slate-400">
+                Plug in any supported language pair. AvidiaTech handles routing,
+                consistency, and audit trails in the background.
               </p>
             </div>
           </div>
@@ -148,16 +147,43 @@ export default function TranslateListPage() {
                 </span>
               </div>
               <div className="rounded-xl bg-gradient-to-r from-sky-100 via-fuchsia-100 to-emerald-100 px-4 py-3 text-xs text-slate-800 dark:from-sky-500/15 dark:via-fuchsia-500/10 dark:to-emerald-500/10 dark:text-slate-100">
-                Keep your canonical specs in one place while AvidiaTranslate
-                maintains language-specific titles and descriptions that still
-                map cleanly back to each SKU.
+                Keep canonical specs in one place while AvidiaTranslate maintains
+                language-specific titles and descriptions that map cleanly to each
+                SKU.
+              </div>
+
+              {/* Quick start language presets (UI stub, ready to wire later) */}
+              <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 text-xs dark:border-white/10 dark:bg-slate-950/60">
+                <p className="mb-2 font-semibold text-slate-800 dark:text-slate-100">
+                  Quick start
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-50 dark:bg-slate-50 dark:text-slate-900"
+                  >
+                    EN → ES (US / LATAM)
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-800 dark:bg-white/10 dark:text-slate-100"
+                  >
+                    EN → FR (CA / EU)
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-800 dark:bg-white/10 dark:text-slate-100"
+                  >
+                    EN → DE
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         {/* BODY: LEFT = LIST, RIGHT = EXPLANATION */}
-        <section className="grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr),minmax(320px,0.9fr)]">
           {/* LEFT: RECENT TRANSLATIONS */}
           <div className="space-y-4 rounded-3xl border border-slate-200 bg-white/90 p-6 backdrop-blur-sm shadow-sm dark:border-white/10 dark:bg-slate-950/80">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -170,15 +196,37 @@ export default function TranslateListPage() {
                   localized copy to your store.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                  Completed
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
-                  In review
-                </span>
+
+              <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                {/* Filter stub (non-functional for now, but ready) */}
+                <div className="hidden items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-600 dark:bg-slate-900/60 dark:text-slate-300 sm:flex">
+                  <span className="mr-1 text-slate-500 dark:text-slate-400">
+                    Filter:
+                  </span>
+                  <button
+                    type="button"
+                    className="mr-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[11px] text-slate-500 dark:text-slate-400"
+                  >
+                    Last 7 days
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                    Completed
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-100">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+                    In review
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -236,7 +284,7 @@ export default function TranslateListPage() {
                       className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-sky-400/70 hover:bg-sky-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-slate-900/80"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
+                        <div className="min-w-0 space-y-1">
                           <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
                             {p.name || p.source_url || `Job ${p.id}`}
                           </p>
@@ -276,7 +324,7 @@ export default function TranslateListPage() {
           </div>
 
           {/* RIGHT: PIPELINE EXPLANATION */}
-          <div className="space-y-4">
+          <div className="space-y-4 self-start lg:sticky lg:top-24">
             <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 backdrop-blur-sm shadow-sm dark:border-white/10 dark:bg-white/5">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                 How AvidiaTranslate fits into the pipeline
@@ -319,19 +367,10 @@ export default function TranslateListPage() {
               <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                 What this module gives you
               </h3>
-              <ul className="mt-3 space-y-2 text-sm text-slate-700 dark:text-slate-200">
-                <li>
-                  • Centralized control of languages per tenant and per product
-                  line.
-                </li>
-                <li>
-                  • Translation jobs that stay in sync with updates from vendors
-                  and Extract.
-                </li>
-                <li>
-                  • Audit trail for who triggered which language updates and
-                  when.
-                </li>
+              <ul className="mt-3 grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
+                <li>• Centralized control of languages per tenant and product.</li>
+                <li>• Translation jobs that stay in sync with Extract updates.</li>
+                <li>• Audit trail for who triggered which language updates.</li>
                 <li>
                   • Consistent formatting and internal linking rules across
                   locales.
