@@ -38,7 +38,7 @@ export default function ImagesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn noisy product image carousels into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-teal-400 to-sky-400 dark:from-emerald-300 dark:via-teal-300 dark:to-sky-300">
                       clean, variant-aware galleries

@@ -38,7 +38,7 @@ export default function FeedsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     One{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-400 dark:from-emerald-300 dark:via-sky-200 dark:to-emerald-200">
                       clean feed

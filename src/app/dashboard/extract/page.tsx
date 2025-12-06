@@ -20,6 +20,8 @@ import ExtractHeader from "@/components/ExtractHeader";
  *   - Fall back to DB row (normalized_payload if available).
  */
 
+export const dynamic = "force-dynamic";
+
 export default function ExtractPage() {
   const router = useRouter();
 
@@ -149,44 +151,27 @@ export default function ExtractPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* BACKGROUND: layered gradients + subtle grid */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/20" />
-        <div className="absolute -bottom-40 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-500/20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/20"
+          />
+          <div
+            className="absolute -bottom-40 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-500/20"
+          />
+          <div
+            className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]"
+          />
+          <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
+            <div
+              className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]"
+            />
+          </div>
         </div>
-      </div>
 
       {/* Wrapper aligned with Describe/Translate (starts higher) */}
-      <div className="relative mx-auto max-w-7xl space-y-8 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO: Extract identity + ExtractHeader (no framed banner) */}
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
-          {/* floating cards on the right */}
-          <div className="pointer-events-none absolute -right-4 -top-4 hidden xl:block">
-            <div className="w-64 rotate-3 rounded-2xl border border-cyan-300/50 bg-white/95 px-4 py-3 text-slate-800 shadow-[0_0_40px_rgba(56,189,248,0.35)] dark:border-cyan-400/40 dark:bg-slate-950/95 dark:text-slate-100 dark:shadow-[0_0_50px_rgba(56,189,248,0.55)]">
-              <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">
-                Example extraction
-              </p>
-              <p className="text-[11px] leading-relaxed">
-                Unified JSON with name, brand, attributes, features, manuals,
-                images, and normalized specs — ready for any downstream module.
-              </p>
-            </div>
-          </div>
-          <div className="pointer-events-none absolute -right-10 bottom-4 hidden xl:block">
-            <div className="w-64 -rotate-2 rounded-2xl border border-emerald-300/50 bg-white/95 px-4 py-3 text-slate-800 shadow-[0_0_40px_rgba(16,185,129,0.35)] dark:border-emerald-400/40 dark:bg-slate-950/95 dark:text-slate-100 dark:shadow-[0_0_50px_rgba(16,185,129,0.55)]">
-              <p className="mb-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                Feeds the stack
-              </p>
-              <ul className="list-inside list-disc space-y-1 text-[11px]">
-                <li>AvidiaDescribe for copy-first flows</li>
-                <li>AvidiaSEO for URL-first SEO pages</li>
-                <li>Any external store / PIM as JSON</li>
-              </ul>
-            </div>
-          </div>
-
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           {/* LEFT: headline + story + status chips */}
           <div className="min-w-[260px] flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-3">
@@ -211,7 +196,7 @@ export default function ExtractPage() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl dark:text-slate-50">
+              <h1 className="text-xl font-semibold leading-tight text-slate-900 lg:text-2xl dark:text-slate-50">
                 Extract everything from a{" "}
                 <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
                   single manufacturer URL
@@ -224,6 +209,28 @@ export default function ExtractPage() {
                 JSON-first view that plugs into SEO, Describe, and any
                 ecommerce stack.
               </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-cyan-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-200">
+                  Example extraction
+                </p>
+                <p className="leading-relaxed">
+                  Unified JSON with name, brand, attributes, features, manuals,
+                  images, and normalized specs — ready for any downstream module.
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/50 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
+                  Feeds the stack
+                </p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>AvidiaDescribe for copy-first flows</li>
+                  <li>AvidiaSEO for URL-first SEO pages</li>
+                  <li>Any external store / PIM as JSON</li>
+                </ul>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3 text-[11px]">

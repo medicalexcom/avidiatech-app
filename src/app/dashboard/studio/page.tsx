@@ -67,7 +67,7 @@ export default function StudioPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-2xl lg:text-3xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
+                <h1 className="text-xl lg:text-2xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
                   Design{" "}
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-fuchsia-500 via-cyan-500 to-sky-500 dark:from-fuchsia-300 dark:via-cyan-300 dark:to-sky-300">
                     conversion-ready product pages
