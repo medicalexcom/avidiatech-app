@@ -7,6 +7,8 @@
  * simplify taxonomy management and deduplication.
  */
 
+export const dynamic = "force-dynamic";
+
 import React from "react";
 
 const sampleClusters = [
@@ -44,6 +46,34 @@ export default function ClusterPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+        {/* SHARED MODULE HEADER (matches Translate / Describe frame) */}
+        <header className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Workspace tool
+            </p>
+            <h1 className="text-2xl font-semibold sm:text-3xl text-slate-900 dark:text-slate-50">
+              Cluster
+            </h1>
+            <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              AvidiaCluster turns messy catalogs into clean product groups,
+              clustering similar SKUs so you can deduplicate, normalize, and
+              build consistent taxonomy on top of AvidiaExtract.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-300/70 bg-white/85 px-3 py-1.5 shadow-sm dark:border-violet-500/50 dark:bg-slate-950/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+              Data intelligence layer
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/70 bg-emerald-50 px-3 py-1.5 text-emerald-700 shadow-sm dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-100">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Built on AvidiaExtract payloads
+            </span>
+          </div>
+        </header>
+
         {/* HERO ROW */}
         <section className="relative overflow-hidden rounded-3xl border border-violet-500/40 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-5 py-6 shadow-[0_0_40px_rgba(129,140,248,0.35)] lg:px-7 lg:py-7 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(129,140,248,0.45)]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -63,13 +93,14 @@ export default function ClusterPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+                {/* changed from h1 -> h2, content unchanged */}
+                <h2 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                   Cluster your catalog into{" "}
                   <span className="bg-gradient-to-r from-violet-500 via-sky-500 to-cyan-400 bg-clip-text text-transparent dark:from-violet-300 dark:via-sky-300 dark:to-cyan-300">
                     clean, explainable product groups
                   </span>
                   .
-                </h1>
+                </h2>
                 <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
                   AvidiaCluster uses similarity signals from your ingested data
                   to group near-duplicate and related products, so you can fix
