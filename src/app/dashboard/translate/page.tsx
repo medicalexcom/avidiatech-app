@@ -69,7 +69,7 @@ export default function TranslateListPage() {
         </div>
       </div>
 
-      {/* Wrapper aligned with Describe page (starts higher, unified padding) */}
+      {/* Wrapper aligned with Describe/Cluster */}
       <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HEADER / HERO */}
         <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -82,33 +82,34 @@ export default function TranslateListPage() {
             </div>
 
             <div className="space-y-3">
-              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl text-slate-900 dark:text-slate-50">
+              {/* Hero typography scaled down to match Cluster */}
+              <h1 className="text-2xl font-semibold leading-tight sm:text-3xl lg:text-3xl text-slate-900 dark:text-slate-50">
                 Translate your entire catalog without breaking{" "}
                 <span className="bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-fuchsia-300 dark:to-emerald-200">
                   structure, SEO, or compliance.
                 </span>
               </h1>
-              <p className="max-w-2xl text-sm text-slate-600 sm:text-base dark:text-slate-200">
+              <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-200">
                 AvidiaTranslate localizes names, descriptions, and key attributes
                 from AvidiaExtract and AvidiaDescribe while preserving structured
                 specs and SEO signals across languages.
               </p>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs sm:text-sm">
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
               <Link
                 href="/dashboard/translate/new"
-                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 font-semibold text-slate-50 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
+                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
               >
                 Create New Translation Job
               </Link>
               <Link
                 href="/dashboard/extract"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/70 px-5 py-2.5 font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/70 px-5 py-2.5 text-xs font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
               >
                 Start from Extracted Products
               </Link>
-              <p className="max-w-xs text-slate-500 dark:text-slate-400">
+              <p className="max-w-xs text-[11px] text-slate-500 dark:text-slate-400">
                 Plug in any supported language pair. AvidiaTech handles routing,
                 consistency, and audit trails in the background.
               </p>
