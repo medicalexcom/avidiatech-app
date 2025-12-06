@@ -6,7 +6,7 @@ import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = auth() as any;
+    const { userId } = await auth() as any;
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
