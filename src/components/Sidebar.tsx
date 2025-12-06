@@ -45,117 +45,115 @@ const sections = [
   },
 ];
 
-// Reusable accent presets
-const ACCENTS = {
-  cyan: {
-    dot: "bg-cyan-400",
-    activeBorder: "border-cyan-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-cyan-50",
-    pillGlow: "shadow-[0_0_18px_rgba(34,211,238,0.45)]",
-  },
-  emerald: {
-    dot: "bg-emerald-400",
-    activeBorder: "border-emerald-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-emerald-50",
-    pillGlow: "shadow-[0_0_18px_rgba(16,185,129,0.45)]",
-  },
-  fuchsia: {
-    dot: "bg-fuchsia-400",
-    activeBorder: "border-fuchsia-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-fuchsia-50",
-    pillGlow: "shadow-[0_0_18px_rgba(236,72,153,0.45)]",
-  },
-  sky: {
-    dot: "bg-sky-400",
-    activeBorder: "border-sky-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-sky-50",
-    pillGlow: "shadow-[0_0_18px_rgba(56,189,248,0.45)]",
-  },
-  violet: {
-    dot: "bg-violet-400",
-    activeBorder: "border-violet-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-violet-50",
-    pillGlow: "shadow-[0_0_18px_rgba(139,92,246,0.4)]",
-  },
-  amber: {
-    dot: "bg-amber-400",
-    activeBorder: "border-amber-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-amber-50",
-    pillGlow: "shadow-[0_0_18px_rgba(245,158,11,0.4)]",
-  },
-  rose: {
-    dot: "bg-rose-400",
-    activeBorder: "border-rose-500/70",
-    activeBg: "bg-slate-900/95",
-    textActive: "text-rose-50",
-    pillGlow: "shadow-[0_0_18px_rgba(244,63,94,0.4)]",
-  },
-  neutral: {
+// Accent design system: map product name → accent classes
+function getAccentClasses(name: string) {
+  const key = name.toLowerCase();
+
+  // Core modules with known palettes
+  if (key === "extract") {
+    return {
+      dot: "bg-cyan-400",
+      activeBorder: "border-cyan-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-cyan-50",
+      pillGlow: "shadow-[0_0_18px_rgba(34,211,238,0.45)]",
+    };
+  }
+
+  if (key === "describe") {
+    return {
+      dot: "bg-fuchsia-400",
+      activeBorder: "border-fuchsia-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-fuchsia-50",
+      pillGlow: "shadow-[0_0_18px_rgba(236,72,153,0.45)]",
+    };
+  }
+
+  if (key === "seo") {
+    return {
+      dot: "bg-emerald-400",
+      activeBorder: "border-emerald-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-emerald-50",
+      pillGlow: "shadow-[0_0_18px_rgba(16,185,129,0.45)]",
+    };
+  }
+
+  // Translate / Studio / Images → sky family
+  if (key === "translate" || key === "studio" || key === "images") {
+    return {
+      dot: "bg-sky-400",
+      activeBorder: "border-sky-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-sky-50",
+      pillGlow: "shadow-[0_0_18px_rgba(56,189,248,0.45)]",
+    };
+  }
+
+  // Cluster / Docs / Browser → violet family
+  if (key === "cluster" || key === "docs" || key === "browser") {
+    return {
+      dot: "bg-violet-400",
+      activeBorder: "border-violet-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-violet-50",
+      pillGlow: "shadow-[0_0_18px_rgba(139,92,246,0.4)]",
+    };
+  }
+
+  // Data Intelligence + Monitor → amber (change / insights)
+  if (key === "match" || key === "variants" || key === "specs" || key === "monitor") {
+    return {
+      dot: "bg-amber-400",
+      activeBorder: "border-amber-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-amber-50",
+      pillGlow: "shadow-[0_0_18px_rgba(245,158,11,0.4)]",
+    };
+  }
+
+  // Commerce & Automation feeds / pricing backbone → emerald
+  if (key === "import" || key === "feeds" || key === "price") {
+    return {
+      dot: "bg-emerald-400",
+      activeBorder: "border-emerald-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-emerald-50",
+      pillGlow: "shadow-[0_0_18px_rgba(16,185,129,0.4)]",
+    };
+  }
+
+  // Audit → rose (QA / warnings)
+  if (key === "audit") {
+    return {
+      dot: "bg-rose-400",
+      activeBorder: "border-rose-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-rose-50",
+      pillGlow: "shadow-[0_0_18px_rgba(244,63,94,0.4)]",
+    };
+  }
+
+  // API (dev surface) → cyan
+  if (key === "api") {
+    return {
+      dot: "bg-cyan-400",
+      activeBorder: "border-cyan-500/70",
+      activeBg: "bg-slate-900/95",
+      textActive: "text-cyan-50",
+      pillGlow: "shadow-[0_0_18px_rgba(34,211,238,0.45)]",
+    };
+  }
+
+  // Fallback neutral style
+  return {
     dot: "bg-slate-400",
     activeBorder: "border-slate-500/70",
     activeBg: "bg-slate-900/95",
     textActive: "text-slate-50",
     pillGlow: "shadow-[0_0_14px_rgba(148,163,184,0.35)]",
-  },
-} as const;
-
-// Accent design system: map product name → accent classes
-function getAccentClasses(name: string) {
-  const key = name.toLowerCase();
-
-  // Cyan: Extract + Specs (ingestion + structured specs)
-  if (key === "extract" || key === "specs") {
-    return ACCENTS.cyan;
-  }
-
-  // Fuchsia: Describe + Studio (creative content / layout)
-  if (key === "describe" || key === "studio") {
-    return ACCENTS.fuchsia;
-  }
-
-  // Emerald: SEO + Match + Images + Price (performance, trust, optimization)
-  if (
-    key === "seo" ||
-    key === "match" ||
-    key === "images" ||
-    key === "price"
-  ) {
-    return ACCENTS.emerald;
-  }
-
-  // Sky: Translate + Import + Feeds (channels / languages / distribution)
-  if (key === "translate" || key === "import" || key === "feeds") {
-    return ACCENTS.sky;
-  }
-
-  // Violet: Docs + Cluster + Browser + API (deep data / developer tooling)
-  if (
-    key === "docs" ||
-    key === "cluster" ||
-    key === "browser" ||
-    key === "api"
-  ) {
-    return ACCENTS.violet;
-  }
-
-  // Amber: Variants + Audit (structure, policy, catalog rules)
-  if (key === "variants" || key === "audit") {
-    return ACCENTS.amber;
-  }
-
-  // Rose: Monitor (alerts, changes, watchdog)
-  if (key === "monitor") {
-    return ACCENTS.rose;
-  }
-
-  // Fallback neutral style
-  return ACCENTS.neutral;
+  };
 }
 
 export default function Sidebar() {
@@ -164,7 +162,7 @@ export default function Sidebar() {
   return (
     <nav
       aria-label="AvidiaTech main navigation"
-      className="flex h-full min-h-screen flex-col border-r border-slate-800/80 bg-slate-950/98 px-3 py-4 text-slate-100"
+      className="flex h-full min-h-screen flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
     >
       {/* Brand / context */}
       <div className="mb-4 px-2">
@@ -177,7 +175,7 @@ export default function Sidebar() {
               Product Data OS
             </span>
           </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-900/90 px-2.5 py-1.5 text-[10px] text-slate-300">
+          <div className="rounded-xl bg-slate-900/90 border border-slate-700 px-2.5 py-1.5 text-[10px] text-slate-300">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span>Live workspace</span>
@@ -187,13 +185,13 @@ export default function Sidebar() {
       </div>
 
       {/* Scrollable section area */}
-      <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
         {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && (
               <div className="my-3 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
             )}
-            <h2 className="mb-2 px-2 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+            <h2 className="px-2 text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-2">
               {section.title}
             </h2>
             <ul className="space-y-1.5">
@@ -208,7 +206,7 @@ export default function Sidebar() {
                       className={[
                         "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium border",
                         "transition-all duration-150 ease-out",
-                        "hover:translate-x-[2px] hover:border-slate-600/80 hover:bg-slate-900/80",
+                        "hover:bg-slate-900/80 hover:border-slate-600/80 hover:translate-x-[2px]",
                         active
                           ? [
                               accent.activeBg,
@@ -216,7 +214,7 @@ export default function Sidebar() {
                               accent.pillGlow,
                               "text-slate-50",
                             ].join(" ")
-                          : "border-transparent bg-transparent text-slate-300",
+                          : "bg-transparent border-transparent text-slate-300",
                       ].join(" ")}
                     >
                       {/* Accent dot / icon placeholder */}
@@ -240,7 +238,7 @@ export default function Sidebar() {
                       </span>
 
                       {/* Tiny tag to hint category state on hover */}
-                      <span className="text-[10px] text-slate-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      <span className="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                         {sectionIndex === 0
                           ? "AI"
                           : sectionIndex === 1
@@ -259,7 +257,7 @@ export default function Sidebar() {
       </div>
 
       {/* Bottom meta (optional) */}
-      <div className="mt-4 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
+      <div className="mt-4 border-t border-slate-800/80 pt-3 px-2 text-[10px] text-slate-500">
         <div className="flex items-center justify-between">
           <span>AvidiaTech • Dashboard</span>
           <span className="text-slate-600">v0.1</span>
