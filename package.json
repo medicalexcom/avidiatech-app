@@ -12,26 +12,27 @@
     "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts"
   },
   "dependencies": {
-    "@clerk/nextjs": "^5.0.0",
+    "@clerk/nextjs": "^6.28.1",
     "@supabase/supabase-js": "^2.81.1",
-    "autoprefixer": "^10.4.16",
-    "next": "16.0.3",
+    "autoprefixer": "^10.4.20",
+    "next": "16.0.7",
     "node-fetch": "^2.7.0",
-    "postcss": "^8.4.31",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "tailwindcss": "^3.4.0",
-    "stripe": "^12.0.0",
-    "openai": "^5.11.0",
-    "zod": "^3.22.2",
-    "uuid": "^9.0.0",
-    "csv-parse": "^5.4.0"
+    "postcss": "^8.4.49",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "tailwindcss": "^3.4.14",
+    "stripe": "^16.0.0",
+    "openai": "^6.10.0",
+    "zod": "^3.23.8",
+    "uuid": "^9.0.1",
+    "csv-parse": "^5.5.5"
   },
   "devDependencies": {
-    "@types/node": "^20.5.9",
+    "@types/node": "^22.10.0",
     "@types/node-fetch": "^2.6.13",
-    "@types/react": "^18.2.48",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.7.2"
   }
 }
