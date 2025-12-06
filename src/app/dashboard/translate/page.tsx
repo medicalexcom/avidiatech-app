@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
 type TranslateProduct = {
   id: string;
@@ -36,9 +37,7 @@ export default function TranslateListPage() {
 
   const totalProducts = products.length;
   const totalLanguages = Array.from(
-    new Set(
-      products.flatMap((p) => p.translated_languages || [])
-    )
+    new Set(products.flatMap((p) => p.translated_languages || []))
   ).length;
 
   const formatDate = (value?: string) => {
@@ -57,9 +56,19 @@ export default function TranslateListPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-50">
-      <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-8 lg:py-10">
-        {/* HEADER / HERO STRIP */}
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
+      {/* Ambient background / grid */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-sky-500/25 blur-3xl" />
+        <div className="absolute -bottom-32 right-[-8rem] h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 opacity-[0.06] mix-blend-soft-light">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)] bg-[size:46px_46px]" />
+        </div>
+      </div>
+
+      <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-6 py-8 lg:py-10">
+        {/* HEADER / HERO */}
         <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold text-sky-100 ring-1 ring-white/10">
@@ -68,6 +77,7 @@ export default function TranslateListPage() {
               </span>
               <span>AvidiaTranslate · Multilingual product catalogs</span>
             </div>
+
             <div className="space-y-2">
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
                 Translate your entire catalog without breaking{" "}
@@ -75,32 +85,33 @@ export default function TranslateListPage() {
                   structure, SEO, or compliance.
                 </span>
               </h1>
-              <p className="max-w-2xl text-sm sm:text-base text-slate-200">
+              <p className="max-w-2xl text-sm text-slate-200 sm:text-base">
                 AvidiaTranslate takes your structured product data from AvidiaExtract and AvidiaDescribe, then localizes
                 names, descriptions, and key attributes—keeping specs intact and SEO signals aligned across languages.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm">
-              <a
+              <Link
                 href="/dashboard/extract"
                 className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
               >
                 Start from Extracted Products
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/dashboard/translate/new"
                 className="inline-flex items-center justify-center rounded-xl border border-white/20 px-5 py-2.5 font-semibold text-slate-50 hover:border-white/40 hover:bg-white/5"
               >
                 Create New Translation Job
-              </a>
+              </Link>
               <p className="text-slate-400">
                 Plug in any supported language pair. AvidiaTech handles the routing and audit trail.
               </p>
             </div>
           </div>
 
-          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-slate-950/70 p-5 shadow-xl shadow-sky-900/40">
+          {/* Snapshot card */}
+          <div className="w-full max-w-sm rounded-3xl border border-white/12 bg-slate-950/80 p-5 shadow-xl shadow-sky-900/40 backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               Translation workspace · Snapshot
             </p>
@@ -126,7 +137,7 @@ export default function TranslateListPage() {
                 </span>
               </div>
               <div className="rounded-xl bg-gradient-to-r from-sky-500/15 via-fuchsia-500/10 to-emerald-500/10 px-4 py-3 text-xs text-slate-100">
-                Keep your canonical specs in one place, while AvidiaTranslate maintains language-specific titles and
+                Keep your canonical specs in one place while AvidiaTranslate maintains language-specific titles and
                 descriptions that still map cleanly back to each SKU.
               </div>
             </div>
@@ -135,12 +146,12 @@ export default function TranslateListPage() {
 
         {/* BODY: LEFT = LIST, RIGHT = EXPLANATION */}
         <section className="grid gap-6 lg:grid-cols-[1.2fr,0.8fr]">
-          {/* LEFT: RECENT TRANSLATIONS TABLE / CARDS */}
-          <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/70 p-6">
+          {/* LEFT: RECENT TRANSLATIONS */}
+          <div className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/80 p-6 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">Recent translation jobs</h2>
-                <p className="text-xs sm:text-sm text-slate-300">
+                <p className="text-xs text-slate-300 sm:text-sm">
                   Pick up where you left off, refine language pairs, or push localized copy to your store.
                 </p>
               </div>
@@ -167,25 +178,26 @@ export default function TranslateListPage() {
                 {error}
               </div>
             ) : products.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-6 text-sm text-slate-300">
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 p-6 text-sm text-slate-300">
                 <p className="font-medium text-slate-100">You don’t have any translation jobs yet.</p>
                 <p className="mt-1">
-                  Start from an extracted product in <span className="font-semibold text-sky-200">AvidiaExtract</span> or
-                  create a new translation job to localize your first SKU.
+                  Start from an extracted product in{" "}
+                  <span className="font-semibold text-sky-200">AvidiaExtract</span> or create a new translation job to
+                  localize your first SKU.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <a
+                  <Link
                     href="/dashboard/extract"
                     className="inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-sky-400"
                   >
                     View Extracted Products
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/dashboard/translate/new"
                     className="inline-flex items-center justify-center rounded-lg border border-white/20 px-4 py-2 text-xs font-semibold text-slate-50 hover:border-white/40 hover:bg-white/5"
                   >
                     Create Translation Job
-                  </a>
+                  </Link>
                 </div>
               </div>
             ) : (
@@ -193,22 +205,23 @@ export default function TranslateListPage() {
                 {products.map((p) => {
                   const languages = p.translated_languages || [];
                   const sourceLabel =
-                    p.source_language || (languages.length ? `Source + ${languages.length} locales` : "Source only");
+                    p.source_language ||
+                    (languages.length ? `Source + ${languages.length} locales` : "Source only");
 
                   return (
-                    <a
+                    <Link
                       key={p.id}
                       href={`/dashboard/translate/${p.id}`}
                       className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-sky-400/70 hover:bg-slate-900/80"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-slate-50">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1 min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-50">
                             {p.name || p.source_url || `Job ${p.id}`}
                           </p>
-                          <p className="text-xs text-slate-300">
+                          <p className="max-w-full truncate text-xs text-slate-300">
                             {p.source_url ? (
-                              <span className="truncate text-slate-300">{p.source_url}</span>
+                              <span>{p.source_url}</span>
                             ) : (
                               <span className="text-slate-400">Created from product payload</span>
                             )}
@@ -228,35 +241,35 @@ export default function TranslateListPage() {
                       </div>
                       <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
                         <span>Opened {formatDate(p.created_at)}</span>
-                        <span>Click to open translation workspace</span>
+                        <span>Open translation workspace →</span>
                       </div>
-                    </a>
+                    </Link>
                   );
                 })}
               </div>
             )}
           </div>
 
-          {/* RIGHT: HOW IT WORKS / LANGUAGES */}
+          {/* RIGHT: PIPELINE EXPLANATION */}
           <div className="space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
               <h2 className="text-lg font-semibold text-white">How AvidiaTranslate fits into the pipeline</h2>
               <div className="mt-4 space-y-3 text-sm text-slate-200">
-                <div className="rounded-2xl bg-slate-950/70 p-3">
+                <div className="rounded-2xl bg-slate-950/80 p-3">
                   <p className="text-xs font-semibold text-sky-200">1. Start from Extract</p>
                   <p className="mt-1 text-xs sm:text-sm">
                     Use AvidiaExtract to ingest manufacturer URLs. You get a clean, structured payload with titles, specs,
                     manuals, and media.
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-950/70 p-3">
+                <div className="rounded-2xl bg-slate-950/80 p-3">
                   <p className="text-xs font-semibold text-fuchsia-200">2. Apply your language strategy</p>
                   <p className="mt-1 text-xs sm:text-sm">
                     AvidiaTranslate localizes key fields (name, short name, description, meta) according to your rules
                     while preserving technical details and measurements.
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-950/70 p-3">
+                <div className="rounded-2xl bg-slate-950/80 p-3">
                   <p className="text-xs font-semibold text-emerald-200">3. Sync to channels</p>
                   <p className="mt-1 text-xs sm:text-sm">
                     Push language-specific variants into your storefronts, feeds, or PIM via the same JSON schema used by
@@ -266,7 +279,7 @@ export default function TranslateListPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-slate-950/70 p-6">
+            <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-6 backdrop-blur">
               <h3 className="text-base font-semibold text-white">What this module gives you</h3>
               <ul className="mt-3 space-y-2 text-sm text-slate-200">
                 <li>• Centralized control of languages per tenant and per product line.</li>
@@ -279,15 +292,25 @@ export default function TranslateListPage() {
                 Typical language setup
               </h4>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-100">
-                <span className="rounded-full bg-white/10 px-3 py-1">English → Spanish (US / LATAM)</span>
-                <span className="rounded-full bg-white/10 px-3 py-1">English → French (CA / EU)</span>
-                <span className="rounded-full bg-white/10 px-3 py-1">English → German</span>
-                <span className="rounded-full bg-white/10 px-3 py-1">English → Arabic</span>
-                <span className="rounded-full bg-white/10 px-3 py-1">English → Portuguese (BR)</span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  English → Spanish (US / LATAM)
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  English → French (CA / EU)
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  English → German
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  English → Arabic
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1">
+                  English → Portuguese (BR)
+                </span>
               </div>
               <p className="mt-3 text-[11px] text-slate-400">
-                Actual language support depends on your configuration and plan. Use this area later to connect to your
-                translation provider or LLM of choice.
+                Actual language support depends on your configuration and plan. Later, this panel can hook into your
+                translation provider or LLM settings for each tenant.
               </p>
             </div>
           </div>
