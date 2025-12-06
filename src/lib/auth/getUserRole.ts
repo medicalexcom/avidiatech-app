@@ -6,7 +6,7 @@ import { auth } from "@clerk/nextjs/server";
  */
 export function getUserRole(): string {
   try {
-    const { sessionClaims } = auth() as any;
+    const { sessionClaims } = await auth() as any;
     const role = sessionClaims?.publicMetadata?.role || sessionClaims?.claims?.role;
     return role ?? "user";
   } catch {
