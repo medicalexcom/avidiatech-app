@@ -9,7 +9,7 @@ export default function AnalyticsPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Workspace
           </p>
-          <h1 className="text-2xl font-semibold sm:text-3xl text-slate-50">
+          <h1 className="text-xl font-semibold sm:text-2xl text-slate-50">
             Analytics &amp; Reporting
           </h1>
           <p className="max-w-2xl text-sm text-slate-300">

@@ -211,7 +211,7 @@ export default function DashboardPage() {
                 AvidiaTech • Dashboard
               </div>
               <div className="space-y-2">
-                <h1 className="text-3xl lg:text-4xl font-semibold leading-tight text-slate-50">
+                <h1 className="text-xl sm:text-2xl font-semibold leading-tight text-slate-50">
                   Welcome to your{" "}
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-emerald-300">
                     product data command center

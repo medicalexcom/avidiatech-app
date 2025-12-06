@@ -162,7 +162,7 @@ export default function Sidebar() {
   return (
     <nav
       aria-label="AvidiaTech main navigation"
-      className="flex h-full min-h-screen flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
+      className="flex h-full min-h-screen w-60 flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100 md:w-56"
     >
       {/* Brand / context */}
       <div className="mb-4 px-2">
@@ -171,7 +171,7 @@ export default function Sidebar() {
             <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               AvidiaTech
             </span>
-            <span className="text-sm font-semibold text-slate-50">
+            <span className="text-[13px] font-semibold text-slate-50">
               Product Data OS
             </span>
           </div>
@@ -204,7 +204,7 @@ export default function Sidebar() {
                     <Link
                       href={item.href}
                       className={[
-                        "group flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium border",
+                        "group flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold border",
                         "transition-all duration-150 ease-out",
                         "hover:bg-slate-900/80 hover:border-slate-600/80 hover:translate-x-[2px]",
                         active

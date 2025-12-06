@@ -10,7 +10,7 @@
 export default function AgencyPage() {
   return (
     <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">Agency Services</h1>
+      <h1 className="text-2xl font-semibold mb-4">Agency Services</h1>
       <p className="mb-4">
         Prefer to outsource your product catalog build?  AvidiaAgency’s experts
         will ingest, normalize and optimize thousands of products on your
