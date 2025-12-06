@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import ProfileMenu from "./ProfileMenu";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/app/dashboard/components/ThemeToggle";
+import { ThemeToggle } from "@/asrc/components/theme/ThemeToggle";
 
 const primaryLinks = [
   { name: "Dashboard", href: "/dashboard" },
