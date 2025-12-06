@@ -25,7 +25,10 @@ export default async function DescribePage() {
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO (no framed banner, open row like Translate) */}
+
         <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
+
           {/* LEFT: identity + story */}
           <div className="min-w-[260px] flex-1 space-y-6">
             {/* Identity row */}
@@ -48,6 +51,7 @@ export default async function DescribePage() {
             {/* Headline */}
             <div className="space-y-3">
               <h1 className="text-xl font-semibold leading-tight text-slate-900 lg:text-2xl dark:text-slate-50">
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 Describe the product in{" "}
                 <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
                   your own words
