@@ -42,7 +42,7 @@ export default async function DescribePage() {
 
             {/* Headline */}
             <div className="space-y-3">
-              <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl dark:text-slate-50">
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 Describe the product in{" "}
                 <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
                   your own words

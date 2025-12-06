@@ -162,7 +162,7 @@ export default function Sidebar() {
   return (
     <nav
       aria-label="AvidiaTech main navigation"
-      className="flex h-full min-h-screen flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
+      className="flex h-full min-h-screen w-60 flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100 md:w-56"
     >
       {/* Brand / context */}
       <div className="mb-4 px-2">
