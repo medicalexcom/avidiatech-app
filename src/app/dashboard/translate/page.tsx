@@ -69,7 +69,8 @@ export default function TranslateListPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-6 py-8 lg:py-10">
+      {/* Wrapper aligned with Describe page (starts higher, unified padding) */}
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HEADER / HERO */}
         <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
