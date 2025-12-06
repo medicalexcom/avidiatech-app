@@ -15,6 +15,19 @@ export default async function DescribePage() {
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* Background treatment aligned with Cluster */}
       <div className="pointer-events-none absolute inset-0">
+        <div
+          className="absolute -top-40 -left-24 h-80 w-80 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/15"
+        />
+        <div
+          className="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15"
+        />
+        <div
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]"
+        />
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
+          <div
+            className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]"
+          />
         <div className="absolute -top-40 -left-24 h-80 w-80 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/15" />
         <div className="absolute -bottom-24 right-0 h-80 w-80 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
@@ -25,6 +38,7 @@ export default async function DescribePage() {
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO (no framed banner, open row like Translate) */}
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
 
         <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
