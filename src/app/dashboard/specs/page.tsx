@@ -24,9 +24,14 @@ export default function SpecsPage() {
         {/* Header / hero row */}
         <section className="mb-2">
           <div className="relative overflow-hidden rounded-3xl border border-cyan-500/45 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(34,211,238,0.45)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            {/* subtle inner grid */}
+            <div className="pointer-events-none absolute inset-0 opacity-[0.06]">
+              <div className="h-full w-full bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:40px_40px]" />
+            </div>
+
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
               {/* Left: title + copy */}
-              <div className="space-y-3 max-w-2xl">
+              <div className="space-y-4 max-w-2xl">
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-300">
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
                   Data Intelligence · AvidiaSpecs
@@ -35,7 +40,7 @@ export default function SpecsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-50">
+                  <h1 className="text-2xl sm:text-3xl lg:text-[1.9rem] font-semibold text-slate-50 leading-snug">
                     Turn messy spec tables into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-emerald-300 to-sky-300">
                       clean, queryable data
@@ -43,12 +48,14 @@ export default function SpecsPage() {
                     .
                   </h1>
                   <p className="text-sm text-slate-300">
-                    Normalize and structure messy specification tables from different
-                    manufacturers into consistent, machine-ready spec models that power
-                    search, filters, comparisons, and rich SEO across your entire catalog.
+                    Normalize and structure spec tables from different manufacturers into
+                    a single spec language for your catalog. AvidiaSpecs becomes the
+                    “attributes brain” for filters, comparisons, feeds, and SEO — no more
+                    guessing what “Overall Height” actually means.
                   </p>
                 </div>
 
+                {/* Hero chips */}
                 <div className="flex flex-wrap gap-3 text-[11px]">
                   <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/90 border border-cyan-500/50 px-3 py-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
@@ -71,17 +78,17 @@ export default function SpecsPage() {
                 </div>
               </div>
 
-              {/* Right: module status card */}
-              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0">
+              {/* Right: module status + mini spec pipeline */}
+              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 flex flex-col gap-3">
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 sm:px-5 sm:py-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
                         Module status
                       </p>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
-                        <span className="text-sm font-semibold text-cyan-200">
+                        <span className="text-xs font-semibold text-cyan-200">
                           Design locked · Specs engine in progress
                         </span>
                       </div>
@@ -93,6 +100,73 @@ export default function SpecsPage() {
                   <p className="text-[11px] text-slate-400">
                     AvidiaSpecs will become the backbone for structured attributes across
                     AvidiaExtract, AvidiaMatch, Variants, and SEO.
+                  </p>
+
+                  {/* Mini pipeline */}
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] text-slate-300">
+                      <span className="font-semibold text-slate-100 uppercase tracking-[0.18em]">
+                        Spec pipeline
+                      </span>
+                      <span className="text-slate-500">Drafted</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-1">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 border border-slate-700 text-[10px] text-cyan-300">
+                          1
+                        </span>
+                        <span className="text-[11px] text-slate-300">
+                          Raw tables &amp; PDFs
+                        </span>
+                      </div>
+                      <span className="text-slate-500 text-[11px]">{">"}</span>
+                      <div className="flex-1 flex items-center gap-1">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 border border-slate-700 text-[10px] text-emerald-300">
+                          2
+                        </span>
+                        <span className="text-[11px] text-slate-300">
+                          Normalized specs
+                        </span>
+                      </div>
+                      <span className="text-slate-500 text-[11px]">{">"}</span>
+                      <div className="flex-1 flex items-center gap-1">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 border border-slate-700 text-[10px] text-violet-300">
+                          3
+                        </span>
+                        <span className="text-[11px] text-slate-300">
+                          Exports &amp; filters
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tiny spec model teaser */}
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/90 px-4 py-3 space-y-2">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                    Spec model sneak peek
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 text-[10px]">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 border border-slate-700 px-2 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                      Height: 72 in
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 border border-slate-700 px-2 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                      Width: 36 in
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 border border-slate-700 px-2 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Voltage: 120 V
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 border border-slate-700 px-2 py-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                      Material: Stainless steel
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Real engine will let you approve, override, and export entire spec
+                    sets per product, brand, or category.
                   </p>
                 </div>
               </div>
