@@ -7,7 +7,7 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 export const dynamic = 'force-dynamic';
 
 export default async function SubscriptionPage() {
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
 
   if (!userId) {
     redirect('/sign-in?redirect_url=/dashboard/subscription');
