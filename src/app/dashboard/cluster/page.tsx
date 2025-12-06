@@ -43,17 +43,23 @@ export default function ClusterPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-8 lg:px-8">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO ROW */}
         <section className="relative overflow-hidden rounded-3xl border border-violet-500/40 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-5 py-6 shadow-[0_0_40px_rgba(129,140,248,0.35)] lg:px-7 lg:py-7 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(129,140,248,0.45)]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
             {/* Left copy */}
             <div className="min-w-[260px] flex-1 space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-slate-950/90 dark:text-slate-300">
-                <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-violet-400/80 bg-slate-100 dark:bg-slate-900">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:bg-slate-950/90 dark:text-slate-300">
+                  <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-violet-400/80 bg-slate-100 dark:bg-slate-900">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+                  </span>
+                  AvidiaCluster • Data intelligence
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/60 bg-emerald-50 px-2.5 py-1 text-[10px] text-emerald-700 shadow-sm dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Coming right after Extract
                 </span>
-                AvidiaCluster • Data intelligence
               </div>
 
               <div className="space-y-2">
@@ -359,6 +365,34 @@ export default function ClusterPage() {
   { "cluster_id": 47, "product_id": "SKU-00456", "similarity": 0.91 }
 ]`}
               </pre>
+            </div>
+
+            {/* Cross-module handoff bar */}
+            <div className="mt-1 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3.5 py-2.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300">
+              <span className="text-slate-500 dark:text-slate-400">
+                Next step with this cluster:
+              </span>
+              <button
+                type="button"
+                className="rounded-full border border-sky-400/60 bg-sky-500/10 px-2.5 py-[3px] text-[10px] font-medium text-sky-700 hover:bg-sky-500/15 dark:border-sky-400/60 dark:text-sky-200"
+              >
+                Send to AvidiaMatch
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-emerald-400/60 bg-emerald-500/10 px-2.5 py-[3px] text-[10px] font-medium text-emerald-700 hover:bg-emerald-500/15 dark:border-emerald-400/60 dark:text-emerald-200"
+              >
+                Build variants
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-slate-300 bg-white px-2.5 py-[3px] text-[10px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                Export CSV
+              </button>
+              <span className="ml-auto hidden text-[10px] text-slate-400 sm:inline dark:text-slate-500">
+                Pure UI for now — wire to real actions later.
+              </span>
             </div>
           </div>
         </section>
