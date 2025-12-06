@@ -520,20 +520,23 @@ export default function AvidiaSeoPage() {
   const demoUrl = "https://www.apple.com/iphone-17/";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 relative">
+    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
       {/* Background treatment */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-cyan-500/15 blur-3xl" />
-        <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/15" />
+        <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
+        </div>
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
         {/* HERO: headline, 3-step flow, live pipeline */}
-        <div className="relative overflow-hidden rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-[0_0_80px_rgba(56,189,248,0.25)] p-5 lg:p-7">
+        <div className="relative overflow-hidden rounded-3xl border border-cyan-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(56,189,248,0.28)] p-5 lg:p-7 dark:border-cyan-500/30 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(56,189,248,0.25)]">
           {/* subtle grid overlay */}
-          <div className="pointer-events-none absolute inset-0 opacity-[0.08]">
-            <div className="h-full w-full bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:42px_42px]" />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.06] dark:opacity-[0.08]">
+            <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
           </div>
 
           <div className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch">
@@ -541,18 +544,18 @@ export default function AvidiaSeoPage() {
             <div className="flex-1 min-w-[260px] space-y-5">
               {/* product identity row */}
               <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/40 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-100">
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 border border-cyan-400/60">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
                     <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                   </span>
                   AvidiaTech • AvidiaSEO
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-2.5 py-1 text-[11px] text-emerald-100">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:border-emerald-400/40 dark:text-emerald-100">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   Live pipeline
                 </span>
                 {ingestionId && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/80 border border-slate-700 px-2.5 py-1 text-[11px] text-slate-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:bg-slate-900/80 dark:border-slate-700 dark:text-slate-300">
                     Ingestion
                     <span className="font-mono text-[10px]">
                       {ingestionId.slice(0, 8)}…
@@ -563,14 +566,14 @@ export default function AvidiaSeoPage() {
 
               {/* headline + subcopy */}
               <div className="space-y-2">
-                <h1 className="text-3xl lg:text-4xl font-semibold text-slate-50 leading-tight">
+                <h1 className="text-3xl lg:text-4xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
                   Turn any manufacturer URL into a{" "}
-                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-sky-400 to-emerald-300">
+                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
                     production-ready SEO page
                   </span>
                   .
                 </h1>
-                <p className="mt-1 text-sm text-slate-300 max-w-xl">
+                <p className="mt-1 text-sm text-slate-600 max-w-xl dark:text-slate-300">
                   Paste a product URL and watch the whole pipeline fire:
                   ingestion, cleanup, and compliant copy — rendered exactly how
                   your store needs it. No prompts, no copy-paste gymnastics.
@@ -579,41 +582,41 @@ export default function AvidiaSeoPage() {
 
               {/* value props strip */}
               <div className="flex flex-wrap gap-2 text-[11px]">
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-950/80 border border-slate-700/70 px-3 py-2">
-                  <span className="h-5 w-5 rounded-lg bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-[13px]">
+                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                  <span className="h-5 w-5 rounded-lg bg-cyan-500/10 border border-cyan-300 flex items-center justify-center text-[13px] text-cyan-700 dark:bg-cyan-500/15 dark:border-cyan-500/40 dark:text-cyan-100">
                     1
                   </span>
                   <div className="space-y-0">
-                    <p className="font-semibold text-slate-50">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
                       Ingest engine native
                     </p>
-                    <p className="text-slate-400 text-[10px]">
+                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
                       Reuses the same ingestion layer powering AvidiaExtract.
                     </p>
                   </div>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-950/80 border border-slate-700/70 px-3 py-2">
-                  <span className="h-5 w-5 rounded-lg bg-sky-500/15 border border-sky-500/40 flex items-center justify-center text-[13px]">
+                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                  <span className="h-5 w-5 rounded-lg bg-sky-500/10 border border-sky-300 flex items-center justify-center text-[13px] text-sky-700 dark:bg-sky-500/15 dark:border-sky-500/40 dark:text-sky-100">
                     2
                   </span>
                   <div className="space-y-0">
-                    <p className="font-semibold text-slate-50">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
                       Custom GPT brain
                     </p>
-                    <p className="text-slate-400 text-[10px]">
+                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
                       Runs your instruction sheet, not a generic prompt.
                     </p>
                   </div>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-950/80 border border-slate-700/70 px-3 py-2">
-                  <span className="h-5 w-5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-[13px]">
+                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                  <span className="h-5 w-5 rounded-lg bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-[13px] text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-100">
                     3
                   </span>
                   <div className="space-y-0">
-                    <p className="font-semibold text-slate-50">
+                    <p className="font-semibold text-slate-900 dark:text-slate-50">
                       JSON + HTML ready
                     </p>
-                    <p className="text-slate-400 text-[10px]">
+                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
                       Mirrors your BigCommerce / automation schema.
                     </p>
                   </div>
@@ -622,24 +625,24 @@ export default function AvidiaSeoPage() {
 
               {/* callout: direct instruction to URL card below */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
-                <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/80 border border-cyan-500/30 px-3 py-1.5">
-                  <span className="text-[11px] font-semibold text-cyan-200 uppercase tracking-[0.16em]">
+                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/30">
+                  <span className="text-[11px] font-semibold text-cyan-700 uppercase tracking-[0.16em] dark:text-cyan-200">
                     Step 1
                   </span>
-                  <span className="text-[11px] text-slate-300">
+                  <span className="text-[11px] text-slate-600 dark:text-slate-300">
                     Paste manufacturer URL in the{" "}
-                    <span className="font-semibold text-cyan-200">
+                    <span className="font-semibold text-cyan-700 dark:text-cyan-200">
                       box right below this hero
                     </span>
                     .
                   </span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-950/80 border border-slate-700 px-3 py-1.5 text-[11px] text-slate-300">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:bg-slate-950/80 dark:border-slate-700 dark:text-slate-300">
                   <span className="text-xs">⬇</span>
                   <span>Step 2 — hit “Generate &amp; Save” for full cascade.</span>
                 </div>
                 {statusMessage && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-950/80 border border-cyan-500/40 px-3 py-1.5 text-[11px] text-cyan-100">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] text-cyan-700 shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/40 dark:text-cyan-100">
                     <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
                     {statusMessage}
                   </div>
@@ -650,18 +653,18 @@ export default function AvidiaSeoPage() {
             {/* Right: 3-step visual flow + live pipeline status */}
             <div className="w-full lg:w-[430px] xl:w-[500px] flex flex-col gap-3">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                   Real-time pipeline
                 </p>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   {loading || generating ? "Running…" : "Idle"}
                 </span>
               </div>
 
               <div className="flex flex-col md:flex-row gap-3">
                 {/* 3-step visual flow */}
-                <div className="flex-1 rounded-2xl bg-slate-950/80 border border-slate-700/80 px-4 py-3 space-y-2 shadow-[0_0_40px_rgba(15,23,42,0.8)]">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
                     3-step visual flow
                   </p>
                   <ol className="space-y-2.5 text-xs mt-1">
@@ -681,7 +684,7 @@ export default function AvidiaSeoPage() {
                                   ? "bg-emerald-400 text-slate-900 border-emerald-300 shadow-emerald-500/40"
                                   : isActive
                                   ? "bg-cyan-500 text-slate-900 border-cyan-300 animate-pulse shadow-cyan-500/40"
-                                  : "bg-slate-900 text-slate-400 border-slate-600",
+                                  : "bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-600",
                               ].join(" ")}
                             >
                               {index + 1}
@@ -692,16 +695,16 @@ export default function AvidiaSeoPage() {
                                   "mt-1 h-6 w-px",
                                   isDone || isActive
                                     ? "bg-gradient-to-b from-cyan-400 via-emerald-400 to-transparent"
-                                    : "bg-slate-700",
+                                    : "bg-slate-200 dark:bg-slate-700",
                                 ].join(" ")}
                               />
                             )}
                           </div>
                           <div className="flex-1">
-                            <p className="text-[11px] font-medium text-slate-100">
+                            <p className="text-[11px] font-medium text-slate-800 dark:text-slate-100">
                               {pill.label}
                             </p>
-                            <p className="text-[11px] text-slate-400">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
                               {pill.hint}
                             </p>
                           </div>
@@ -712,13 +715,13 @@ export default function AvidiaSeoPage() {
                 </div>
 
                 {/* Live pipeline status */}
-                <div className="flex-1 rounded-2xl bg-slate-950/80 border border-slate-700/80 px-4 py-3 space-y-2 shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+                <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                       Live pipeline status
                     </p>
                     {loading && (
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
                         Loading…
                       </span>
                     )}
@@ -729,10 +732,10 @@ export default function AvidiaSeoPage() {
                         key={pill.key}
                         className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[11px] ${
                           pill.state === "done"
-                            ? "bg-emerald-950/70 border-emerald-500/40 text-emerald-100"
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:border-emerald-500/40 dark:text-emerald-100"
                             : pill.state === "active"
-                            ? "bg-amber-950/70 border-amber-500/40 text-amber-100"
-                            : "bg-slate-950/70 border-slate-700 text-slate-300"
+                            ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/70 dark:border-amber-500/40 dark:text-amber-100"
+                            : "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-300"
                         }`}
                       >
                         <div className="flex items-center gap-2">
@@ -742,7 +745,7 @@ export default function AvidiaSeoPage() {
                                 ? "bg-emerald-400"
                                 : pill.state === "active"
                                 ? "bg-amber-400 animate-pulse"
-                                : "bg-slate-500"
+                                : "bg-slate-400 dark:bg-slate-500"
                             }`}
                           />
                           <span className="font-medium">{pill.label}</span>
@@ -751,7 +754,7 @@ export default function AvidiaSeoPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1 dark:text-slate-500">
                     Every state here is driven by real ingestion + SEO calls —
                     not dummy UI.
                   </p>
@@ -763,7 +766,7 @@ export default function AvidiaSeoPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="rounded-2xl border border-rose-500/40 bg-rose-950/60 text-rose-50 px-4 py-3 text-sm shadow-lg shadow-rose-900/40">
+          <div className="rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-lg shadow-rose-200/60 dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50 dark:shadow-rose-900/40">
             {error}
           </div>
         )}
@@ -772,15 +775,15 @@ export default function AvidiaSeoPage() {
           {/* Main work column */}
           <div className="lg:col-span-2 space-y-4">
             {/* Primary action: URL + Generate (right under hero) */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 lg:p-5 space-y-3">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 lg:p-5 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-50">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     One-click AvidiaSEO
                   </h4>
-                  <p className="text-xs text-slate-400 max-w-xl">
+                  <p className="text-xs text-slate-600 max-w-xl dark:text-slate-400">
                     Step 1 — paste the manufacturer URL. Step 2 — hit{" "}
-                    <span className="font-semibold text-cyan-300">
+                    <span className="font-semibold text-cyan-700 dark:text-cyan-300">
                       Generate &amp; Save
                     </span>
                     . AvidiaSEO runs ingest → poll → GPT SEO in a single shot.
@@ -804,7 +807,7 @@ export default function AvidiaSeoPage() {
                       setError(null);
                     }}
                     placeholder="https://manufacturer.com/product..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-950/60 text-slate-50 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                     type="url"
                   />
                   <button
@@ -820,7 +823,7 @@ export default function AvidiaSeoPage() {
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-500">
                     This always runs the full cascade for the current URL. If
                     the URL matches an existing ingestion, AvidiaSEO reuses it.
                   </p>
@@ -835,7 +838,7 @@ export default function AvidiaSeoPage() {
                       setStatusMessage("Demo URL loaded — hit Generate & Save");
                       setError(null);
                     }}
-                    className="text-[11px] text-cyan-300 hover:text-cyan-200 underline underline-offset-4"
+                    className="text-[11px] text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
                   >
                     Try a demo URL
                   </button>
@@ -844,16 +847,16 @@ export default function AvidiaSeoPage() {
             </div>
 
             {/* Premium HTML viewer */}
-            <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-2xl shadow-slate-950/70 p-6 border border-slate-700/80">
+            <div className="rounded-3xl bg-gradient-to-br from-slate-50 via-white to-slate-50 text-slate-900 shadow-2xl shadow-slate-200/80 p-6 border border-slate-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 dark:text-white dark:shadow-2xl dark:shadow-slate-950/70 dark:border-slate-700/80">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400 mb-1">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-1 dark:text-slate-400">
                     Description window
                   </p>
                   <h3 className="text-2xl font-semibold mb-1">
                     Premium HTML Viewer
                   </h3>
-                  <p className="text-slate-300 text-xs max-w-2xl">
+                  <p className="text-slate-600 text-xs max-w-2xl dark:text-slate-300">
                     See the final copy exactly as it will appear on a product
                     page. Highlight any claim, copy it into your CMS, or export
                     the HTML for your automation layer.
@@ -864,7 +867,7 @@ export default function AvidiaSeoPage() {
                     type="button"
                     onClick={handleCopyDescription}
                     disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-white/5 border border-white/25 text-xs text-white hover:bg-white/10 disabled:opacity-40"
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 disabled:opacity-40 dark:bg-white/5 dark:border-white/25 dark:text-white dark:hover:bg-white/10"
                   >
                     {copyState === "copied"
                       ? "Copied!"
@@ -876,7 +879,7 @@ export default function AvidiaSeoPage() {
                     type="button"
                     onClick={handleDownloadDescription}
                     disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-white text-xs text-slate-900 font-semibold border border-white/30 shadow hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none"
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none dark:bg-white dark:text-slate-900 dark:border-white/30"
                   >
                     Download HTML
                   </button>
@@ -891,20 +894,20 @@ export default function AvidiaSeoPage() {
               </div>
 
               <div className="mt-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 bg-white/5 border border-white/15 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 dark:bg-white/5 dark:border-white/15">
                   <input
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search headline, claims, or FAQs"
-                    className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-300 focus:outline-none"
+                    className="flex-1 bg-transparent text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white dark:placeholder:text-slate-300"
                   />
-                  <span className="text-[11px] text-slate-200">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-200">
                     Live highlight
                   </span>
                 </div>
 
-                <div className="rounded-2xl bg-white text-slate-900 shadow-inner border border-slate-200 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                <div className="rounded-2xl bg-white text-slate-900 shadow-inner border border-slate-200 overflow-hidden dark:bg-white dark:text-slate-900 dark:border-slate-200">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 dark:bg-slate-50">
                     <div>
                       <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">
                         Rendered description
@@ -943,51 +946,51 @@ export default function AvidiaSeoPage() {
           {/* Side column: structure, features, debug */}
           <div className="space-y-4">
             {/* SEO structure */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-50">
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                   SEO structure
                 </h4>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   Driven by custom instructions
                 </span>
               </div>
               <div className="space-y-2 text-xs">
-                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-400 mb-1">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     H1
                   </p>
-                  <p className="font-semibold text-slate-50">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
                     {seoPayload?.h1 ??
                       seoPayload?.name_best ??
                       "Not yet generated"}
                   </p>
                 </div>
-                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-400 mb-1">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     Page title
                   </p>
-                  <p className="font-semibold text-slate-50">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
                     {seoPayload?.pageTitle ??
                       seoPayload?.title ??
                       "Not yet generated"}
                   </p>
                 </div>
-                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-400 mb-1">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     Meta description
                   </p>
-                  <p className="text-slate-100 leading-relaxed">
+                  <p className="text-slate-800 leading-relaxed dark:text-slate-100">
                     {seoPayload?.metaDescription ??
                       seoPayload?.meta_description ??
                       "Not yet generated"}
                   </p>
                 </div>
-                <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-400 mb-1">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     Short description
                   </p>
-                  <p className="text-slate-100">
+                  <p className="text-slate-800 dark:text-slate-100">
                     {seoPayload?.seoShortDescription ??
                       seoPayload?.seo_short_description ??
                       "Not yet generated"}
@@ -997,40 +1000,40 @@ export default function AvidiaSeoPage() {
             </div>
 
             {/* Features + parked extras */}
-            <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-50">
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                   Feature bullets
                 </h4>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   What the enforcer kept
                 </span>
               </div>
               {Array.isArray(features) && features.length > 0 ? (
-                <ul className="list-disc list-inside space-y-1 text-xs text-slate-100">
+                <ul className="list-disc list-inside space-y-1 text-xs text-slate-800 dark:text-slate-100">
                   {features.map((feat: string, idx: number) => (
                     <li key={idx}>{feat}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-slate-400 text-xs">
+                <p className="text-slate-500 text-xs dark:text-slate-400">
                   No features captured yet. Generate SEO to see normalized
                   bullets.
                 </p>
               )}
 
               {parkedExtras.length > 0 && (
-                <div className="mt-3 border-t border-slate-700 pt-3">
+                <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
                   <button
                     type="button"
                     onClick={() => setShowRawExtras((v) => !v)}
-                    className="text-xs text-cyan-300 hover:text-cyan-200 underline underline-offset-4"
+                    className="text-xs text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
                   >
                     {showRawExtras ? "Hide" : "Show"} parked extras (
                     {parkedExtras.length})
                   </button>
                   {showRawExtras && (
-                    <pre className="mt-2 p-3 rounded-lg bg-slate-950/70 text-[11px] text-slate-100 border border-slate-700 overflow-auto">
+                    <pre className="mt-2 p-3 rounded-lg bg-slate-900 text-[11px] text-slate-100 border border-slate-700 overflow-auto dark:bg-slate-950/70">
                       {JSON.stringify(
                         Object.fromEntries(parkedExtras),
                         null,
@@ -1044,16 +1047,16 @@ export default function AvidiaSeoPage() {
 
             {/* Debug: Source SEO */}
             {jobData && ingestionId && (
-              <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-50">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Source SEO (scraped)
                   </h4>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Live from ingestion
                   </span>
                 </div>
-                <pre className="bg-slate-950/70 border border-slate-700 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words">
+                <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
                   {JSON.stringify(
                     jobData.normalized_payload ?? jobData,
                     null,
@@ -1065,18 +1068,18 @@ export default function AvidiaSeoPage() {
 
             {/* Debug: raw ingest response */}
             {rawIngestResponse && (
-              <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-3">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-50">
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Raw /api/v1/ingest response
                   </h4>
                   {pollingState && (
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
                       {pollingState}
                     </span>
                   )}
                 </div>
-                <pre className="bg-slate-950/70 border border-slate-700 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words">
+                <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
                   {JSON.stringify(rawIngestResponse, null, 2)}
                 </pre>
               </div>
@@ -1084,8 +1087,8 @@ export default function AvidiaSeoPage() {
 
             {/* Inline preview if no ingestionId but we got a payload */}
             {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
-              <div className="rounded-2xl bg-slate-900/80 border border-slate-700/60 shadow-xl shadow-slate-900/50 p-4 space-y-2 text-xs text-slate-100">
-                <h5 className="text-xs font-semibold text-slate-50">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-2 text-xs text-slate-800 dark:bg-slate-900/80 dark:border-slate-700/60 dark:text-slate-100 dark:shadow-xl dark:shadow-slate-900/50">
+                <h5 className="text-xs font-semibold text-slate-900 dark:text-slate-50">
                   Preview Generated SEO
                 </h5>
                 <p>
@@ -1103,7 +1106,7 @@ export default function AvidiaSeoPage() {
                     ""}
                 </p>
                 <div
-                  className="rounded-lg border border-slate-700 bg-slate-950/70 p-3"
+                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/70"
                   dangerouslySetInnerHTML={{
                     __html:
                       job.description_html ||
@@ -1116,6 +1119,6 @@ export default function AvidiaSeoPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
