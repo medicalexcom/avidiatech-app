@@ -531,238 +531,233 @@ export default function AvidiaSeoPage() {
         </div>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
+      {/* Wrapper aligned with Describe/Translate/Extract */}
+      <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-8 space-y-6 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO: headline, 3-step flow, live pipeline */}
-        <div className="relative overflow-hidden rounded-3xl border border-cyan-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(56,189,248,0.28)] p-5 lg:p-7 dark:border-cyan-500/30 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(56,189,248,0.25)]">
-          {/* subtle grid overlay */}
-          <div className="pointer-events-none absolute inset-0 opacity-[0.06] dark:opacity-[0.08]">
-            <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
-          </div>
-
-          <div className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch">
-            {/* Left: Identity + headline + value props */}
-            <div className="flex-1 min-w-[260px] space-y-5">
-              {/* product identity row */}
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
-                    <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                  </span>
-                  AvidiaTech • AvidiaSEO
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:border-emerald-400/40 dark:text-emerald-100">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Live pipeline
+        <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch">
+          {/* Left: Identity + headline + value props */}
+          <div className="flex-1 min-w-[260px] space-y-5">
+            {/* product identity row */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
+                  <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                 </span>
-                {ingestionId && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:bg-slate-900/80 dark:border-slate-700 dark:text-slate-300">
-                    Ingestion
-                    <span className="font-mono text-[10px]">
-                      {ingestionId.slice(0, 8)}…
-                    </span>
-                  </span>
-                )}
+                AvidiaTech • AvidiaSEO
               </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:border-emerald-400/40 dark:text-emerald-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Live pipeline
+              </span>
+              {ingestionId && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:bg-slate-900/80 dark:border-slate-700 dark:text-slate-300">
+                  Ingestion
+                  <span className="font-mono text-[10px]">
+                    {ingestionId.slice(0, 8)}…
+                  </span>
+                </span>
+              )}
+            </div>
 
-              {/* headline + subcopy */}
-              <div className="space-y-2">
-                <h1 className="text-3xl lg:text-4xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
-                  Turn any manufacturer URL into a{" "}
-                  <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
-                    production-ready SEO page
+            {/* headline + subcopy */}
+            <div className="space-y-2">
+              <h1 className="text-3xl lg:text-4xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
+                Turn any manufacturer URL into a{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
+                  production-ready SEO page
+                </span>
+                .
+              </h1>
+              <p className="mt-1 text-sm text-slate-600 max-w-xl dark:text-slate-300">
+                Paste a product URL and watch the whole pipeline fire:
+                ingestion, cleanup, and compliant copy — rendered exactly how
+                your store needs it. No prompts, no copy-paste gymnastics.
+              </p>
+            </div>
+
+            {/* value props strip */}
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                <span className="h-5 w-5 rounded-lg bg-cyan-500/10 border border-cyan-300 flex items-center justify-center text-[13px] text-cyan-700 dark:bg-cyan-500/15 dark:border-cyan-500/40 dark:text-cyan-100">
+                  1
+                </span>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    Ingest engine native
+                  </p>
+                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
+                    Reuses the same ingestion layer powering AvidiaExtract.
+                  </p>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                <span className="h-5 w-5 rounded-lg bg-sky-500/10 border border-sky-300 flex items-center justify-center text-[13px] text-sky-700 dark:bg-sky-500/15 dark:border-sky-500/40 dark:text-sky-100">
+                  2
+                </span>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    Custom GPT brain
+                  </p>
+                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
+                    Runs your instruction sheet, not a generic prompt.
+                  </p>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+                <span className="h-5 w-5 rounded-lg bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-[13px] text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-100">
+                  3
+                </span>
+                <div className="space-y-0">
+                  <p className="font-semibold text-slate-900 dark:text-slate-50">
+                    JSON + HTML ready
+                  </p>
+                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
+                    Mirrors your BigCommerce / automation schema.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* callout: direct instruction to URL card below */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/30">
+                <span className="text-[11px] font-semibold text-cyan-700 uppercase tracking-[0.16em] dark:text-cyan-200">
+                  Step 1
+                </span>
+                <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                  Paste manufacturer URL in the{" "}
+                  <span className="font-semibold text-cyan-700 dark:text-cyan-200">
+                    box right below this hero
                   </span>
                   .
-                </h1>
-                <p className="mt-1 text-sm text-slate-600 max-w-xl dark:text-slate-300">
-                  Paste a product URL and watch the whole pipeline fire:
-                  ingestion, cleanup, and compliant copy — rendered exactly how
-                  your store needs it. No prompts, no copy-paste gymnastics.
-                </p>
-              </div>
-
-              {/* value props strip */}
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                  <span className="h-5 w-5 rounded-lg bg-cyan-500/10 border border-cyan-300 flex items-center justify-center text-[13px] text-cyan-700 dark:bg-cyan-500/15 dark:border-cyan-500/40 dark:text-cyan-100">
-                    1
-                  </span>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      Ingest engine native
-                    </p>
-                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                      Reuses the same ingestion layer powering AvidiaExtract.
-                    </p>
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                  <span className="h-5 w-5 rounded-lg bg-sky-500/10 border border-sky-300 flex items-center justify-center text-[13px] text-sky-700 dark:bg-sky-500/15 dark:border-sky-500/40 dark:text-sky-100">
-                    2
-                  </span>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      Custom GPT brain
-                    </p>
-                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                      Runs your instruction sheet, not a generic prompt.
-                    </p>
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                  <span className="h-5 w-5 rounded-lg bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-[13px] text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-100">
-                    3
-                  </span>
-                  <div className="space-y-0">
-                    <p className="font-semibold text-slate-900 dark:text-slate-50">
-                      JSON + HTML ready
-                    </p>
-                    <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                      Mirrors your BigCommerce / automation schema.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* callout: direct instruction to URL card below */}
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/30">
-                  <span className="text-[11px] font-semibold text-cyan-700 uppercase tracking-[0.16em] dark:text-cyan-200">
-                    Step 1
-                  </span>
-                  <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                    Paste manufacturer URL in the{" "}
-                    <span className="font-semibold text-cyan-700 dark:text-cyan-200">
-                      box right below this hero
-                    </span>
-                    .
-                  </span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:bg-slate-950/80 dark:border-slate-700 dark:text-slate-300">
-                  <span className="text-xs">⬇</span>
-                  <span>Step 2 — hit “Generate &amp; Save” for full cascade.</span>
-                </div>
-                {statusMessage && (
-                  <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] text-cyan-700 shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/40 dark:text-cyan-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                    {statusMessage}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right: 3-step visual flow + live pipeline status */}
-            <div className="w-full lg:w-[430px] xl:w-[500px] flex flex-col gap-3">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Real-time pipeline
-                </p>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {loading || generating ? "Running…" : "Idle"}
                 </span>
               </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:bg-slate-950/80 dark:border-slate-700 dark:text-slate-300">
+                <span className="text-xs">⬇</span>
+                <span>Step 2 — hit “Generate &amp; Save” for full cascade.</span>
+              </div>
+              {statusMessage && (
+                <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] text-cyan-700 shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/40 dark:text-cyan-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  {statusMessage}
+                </div>
+              )}
+            </div>
+          </div>
 
-              <div className="flex flex-col md:flex-row gap-3">
-                {/* 3-step visual flow */}
-                <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                    3-step visual flow
-                  </p>
-                  <ol className="space-y-2.5 text-xs mt-1">
-                    {statusPills.map((pill, index) => {
-                      const isDone = pill.state === "done";
-                      const isActive = pill.state === "active";
-                      return (
-                        <li
-                          key={pill.key}
-                          className="flex items-center gap-3 relative"
-                        >
-                          <div className="flex flex-col items-center">
+          {/* Right: 3-step visual flow + live pipeline status */}
+          <div className="w-full lg:w-[430px] xl:w-[500px] flex flex-col gap-3">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Real-time pipeline
+              </p>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                {loading || generating ? "Running…" : "Idle"}
+              </span>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-3">
+              {/* 3-step visual flow */}
+              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+                <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                  3-step visual flow
+                </p>
+                <ol className="space-y-2.5 text-xs mt-1">
+                  {statusPills.map((pill, index) => {
+                    const isDone = pill.state === "done";
+                    const isActive = pill.state === "active";
+                    return (
+                      <li
+                        key={pill.key}
+                        className="flex items-center gap-3 relative"
+                      >
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={[
+                              "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold shadow-sm",
+                              isDone
+                                ? "bg-emerald-400 text-slate-9
+00 border-emerald-300 shadow-emerald-500/40"
+                                : isActive
+                                ? "bg-cyan-500 text-slate-900 border-cyan-300 animate-pulse shadow-cyan-500/40"
+                                : "bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-600",
+                            ].join(" ")}
+                          >
+                            {index + 1}
+                          </div>
+                          {index < statusPills.length - 1 && (
                             <div
                               className={[
-                                "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold shadow-sm",
-                                isDone
-                                  ? "bg-emerald-400 text-slate-900 border-emerald-300 shadow-emerald-500/40"
-                                  : isActive
-                                  ? "bg-cyan-500 text-slate-900 border-cyan-300 animate-pulse shadow-cyan-500/40"
-                                  : "bg-slate-100 text-slate-500 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-600",
+                                "mt-1 h-6 w-px",
+                                isDone || isActive
+                                  ? "bg-gradient-to-b from-cyan-400 via-emerald-400 to-transparent"
+                                  : "bg-slate-200 dark:bg-slate-700",
                               ].join(" ")}
-                            >
-                              {index + 1}
-                            </div>
-                            {index < statusPills.length - 1 && (
-                              <div
-                                className={[
-                                  "mt-1 h-6 w-px",
-                                  isDone || isActive
-                                    ? "bg-gradient-to-b from-cyan-400 via-emerald-400 to-transparent"
-                                    : "bg-slate-200 dark:bg-slate-700",
-                                ].join(" ")}
-                              />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-[11px] font-medium text-slate-800 dark:text-slate-100">
-                              {pill.label}
-                            </p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                              {pill.hint}
-                            </p>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-
-                {/* Live pipeline status */}
-                <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Live pipeline status
-                    </p>
-                    {loading && (
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Loading…
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-2 mt-1">
-                    {statusPills.map((pill) => (
-                      <div
-                        key={pill.key}
-                        className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[11px] ${
-                          pill.state === "done"
-                            ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:border-emerald-500/40 dark:text-emerald-100"
-                            : pill.state === "active"
-                            ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/70 dark:border-amber-500/40 dark:text-amber-100"
-                            : "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              pill.state === "done"
-                                ? "bg-emerald-400"
-                                : pill.state === "active"
-                                ? "bg-amber-400 animate-pulse"
-                                : "bg-slate-400 dark:bg-slate-500"
-                            }`}
-                          />
-                          <span className="font-medium">{pill.label}</span>
+                            />
+                          )}
                         </div>
-                        <span className="text-[10px]">{pill.hint}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1 dark:text-slate-500">
-                    Every state here is driven by real ingestion + SEO calls —
-                    not dummy UI.
+                        <div className="flex-1">
+                          <p className="text-[11px] font-medium text-slate-800 dark:text-slate-100">
+                            {pill.label}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {pill.hint}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+
+              {/* Live pipeline status */}
+              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Live pipeline status
                   </p>
+                  {loading && (
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Loading…
+                    </span>
+                  )}
                 </div>
+                <div className="space-y-2 mt-1">
+                  {statusPills.map((pill) => (
+                    <div
+                      key={pill.key}
+                      className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-[11px] ${
+                        pill.state === "done"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:border-emerald-500/40 dark:text-emerald-100"
+                          : pill.state === "active"
+                          ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/70 dark:border-amber-500/40 dark:text-amber-100"
+                          : "bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-950/70 dark:border-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            pill.state === "done"
+                              ? "bg-emerald-400"
+                              : pill.state === "active"
+                              ? "bg-amber-400 animate-pulse"
+                              : "bg-slate-400 dark:bg-slate-500"
+                          }`}
+                        />
+                        <span className="font-medium">{pill.label}</span>
+                      </div>
+                      <span className="text-[10px]">{pill.hint}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 dark:text-slate-500">
+                  Every state here is driven by real ingestion + SEO calls —
+                  not dummy UI.
+                </p>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Error banner */}
         {error && (
@@ -990,7 +985,8 @@ export default function AvidiaSeoPage() {
                   <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
                     Short description
                   </p>
-                  <p className="text-slate-800 dark:text-slate-100">
+                  <p className="text-slate-8
+00 dark:text-slate-100">
                     {seoPayload?.seoShortDescription ??
                       seoPayload?.seo_short_description ??
                       "Not yet generated"}
