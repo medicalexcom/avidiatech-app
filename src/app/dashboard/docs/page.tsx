@@ -38,7 +38,7 @@ export default function DocsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl dark:text-slate-50">
+                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
                     Turn dense manuals into{" "}
                     <span className="bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-fuchsia-300 dark:to-sky-300">
                       structured, reusable product data

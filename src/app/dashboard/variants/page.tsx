@@ -40,7 +40,7 @@ export default function VariantsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn scattered SKUs into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 dark:from-amber-300 dark:via-amber-200 dark:to-yellow-300">
                       clean variant families

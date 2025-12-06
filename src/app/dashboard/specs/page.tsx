@@ -40,7 +40,7 @@ export default function SpecsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl lg:text-[1.9rem] font-semibold text-slate-50 leading-snug">
+                  <h1 className="text-xl sm:text-2xl lg:text-[1.85rem] font-semibold text-slate-50 leading-snug">
                     Turn messy spec tables into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 via-emerald-300 to-sky-300">
                       clean, queryable data

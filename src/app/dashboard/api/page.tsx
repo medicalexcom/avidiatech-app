@@ -38,7 +38,7 @@ export default function ApiPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl dark:text-slate-50">
+                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
                     Ship on top of{" "}
                     <span className="bg-gradient-to-r from-violet-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-sky-200 dark:to-emerald-200">
                       Avidia’s product data engine.

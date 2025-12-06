@@ -37,7 +37,7 @@ export default function PricePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     Turn raw costs into{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-emerald-400 to-sky-400 dark:from-emerald-300 dark:via-emerald-200 dark:to-sky-200">
                       policy-aligned, profitable prices

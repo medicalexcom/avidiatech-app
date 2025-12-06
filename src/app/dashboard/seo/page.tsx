@@ -561,7 +561,7 @@ export default function AvidiaSeoPage() {
 
             {/* headline + subcopy */}
             <div className="space-y-2">
-              <h1 className="text-3xl lg:text-4xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
                 Turn any manufacturer URL into a{" "}
                 <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
                   production-ready SEO page

@@ -20,6 +20,8 @@ import ExtractHeader from "@/components/ExtractHeader";
  *   - Fall back to DB row (normalized_payload if available).
  */
 
+export const dynamic = "force-dynamic";
+
 export default function ExtractPage() {
   const router = useRouter();
 
@@ -159,8 +161,9 @@ export default function ExtractPage() {
       </div>
 
       {/* Wrapper aligned with Describe/Translate (starts higher) */}
-      <div className="relative mx-auto max-w-7xl space-y-8 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
         {/* HERO: Extract identity + ExtractHeader (no framed banner) */}
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
           {/* LEFT: headline + story + status chips */}
           <div className="min-w-[260px] flex-1 space-y-5">
@@ -186,6 +189,7 @@ export default function ExtractPage() {
             </div>
 
             <div className="space-y-2">
+              <h1 className="text-xl font-semibold leading-tight text-slate-900 lg:text-2xl dark:text-slate-50">
               <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 Extract everything from a{" "}
                 <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">

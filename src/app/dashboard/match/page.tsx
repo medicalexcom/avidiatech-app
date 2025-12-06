@@ -90,7 +90,7 @@ export default function MatchPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
                     Match competitor and marketplace listings to{" "}
                     <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-cyan-400 to-sky-400 dark:from-emerald-300 dark:via-cyan-300 dark:to-sky-300">
                       your source catalog

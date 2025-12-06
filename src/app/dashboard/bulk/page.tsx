@@ -10,7 +10,7 @@
 export default function BulkPage() {
   return (
     <div className="p-4">
-      <h1 className="text-3xl font-bold mb-4">Bulk Operations</h1>
+      <h1 className="text-2xl font-semibold mb-4">Bulk Operations</h1>
       <p className="mb-4">
         Manage large sets of products more efficiently with CSV upload and
         batch processing features.
