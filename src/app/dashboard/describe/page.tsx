@@ -21,31 +21,6 @@ export default async function DescribePage() {
       <div className="relative mx-auto max-w-7xl space-y-8 px-4 py-8 lg:px-8">
         {/* HERO (no framed banner, open row like Translate) */}
         <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch lg:justify-between">
-          {/* Floating cards (keep as subtle decoration) */}
-          <div className="pointer-events-none absolute -right-10 top-10 hidden xl:block">
-            <div className="w-60 rotate-3 rounded-2xl border border-sky-300/40 bg-white/95 px-4 py-3 shadow-[0_0_40px_rgba(56,189,248,0.25)] dark:border-sky-500/30 dark:bg-slate-950/90 dark:shadow-[0_0_60px_rgba(56,189,248,0.4)]">
-              <p className="mb-1 text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                Example input
-              </p>
-              <p className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-100">
-                “Lightweight aluminum walker with wheels, good for small
-                apartments, need to highlight safety and Medicare coverage.”
-              </p>
-            </div>
-          </div>
-          <div className="pointer-events-none absolute -right-4 bottom-6 hidden xl:block">
-            <div className="w-64 -rotate-2 rounded-2xl border border-emerald-300/50 bg-white/95 px-4 py-3 shadow-[0_0_40px_rgba(16,185,129,0.25)] dark:border-emerald-400/40 dark:bg-slate-950/95 dark:shadow-[0_0_60px_rgba(16,185,129,0.4)]">
-              <p className="mb-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
-                AvidiaDescribe Output
-              </p>
-              <ul className="list-inside list-disc space-y-1 text-[11px] text-slate-700 dark:text-slate-100">
-                <li>Structured H1, page title & meta</li>
-                <li>Benefit-first feature bullets</li>
-                <li>Compliance and disclaimers baked in</li>
-              </ul>
-            </div>
-          </div>
-
           {/* LEFT: identity + story */}
           <div className="min-w-[260px] flex-1 space-y-6">
             {/* Identity row */}
@@ -67,7 +42,7 @@ export default async function DescribePage() {
 
             {/* Headline */}
             <div className="space-y-3">
-              <h1 className="text-3xl font-semibold leading-tight text-slate-900 lg:text-4xl dark:text-slate-50">
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 Describe the product in{" "}
                 <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
                   your own words
@@ -79,6 +54,27 @@ export default async function DescribePage() {
                 disclaimers. AvidiaDescribe runs your custom instructions and
                 returns SEO-ready copy that matches your brands and channels.
               </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-sky-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-sky-400/50 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-200">
+                  Example input
+                </p>
+                <p className="leading-relaxed">
+                  “Lightweight aluminum walker with wheels, good for small apartments, need to highlight safety and Medicare coverage.”
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/50 dark:bg-slate-950/90 dark:text-slate-100">
+                <p className="mb-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  AvidiaDescribe Output
+                </p>
+                <ul className="list-inside list-disc space-y-1">
+                  <li>Structured H1, page title & meta</li>
+                  <li>Benefit-first feature bullets</li>
+                  <li>Compliance and disclaimers baked in</li>
+                </ul>
+              </div>
             </div>
 
             {/* Value props */}
