@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const sections = [
   {
     title: "AI Extraction & Content",
+    tag: "AI content",
     items: [
       { name: "Extract", href: "/dashboard/extract" },
       { name: "Describe", href: "/dashboard/describe" },
@@ -18,6 +19,7 @@ const sections = [
   },
   {
     title: "Data Intelligence",
+    tag: "Signals",
     items: [
       { name: "Match", href: "/dashboard/match" },
       { name: "Variants", href: "/dashboard/variants" },
@@ -28,6 +30,7 @@ const sections = [
   },
   {
     title: "Commerce & Automation",
+    tag: "Ops",
     items: [
       { name: "Import", href: "/dashboard/import" },
       { name: "Audit", href: "/dashboard/audit" },
@@ -38,6 +41,7 @@ const sections = [
   },
   {
     title: "Developer Tools",
+    tag: "Dev",
     items: [
       { name: "Browser", href: "/dashboard/browser" },
       { name: "API", href: "/dashboard/api" },
@@ -102,7 +106,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Data Intelligence + Monitor → amber (change / insights)
+  // Data Intelligence + Monitor → amber
   if (key === "match" || key === "variants" || key === "specs" || key === "monitor") {
     return {
       dot: "bg-amber-400",
@@ -113,7 +117,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Commerce & Automation feeds / pricing backbone → emerald
+  // Commerce & Automation → emerald
   if (key === "import" || key === "feeds" || key === "price") {
     return {
       dot: "bg-emerald-400",
@@ -124,7 +128,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Audit → rose (QA / warnings)
+  // Audit → rose
   if (key === "audit") {
     return {
       dot: "bg-rose-400",
@@ -135,7 +139,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // API (dev surface) → cyan
+  // API → cyan
   if (key === "api") {
     return {
       dot: "bg-cyan-400",
@@ -160,22 +164,22 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <nav
+    <aside
       aria-label="AvidiaTech main navigation"
-      className="flex h-full min-h-screen w-60 flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100 md:w-56"
+      className="flex h-screen w-60 flex-col border-r border-slate-800/80 bg-slate-950/98 px-3 py-4 text-slate-100 md:w-56"
     >
       {/* Brand / context */}
       <div className="mb-4 px-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <span className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
               AvidiaTech
             </span>
             <span className="text-[13px] font-semibold text-slate-50">
               Product Data OS
             </span>
           </div>
-          <div className="rounded-xl bg-slate-900/90 border border-slate-700 px-2.5 py-1.5 text-[10px] text-slate-300">
+          <div className="rounded-xl border border-slate-700 bg-slate-900/90 px-2.5 py-1.5 text-[10px] text-slate-300">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span>Live workspace</span>
@@ -184,29 +188,53 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Scrollable section area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+      {/* Scrollable menu region with custom-ish vertical scroll */}
+      <div
+        className="
+          flex-1 space-y-4 overflow-y-auto pr-1
+          scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/40
+        "
+      >
         {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && (
               <div className="my-3 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
             )}
-            <h2 className="px-2 text-[10px] uppercase tracking-[0.18em] text-slate-500 mb-2">
-              {section.title}
-            </h2>
+
+            {/* Section heading row: title + tiny chip */}
+            <div className="mb-1.5 flex items-center justify-between px-2">
+              <h2 className="text-[11px] font-semibold text-slate-400 capitalize">
+                {section.title}
+              </h2>
+              {section.tag && (
+                <span className="rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] text-slate-500 ring-1 ring-slate-800">
+                  {section.tag}
+                </span>
+              )}
+            </div>
+
             <ul className="space-y-1.5">
               {section.items.map((item) => {
                 const active = pathname === item.href;
                 const accent = getAccentClasses(item.name);
 
                 return (
-                  <li key={item.href}>
+                  <li key={item.href} className="relative">
+                    {/* Vertical active rail – no layout jump */}
+                    <span
+                      className={[
+                        "pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-full transition-opacity duration-150",
+                        active
+                          ? `${accent.dot} opacity-100`
+                          : "bg-slate-700 opacity-0",
+                      ].join(" ")}
+                    />
+
                     <Link
                       href={item.href}
                       className={[
-                        "group flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold border",
-                        "transition-all duration-150 ease-out",
-                        "hover:bg-slate-900/80 hover:border-slate-600/80 hover:translate-x-[2px]",
+                        "group relative ml-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium",
+                        "transition-colors duration-150 ease-out",
                         active
                           ? [
                               accent.activeBg,
@@ -214,7 +242,7 @@ export default function Sidebar() {
                               accent.pillGlow,
                               "text-slate-50",
                             ].join(" ")
-                          : "bg-transparent border-transparent text-slate-300",
+                          : "border-slate-800/70 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-900/70",
                       ].join(" ")}
                     >
                       {/* Accent dot / icon placeholder */}
@@ -237,8 +265,8 @@ export default function Sidebar() {
                         {item.name}
                       </span>
 
-                      {/* Tiny tag to hint category state on hover */}
-                      <span className="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                      {/* Tiny tag to hint category on hover */}
+                      <span className="text-[10px] text-slate-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                         {sectionIndex === 0
                           ? "AI"
                           : sectionIndex === 1
@@ -256,13 +284,13 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Bottom meta (optional) */}
-      <div className="mt-4 border-t border-slate-800/80 pt-3 px-2 text-[10px] text-slate-500">
+      {/* Bottom meta */}
+      <div className="mt-4 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
         <div className="flex items-center justify-between">
           <span>AvidiaTech • Dashboard</span>
           <span className="text-slate-600">v0.1</span>
         </div>
       </div>
-    </nav>
+    </aside>
   );
 }
