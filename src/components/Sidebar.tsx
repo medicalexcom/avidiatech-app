@@ -162,20 +162,20 @@ export default function Sidebar() {
   return (
     <nav
       aria-label="AvidiaTech main navigation"
-      className="flex h-screen w-60 flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100 md:w-56"
+      className="fixed top-[56px] bottom-0 left-0 flex w-56 flex-col bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
     >
       {/* Brand / context */}
-      <div className="mb-4 px-2 shrink-0">
+      <div className="mb-3 px-2 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               AvidiaTech
             </span>
             <span className="text-[12px] font-semibold text-slate-50">
               Product Data OS
             </span>
           </div>
-          <div className="rounded-xl bg-slate-900/90 border border-slate-700 px-2.5 py-1.5 text-[10px] text-slate-300">
+          <div className="rounded-xl bg-slate-900/90 border border-slate-700 px-2.5 py-1.5 text-[10px] text-slate-200">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span>Live workspace</span>
@@ -185,16 +185,16 @@ export default function Sidebar() {
       </div>
 
       {/* Scrollable section area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && (
-              <div className="my-3 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
+              <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
             )}
-            <h2 className="px-2 mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500 whitespace-nowrap">
+            <h2 className="px-2 mb-1 text-[8px] font-medium uppercase tracking-[0.14em] text-slate-500 whitespace-nowrap">
               {section.title}
             </h2>
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {section.items.map((item) => {
                 const active = pathname === item.href;
                 const accent = getAccentClasses(item.name);
@@ -204,9 +204,9 @@ export default function Sidebar() {
                     <Link
                       href={item.href}
                       className={[
-                        "group flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold border",
+                        "group flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] font-medium border",
                         "transition-all duration-150 ease-out",
-                        "hover:bg-slate-900/80 hover:border-slate-600/80 hover:translate-x-[2px]",
+                        "hover:bg-slate-900 hover:border-slate-500/70 hover:translate-x-[2px]",
                         active
                           ? [
                               accent.activeBg,
@@ -214,7 +214,7 @@ export default function Sidebar() {
                               accent.pillGlow,
                               "text-slate-50",
                             ].join(" ")
-                          : "bg-transparent border-transparent text-slate-300",
+                          : "bg-transparent border-transparent text-slate-200",
                       ].join(" ")}
                     >
                       {/* Accent dot / icon placeholder */}
@@ -223,7 +223,7 @@ export default function Sidebar() {
                           "h-1.5 w-1.5 rounded-full transition-colors duration-150",
                           active
                             ? accent.dot
-                            : "bg-slate-600 group-hover:bg-slate-400",
+                            : "bg-slate-500 group-hover:bg-slate-300",
                         ].join(" ")}
                       />
 
@@ -231,7 +231,9 @@ export default function Sidebar() {
                       <span
                         className={[
                           "flex-1 truncate",
-                          active ? accent.textActive : "text-slate-300",
+                          active
+                            ? accent.textActive
+                            : "text-slate-200 group-hover:text-slate-50",
                         ].join(" ")}
                       >
                         {item.name}
@@ -255,21 +257,21 @@ export default function Sidebar() {
         <div className="flex flex-col gap-1.5">
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/80 px-2 py-1 text-left text-[10px] text-slate-300 hover:bg-slate-800/90"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/80 px-2 py-1 text-left text-[10px] text-slate-200 hover:bg-slate-800/90"
           >
             <span>💬</span>
             <span>Open support chat</span>
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-900"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-300 hover:bg-slate-900"
           >
             <span>📚</span>
             <span>Documentation &amp; guides</span>
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-900"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-300 hover:bg-slate-900"
           >
             <span>🟢</span>
             <span>System status: all good</span>
