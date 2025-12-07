@@ -259,13 +259,16 @@ export function Strong(props: Omit<TextProps, "variant" | "as">) {
  *   <Brand tone="emerald">AvidiaSEO</Brand>
  *
  * This keeps markup semantic and removes inline font/color utilities from pages.
+ *
+ * NOTE: we Omit "tone" from TextProps then provide a small, explicit union for brand tones
+ * to avoid type collisions with the global TextProps.tone.
  */
 export function Brand({
   tone = "accent",
   children,
   className,
   ...rest
-}: { tone?: "cyan" | "fuchsia" | "emerald" | "accent" } & Omit<TextProps, "variant" | "as">) {
+}: { tone?: "cyan" | "fuchsia" | "emerald" | "accent" } & Omit<TextProps, "variant" | "as" | "tone">) {
   const toneClass =
     tone === "cyan"
       ? "text-cyan-600 dark:text-cyan-300"
