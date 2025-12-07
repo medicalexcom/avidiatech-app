@@ -10,7 +10,6 @@ import { useTheme } from "next-themes";
  * ProfileMenu — premium account dropdown
  * - Uses next-themes + a local isDark mirror so the toggle never feels "stuck".
  * - Light mode is default (handled by global ThemeProvider).
- * - Still manually updates <html class="dark"> and localStorage as a fallback.
  */
 
 export default function ProfileMenu() {
@@ -80,14 +79,12 @@ export default function ProfileMenu() {
       const next = !prev;
       const mode = next ? "dark" : "light";
 
-      // Update next-themes (preferred)
       try {
         setTheme(mode);
       } catch {
         // ignore if ThemeProvider not fully wired
       }
 
-      // Fallback: directly control <html> class + localStorage
       try {
         document.documentElement.classList.toggle("dark", next);
         window.localStorage.setItem("theme", mode);
@@ -212,46 +209,40 @@ export default function ProfileMenu() {
             </div>
           </div>
 
+          {/* ⬇️ New pill from the snippet, wired to our isDark / toggleTheme */}
           {mounted && (
             <button
               type="button"
               onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className={`relative inline-flex h-8 w-24 items-center rounded-full border p-1 transition-colors ${
+              aria-label="Toggle dark mode"
+              className={[
+                "inline-flex items-center rounded-full border px-1 py-0.5 text-[11px] font-medium shadow-sm transition-colors",
                 isDark
-                  ? "bg-slate-900 border-slate-600"
-                  : "bg-slate-100 border-slate-300"
-              }`}
+                  ? "border-slate-700 bg-slate-900 text-slate-100"
+                  : "border-slate-200 bg-white text-slate-700",
+              ].join(" ")}
             >
-              {/* Labels layer */}
-              <span className="absolute inset-0 flex items-center justify-between px-2 text-[10px] font-medium select-none">
-                <span
-                  className={`inline-flex items-center gap-1 ${
-                    isDark ? "text-amber-300" : "text-amber-600"
-                  }`}
-                >
-                  <span aria-hidden>☀️</span>
-                  <span>Light</span>
-                </span>
-                <span
-                  className={`inline-flex items-center gap-1 ${
-                    isDark ? "text-sky-200" : "text-slate-600"
-                  }`}
-                >
-                  <span>Dark</span>
-                  <span aria-hidden>🌙</span>
-                </span>
-              </span>
-
-              {/* Thumb */}
               <span
-                className={`relative z-10 inline-flex h-6 w-11 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm text-[11px] font-semibold transition-transform ${
-                  isDark
-                    ? "translate-x-7 text-slate-50"
-                    : "translate-x-0 text-slate-900"
-                }`}
+                className={[
+                  "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                  !isDark
+                    ? "bg-slate-900 text-slate-50"
+                    : "text-slate-500 dark:text-slate-300",
+                ].join(" ")}
               >
-                {isDark ? "Dark" : "Light"}
+                <span className="text-xs">☀️</span>
+                <span>Light</span>
+              </span>
+              <span
+                className={[
+                  "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                  isDark
+                    ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900"
+                    : "text-slate-500",
+                ].join(" ")}
+              >
+                <span className="text-xs">🌙</span>
+                <span>Dark</span>
               </span>
             </button>
           )}
