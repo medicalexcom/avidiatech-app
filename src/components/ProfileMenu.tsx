@@ -48,10 +48,27 @@ export default function ProfileMenu() {
     };
   }, [open]);
 
-  const isDark = resolvedTheme === "dark";
+  // Reliable theme detection helper: prefer next-themes' resolvedTheme,
+  // fall back to checking html.dark class (in case class strategy is used).
+  function getCurrentTheme(): "dark" | "light" {
+    if (resolvedTheme === "dark" || resolvedTheme === "light") {
+      return resolvedTheme;
+    }
+    if (typeof document !== "undefined") {
+      return document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
+    }
+    return "light";
+  }
 
+  // Compute isDark from the reliable getter. Use mounted guard to avoid SSR mismatch.
+  const isDark = mounted ? getCurrentTheme() === "dark" : false;
+
+  // Toggle theme reading the current theme at click time (avoids stale closures).
   function toggleTheme() {
-    setTheme(isDark ? "light" : "dark");
+    const current = getCurrentTheme();
+    setTheme(current === "dark" ? "light" : "dark");
   }
 
   function nav(href: string, e?: React.MouseEvent) {
@@ -160,6 +177,7 @@ export default function ProfileMenu() {
             type="button"
             onClick={toggleTheme}
             aria-label="Toggle dark mode"
+            aria-pressed={isDark}
             className={[
               "inline-flex items-center rounded-full border px-1 py-0.5 text-[11px] font-medium shadow-sm transition-colors",
               isDark
