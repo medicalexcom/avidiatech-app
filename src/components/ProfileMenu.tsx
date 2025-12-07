@@ -8,15 +8,13 @@ import { useTheme } from "next-themes";
 /**
  * ProfileMenu — dropdown with global light/dark toggle.
  *
- * Notes on fixes:
- * - Use `resolvedTheme` from next-themes for reliable read of the active theme.
- * - Guard with `mounted` to avoid reading theme on the server (SSR hydration).
- * - Call `setTheme("dark" | "light")` directly from the pill click handlers
- *   (no ambiguous toggles) and stopPropagation so parent handlers don't interfere.
- * - Removed best-effort manual DOM mutation fallback (keep behavior consistent
- *   with next-themes). If you still need instant DOM changes, we can re-add a
- *   small fallback, but usually setTheme is sufficient when ThemeProvider is
- *   configured with attribute="class".
+ * Key fixes applied:
+ * - Use next-themes' resolvedTheme for reliable reads when attribute="class".
+ * - Guard with `mounted` to avoid SSR/hydration mismatch.
+ * - Call setTheme("dark" | "light") directly from each pill's onClick.
+ * - Do not attach a click handler to the outer group (avoid ambiguous toggles).
+ * - Make pill elements <button> so clicks are explicit and accessible.
+ * - Keep behavior consistent with ThemeProvider attribute="class".
  */
 
 export default function ProfileMenu() {
@@ -27,7 +25,7 @@ export default function ProfileMenu() {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // Avoid hydration issues with next-themes
+  // Mark client mounted so resolvedTheme reads are safe.
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -55,16 +53,19 @@ export default function ProfileMenu() {
     };
   }, [open]);
 
-  // Use resolvedTheme (this reflects the actual applied theme when attribute="class")
+  // Use resolvedTheme (reflects applied theme when attribute="class")
   const isDark = mounted && resolvedTheme === "dark";
 
-  // Explicit handlers — set the theme directly
+  // Explicit handlers: set the theme directly
   function setExplicitTheme(next: "dark" | "light", e?: React.MouseEvent) {
     if (e) {
+      // keep the click local to the pill
       e.stopPropagation();
       e.preventDefault();
     }
     setTheme(next);
+    // keep menu open so user can see state in the pills; close if you prefer:
+    // setOpen(false);
   }
 
   function nav(href: string, e?: React.MouseEvent) {
@@ -168,7 +169,7 @@ export default function ProfileMenu() {
             </div>
           </div>
 
-          {/* Premium toggle pill */}
+          {/* Premium toggle pill: no outer onClick, each pill is a button */}
           <div
             role="group"
             aria-label="Appearance toggle"
@@ -179,8 +180,8 @@ export default function ProfileMenu() {
                 : "border-slate-200 bg-white text-slate-700",
             ].join(" ")}
           >
-            {/* Light pill: explicit setter (stopPropagation so parent doesn't just toggle) */}
             <button
+              type="button"
               onClick={(e) => setExplicitTheme("light", e)}
               aria-pressed={!isDark}
               className={[
@@ -189,14 +190,13 @@ export default function ProfileMenu() {
                   ? "bg-slate-900 text-slate-50"
                   : "text-slate-500 dark:text-slate-300",
               ].join(" ")}
-              type="button"
             >
               <span className="text-xs">☀️</span>
               <span>Light</span>
             </button>
 
-            {/* Dark pill: explicit setter */}
             <button
+              type="button"
               onClick={(e) => setExplicitTheme("dark", e)}
               aria-pressed={isDark}
               className={[
@@ -205,7 +205,6 @@ export default function ProfileMenu() {
                   ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900"
                   : "text-slate-500",
               ].join(" ")}
-              type="button"
             >
               <span className="text-xs">🌙</span>
               <span>Dark</span>
