@@ -8,9 +8,14 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 export default function MatchPage() {
+  // Enabled when:
+  // - NEXT_PUBLIC_FEATURE_MATCH === "true", or
+  // - FEATURE_MATCH === "true", or
+  // - you're NOT in production (dev / preview are always ON)
   const featureEnabled =
     process.env.NEXT_PUBLIC_FEATURE_MATCH === "true" ||
-    process.env.FEATURE_MATCH === "true";
+    process.env.FEATURE_MATCH === "true" ||
+    process.env.NODE_ENV !== "production";
 
   if (!featureEnabled) {
     return (
@@ -76,80 +81,71 @@ export default function MatchPage() {
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* Header / hero row */}
-        <section className="mb-7">
-          <div className="relative overflow-hidden rounded-3xl border border-emerald-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(16,185,129,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-emerald-500/40 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(16,185,129,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + copy */}
-              <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
-                  Data Intelligence · AvidiaMatch
-                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-                  <span className="text-emerald-700 dark:text-emerald-200">Live</span>
-                </div>
+        {/* Header – compact Cluster-style (no hero frame) */}
+        <section className="mb-6 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: title + copy */}
+          <div className="space-y-3 max-w-2xl flex-1 min-w-[260px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+              Data Intelligence · AvidiaMatch
+              <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+              <span className="text-emerald-700 dark:text-emerald-200">Live</span>
+            </div>
 
-                <div className="space-y-2">
-                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                    Match competitor and marketplace listings to{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-cyan-400 to-sky-400 dark:from-emerald-300 dark:via-cyan-300 dark:to-sky-300">
-                      your source catalog
-                    </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    Upload competitor feeds or marketplace exports and AvidiaMatch will
-                    align them to your ingested products from AvidiaExtract. Review,
-                    refine, and export high-confidence matches into pricing, feeds, and
-                    automation flows.
-                  </p>
-                </div>
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                Match competitor and marketplace listings to{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-cyan-400 to-sky-400 dark:from-emerald-300 dark:via-cyan-300 dark:to-sky-300">
+                  your source catalog
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Upload competitor feeds or marketplace exports and AvidiaMatch will align
+                them to your ingested products from AvidiaExtract. Review, refine, and
+                export high-confidence matches into pricing, feeds, and automation flows.
+              </p>
+            </div>
 
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>Uses normalized data from AvidiaExtract as the source of truth.</span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span>
-                      Scored matches with filters for brand, MPN, GTIN, and title.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-violet-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-violet-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span>
-                      Export approved matches into Price, Feeds, or your own pipelines.
-                    </span>
-                  </div>
-                </div>
+            <div className="flex flex-wrap gap-3 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/50 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Uses normalized data from AvidiaExtract as the source of truth.</span>
               </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/50 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span>Scored matches with filters for brand, MPN, GTIN, and title.</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-violet-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-violet-500/50 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                <span>Export approved matches into Price, Feeds, or your own pipelines.</span>
+              </div>
+            </div>
+          </div>
 
-              {/* Right: module status card */}
-              <div className="w-full max-w-xs lg:max-w-sm">
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
-                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                          Live &amp; active
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                      Tenant-aware
+          {/* Right: module status card */}
+          <div className="w-full max-w-xs lg:max-w-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
+                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                      Live &amp; active
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    Later, this card can show how many match jobs ran this week, average
-                    confidence, and how many rows are waiting for approval.
-                  </p>
                 </div>
+                <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+                  Tenant-aware
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                Later, this card can show how many match jobs ran this week, average
+                confidence, and how many rows are waiting for approval.
+              </p>
             </div>
           </div>
         </section>
@@ -214,6 +210,23 @@ export default function MatchPage() {
                   Live match grid
                 </span>
               </div>
+
+              {/* Confidence legend */}
+              <div className="px-1 mb-2 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 shadow-sm dark:border-emerald-500/70 dark:bg-emerald-900/40 dark:text-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  High confidence
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 shadow-sm dark:border-amber-400/70 dark:bg-amber-900/40 dark:text-amber-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  Needs review
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm dark:border-slate-600/70 dark:bg-slate-900/60 dark:text-slate-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  Exploratory / low confidence
+                </span>
+              </div>
+
               <p className="px-1 text-[11px] text-slate-500 mb-2 dark:text-slate-400">
                 Inspect row-level matches, override scores when needed, and mark pairs as
                 approved or rejected. In production, this grid should be fully sortable and
@@ -255,8 +268,7 @@ export default function MatchPage() {
                 <li>• Use consistent brand names between sources and master catalog.</li>
                 <li>• Re-run jobs after updating your master catalog in AvidiaExtract.</li>
                 <li>
-                  • Use higher confidence thresholds for pricing, lower for discovery and
-                  QA.
+                  • Use higher confidence thresholds for pricing, lower for discovery and QA.
                 </li>
               </ul>
               <p className="mt-3 text-[10px] text-slate-500 dark:text-slate-500">
