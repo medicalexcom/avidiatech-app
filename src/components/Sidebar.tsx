@@ -49,7 +49,6 @@ const sections = [
 function getAccentClasses(name: string) {
   const key = name.toLowerCase();
 
-  // Core modules with known palettes
   if (key === "extract") {
     return {
       dot: "bg-cyan-400",
@@ -102,7 +101,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Data Intelligence + Monitor → amber (change / insights)
+  // Data Intelligence + Monitor → amber
   if (key === "match" || key === "variants" || key === "specs" || key === "monitor") {
     return {
       dot: "bg-amber-400",
@@ -113,7 +112,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Commerce & Automation feeds / pricing backbone → emerald
+  // Commerce & Automation → emerald
   if (key === "import" || key === "feeds" || key === "price") {
     return {
       dot: "bg-emerald-400",
@@ -124,7 +123,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Audit → rose (QA / warnings)
+  // Audit → rose
   if (key === "audit") {
     return {
       dot: "bg-rose-400",
@@ -135,7 +134,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // API (dev surface) → cyan
+  // API → cyan
   if (key === "api") {
     return {
       dot: "bg-cyan-400",
@@ -146,7 +145,7 @@ function getAccentClasses(name: string) {
     };
   }
 
-  // Fallback neutral style
+  // Fallback
   return {
     dot: "bg-slate-400",
     activeBorder: "border-slate-500/70",
@@ -164,24 +163,11 @@ export default function Sidebar() {
       aria-label="AvidiaTech main navigation"
       className="fixed top-[56px] bottom-0 left-0 flex w-56 flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
     >
-      {/* Brand / context */}
-      <div className="mb-3 px-2 shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              AvidiaTech
-            </span>
-            <span className="text-[12px] font-semibold text-slate-50">
-              Product Data OS
-            </span>
-          </div>
-          <div className="rounded-xl bg-slate-900/90 border border-slate-700 px-2.5 py-1.5 text-[10px] text-slate-200">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span>Live workspace</span>
-            </span>
-          </div>
-        </div>
+      {/* Tiny spacer so content isn't glued to the top */}
+      <div className="mb-2 px-2 shrink-0">
+        <span className="text-[8px] font-medium uppercase tracking-[0.16em] text-slate-600">
+          Navigation
+        </span>
       </div>
 
       {/* Scrollable section area */}
@@ -247,39 +233,27 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Pinned bottom premium support block */}
+      {/* Pinned bottom simple support block */}
       <div className="mt-3 shrink-0 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
         <div className="flex flex-col gap-1.5">
-          {/* Primary support chat */}
           <button
             type="button"
-            className="group inline-flex w-full items-center justify-between rounded-xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-2 text-left text-[10px] text-slate-100 shadow-[0_0_18px_rgba(15,23,42,0.85)] hover:border-cyan-400/80 hover:bg-slate-900"
+            className="inline-flex w-full items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-2 text-left text-[10px] text-slate-100 shadow-[0_0_18px_rgba(15,23,42,0.85)] hover:border-cyan-400/80 hover:bg-slate-900"
           >
-            <span className="inline-flex items-center gap-1.5">
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
-                💬
-              </span>
-              <span className="font-medium">Open support chat</span>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
+              💬
             </span>
-            <span className="text-[9px] text-slate-400 group-hover:text-cyan-300">
-              Live & async
-            </span>
+            <span className="font-medium">Open support chat</span>
           </button>
 
-          {/* Documentation / guides */}
           <button
             type="button"
-            className="group inline-flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-left text-[10px] text-slate-200 hover:border-violet-400/80 hover:bg-slate-900"
+            className="inline-flex w-full items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-left text-[10px] text-slate-200 hover:border-violet-400/80 hover:bg-slate-900"
           >
-            <span className="inline-flex items-center gap-1.5">
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
-                📚
-              </span>
-              <span className="font-medium">Documentation &amp; guides</span>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
+              📚
             </span>
-            <span className="text-[9px] text-slate-500 group-hover:text-violet-300">
-              Playbooks & how-tos
-            </span>
+            <span className="font-medium">Documentation &amp; guides</span>
           </button>
         </div>
       </div>
