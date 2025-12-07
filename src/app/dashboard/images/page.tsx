@@ -22,109 +22,108 @@ export default function ImagesPage() {
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
-        {/* Header / hero row */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-emerald-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(16,185,129,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-emerald-500/45 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(16,185,129,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + copy */}
-              <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
-                  Commerce &amp; Automation · AvidiaImages
-                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-                  <span className="text-emerald-600 dark:text-emerald-200">
-                    Gallery &amp; variant mapping engine
-                  </span>
-                </div>
+        {/* Compact Cluster-style header (no hero frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: identity + title + chips */}
+          <div className="flex-1 min-w-[260px] space-y-4 max-w-2xl">
+            {/* Identity pill */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+              Commerce &amp; Automation · AvidiaImages
+              <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+              <span className="text-emerald-600 dark:text-emerald-200">
+                Gallery &amp; variant mapping engine
+              </span>
+            </div>
 
-                <div className="space-y-2">
-                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                    Turn noisy product image carousels into{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-teal-400 to-sky-400 dark:from-emerald-300 dark:via-teal-300 dark:to-sky-300">
-                      clean, variant-aware galleries
-                    </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    AvidiaImages pulls images from manufacturer and marketplace pages, cleans
-                    them up, annotates them with precise alt text, and maps each asset to the
-                    right variant&mdash;so your storefronts and feeds always show the right
-                    photo at the right time.
-                  </p>
-                </div>
+            {/* Title + subtitle */}
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                Turn noisy product image carousels into{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-teal-400 to-sky-400 dark:from-emerald-300 dark:via-teal-300 dark:to-sky-300">
+                  clean, variant-aware galleries
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                AvidiaImages pulls images from manufacturer and marketplace pages, cleans
+                them up, annotates them with precise alt text, and maps each asset to the
+                right variant&mdash;so your storefronts and feeds always show the right
+                photo at the right time.
+              </p>
+            </div>
 
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/60 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>De-duplicate and normalize all product imagery.</span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/55 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span>
-                      Generate SEO-safe, accessible alt text with your custom GPT logic.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-amber-200/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-amber-500/55 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span>
-                      Designed to sync downstream to MedicalEx and other commerce stacks.
-                    </span>
-                  </div>
-                </div>
+            {/* Value chips */}
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/60 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>De-duplicate and normalize all product imagery.</span>
               </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/55 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                <span>
+                  Generate SEO-safe, accessible alt text with your custom GPT logic.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-amber-200/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-amber-500/55 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span>
+                  Designed to sync downstream to MedicalEx and other commerce stacks.
+                </span>
+              </div>
+            </div>
+          </div>
 
-              {/* Right: module status + gallery preview skeleton */}
-              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
-                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
-                          Core pipeline designed · Gallery UI planned
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                      Commerce &amp; Automation
+          {/* Right: module status + gallery preview skeleton */}
+          <div className="w-full max-w-xs lg:max-w-sm space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
+                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
+                      Core pipeline designed · Gallery UI planned
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    AvidiaImages will sit between Extract, SEO, and Variants as your image
-                    brain: where raw URLs become curated, variant-aware galleries.
-                  </p>
                 </div>
-
-                {/* Static gallery skeleton to hint future UI */}
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
-                    Future gallery workspace
-                  </p>
-                  <div className="grid grid-cols-4 gap-2">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="aspect-square rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-slate-50 to-white flex items-center justify-center text-[9px] text-slate-500 dark:border-slate-800 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 dark:text-slate-500"
-                      >
-                        {i === 0
-                          ? "Main"
-                          : i === 1
-                          ? "Zoom"
-                          : i === 2
-                          ? "Context"
-                          : "Img"}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                    Planned: drag-and-drop ordering, alt-text editing, and variant chip
-                    assignments in one place.
-                  </p>
-                </div>
+                <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+                  Commerce &amp; Automation
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                AvidiaImages will sit between Extract, SEO, and Variants as your image
+                brain: where raw URLs become curated, variant-aware galleries.
+              </p>
+            </div>
+
+            {/* Static gallery skeleton to hint future UI */}
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
+                Future gallery workspace
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="aspect-square rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 via-slate-50 to-white flex items-center justify-center text-[9px] text-slate-500 dark:border-slate-800 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950 dark:text-slate-500"
+                  >
+                    {i === 0
+                      ? "Main"
+                      : i === 1
+                      ? "Zoom"
+                      : i === 2
+                      ? "Context"
+                      : "Img"}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                Planned: drag-and-drop ordering, alt-text editing, and variant chip
+                assignments in one place.
+              </p>
             </div>
           </div>
         </section>
