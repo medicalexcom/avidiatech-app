@@ -14,7 +14,7 @@ import { useTheme } from "next-themes";
 
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -48,7 +48,7 @@ export default function ProfileMenu() {
     };
   }, [open]);
 
-  const isDark = theme === "dark";
+  const isDark = resolvedTheme === "dark";
 
   function toggleTheme() {
     setTheme(isDark ? "light" : "dark");
@@ -140,7 +140,9 @@ export default function ProfileMenu() {
         <Item href="/settings/profile">Account Settings</Item>
         <hr className="my-1 border-slate-100 dark:border-slate-800" />
         <Item href="/settings/organization">Organization</Item>
-        <Item href="/settings/developer/api-keys">API Keys &amp; Developer Tools</Item>
+        <Item href="/settings/developer/api-keys">
+          API Keys &amp; Developer Tools
+        </Item>
         <Item href="/settings/billing">Subscription &amp; Billing</Item>
       </nav>
 
@@ -150,9 +152,6 @@ export default function ProfileMenu() {
           <div>
             <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
               Appearance
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Switch between light and dark
             </div>
           </div>
 
