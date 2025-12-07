@@ -13,7 +13,7 @@ import React from "react";
 export default function VariantsPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
-      {/* Background gradients + subtle grid */}
+      {/* Background gradients + subtle grid (kept, like SEO page) */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-amber-300/25 blur-3xl dark:bg-amber-500/18" />
         <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-orange-300/25 blur-3xl dark:bg-orange-500/18" />
@@ -24,84 +24,83 @@ export default function VariantsPage() {
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
-        {/* Header / hero row */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-amber-100 to-slate-50 shadow-[0_0_60px_rgba(251,191,36,0.35)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-amber-500/45 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(251,191,36,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + copy */}
-              <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-amber-50/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-amber-900 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
-                  Commerce &amp; Automation · AvidiaVariants
-                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-                  <span className="text-amber-700 dark:text-amber-200">
-                    Concept stage
-                  </span>
-                </div>
+        {/* Compact Cluster-style header (no hero card frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: identity, title, value chips */}
+          <div className="flex-1 min-w-[260px] space-y-4">
+            {/* Identity pill row */}
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+              Commerce &amp; Automation · AvidiaVariants
+              <span className="h-3 w-px bg-slate-300 dark:bg-slate-700" />
+              <span className="text-amber-700 dark:text-amber-200">
+                Concept stage
+              </span>
+            </div>
 
-                <div className="space-y-2">
-                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                    Turn scattered SKUs into{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 dark:from-amber-300 dark:via-amber-200 dark:to-yellow-300">
-                      clean variant families
-                    </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-700 dark:text-slate-300">
-                    Group related SKUs into color, size, configuration, or kit options so
-                    your catalog stays sane while downstream storefronts, feeds, and
-                    analytics stay perfectly in sync.
-                  </p>
-                </div>
+            {/* Title + subtitle */}
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
+                Turn scattered SKUs into{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 dark:from-amber-300 dark:via-amber-200 dark:to-yellow-300">
+                  clean variant families
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-700 max-w-2xl dark:text-slate-300">
+                Group related SKUs into color, size, configuration, or kit options so
+                your catalog stays sane while downstream storefronts, feeds, and
+                analytics stay perfectly in sync.
+              </p>
+            </div>
 
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-amber-50/90 border border-amber-300 px-3 py-1.5 text-amber-900 dark:bg-slate-950/90 dark:border-amber-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span>
-                      Scans your AvidiaExtract / store catalog to propose variant families.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50/90 border border-emerald-300 px-3 py-1.5 text-emerald-900 dark:bg-slate-950/90 dark:border-emerald-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>
-                      Builds canonical parents with stable variant codes and attributes.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-sky-50/90 border border-sky-300 px-3 py-1.5 text-sky-900 dark:bg-slate-950/90 dark:border-sky-500/50 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span>
-                      Designed to sync directly into commerce platforms and feeds.
-                    </span>
-                  </div>
-                </div>
+            {/* Value chips (flattened, no big hero frame) */}
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/95 border border-slate-200 px-3 py-1.5 text-slate-800 shadow-sm dark:bg-slate-950/85 dark:border-slate-800 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span>
+                  Scans your AvidiaExtract / store catalog to propose variant families.
+                </span>
               </div>
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/95 border border-slate-200 px-3 py-1.5 text-slate-800 shadow-sm dark:bg-slate-950/85 dark:border-slate-800 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>
+                  Builds canonical parents with stable variant codes and attributes.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/95 border border-slate-200 px-3 py-1.5 text-slate-800 shadow-sm dark:bg-slate-950/85 dark:border-slate-800 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                <span>
+                  Designed to sync directly into commerce platforms and feeds.
+                </span>
+              </div>
+            </div>
+          </div>
 
-              {/* Right: module status card */}
-              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0">
-                <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/90">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
-                        <span className="text-sm font-semibold text-amber-700 dark:text-amber-200">
-                          In design · Early access soon
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] text-amber-900 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                      Commerce &amp; Automation
+          {/* Right: module status card (lean, no hero shell) */}
+          <div className="w-full max-w-xs lg:max-w-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/90">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+                    <span className="text-sm font-semibold text-amber-700 dark:text-amber-200">
+                      In design · Early access soon
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    AvidiaVariants will launch as part of the Commerce &amp; Automation
-                    layer, sitting alongside Price, Feeds, and Monitor to keep your product
-                    graph coherent across channels.
-                  </p>
                 </div>
+                <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[10px] text-amber-900 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+                  Commerce &amp; Automation
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                AvidiaVariants will launch as part of the Commerce &amp; Automation
+                layer, sitting alongside Price, Feeds, and Monitor to keep your product
+                graph coherent across channels.
+              </p>
             </div>
           </div>
         </section>
@@ -110,15 +109,15 @@ export default function VariantsPage() {
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)]">
           {/* Left column: what it does / value */}
           <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 sm:p-5 shadow-[0_18px_45px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 sm:p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/85">
               <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-300">
                 Variant intelligence for messy catalogs
               </h2>
               <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
                 AvidiaVariants will scan your existing catalog and group related SKUs into
-                consolidated variant clusters&mdash;so instead of 15 separate rows for the
-                same chair in different heights, you get one clean product with selectable
-                options.
+                consolidated variant clusters&mdash;so instead of 15 separate rows for
+                the same chair in different heights, you get one clean product with
+                selectable options.
               </p>
 
               <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-300">
@@ -134,8 +133,8 @@ export default function VariantsPage() {
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   <span>
                     <span className="font-medium">Unifies duplicate listings</span> into
-                    coherent variant groups instead of fragmented SKUs spread across feeds,
-                    storefronts, and marketplaces.
+                    coherent variant groups instead of fragmented SKUs spread across
+                    feeds, storefronts, and marketplaces.
                   </span>
                 </li>
                 <li className="flex gap-2">
@@ -151,7 +150,8 @@ export default function VariantsPage() {
                   <span>
                     Feeds directly into{" "}
                     <span className="font-medium">Extract, Describe, and SEO</span> so
-                    variants and content stay perfectly aligned with your automation rules.
+                    variants and content stay perfectly aligned with your automation
+                    rules.
                   </span>
                 </li>
               </ul>
@@ -262,9 +262,12 @@ export default function VariantsPage() {
               </h3>
               <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                 <li>
-                  • <span className="font-medium text-slate-900 dark:text-slate-200">AvidiaExtract</span> — use
-                  extracted specs and attribute fields to power smarter variant grouping and
-                  canonical parents.
+                  •{" "}
+                  <span className="font-medium text-slate-900 dark:text-slate-200">
+                    AvidiaExtract
+                  </span>{" "}
+                  — use extracted specs and attribute fields to power smarter variant
+                  grouping and canonical parents.
                 </li>
                 <li>
                   •{" "}
@@ -275,7 +278,10 @@ export default function VariantsPage() {
                   option labels pushed to variants.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-900 dark:text-slate-200">Commerce connectors</span>{" "}
+                  •{" "}
+                  <span className="font-medium text-slate-900 dark:text-slate-200">
+                    Commerce connectors
+                  </span>{" "}
                   — push approved variant structures directly into MedicalEx or other
                   connected storefronts and feeds.
                 </li>
