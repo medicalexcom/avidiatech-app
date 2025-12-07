@@ -521,7 +521,7 @@ export default function AvidiaSeoPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
-      {/* Background treatment */}
+      {/* Background treatment (kept, subtle) */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/15" />
         <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
@@ -531,35 +531,29 @@ export default function AvidiaSeoPage() {
         </div>
       </div>
 
-      {/* Wrapper aligned with Describe/Translate/Extract */}
+      {/* Compact Cluster-style wrapper */}
       <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-8 space-y-6 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO: headline, 3-step flow, live pipeline */}
-        <section className="relative flex flex-col gap-8 lg:flex-row lg:items-stretch">
-          {/* Left: Identity + headline + value props */}
-          <div className="flex-1 min-w-[260px] space-y-5">
-            {/* product identity row */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
-                  <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                </span>
-                AvidiaTech • AvidiaSEO
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] text-emerald-700 shadow-sm dark:bg-emerald-500/10 dark:border-emerald-400/40 dark:text-emerald-100">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Live pipeline
+        {/* HEADER + TOP FLOW (Cluster-aligned, efficient) */}
+        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch">
+          {/* Left: compact header + value props */}
+          <div className="flex-1 min-w-[260px] space-y-4">
+            {/* Module pill row */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
               </span>
+              AvidiaTech • AvidiaSEO
               {ingestionId && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:bg-slate-900/80 dark:border-slate-700 dark:text-slate-300">
-                  Ingestion
+                <>
+                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
                   <span className="font-mono text-[10px]">
                     {ingestionId.slice(0, 8)}…
                   </span>
-                </span>
+                </>
               )}
             </div>
 
-            {/* headline + subcopy */}
+            {/* Title + subtitle (Cluster typography) */}
             <div className="space-y-2">
               <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
                 Turn any manufacturer URL into a{" "}
@@ -568,16 +562,16 @@ export default function AvidiaSeoPage() {
                 </span>
                 .
               </h1>
-              <p className="mt-1 text-sm text-slate-600 max-w-xl dark:text-slate-300">
-                Paste a product URL and watch the whole pipeline fire:
-                ingestion, cleanup, and compliant copy — rendered exactly how
-                your store needs it. No prompts, no copy-paste gymnastics.
+              <p className="text-sm text-slate-600 max-w-xl dark:text-slate-300">
+                Paste a product URL and fire the whole pipeline: ingestion,
+                cleanup, and compliant copy — rendered exactly how your store
+                needs it. No prompts, no copy-paste gymnastics.
               </p>
             </div>
 
-            {/* value props strip */}
+            {/* Value props strip */}
             <div className="flex flex-wrap gap-2 text-[11px]">
-              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
                 <span className="h-5 w-5 rounded-lg bg-cyan-500/10 border border-cyan-300 flex items-center justify-center text-[13px] text-cyan-700 dark:bg-cyan-500/15 dark:border-cyan-500/40 dark:text-cyan-100">
                   1
                 </span>
@@ -590,7 +584,7 @@ export default function AvidiaSeoPage() {
                   </p>
                 </div>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
                 <span className="h-5 w-5 rounded-lg bg-sky-500/10 border border-sky-300 flex items-center justify-center text-[13px] text-sky-700 dark:bg-sky-500/15 dark:border-sky-500/40 dark:text-sky-100">
                   2
                 </span>
@@ -603,7 +597,7 @@ export default function AvidiaSeoPage() {
                   </p>
                 </div>
               </div>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
                 <span className="h-5 w-5 rounded-lg bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-[13px] text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-100">
                   3
                 </span>
@@ -618,16 +612,16 @@ export default function AvidiaSeoPage() {
               </div>
             </div>
 
-            {/* callout: direct instruction to URL card below */}
+            {/* Callout row (Compact guidance + status pill) */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/30">
                 <span className="text-[11px] font-semibold text-cyan-700 uppercase tracking-[0.16em] dark:text-cyan-200">
                   Step 1
                 </span>
                 <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                  Paste manufacturer URL in the{" "}
+                  Paste the manufacturer URL in the{" "}
                   <span className="font-semibold text-cyan-700 dark:text-cyan-200">
-                    box right below this hero
+                    URL box directly below
                   </span>
                   .
                 </span>
@@ -645,10 +639,10 @@ export default function AvidiaSeoPage() {
             </div>
           </div>
 
-          {/* Right: 3-step visual flow + live pipeline status */}
-          <div className="w-full lg:w-[430px] xl:w-[500px] flex flex-col gap-3">
+          {/* Right: 3-step flow + live pipeline snapshot (compact cards) */}
+          <div className="w-full lg:w-[430px] xl:w-[480px] flex flex-col gap-3">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Real-time pipeline
               </p>
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -658,8 +652,8 @@ export default function AvidiaSeoPage() {
 
             <div className="flex flex-col md:flex-row gap-3">
               {/* 3-step visual flow */}
-              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
-                <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/80">
+                <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                   3-step visual flow
                 </p>
                 <ol className="space-y-2.5 text-xs mt-1">
@@ -710,7 +704,7 @@ export default function AvidiaSeoPage() {
               </div>
 
               {/* Live pipeline status */}
-              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-md shadow-slate-200/70 dark:bg-slate-950/80 dark:border-slate-700/80 dark:shadow-[0_0_40px_rgba(15,23,42,0.8)]">
+              <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/80">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Live pipeline status
@@ -750,17 +744,17 @@ export default function AvidiaSeoPage() {
                   ))}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1 dark:text-slate-500">
-                  Every state here is driven by real ingestion + SEO calls —
-                  not dummy UI.
+                  Every state here reflects real ingestion + SEO calls — not a
+                  fake demo.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Error banner */}
+        {/* Error banner (compact, inline) */}
         {error && (
-          <div className="rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-lg shadow-rose-200/60 dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50 dark:shadow-rose-900/40">
+          <div className="rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
             {error}
           </div>
         )}
@@ -768,8 +762,8 @@ export default function AvidiaSeoPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Main work column */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Primary action: URL + Generate (right under hero) */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 lg:p-5 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
+            {/* URL + Generate (directly under header, no heavy hero frame) */}
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 lg:p-5 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
@@ -811,7 +805,7 @@ export default function AvidiaSeoPage() {
                       handleGenerateAndSave();
                     }}
                     disabled={generating}
-                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold shadow-lg shadow-cyan-500/30 hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
+                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
                   >
                     {generating ? "Generating…" : "Generate & Save"}
                   </button>
@@ -840,15 +834,15 @@ export default function AvidiaSeoPage() {
               </div>
             </div>
 
-            {/* Premium HTML viewer */}
-            <div className="rounded-3xl bg-gradient-to-br from-slate-50 via-white to-slate-50 text-slate-900 shadow-2xl shadow-slate-200/80 p-6 border border-slate-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 dark:text-white dark:shadow-2xl dark:shadow-slate-950/70 dark:border-slate-700/80">
+            {/* Premium HTML viewer (flattened: no big gradient halo) */}
+            <div className="rounded-2xl bg-white text-slate-900 shadow-sm p-5 border border-slate-200 dark:bg-slate-900/85 dark:text-white dark:border-slate-700/80">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-1 dark:text-slate-400">
                     Description window
                   </p>
-                  <h3 className="text-2xl font-semibold mb-1">
-                    Premium HTML Viewer
+                  <h3 className="text-xl sm:text-2xl font-semibold mb-1">
+                    Premium HTML viewer
                   </h3>
                   <p className="text-slate-600 text-xs max-w-2xl dark:text-slate-300">
                     See the final copy exactly as it will appear on a product
@@ -873,14 +867,14 @@ export default function AvidiaSeoPage() {
                     type="button"
                     onClick={handleDownloadDescription}
                     disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none dark:bg-white dark:text-slate-900 dark:border-white/30"
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow-sm hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none dark:bg-white dark:text-slate-900 dark:border-white/30"
                   >
                     Download HTML
                   </button>
                   <button
                     type="button"
                     onClick={() => setSearchTerm((prev) => prev.trim())}
-                    className="px-3 py-2 rounded-lg bg-amber-400 text-xs text-slate-900 font-semibold shadow hover:bg-amber-300"
+                    className="px-3 py-2 rounded-lg bg-amber-400 text-xs text-slate-900 font-semibold shadow-sm hover:bg-amber-300"
                   >
                     Search in text
                   </button>
@@ -940,7 +934,7 @@ export default function AvidiaSeoPage() {
           {/* Side column: structure, features, debug */}
           <div className="space-y-4">
             {/* SEO structure */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                   SEO structure
@@ -994,7 +988,7 @@ export default function AvidiaSeoPage() {
             </div>
 
             {/* Features + parked extras */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                   Feature bullets
@@ -1041,7 +1035,7 @@ export default function AvidiaSeoPage() {
 
             {/* Debug: Source SEO */}
             {jobData && ingestionId && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Source SEO (scraped)
@@ -1062,7 +1056,7 @@ export default function AvidiaSeoPage() {
 
             {/* Debug: raw ingest response */}
             {rawIngestResponse && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60 dark:shadow-xl dark:shadow-slate-900/50">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Raw /api/v1/ingest response
@@ -1081,7 +1075,7 @@ export default function AvidiaSeoPage() {
 
             {/* Inline preview if no ingestionId but we got a payload */}
             {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_18px_45px_rgba(148,163,184,0.35)] p-4 space-y-2 text-xs text-slate-800 dark:bg-slate-900/80 dark:border-slate-700/60 dark:text-slate-100 dark:shadow-xl dark:shadow-slate-900/50">
+              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-2 text-xs text-slate-800 dark:bg-slate-900/80 dark:border-slate-700/60 dark:text-slate-100">
                 <h5 className="text-xs font-semibold text-slate-900 dark:text-slate-50">
                   Preview Generated SEO
                 </h5>
