@@ -50,25 +50,29 @@ export interface TextProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 /**
- * Base styles per variant: size, weight, tracking, base color.
- * Keep these aligned with Cluster / module pages.
+ * Base styles per variant: size, weight, base color.
+ * Titles / headings = darker (around 900), body = softer.
  */
 const baseByVariant: Record<TextVariant, string> = {
+  // Page-level
   pageTitle:
     "text-xl sm:text-2xl font-semibold leading-tight text-slate-900 dark:text-slate-50",
   pageKicker:
-    "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400",
+    "text-xs font-semibold text-slate-700 dark:text-slate-300",
   pageDescription:
     "max-w-2xl text-sm text-slate-600 dark:text-slate-300",
 
+  // Section / card labels (no uppercase, no extra tracking)
   sectionLabel:
-    "text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300",
+    "text-[11px] font-semibold text-slate-900 dark:text-slate-50",
 
+  // Card titles / descriptions
   cardTitle:
     "text-sm font-semibold text-slate-900 dark:text-slate-50",
   cardDescription:
     "text-xs text-slate-600 dark:text-slate-300",
 
+  // Body text
   body:
     "text-sm text-slate-700 dark:text-slate-200",
   bodySm:
@@ -76,6 +80,7 @@ const baseByVariant: Record<TextVariant, string> = {
   bodyXs:
     "text-[11px] text-slate-500 dark:text-slate-400",
 
+  // Metrics
   metricLabel:
     "text-xs text-slate-500 dark:text-slate-400",
   metricValue:
@@ -83,8 +88,9 @@ const baseByVariant: Record<TextVariant, string> = {
   metricHint:
     "mt-1 text-[11px] text-slate-500 dark:text-slate-400",
 
+  // Badges / pills (no tracking, no auto-uppercase)
   badge:
-    "text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400",
+    "text-[10px] font-medium text-slate-600 dark:text-slate-400",
   pill:
     "text-[11px] text-slate-700 dark:text-slate-200",
 };
@@ -98,7 +104,7 @@ const toneByTone: Record<TextTone, string> = {
   muted: "text-slate-500 dark:text-slate-400",
   subtle: "text-slate-400 dark:text-slate-500",
   accent:
-    "text-cyan-700 dark:text-cyan-300", // tweak if you want violet/emerald accent instead
+    "text-cyan-700 dark:text-cyan-300",
 };
 
 export function Text({
