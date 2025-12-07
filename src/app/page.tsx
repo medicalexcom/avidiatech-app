@@ -37,7 +37,7 @@ const modules = [
   {
     name: "AvidiaDescribe",
     badge: "AI product copy",
-    copy: "Generate compliant, on-brand descriptions from your structured product data.",
+    copy: "Generate compliant, on-brand descriptions from your structured product data or short internal notes.",
     tag: "SEO-aware",
   },
   {
@@ -102,7 +102,7 @@ export default function Home() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  // Lightweight, no-auth AvidiaDescribe sample demo
+  // Lightweight, no-auth pipeline sample (URL → Describe-style snippet)
   const [demoUrl, setDemoUrl] = useState(
     "https://vendor.com/products/infusion-pump-9000"
   );
@@ -115,13 +115,13 @@ export default function Home() {
 
   const handleDemoRun = () => {
     if (!demoUrl.trim()) {
-      setDemoError("Add a manufacturer URL to preview a sample description.");
+      setDemoError("Add a manufacturer URL to preview a sample pipeline output.");
       return;
     }
 
     if (demoRunsLeft <= 0) {
       setDemoError(
-        "Sample limit reached. Create a free workspace to generate full SEO outputs."
+        "Sample limit reached. Create a free workspace to run full SEO flows on your own products."
       );
       return;
     }
@@ -132,7 +132,7 @@ export default function Home() {
     // Mock async behavior – later you can swap this for a real public API call.
     setTimeout(() => {
       setDemoOutput(
-        `Sample SEO description for product at ${demoUrl}.\n\nAvidiaDescribe would generate a compliant, search-aware paragraph here based on your ingestion and custom GPT instructions. In your workspace, this becomes a full HTML + SEO JSON payload ready to sync to your store.`
+        `Sample description (Describe step) for product at ${demoUrl}.\n\nThis simulates what AvidiaTech would produce after Extract + Describe: a compliant, search-aware paragraph tailored to your catalog rules. In your workspace, this becomes structured HTML + SEO JSON AvidiaSEO uses to build the full product page.`
       );
       setDemoStatus("done");
       setDemoRunsLeft((prev) => prev - 1);
@@ -192,7 +192,7 @@ export default function Home() {
 
         {/* BODY CONTENT */}
         <div className="flex flex-1 flex-col gap-16 pb-12 lg:pb-16">
-          {/* HERO (with Describe demo) */}
+          {/* HERO (with pipeline sample demo) */}
           <section className="grid items-center gap-12 lg:grid-cols-[1.1fr,0.9fr]">
             {/* Left side: copy + CTAs */}
             <div className="space-y-8">
@@ -261,7 +261,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right side: hybrid “Try AvidiaDescribe” + workspace signals */}
+            {/* Right side: hybrid pipeline sample + workspace signals */}
             <div className="relative">
               <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-3xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
               <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
@@ -269,7 +269,7 @@ export default function Home() {
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <span>Workspace preview</span>
+                    <span>Pipeline sample · URL → Describe</span>
                   </div>
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
                     Guardrails active
@@ -298,10 +298,10 @@ export default function Home() {
 
                 {/* Two-column inner content */}
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {/* Left: no-auth AvidiaDescribe sample */}
+                  {/* Left: pipeline sample input */}
                   <div className="space-y-3 rounded-xl bg-slate-50 p-4 dark:bg-slate-900/70">
                     <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                      Try AvidiaDescribe (sample)
+                      Step 1 · Try the AvidiaTech pipeline (sample)
                     </p>
                     <div className="space-y-2">
                       <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -320,7 +320,7 @@ export default function Home() {
                       >
                         {demoStatus === "running"
                           ? "Generating sample…"
-                          : "Generate sample description"}
+                          : "Generate sample snippet"}
                       </button>
                       {demoError && (
                         <p className="text-[11px] text-rose-600 dark:text-rose-300">
@@ -337,9 +337,9 @@ export default function Home() {
                         </span>
                       </div>
                       <p>
-                        This is a preview only. In your workspace, AvidiaDescribe
-                        uses your ingest + custom GPT instructions to produce full
-                        HTML + SEO JSON.
+                        This simulates Extract + Describe on a single URL. In your
+                        workspace, you can also start AvidiaDescribe from short
+                        internal notes instead of a URL.
                       </p>
                     </div>
                   </div>
@@ -347,14 +347,14 @@ export default function Home() {
                   {/* Right: sample output / workspace signals */}
                   <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
                     <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                      Sample output
+                      Step 2 · Sample description (Describe step)
                     </p>
                     <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                       <pre className="whitespace-pre-wrap text-[11px]">
                         {demoOutput ??
-                          `Paste a manufacturer URL on the left and click “Generate sample description”. 
+                          `Paste a manufacturer URL on the left and click “Generate sample snippet”. 
                           
-We’ll simulate what AvidiaDescribe would return using your ingestion rules. In the real workspace, this becomes structured HTML + SEO JSON you can sync to your store or feeds.`}
+We’ll simulate the Describe step in your pipeline: a compliant, search-aware paragraph built from your ingestion rules. In the real workspace, this feeds AvidiaSEO, which builds the full product page and SEO JSON.`}
                       </pre>
                     </div>
                     <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -382,7 +382,7 @@ We’ll simulate what AvidiaDescribe would return using your ingestion rules. In
 
                 <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
                   Like what you see? Create a free workspace to unlock full modules,
-                  saved ingestions, and exports.
+                  saved ingestions, and end-to-end SEO flows.
                 </p>
               </div>
             </div>
@@ -430,6 +430,123 @@ We’ll simulate what AvidiaDescribe would return using your ingestion rules. In
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          {/* NEW SECTION: Describe + SEO, and notes-based input */}
+          <section className="grid gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[1.05fr,0.95fr] dark:border-slate-800 dark:bg-slate-950">
+            {/* Left: Describe focus */}
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
+                AvidiaDescribe: from messy notes to clean, compliant copy.
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-200">
+                In the workspace, AvidiaDescribe doesn&apos;t need a perfect source.
+                Start from your ingest JSON, a short internal paragraph, or rough
+                stakeholder notes—Describe turns it into structured, SEO-aware copy
+                that respects your catalog rules.
+              </p>
+              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-200">
+                <li>• Works with either manufacturer ingest or your own short notes.</li>
+                <li>• Applies your custom GPT instructions and compliance guardrails.</li>
+                <li>• Returns HTML + fields for titles, bullets, warnings, and manuals blocks.</li>
+                <li>• Feeds directly into AvidiaSEO for full-page and feed generation.</li>
+              </ul>
+
+              {/* Notes → Describe example */}
+              <div className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-xs text-slate-700 md:grid-cols-2 dark:bg-slate-900 dark:text-slate-200">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Example notes input
+                  </p>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                    <p className="text-[11px] leading-relaxed">
+                      &quot;Need SEO copy for ACME Infusion Pump 9000. 4-channel,
+                      dose-error reduction, touchscreen, hospital-grade. Focus on
+                      safety, standardizing IV workflows, and smart alarms. Avoid
+                      clinical claims we can&apos;t back.&quot;
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Describe output snippet
+                  </p>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                    <p className="text-[11px] leading-relaxed">
+                      The ACME Infusion Pump 9000 is a four-channel, hospital-grade IV
+                      pump designed to help standardize medication workflows. A
+                      color touch-screen interface, dose-error reduction software,
+                      and configurable smart alarms support consistent setup across
+                      bedsides while reducing manual double-entry.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                You control the rules. AvidiaDescribe enforces them every time, so new
+                products land on-brand instead of copy-pasted from vendors.
+              </p>
+            </div>
+
+            {/* Right: SEO JSON excerpt showing the next step */}
+            <div className="space-y-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-medium">From Describe to full SEO output</span>
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  Example
+                </span>
+              </div>
+
+              {/* Page preview card */}
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Page preview
+                </p>
+                <h3 className="text-sm font-semibold">
+                  ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow Ready
+                </h3>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  The ACME Infusion Pump 9000 is a four-channel, smart IV pump
+                  designed for high-acuity environments. Pre-configured drug
+                  libraries, a color touch-screen, and dose-error reduction features
+                  help standardize IV workflows while reducing manual entry.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  <li>4 independent channels with shared drug library</li>
+                  <li>Color touch-screen with guided setup</li>
+                  <li>Dose-error reduction support for standardized workflows</li>
+                </ul>
+                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  Manuals, warranty details, and compliance language are included
+                  below the fold and in the JSON payload.
+                </p>
+              </div>
+
+              {/* JSON snippet */}
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-900 p-4 text-[11px] text-slate-100 dark:border-slate-700">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  SEO JSON (excerpt)
+                </p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">
+{`{
+  "name": "ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow Ready",
+  "h1": "ACME Infusion Pump 9000",
+  "meta_title": "ACME Infusion Pump 9000 | Smart 4-Channel IV Pump",
+  "meta_description": "Four-channel smart infusion pump with dose-error reduction and guided IV workflows for hospital environments.",
+  "sections": {
+    "overview_html": "<p>The ACME Infusion Pump 9000 is ...</p>",
+    "manuals_html": "<ul>...</ul>"
+  }
+}`}
+                </pre>
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                AvidiaSEO runs this inside the dashboard so you can queue URLs, review
+                changes, and sync only when you&apos;re ready to publish.
+              </p>
             </div>
           </section>
 
