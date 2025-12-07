@@ -22,84 +22,83 @@ export default function DocsPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* Header / hero row */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-violet-300/60 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-5 shadow-[0_0_64px_rgba(129,140,248,0.25)] sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-violet-500/45 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(167,139,250,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + copy */}
-              <div className="max-w-2xl space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(129,140,248,0.8)] dark:bg-violet-400 dark:shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
-                  Data Intelligence · AvidiaDocs
-                  <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
-                  <span className="text-violet-700 dark:text-violet-200">
-                    Manuals pipeline in progress
-                  </span>
-                </div>
+        {/* Compact Cluster-style header (no hero frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: identity + title + chips */}
+          <div className="flex-1 min-w-[260px] space-y-4">
+            {/* Identity pill */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(129,140,248,0.8)] dark:bg-violet-400 dark:shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
+              Data Intelligence · AvidiaDocs
+              <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
+              <span className="text-violet-700 dark:text-violet-200">
+                Manuals pipeline in progress
+              </span>
+            </div>
 
-                <div className="space-y-2">
-                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
-                    Turn dense manuals into{" "}
-                    <span className="bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-fuchsia-300 dark:to-sky-300">
-                      structured, reusable product data
-                    </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    Transform technical manuals, IFUs, and PDF data sheets into clean specs,
-                    features, warnings, and support content that flows into your catalog,
-                    SEO, and automation workflows&mdash;without reading every page.
-                  </p>
-                </div>
+            {/* Title + subtitle */}
+            <div className="space-y-2">
+              <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
+                Turn dense manuals into{" "}
+                <span className="bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-fuchsia-300 dark:to-sky-300">
+                  structured, reusable product data
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-600 max-w-2xl dark:text-slate-300">
+                Transform technical manuals, IFUs, and PDF data sheets into clean specs,
+                features, warnings, and support content that flows into your catalog,
+                SEO, and automation workflows&mdash;without reading every page.
+              </p>
+            </div>
 
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-violet-500/50 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-500 dark:bg-violet-400" />
-                    <span>
-                      Targets the &quot;hard mode&quot; of product data: manuals, IFUs, and
-                      regulatory PDFs.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-emerald-500/50 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                    <span>
-                      Extracts specs, warnings, and tables into a structured data layer.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-sky-500/50 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-sky-400" />
-                    <span>
-                      Designed to plug into Specs, Extract, and SEO with zero copy-paste.
-                    </span>
-                  </div>
-                </div>
+            {/* Value chips */}
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-violet-500/50 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-500 dark:bg-violet-400" />
+                <span>
+                  Targets the &quot;hard mode&quot; of product data: manuals, IFUs, and
+                  regulatory PDFs.
+                </span>
               </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-emerald-500/50 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                <span>
+                  Extracts specs, warnings, and tables into a structured data layer.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-sky-500/50 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500 dark:bg-sky-400" />
+                <span>
+                  Designed to plug into Specs, Extract, and SEO with zero copy-paste.
+                </span>
+              </div>
+            </div>
+          </div>
 
-              {/* Right: module status card */}
-              <div className="mt-1 w-full max-w-xs lg:mt-0 lg:max-w-sm">
-                <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(129,140,248,0.8)] dark:bg-violet-400 dark:shadow-[0_0_10px_rgba(167,139,250,0.9)]" />
-                        <span className="text-sm font-semibold text-violet-700 dark:text-violet-200">
-                          R&amp;D engine · Manuals pipeline in progress
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      Data Intelligence
+          {/* Right: module status card */}
+          <div className="w-full max-w-xs lg:max-w-sm">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(129,140,248,0.8)] dark:bg-violet-400 dark:shadow-[0_0_10px_rgba(167,139,250,0.9)]" />
+                    <span className="text-sm font-semibold text-violet-700 dark:text-violet-200">
+                      R&amp;D engine · Manuals pipeline in progress
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    AvidiaDocs will specialize in extracting trusted, source-of-truth product
-                    data directly from OEM manuals and regulatory PDFs.
-                  </p>
                 </div>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  Data Intelligence
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                AvidiaDocs will specialize in extracting trusted, source-of-truth product
+                data directly from OEM manuals and regulatory PDFs.
+              </p>
             </div>
           </div>
         </section>
@@ -134,7 +133,7 @@ export default function DocsPage() {
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   <span>
                     Summarizes lengthy technical documents into{" "}
-                    <span className="font-medium">digestible content</span> for product
+                      <span className="font-medium">digestible content</span> for product
                     pages, support docs, and internal teams.
                   </span>
                 </li>
@@ -142,7 +141,9 @@ export default function DocsPage() {
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   <span>
                     Normalizes extracted specs for easy mapping to{" "}
-                    <span className="font-medium">product attributes and AvidiaSpecs schemas</span>
+                    <span className="font-medium">
+                      product attributes and AvidiaSpecs schemas
+                    </span>
                     .
                   </span>
                 </li>
@@ -260,12 +261,19 @@ export default function DocsPage() {
               </h3>
               <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
                 <li>
-                  • <span className="font-medium text-slate-900 dark:text-slate-200">AvidiaExtract</span> — detect
-                  and pull linked manuals automatically during URL ingests.
+                  •{" "}
+                  <span className="font-medium text-slate-900 dark:text-slate-200">
+                    AvidiaExtract
+                  </span>{" "}
+                  — detect and pull linked manuals automatically during URL ingests.
                 </li>
                 <li>
-                  • <span className="font-medium text-slate-900 dark:text-slate-200">AvidiaSpecs</span> — map
-                  structured spec fields from manuals into your normalized spec schema.
+                  •{" "}
+                  <span className="font-medium text-slate-900 dark:text-slate-200">
+                    AvidiaSpecs
+                  </span>{" "}
+                  — map structured spec fields from manuals into your normalized spec
+                  schema.
                 </li>
                 <li>
                   •{" "}
