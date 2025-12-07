@@ -22,121 +22,114 @@ export default function AuditPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* HERO / HEADER */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-amber-500/45 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-5 shadow-[0_0_40px_rgba(251,191,36,0.35)] sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(251,191,36,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: descriptor */}
-              <div className="max-w-2xl space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
-                  Data Intelligence · AvidiaAudit
-                  <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
-                  <span className="text-amber-500 dark:text-amber-200">
-                    Quality &amp; compliance engine
+        {/* Compact Cluster-style HEADER (no hero frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: descriptor */}
+          <div className="max-w-2xl space-y-4 flex-1 min-w-[260px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+              Data Intelligence · AvidiaAudit
+              <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
+              <span className="text-amber-500 dark:text-amber-200">
+                Quality &amp; compliance engine
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
+                Turn your product rules into a{" "}
+                <span className="bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-300 bg-clip-text text-transparent dark:from-amber-300 dark:via-amber-200 dark:to-emerald-200">
+                  measurable, enforceable audit score
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Run automated quality checks on every product: structure, SEO, naming rules,
+                internal links, and compliance. AvidiaAudit turns your policies into a
+                consistent, machine-readable score that powers auto-heal, safe automation,
+                and store-ready confidence.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/60 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-amber-500/60 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span>
+                  Structured <span className="font-semibold">auditResult JSON</span> for every
+                  row.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/55 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-emerald-500/55 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Drives auto-heal and safe sync workflows across modules.</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                <span>Built for regulated, policy-heavy catalogs like MedicalEx.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: module status + score card skeleton */}
+          <div className="mt-1 w-full max-w-xs space-y-3 lg:mt-0 lg:max-w-sm">
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+                    <span className="text-sm font-semibold text-amber-600 dark:text-amber-200">
+                      Engine active in pipelines · UI workspace in design
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  Audit engine
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                AvidiaAudit already powers background QA and auto-heal for MedicalEx;
+                this UI will surface that intelligence for every tenant.
+              </p>
+            </div>
+
+            {/* Static audit-result skeleton */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Sample audit snapshot
+              </p>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">Overall score</span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
+                    94 / 100
                   </span>
                 </div>
-
-                <div className="space-y-2">
-                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
-                    Turn your product rules into a{" "}
-                    <span className="bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-300 bg-clip-text text-transparent dark:from-amber-300 dark:via-amber-200 dark:to-emerald-200">
-                      measurable, enforceable audit score
-                    </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    Run automated quality checks on every product: structure, SEO, naming rules,
-                    internal links, and compliance. AvidiaAudit turns your policies into a
-                    consistent, machine-readable score that powers auto-heal, safe automation,
-                    and store-ready confidence.
-                  </p>
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <span>Structure &amp; SEO</span>
+                  <span className="font-medium text-emerald-600 dark:text-emerald-300">
+                    OK
+                  </span>
                 </div>
-
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/60 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-amber-500/60 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span>
-                      Structured <span className="font-semibold">auditResult JSON</span> for every row.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/55 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-emerald-500/55 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>
-                      Drives auto-heal and safe sync workflows across modules.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    <span>
-                      Built for regulated, policy-heavy catalogs like MedicalEx.
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <span>Compliance</span>
+                  <span className="font-medium text-amber-500 dark:text-amber-300">
+                    Review
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <span>Catalog integrity</span>
+                  <span className="font-medium text-emerald-600 dark:text-emerald-300">
+                    OK
+                  </span>
                 </div>
               </div>
-
-              {/* Right: module status + score card skeleton */}
-              <div className="mt-1 w-full max-w-xs space-y-3 lg:mt-0 lg:max-w-sm">
-                <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
-                        <span className="text-sm font-semibold text-amber-600 dark:text-amber-200">
-                          Engine active in pipelines · UI workspace in design
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      Audit engine
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    AvidiaAudit already powers background QA and auto-heal for MedicalEx;
-                    this UI will surface that intelligence for every tenant.
-                  </p>
-                </div>
-
-                {/* Static audit-result skeleton */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Sample audit snapshot
-                  </p>
-                  <div className="space-y-2 text-[11px]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-300">Overall score</span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/70 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300">
-                        94 / 100
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                      <span>Structure &amp; SEO</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-300">
-                        OK
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                      <span>Compliance</span>
-                      <span className="font-medium text-amber-500 dark:text-amber-300">
-                        Review
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                      <span>Catalog integrity</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-300">
-                        OK
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                    UI will let you drill into per-check flags, messages, and auto-heal
-                    actions for each product.
-                  </p>
-                </div>
-              </div>
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                UI will let you drill into per-check flags, messages, and auto-heal
+                actions for each product.
+              </p>
             </div>
           </div>
         </section>
