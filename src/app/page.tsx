@@ -141,7 +141,7 @@ export default function Home() {
     }, 700);
   };
 
-  // Sticky CTA after scroll (conversion flow improvement)
+  // Sticky CTA after scroll
   useEffect(() => {
     const onScroll = () => {
       if (typeof window === "undefined") return;
@@ -162,10 +162,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      {/* Sticky CTA bar (appears after scrolling past hero) */}
+      {/* Sticky CTA bar (full width) */}
       {showStickyCta && (
         <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200 bg-slate-50/85 px-4 py-2 text-xs backdrop-blur sm:px-6 lg:px-10 dark:border-slate-800 dark:bg-slate-950/85">
-          <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
+          <div className="flex w-full items-center justify-between gap-3">
             <span className="hidden text-[11px] text-slate-600 sm:inline dark:text-slate-300">
               Ready to see AvidiaTech on your own catalog?
             </span>
@@ -181,7 +181,7 @@ export default function Home() {
               </a>
               <a
                 href="/sign-up"
-                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-400"
+                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
               >
                 Create free workspace
               </a>
@@ -191,8 +191,8 @@ export default function Home() {
       )}
 
       <div className="flex min-h-screen flex-col">
-        {/* HEADER */}
-        <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6 lg:px-10">
+        {/* HEADER – full width */}
+        <header className="flex w-full items-center justify-between px-4 py-5 sm:px-6 lg:px-10">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-cyan-500 via-emerald-400 to-amber-400 shadow-sm shadow-cyan-500/40" />
             <div className="flex flex-col leading-tight">
@@ -241,10 +241,10 @@ export default function Home() {
 
         {/* BODY CONTENT */}
         <div className="flex-1 space-y-16 pb-14 lg:space-y-20 lg:pb-20">
-          {/* HERO BAND (full-width background, inner content constrained) */}
+          {/* HERO – full-width band */}
           <section className="border-y border-slate-200/60 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 py-8 dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
-            <div className="mx-auto grid w-full max-w-6xl items-stretch gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:px-10">
-              {/* Left side: copy + URL input + CTAs + stats + outcomes */}
+            <div className="grid w-full items-stretch gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:px-10">
+              {/* Left side */}
               <div className="space-y-7">
                 <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">
                   <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
@@ -268,7 +268,7 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* CENTRAL URL INPUT – main action */}
+                {/* URL input */}
                 <div className="space-y-2" id="hero-url">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Step 1 · Paste a manufacturer URL to see a sample pipeline output
@@ -285,7 +285,7 @@ export default function Home() {
                     <button
                       onClick={handleDemoRun}
                       disabled={demoStatus === "running"}
-                      className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70 whitespace-nowrap"
                     >
                       {demoStatus === "running"
                         ? "Generating sample…"
@@ -309,17 +309,17 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-4">
                   <a
                     href="/sign-up"
-                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:brightness-110"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:brightness-110 whitespace-nowrap"
                   >
                     Get Started – free trial
                   </a>
 
-                <a
-                  href="/sign-in?redirect_url=/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-800 backdrop-blur transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900"
-                >
-                  Open Dashboard
-                </a>
+                  <a
+                    href="/sign-in?redirect_url=/dashboard"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-800 backdrop-blur transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
+                  >
+                    Open Dashboard
+                  </a>
 
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                     No credit card required to explore modules. Upgrade only when
@@ -327,7 +327,7 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* Social proof / quick stats */}
+                {/* Stats */}
                 <div className="grid gap-4 sm:grid-cols-3">
                   {stats.map((stat) => (
                     <div
@@ -347,8 +347,8 @@ export default function Home() {
                   ))}
                 </div>
 
-                {/* Outcome strip (trust + premium feel) */}
-                <div className="mt-2 grid gap-3 text-xs sm:grid-cols-3">
+                {/* Outcomes strip */}
+                <div className="mt-2 grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-slate-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-50">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">
                       Outcomes
@@ -377,7 +377,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Right side: pipeline preview fills height */}
+              {/* Right side – pipeline preview */}
               <div className="relative flex h-full" id="pipeline-preview">
                 <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
                 <div className="relative z-10 flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
@@ -392,7 +392,7 @@ export default function Home() {
                     </span>
                   </div>
 
-                  {/* Main content fills space */}
+                  {/* Content */}
                   <div className="mt-4 flex flex-1 flex-col gap-4">
                     {/* Flow strip */}
                     <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -414,7 +414,7 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Output card takes remaining space */}
+                    {/* Output */}
                     <div className="flex flex-1 flex-col rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
                       <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
                         Step 2 · Sample description (Describe step)
@@ -429,7 +429,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                       </div>
                     </div>
 
-                    {/* Metrics + helper pinned at bottom */}
+                    {/* Metrics */}
                     <div className="mt-auto space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
@@ -462,8 +462,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* MODULES – show capabilities early */}
-          <section className="mx-auto w-full max-w-6xl space-y-6 px-4 pt-6 sm:px-6 lg:px-10">
+          {/* MODULES – full width */}
+          <section className="w-full space-y-6 px-4 pt-6 sm:px-6 lg:px-10">
             <div className="space-y-3 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:space-y-0">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
@@ -507,9 +507,9 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* NEW SECTION: Describe + SEO, and notes-based input */}
-          <section className="mx-auto grid w-full max-w-6xl gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm px-4 sm:px-6 lg:grid-cols-[1.05fr,0.95fr] lg:px-10 dark:border-slate-800 dark:bg-slate-950">
-            {/* Left: Describe focus */}
+          {/* Describe + SEO – full width */}
+          <section className="grid w-full gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm px-4 sm:px-6 lg:grid-cols-[1.05fr,0.95fr] lg:px-10 dark:border-slate-800 dark:bg-slate-950">
+            {/* Left */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                 AvidiaDescribe: from messy notes to clean, compliant copy.
@@ -527,7 +527,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                 <li>• Feeds directly into AvidiaSEO for full-page and feed generation.</li>
               </ul>
 
-              {/* Notes → Describe example */}
+              {/* Notes example */}
               <div className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-xs text-slate-700 md:grid-cols-2 dark:bg-slate-900 dark:text-slate-200">
                 <div className="space-y-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -564,7 +564,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
               </p>
             </div>
 
-            {/* Right: SEO JSON excerpt showing the next step */}
+            {/* Right */}
             <div className="space-y-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span className="font-medium">From Describe to full SEO output</span>
@@ -573,7 +573,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                 </span>
               </div>
 
-              {/* Page preview card (shorter height + scroll) */}
+              {/* Page preview, shorter w/ scroll */}
               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                   Page preview
@@ -626,8 +626,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* PILLARS + WHO IT'S FOR */}
-          <section className="mx-auto w-full max-w-6xl space-y-8 px-4 sm:px-6 lg:px-10">
+          {/* PILLARS + WHO IT'S FOR – full width */}
+          <section className="w-full space-y-8 px-4 sm:px-6 lg:px-10">
             {/* Pillars */}
             <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-950">
               {pillars.map((item) => (
@@ -675,8 +675,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* HOW IT WORKS + CAPABILITIES */}
-          <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:px-10">
+          {/* HOW IT WORKS + CAPABILITIES – full width */}
+          <section className="grid w-full gap-8 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:px-10">
             <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                 How AvidiaTech fits into your stack.
@@ -720,8 +720,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* Micro FAQ (conversion friction reducer) */}
-          <section className="mx-auto w-full max-w-6xl space-y-4 px-4 sm:px-6 lg:px-10">
+          {/* Micro FAQ – full width */}
+          <section className="w-full space-y-4 px-4 sm:px-6 lg:px-10">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
               Common questions before teams try AvidiaTech
             </h3>
@@ -756,8 +756,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* FINAL CTA STRIP */}
-          <section className="mx-auto w-full max-w-6xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm px-4 sm:px-6 lg:px-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+          {/* FINAL CTA – full width, buttons locked on one row */}
+          <section className="w-full rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm px-4 sm:px-6 lg:px-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">
@@ -768,16 +768,16 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   output looks like something you&apos;d ship to customers.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-nowrap items-center gap-3">
                 <a
                   href="/sign-up"
-                  className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
+                  className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
                 >
                   Get Started
                 </a>
                 <a
                   href="/sign-in?redirect_url=/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900"
+                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
                 >
                   Open Dashboard
                 </a>
@@ -786,9 +786,9 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
           </section>
         </div>
 
-        {/* FOOTER */}
+        {/* FOOTER – full width */}
         <footer className="mt-auto border-t border-slate-200 py-4 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
+          <div className="flex w-full flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
             <span>© {new Date().getFullYear()} AvidiaTech. All rights reserved.</span>
             <div className="flex flex-wrap items-center gap-3">
               <a
