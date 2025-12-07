@@ -2,6 +2,12 @@
 
 import React from "react";
 import Link from "next/link";
+import {
+  PageTitle,
+  PageDescription,
+  CardTitle,
+  SectionLabel,
+} from "@/components/typography";
 
 const primaryModules = [
   {
@@ -204,7 +210,7 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             {/* Left copy */}
             <div className="flex-1 min-w-[260px] space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                 <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-emerald-400/80 dark:bg-slate-900">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 </span>
@@ -216,18 +222,18 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-2">
-                <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl dark:text-slate-50">
+                <PageTitle>
                   Welcome to your{" "}
                   <span className="bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent dark:from-cyan-300 dark:via-fuchsia-300 dark:to-emerald-300">
                     product data command center
                   </span>
                   .
-                </h1>
-                <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
+                </PageTitle>
+                <PageDescription className="max-w-xl">
                   This is the hub for everything AvidiaTech: ingestion, content, SEO,
                   intelligence, automation, and developer tools. Start with Extract,
                   Describe, or SEO — then layer the rest as your stack matures.
-                </p>
+                </PageDescription>
               </div>
 
               <div className="flex flex-wrap gap-3 text-[11px]">
@@ -267,9 +273,9 @@ export default function DashboardPage() {
             <div className="mt-4 w-full max-w-md space-y-3 lg:mt-0 lg:max-w-sm">
               <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-[0_16px_40px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-950/95 dark:shadow-[0_16px_40px_rgba(15,23,42,0.8)]">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                  <SectionLabel className="font-medium">
                     Pipeline at a glance
-                  </p>
+                  </SectionLabel>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500">
                     Sample states — wire later
                   </span>
@@ -346,9 +352,9 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900 lg:text-base dark:text-slate-50">
+                  <CardTitle className="text-sm lg:text-base">
                     {mod.name}
-                  </h2>
+                  </CardTitle>
                   <p className="mt-1 text-[11px] text-slate-700 dark:text-slate-200">
                     {mod.description}
                   </p>
@@ -380,7 +386,7 @@ export default function DashboardPage() {
             >
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-100">
+                  <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-100">
                     {group.group}
                   </h3>
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -427,7 +433,7 @@ export default function DashboardPage() {
 
           {/* RIGHT COLUMN: helper / roadmap */}
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(148,163,184,0.25)] dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-[0_16px_40px_rgba(15,23,42,0.7)] lg:p-5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-700 dark:text-slate-100">
+            <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-100">
               How to grow into all modules
             </h3>
             <ol className="list-inside list-decimal space-y-2 text-[11px] text-slate-600 dark:text-slate-300">
