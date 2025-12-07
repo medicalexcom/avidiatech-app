@@ -22,93 +22,92 @@ export default function ApiPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* HEADER / HERO */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-violet-500/45 bg-gradient-to-br from-slate-50 via-white to-slate-50 px-4 py-5 shadow-[0_0_40px_rgba(129,140,248,0.25)] sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(167,139,250,0.35)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + description */}
-              <div className="max-w-2xl space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
-                  Developer Tools · AvidiaAPI
-                  <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
-                  <span className="text-violet-500 dark:text-violet-200">
-                    Unified product data API
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
-                    Ship on top of{" "}
-                    <span className="bg-gradient-to-r from-violet-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-sky-200 dark:to-emerald-200">
-                      Avidia’s product data engine.
-                    </span>
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    AvidiaAPI lets you programmatically ingest URLs, retrieve normalized
-                    JSON, generate SEO content, trigger audits, and sync products into
-                    your own tools. Instead of reinventing scraping and formatting, you
-                    call a single REST API—and focus on the product experience.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/60 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-violet-500/60 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span>
-                      Unified REST surface across Extract, Describe, SEO, Audit, and more.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/55 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-cyan-500/55 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span>
-                      Tenant-scoped API keys with role-aware permissions and quotas.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-slate-700 shadow-sm bg-white/90 dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    <span>Pagination, filters, and webhooks for production workloads.</span>
-                  </div>
-                </div>
+        {/* COMPACT HEADER */}
+        <section className="mb-4">
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            {/* Left: pill + title + copy */}
+            <div className="space-y-3 max-w-2xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
+                Developer Tools · AvidiaAPI
+                <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
+                <span className="text-violet-500 dark:text-violet-200">
+                  Unified product data API
+                </span>
               </div>
 
-              {/* Right: module status + mini code sample */}
-              <div className="mt-1 w-full max-w-xs space-y-3 lg:mt-0 lg:max-w-sm">
-                <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.9)]" />
-                        <span className="text-sm font-semibold text-violet-600 dark:text-violet-200">
-                          Endpoint design locked · Beta client planned
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                      API-first
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    AvidiaAPI will mirror the dashboard flows: ingest URLs, manage jobs,
-                    fetch normalized payloads, and request SEO / Audit runs with the same
-                    primitives the UI uses.
-                  </p>
-                </div>
+              <div className="space-y-2">
+                <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-50">
+                  Ship on top of{" "}
+                  <span className="bg-gradient-to-r from-violet-500 via-sky-500 to-emerald-500 bg-clip-text text-transparent dark:from-violet-300 dark:via-sky-200 dark:to-emerald-200">
+                    Avidia’s product data engine.
+                  </span>
+                </h1>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  AvidiaAPI lets you programmatically ingest URLs, retrieve normalized
+                  JSON, generate SEO content, trigger audits, and sync products into
+                  your own tools. Instead of reinventing scraping and formatting, you
+                  call a single REST API—and focus on the product experience.
+                </p>
+              </div>
 
-                {/* Tiny "code" preview */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                      Quick example · Ingest a URL
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                      REST · JSON
-                    </span>
+              <div className="flex flex-wrap gap-3 text-[11px]">
+                <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/60 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-violet-500/60 dark:bg-slate-950/90 dark:text-slate-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                  <span>
+                    Unified REST surface across Extract, Describe, SEO, Audit, and more.
+                  </span>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/55 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-cyan-500/55 dark:bg-slate-950/90 dark:text-slate-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  <span>
+                    Tenant-scoped API keys with role-aware permissions and quotas.
+                  </span>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  <span>Pagination, filters, and webhooks for production workloads.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: module status + mini code sample */}
+            <div className="w-full max-w-xs space-y-3 sm:max-w-sm">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-400">
+                      Module status
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_10px_rgba(167,139,250,0.9)]" />
+                      <span className="text-sm font-semibold text-violet-600 dark:text-violet-200">
+                        Endpoint design locked · Beta client planned
+                      </span>
+                    </div>
                   </div>
-                  <pre className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/95 px-3 py-2 text-[10px] leading-relaxed text-slate-100 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    API-first
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  AvidiaAPI will mirror the dashboard flows: ingest URLs, manage jobs,
+                  fetch normalized payloads, and request SEO / Audit runs with the same
+                  primitives the UI uses.
+                </p>
+              </div>
+
+              {/* Tiny "code" preview */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Quick example · Ingest a URL
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    REST · JSON
+                  </span>
+                </div>
+                <pre className="overflow-auto rounded-xl border border-slate-200 bg-slate-900/95 px-3 py-2 text-[10px] leading-relaxed text-slate-100 dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
 {`POST https://api.avidiatech.com/v1/ingest
 Authorization: Bearer <API_KEY>
 Content-Type: application/json
@@ -118,15 +117,14 @@ Content-Type: application/json
   "source": "manufacturer",
   "tenant_id": "tenant_x"
 }`}
-                  </pre>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                    The same API surface powers AvidiaExtract and AvidiaSEO behind the
-                    scenes.
-                  </p>
-                </div>
+                </pre>
+                <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                  The same API surface powers AvidiaExtract and AvidiaSEO behind the
+                  scenes.
+                </p>
               </div>
             </div>
-          </div>
+          </header>
         </section>
 
         {/* BODY: two-column layout */}
