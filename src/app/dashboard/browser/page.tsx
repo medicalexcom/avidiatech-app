@@ -22,11 +22,11 @@ export default function BrowserPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* COMPACT HEADER */}
+        {/* HEADER / CLUSTER-STYLE HERO */}
         <section className="mb-4">
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            {/* Left: pill + title + copy */}
-            <div className="space-y-3 max-w-2xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            {/* Left: title + description */}
+            <div className="max-w-2xl space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
                 Developer Tools · AvidiaBrowser
@@ -47,8 +47,8 @@ export default function BrowserPage() {
                   AvidiaBrowser is a browser extension for power users. While you browse
                   manufacturer sites, marketplaces, or competitor catalogs, you can grab
                   structured product data on the spot and send it straight into the
-                  AvidiaTech pipeline—or export it as CSV/JSON when you just need a quick
-                  capture.
+                  AvidiaTech pipeline—or export it as CSV/JSON when you just need a
+                  quick capture.
                 </p>
               </div>
 
@@ -68,9 +68,8 @@ export default function BrowserPage() {
               </div>
             </div>
 
-            {/* Right: compact status + fake browser preview */}
-            <div className="w-full max-w-xs space-y-3 sm:max-w-sm">
-              {/* Status card */}
+            {/* Right: module status + "browser strip" */}
+            <div className="mt-1 w-full max-w-xs space-y-3 lg:mt-0 lg:max-w-sm">
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -94,8 +93,8 @@ export default function BrowserPage() {
                 </p>
               </div>
 
-              {/* Fake browser preview (kept compact) */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-950/95 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
+              {/* Static "fake browser" preview */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-[0_18px_45px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-950/95 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-400/80" />
@@ -165,7 +164,7 @@ export default function BrowserPage() {
                 </p>
               </div>
             </div>
-          </header>
+          </div>
         </section>
 
         {/* BODY: two-column layout */}
@@ -197,8 +196,7 @@ export default function BrowserPage() {
                   <span>
                     <span className="font-medium">Send to Avidia:</span> push captured
                     products directly into AvidiaExtract or a selected project with one
-                    click, keeping them in the same normalized JSON as your ingest
-                    engine.
+                    click, keeping them in the same normalized JSON as your ingest engine.
                   </span>
                 </li>
                 <li className="flex gap-2">
@@ -212,9 +210,9 @@ export default function BrowserPage() {
                 <li className="flex gap-2">
                   <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-violet-400" />
                   <span>
-                    <span className="font-medium">Secure &amp; rate-limited:</span>{" "}
-                    built-in authentication and per-account rate limits keep captures
-                    tied to your workspace and protect your API usage.
+                    <span className="font-medium">Secure &amp; rate-limited:</span> built-in
+                    authentication and per-account rate limits keep captures tied to your
+                    workspace and protect your API usage.
                   </span>
                 </li>
               </ul>
@@ -240,9 +238,9 @@ export default function BrowserPage() {
                     Founders &amp; operators
                   </div>
                   <p className="mt-1.5">
-                    Validate suppliers, test new niches, or pull a small batch of
-                    products into your Avidia workspace while you&apos;re still
-                    exploring ideas from your browser.
+                    Validate suppliers, test new niches, or pull a small batch of products
+                    into your Avidia workspace while you&apos;re still exploring ideas
+                    from your browser.
                   </p>
                 </div>
               </div>
@@ -282,8 +280,8 @@ export default function BrowserPage() {
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       On any product page, open the extension pane, review the extracted
-                      product payload, and either send it into AvidiaExtract or download
-                      it as CSV/JSON.
+                      product payload, and either send it into AvidiaExtract or download it
+                      as CSV/JSON.
                     </p>
                   </div>
                 </li>
@@ -346,8 +344,8 @@ export default function BrowserPage() {
                   <span className="font-medium text-slate-800 dark:text-slate-200">
                     AvidiaImport
                   </span>{" "}
-                  — include browser-sourced products in your export profiles and store
-                  sync runs.
+                  — include browser-sourced products in your export profiles and store sync
+                  runs.
                 </li>
                 <li>
                   •{" "}
