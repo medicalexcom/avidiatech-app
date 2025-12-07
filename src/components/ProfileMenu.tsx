@@ -210,7 +210,6 @@ export default function ProfileMenu() {
             <div className="text-sm font-medium text-slate-900 dark:text-slate-50">
               Appearance
             </div>
-            {/* Removed the “Light / dark theme” subtitle as requested */}
           </div>
 
           {mounted && (
@@ -218,19 +217,43 @@ export default function ProfileMenu() {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className={`relative inline-flex h-8 w-16 items-center rounded-full border p-1 transition-colors ${
+              className={`relative inline-flex h-8 w-24 items-center rounded-full border p-1 transition-colors ${
                 isDark
                   ? "bg-slate-900 border-slate-600"
                   : "bg-slate-100 border-slate-300"
               }`}
             >
-              {/* Thumb with icon */}
+              {/* Labels layer */}
+              <span className="absolute inset-0 flex items-center justify-between px-2 text-[10px] font-medium select-none">
+                <span
+                  className={`inline-flex items-center gap-1 ${
+                    isDark
+                      ? "text-slate-500"
+                      : "text-amber-600"
+                  }`}
+                >
+                  <span aria-hidden>☀️</span>
+                  <span>Light</span>
+                </span>
+                <span
+                  className={`inline-flex items-center gap-1 ${
+                    isDark
+                      ? "text-indigo-200"
+                      : "text-slate-500"
+                  }`}
+                >
+                  <span>Dark</span>
+                  <span aria-hidden>🌙</span>
+                </span>
+              </span>
+
+              {/* Thumb */}
               <span
-                className={`inline-flex h-6 w-6 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm transform text-[13px] transition-transform ${
+                className={`relative z-10 inline-flex h-6 w-11 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm text-[11px] font-semibold transition-transform ${
                   isDark ? "translate-x-7" : "translate-x-0"
                 }`}
               >
-                {isDark ? "🌙" : "☀️"}
+                {isDark ? "Dark" : "Light"}
               </span>
             </button>
           )}
