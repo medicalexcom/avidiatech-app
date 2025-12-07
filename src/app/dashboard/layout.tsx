@@ -49,6 +49,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [isLoaded, isSignedIn]);
 
+  function onActivated() {
+    setShowModal(false);
+  }
+
   // Avoid flashing content while status is loading
   if (!checked) {
     return (
@@ -75,7 +79,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Hard-blocking PlanModal overlay (portaled) */}
-      {showModal && <PlanModal />}
+      {showModal && <PlanModal onActivated={onActivated} />}
     </>
   );
 }
