@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import ProfileMenu from "./ProfileMenu";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 const primaryLinks = [
   { name: "Dashboard", href: "/dashboard" },
@@ -84,7 +83,7 @@ export default function TopNav() {
           })}
         </nav>
 
-        {/* Right: secondary links + theme + notifications + profile/auth */}
+        {/* Right: secondary links + notifications + profile/auth */}
         <div className="flex min-w-[190px] items-center justify-end gap-4">
           {/* Secondary nav (Roles / Versioning) */}
           <nav
@@ -111,9 +110,6 @@ export default function TopNav() {
           </nav>
 
           <div className="flex items-center gap-3">
-            {/* Theme toggle */}
-            <ThemeToggle />
-
             {/* Notifications */}
             <Link
               href="/dashboard/notifications"
