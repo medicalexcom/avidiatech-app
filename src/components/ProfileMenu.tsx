@@ -3,33 +3,36 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUser, SignOutButton } from "@clerk/nextjs";
+import { useTheme } from "next-themes";
 
 /**
- * ProfileMenu — consistent premium dropdown.
- * - Each menu item uses identical spacing & styles.
- * - "Subscription & Billing" is a normal item, same as Account Settings.
- * - Robust nav via window.history/window.location.fallback.
+ * ProfileMenu — premium dropdown with global light/dark toggle.
+ * - Uses next-themes (ThemeProvider) with light as default.
+ * - Menu styling matches the premium dashboard look.
+ * - Robust nav via window.history/window.location fallback.
  */
 
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
+  const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
-  const [dark, setDark] = useState(false);
-  const [loadingPortal, setLoadingPortal] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  // Avoid hydration issues with next-themes
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const isDark = saved === "dark";
-    setDark(isDark);
-    if (isDark) document.documentElement.classList.add("dark");
+    setMounted(true);
   }, []);
 
+  // Close on outside click / ESC
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (open && menuRef.current && buttonRef.current) {
-        if (!menuRef.current.contains(e.target as Node) && !buttonRef.current.contains(e.target as Node)) {
+        if (
+          !menuRef.current.contains(e.target as Node) &&
+          !buttonRef.current.contains(e.target as Node)
+        ) {
           setOpen(false);
         }
       }
@@ -45,13 +48,10 @@ export default function ProfileMenu() {
     };
   }, [open]);
 
+  const isDark = theme === "dark";
+
   function toggleTheme() {
-    const next = !dark;
-    setDark(next);
-    try {
-      localStorage.setItem("theme", next ? "dark" : "light");
-      document.documentElement.classList.toggle("dark", next);
-    } catch {}
+    setTheme(isDark ? "light" : "dark");
   }
 
   function nav(href: string, e?: React.MouseEvent) {
@@ -73,7 +73,7 @@ export default function ProfileMenu() {
     }
   }
 
-  if (!isLoaded) return null;
+  if (!isLoaded || !mounted) return null;
 
   const avatar = (user as any)?.imageUrl ?? "/default-avatar.png";
   const name = user?.fullName ?? user?.firstName ?? "Account";
@@ -86,11 +86,17 @@ export default function ProfileMenu() {
   const orgName = (user as any)?.publicMetadata?.orgName ?? "";
 
   // Single menu item render to ensure consistent spacing
-  const Item = ({ href, children }: { href: string; children: React.ReactNode }) => (
+  const Item = ({
+    href,
+    children,
+  }: {
+    href: string;
+    children: React.ReactNode;
+  }) => (
     <a
       href={href}
       onClick={(e) => nav(href, e)}
-      className="block px-3 py-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
+      className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/80"
     >
       {children}
     </a>
@@ -99,50 +105,100 @@ export default function ProfileMenu() {
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-[340px] bg-white dark:bg-slate-900 border rounded-lg shadow-2xl p-3"
+      className="fixed right-3 top-14 z-[9999] w-[340px] rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-[0_24px_80px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95"
       role="menu"
       aria-orientation="vertical"
     >
-      <div className="flex items-center gap-3 pb-3 border-b dark:border-slate-800">
-        <img src={avatar} alt="avatar" className="w-12 h-12 rounded-lg object-cover" />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold truncate">{name}</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{email}</div>
+      {/* Header / identity */}
+      <div className="flex items-center gap-3 rounded-2xl bg-slate-50/80 px-3 py-3 ring-1 ring-slate-100 dark:bg-slate-900/80 dark:ring-slate-800">
+        <img
+          src={avatar}
+          alt="avatar"
+          className="h-11 w-11 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+            {name}
+          </div>
+          <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+            {email}
+          </div>
           {orgName ? (
-            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+            <div className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">
               {orgName} • {role}
             </div>
           ) : (
-            <div className="text-xs text-slate-400 mt-1">{role}</div>
+            <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              {role}
+            </div>
           )}
         </div>
       </div>
 
-      <nav className="py-2">
+      {/* Nav */}
+      <nav className="mt-3 space-y-1 rounded-2xl bg-slate-50/70 p-2 ring-1 ring-slate-100 dark:bg-slate-900/80 dark:ring-slate-800">
         <Item href="/settings/profile">Account Settings</Item>
         <hr className="my-1 border-slate-100 dark:border-slate-800" />
         <Item href="/settings/organization">Organization</Item>
-        <Item href="/settings/developer/api-keys">API Keys & Developer Tools</Item>
+        <Item href="/settings/developer/api-keys">API Keys &amp; Developer Tools</Item>
         <Item href="/settings/billing">Subscription &amp; Billing</Item>
       </nav>
 
-      <div className="mt-3 border-t dark:border-slate-800 pt-3">
-        <div className="flex items-center justify-between">
+      {/* Footer: appearance + sign out */}
+      <div className="mt-3 space-y-3 rounded-2xl bg-slate-50/60 p-3 ring-1 ring-slate-100 dark:bg-slate-900/80 dark:ring-slate-800">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-medium">Appearance</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">Toggle theme</div>
+            <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+              Appearance
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Switch between light and dark
+            </div>
           </div>
-          <label className="inline-flex items-center cursor-pointer">
-            <input aria-label="Toggle dark mode" type="checkbox" checked={dark} onChange={toggleTheme} className="sr-only" />
-            <span className={`inline-block w-10 h-6 rounded-full p-1 ${dark ? "bg-indigo-600" : "bg-slate-300"}`}>
-              <span className={`block w-4 h-4 rounded-full bg-white transform ${dark ? "translate-x-4" : "translate-x-0"}`} />
+
+          {/* Premium toggle pill */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle dark mode"
+            className={[
+              "inline-flex items-center rounded-full border px-1 py-0.5 text-[11px] font-medium shadow-sm transition-colors",
+              isDark
+                ? "border-slate-700 bg-slate-900 text-slate-100"
+                : "border-slate-200 bg-white text-slate-700",
+            ].join(" ")}
+          >
+            <span
+              className={[
+                "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                !isDark
+                  ? "bg-slate-900 text-slate-50"
+                  : "text-slate-500 dark:text-slate-300",
+              ].join(" ")}
+            >
+              <span className="text-xs">☀️</span>
+              <span>Light</span>
             </span>
-          </label>
+            <span
+              className={[
+                "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                isDark
+                  ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900"
+                  : "text-slate-500",
+              ].join(" ")}
+            >
+              <span className="text-xs">🌙</span>
+              <span>Dark</span>
+            </span>
+          </button>
         </div>
 
-        <div className="mt-3">
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
           <SignOutButton>
-            <button onClick={() => setOpen(false)} className="w-full text-left text-sm text-red-600 hover:underline">
+            <button
+              onClick={() => setOpen(false)}
+              className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+            >
               Sign out
             </button>
           </SignOutButton>
@@ -157,14 +213,20 @@ export default function ProfileMenu() {
         ref={buttonRef}
         aria-expanded={open}
         onClick={() => setOpen((s) => !s)}
-        className="flex items-center gap-2 rounded-md p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 p-1.5 text-xs shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/80 dark:hover:bg-slate-800"
         title="Account"
         type="button"
       >
-        <img src={avatar} alt="avatar" className="w-8 h-8 rounded-md object-cover" />
+        <img
+          src={avatar}
+          alt="avatar"
+          className="h-8 w-8 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+        />
       </button>
 
-      {open && typeof document !== "undefined" ? createPortal(menu, document.body) : null}
+      {open && typeof document !== "undefined"
+        ? createPortal(menu, document.body)
+        : null}
     </>
   );
 }
