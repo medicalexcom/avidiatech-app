@@ -192,9 +192,9 @@ export default function Home() {
 
         {/* BODY CONTENT */}
         <div className="flex flex-1 flex-col gap-16 pb-12 lg:pb-16">
-          {/* HERO (with pipeline sample demo) */}
+          {/* HERO (with central URL input + pipeline preview) */}
           <section className="grid items-center gap-12 lg:grid-cols-[1.1fr,0.9fr]">
-            {/* Left side: copy + CTAs */}
+            {/* Left side: copy + URL input + CTAs + stats */}
             <div className="space-y-8">
               <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
@@ -215,6 +215,43 @@ export default function Home() {
                   AvidiaTech ingests, enriches, and monitors your entire catalog—so you
                   can launch new products, regions, and channels without rewriting the
                   same description three times.
+                </p>
+              </div>
+
+              {/* CENTRAL URL INPUT – main action */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Step 1 · Paste a manufacturer URL to see a sample pipeline output
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
+                    <input
+                      className="w-full border-none bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                      value={demoUrl}
+                      onChange={(e) => setDemoUrl(e.target.value)}
+                      placeholder="https://vendor.com/products/your-sku"
+                    />
+                  </div>
+                  <button
+                    onClick={handleDemoRun}
+                    disabled={demoStatus === "running"}
+                    className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {demoStatus === "running"
+                      ? "Generating sample…"
+                      : "Try pipeline sample"}
+                  </button>
+                </div>
+                {demoError && (
+                  <p className="text-[11px] text-rose-600 dark:text-rose-300">
+                    {demoError}
+                  </p>
+                )}
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  This runs a lightweight simulation of Extract → Describe on a single
+                  URL. In your workspace, AvidiaDescribe can also start from short
+                  internal notes instead of a URL. Sample runs remaining:{" "}
+                  <span className="font-semibold">{demoRunsLeft} / 1</span>.
                 </p>
               </div>
 
@@ -261,8 +298,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right side: hybrid pipeline sample + workspace signals */}
-            <div className="relative">
+            {/* Right side: pipeline preview driven by the central input */}
+            <div className="relative" id="pipeline-preview">
               <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-3xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
               <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
                 {/* Top bar */}
@@ -296,86 +333,37 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Two-column inner content */}
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  {/* Left: pipeline sample input */}
-                  <div className="space-y-3 rounded-xl bg-slate-50 p-4 dark:bg-slate-900/70">
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                      Step 1 · Try the AvidiaTech pipeline (sample)
-                    </p>
-                    <div className="space-y-2">
-                      <label className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                        Manufacturer URL
-                      </label>
-                      <input
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                        value={demoUrl}
-                        onChange={(e) => setDemoUrl(e.target.value)}
-                        placeholder="https://vendor.com/products/your-sku"
-                      />
-                      <button
-                        onClick={handleDemoRun}
-                        disabled={demoStatus === "running"}
-                        className="mt-1 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {demoStatus === "running"
-                          ? "Generating sample…"
-                          : "Generate sample snippet"}
-                      </button>
-                      {demoError && (
-                        <p className="text-[11px] text-rose-600 dark:text-rose-300">
-                          {demoError}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center justify-between">
-                        <span>Sample runs remaining</span>
-                        <span className="font-medium">
-                          {demoRunsLeft} / 1
-                        </span>
-                      </div>
-                      <p>
-                        This simulates Extract + Describe on a single URL. In your
-                        workspace, you can also start AvidiaDescribe from short
-                        internal notes instead of a URL.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right: sample output / workspace signals */}
-                  <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                      Step 2 · Sample description (Describe step)
-                    </p>
-                    <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                      <pre className="whitespace-pre-wrap text-[11px]">
-                        {demoOutput ??
-                          `Paste a manufacturer URL on the left and click “Generate sample snippet”. 
-                          
+                {/* Output card */}
+                <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                    Step 2 · Sample description (Describe step)
+                  </p>
+                  <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                    <pre className="whitespace-pre-wrap text-[11px]">
+                      {demoOutput ??
+                        `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
+                        
 We’ll simulate the Describe step in your pipeline: a compliant, search-aware paragraph built from your ingestion rules. In the real workspace, this feeds AvidiaSEO, which builds the full product page and SEO JSON.`}
-                      </pre>
+                    </pre>
+                  </div>
+                  <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center justify-between">
+                      <span>Ingest</span>
+                      <span className="text-emerald-600 dark:text-emerald-300">
+                        ✓ Wired to your engine
+                      </span>
                     </div>
-                    <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center justify-between">
-                        <span>Ingest</span>
-                        <span className="text-emerald-600 dark:text-emerald-300">
-                          ✓ Wired to your engine
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>AI description</span>
-                        <span className="text-emerald-600 dark:text-emerald-300">
-                          ✓ Custom GPT instructions
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>SEO checks</span>
-                        <span className="text-amber-600 dark:text-amber-300">
-                          • Enforced in workspace
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <span>AI description</span>
+                      <span className="text-emerald-600 dark:text-emerald-300">
+                        ✓ Custom GPT instructions
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>SEO checks</span>
+                      <span className="text-amber-600 dark:text-amber-300">
+                        • Enforced in workspace
+                      </span>
                     </div>
                   </div>
                 </div>
