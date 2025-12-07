@@ -163,12 +163,8 @@ export default function Sidebar() {
       aria-label="AvidiaTech main navigation"
       className="fixed top-[56px] bottom-0 left-0 flex w-56 flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
     >
-      {/* Tiny spacer so content isn't glued to the top */}
-      <div className="mb-2 px-2 shrink-0">
-        <span className="text-[8px] font-medium uppercase tracking-[0.16em] text-slate-600">
-          Navigation
-        </span>
-      </div>
+      {/* Small top spacer so content isn’t glued to the top */}
+      <div className="mb-1 shrink-0" />
 
       {/* Scrollable section area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1">
@@ -177,7 +173,7 @@ export default function Sidebar() {
             {sectionIndex > 0 && (
               <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
             )}
-            <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-500 whitespace-nowrap">
+            <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-900 dark:text-slate-300 whitespace-nowrap">
               {section.title}
             </h2>
             <ul className="space-y-1">
@@ -214,14 +210,7 @@ export default function Sidebar() {
                       />
 
                       {/* Item label */}
-                      <span
-                        className={[
-                          "flex-1 truncate",
-                          active
-                            ? accent.textActive
-                            : "text-slate-200 group-hover:text-slate-50",
-                        ].join(" ")}
-                      >
+                      <span className="flex-1 truncate text-slate-600 group-hover:text-slate-50">
                         {item.name}
                       </span>
                     </Link>
@@ -233,14 +222,14 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Pinned bottom simple support block */}
-      <div className="mt-3 shrink-0 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
-        <div className="flex flex-col gap-1.5">
+      {/* Pinned bottom simple support block, light/dark friendly */}
+      <div className="mt-3 shrink-0 border-t border-slate-200/20 px-2 pt-3 text-[10px] text-slate-600 dark:border-slate-800/80 dark:text-slate-500">
+        <div className="flex flex-col gap-1">
           <button
             type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/90 px-2.5 py-2 text-left text-[10px] text-slate-100 shadow-[0_0_18px_rgba(15,23,42,0.85)] hover:border-cyan-400/80 hover:bg-slate-900"
+            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
           >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               💬
             </span>
             <span className="font-medium">Open support chat</span>
@@ -248,9 +237,9 @@ export default function Sidebar() {
 
           <button
             type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/70 px-2.5 py-2 text-left text-[10px] text-slate-200 hover:border-violet-400/80 hover:bg-slate-900"
+            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
           >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[10px]">
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               📚
             </span>
             <span className="font-medium">Documentation &amp; guides</span>
