@@ -192,8 +192,8 @@ export default function Home() {
 
         {/* BODY CONTENT */}
         <div className="flex flex-1 flex-col gap-16 pb-12 lg:pb-16">
-          {/* HERO (with central URL input + pipeline preview) */}
-          <section className="grid items-center gap-12 lg:grid-cols-[1.1fr,0.9fr]">
+          {/* HERO (with central URL input + pipeline preview, stretched) */}
+          <section className="grid gap-10 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:items-stretch">
             {/* Left side: copy + URL input + CTAs + stats */}
             <div className="space-y-8">
               <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">
@@ -204,7 +204,7 @@ export default function Home() {
               </div>
 
               <div className="space-y-4">
-                <h1 className="text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
+                <h1 className="text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
                   Turn messy manufacturer URLs into
                   <span className="bg-gradient-to-r from-cyan-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
                     {" "}
@@ -298,10 +298,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right side: pipeline preview driven by the central input */}
-            <div className="relative" id="pipeline-preview">
-              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2.5rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-3xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
+            {/* Right side: pipeline preview fills height */}
+            <div className="relative flex h-full" id="pipeline-preview">
+              <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
+              <div className="relative z-10 flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
                 {/* Top bar */}
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
                   <div className="flex items-center gap-2">
@@ -313,62 +313,66 @@ export default function Home() {
                   </span>
                 </div>
 
-                {/* Flow strip */}
-                <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Pipeline snapshot
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-medium text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-100">
-                      AvidiaExtract · URL ingests
-                    </span>
-                    <span className="text-slate-400">→</span>
-                    <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
-                      AvidiaDescribe · AI copy
-                    </span>
-                    <span className="text-slate-400">→</span>
-                    <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
-                      AvidiaSEO · pages & feeds
-                    </span>
+                {/* Main content fills space */}
+                <div className="mt-4 flex flex-1 flex-col gap-4">
+                  {/* Flow strip */}
+                  <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Pipeline snapshot
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-medium text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-100">
+                        AvidiaExtract · URL ingests
+                      </span>
+                      <span className="text-slate-400">→</span>
+                      <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
+                        AvidiaDescribe · AI copy
+                      </span>
+                      <span className="text-slate-400">→</span>
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
+                        AvidiaSEO · pages & feeds
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Output card */}
-                <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Step 2 · Sample description (Describe step)
-                  </p>
-                  <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                    <pre className="whitespace-pre-wrap text-[11px]">
-                      {demoOutput ??
-                        `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
-                        
+                  {/* Output card */}
+                  <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                      Step 2 · Sample description (Describe step)
+                    </p>
+                    <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                      <pre className="whitespace-pre-wrap text-[11px]">
+                        {demoOutput ??
+                          `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
+                
 We’ll simulate the Describe step in your pipeline: a compliant, search-aware paragraph built from your ingestion rules. In the real workspace, this feeds AvidiaSEO, which builds the full product page and SEO JSON.`}
-                    </pre>
-                  </div>
-                  <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center justify-between">
-                      <span>Ingest</span>
-                      <span className="text-emerald-600 dark:text-emerald-300">
-                        ✓ Wired to your engine
-                      </span>
+                      </pre>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>AI description</span>
-                      <span className="text-emerald-600 dark:text-emerald-300">
-                        ✓ Custom GPT instructions
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>SEO checks</span>
-                      <span className="text-amber-600 dark:text-amber-300">
-                        • Enforced in workspace
-                      </span>
+                    <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center justify-between">
+                        <span>Ingest</span>
+                        <span className="text-emerald-600 dark:text-emerald-300">
+                          ✓ Wired to your engine
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>AI description</span>
+                        <span className="text-emerald-600 dark:text-emerald-300">
+                          ✓ Custom GPT instructions
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>SEO checks</span>
+                        <span className="text-amber-600 dark:text-amber-300">
+                          • Enforced in workspace
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                {/* Bottom helper text stays pinned at bottom */}
+                <p className="mt-4 text-[11px] text-slate-500 dark:text-slate-400">
                   Like what you see? Create a free workspace to unlock full modules,
                   saved ingestions, and end-to-end SEO flows.
                 </p>
