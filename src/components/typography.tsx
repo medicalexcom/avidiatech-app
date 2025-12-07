@@ -15,8 +15,8 @@ import clsx from "clsx";
  *
  * This file contains:
  * - Text component with `as`, `variant`, `tone` and `className`.
- * - Small helpers: PageTitle, PageKicker, PageDescription, CardTitle, SectionLabel, Metric* etc.
- * - A small Heading helper (levels 1-6) for cases where you want an explicit heading level.
+ * - Small helpers: PageTitle, PageKicker, PageDescription, CardTitle, SectionLabel, BadgeText, Metric helpers, Body helpers.
+ * - Inline helpers: Strong and Brand for encapsulating inline emphasis and brand-colored names.
  */
 
 /* ---------- Types ---------- */
@@ -56,7 +56,6 @@ export type TextTone =
 
 /**
  * All tags we allow the `as` prop to choose from.
- * Extended to cover micro elements used in the app.
  */
 type TextTag =
   | "p"
@@ -84,13 +83,6 @@ export interface TextProps extends React.HTMLAttributes<HTMLElement> {
 }
 
 /* ---------- Base variant styles (single source of truth) ---------- */
-/**
- * Notes:
- * - Headings are darker (text-slate-900) in light mode and map to bright text in dark mode.
- * - Body text is softer than headings.
- * - Removed automatic uppercase/tracking from variants to avoid forcing casing across the app.
- * - Keep sizes compact for labels / badges.
- */
 const baseByVariant: Record<TextVariant, string> = {
   // Page-level
   pageTitle:
@@ -134,14 +126,6 @@ const baseByVariant: Record<TextVariant, string> = {
 };
 
 /* ---------- Tone modifiers ---------- */
-/**
- * Tones layer on top of the base variant. Use them when you want to:
- * - Make something muted: tone="muted"
- * - Make something accent color: tone="accent"
- * - Use semantic colors: success/warning/danger
- *
- * Empty string means the variant's base color is used.
- */
 const toneByTone: Record<TextTone, string> = {
   default: "",
   muted: "text-slate-500 dark:text-slate-400",
@@ -154,15 +138,6 @@ const toneByTone: Record<TextTone, string> = {
 };
 
 /* ---------- Core Text component ---------- */
-/**
- * Simple, predictable Text primitive.
- * - `as` selects the tag (h1,h2,p,span,...)
- * - `variant` selects the typography preset (size/weight/base color)
- * - `tone` optionally overrides color to tone (muted, accent, success...)
- *
- * This is intentionally a plain function component (no forwardRef) to keep typings simpler.
- * If you need refs forwarded, we can convert to forwardRef in a follow-up.
- */
 export function Text({
   as: Tag = "p",
   variant = "body",
@@ -264,12 +239,51 @@ export function PillText(props: Omit<TextProps, "variant" | "as">) {
   return <Text as="span" variant="pill" {...props} />;
 }
 
-/* ========= ADDITIONAL UTILS ========= */
+/* ========= INLINE / EMPHASIS HELPERS ========= */
 
 /**
- * Heading helper: choose level 1-6 but keep variant control centralized.
- * Usage: <Heading level={3}>Section</Heading>
+ * Strong: inline emphasis used across copy (encapsulates font-weight + neutral emphasis color).
+ * Use this when you want a neutral bold inline emphasis (replaces `className="font-semibold text-slate-800 dark:text-slate-100"`).
  */
+export function Strong(props: Omit<TextProps, "variant" | "as">) {
+  return <Text as="span" className="font-semibold text-slate-800 dark:text-slate-100" {...props} />;
+}
+
+/**
+ * Brand: inline helper for brand-colored names where you'd previously used
+ * text-cyan-600 / text-fuchsia-600 / text-emerald-600, etc.
+ *
+ * Usage:
+ *   <Brand tone="cyan">AvidiaExtract</Brand>
+ *   <Brand tone="fuchsia">AvidiaDescribe</Brand>
+ *   <Brand tone="emerald">AvidiaSEO</Brand>
+ *
+ * This keeps markup semantic and removes inline font/color utilities from pages.
+ */
+export function Brand({
+  tone = "accent",
+  children,
+  className,
+  ...rest
+}: { tone?: "cyan" | "fuchsia" | "emerald" | "accent" } & Omit<TextProps, "variant" | "as">) {
+  const toneClass =
+    tone === "cyan"
+      ? "text-cyan-600 dark:text-cyan-300"
+      : tone === "fuchsia"
+      ? "text-fuchsia-600 dark:text-fuchsia-300"
+      : tone === "emerald"
+      ? "text-emerald-600 dark:text-emerald-300"
+      : "text-cyan-700 dark:text-cyan-300"; // fallback accent
+
+  return (
+    <Text as="span" className={clsx("font-semibold", toneClass, className)} {...rest}>
+      {children}
+    </Text>
+  );
+}
+
+/* ========= ADDITIONAL UTILS ========= */
+
 export function Heading({
   level = 2,
   children,
@@ -281,7 +295,6 @@ export function Heading({
   className?: string;
 } & Omit<TextProps, "as" | "variant">) {
   const tag = (`h${level}` as TextTag) || "h2";
-  // Use cardTitle for h2-h3 and pageTitle for h1, h4-h6 fall back to cardTitle
   const variant: TextVariant = level === 1 ? "pageTitle" : "cardTitle";
   return (
     <Text as={tag} variant={variant} className={className} {...rest}>
