@@ -34,7 +34,7 @@ export default function ApiPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             {/* Left: title + description */}
             <div className="max-w-2xl space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium  text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
                 Developer Tools · AvidiaAPI
                 <span className="h-1 w-px bg-slate-200 dark:bg-slate-700" />
@@ -83,7 +83,7 @@ export default function ApiPage() {
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-medium  text-slate-400">
+                    <p className="text-[11px] font-medium text-slate-400">
                       Module status
                     </p>
                     <div className="mt-1 flex items-center gap-2">
@@ -139,7 +139,7 @@ Content-Type: application/json
           {/* LEFT: what it does / value */}
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_18px_45px_rgba(148,163,184,0.35)] sm:p-5 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
-              <h2 className="text-sm font-semibold  text-slate-500 dark:text-slate-300">
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-300">
                 One API for the entire product data pipeline
               </h2>
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
@@ -186,7 +186,7 @@ Content-Type: application/json
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
-              <h3 className="text-sm font-semibold  text-slate-500 dark:text-slate-300">
+              <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-300">
                 Common AvidiaAPI use cases
               </h3>
               <div className="mt-3 grid gap-3 text-xs text-slate-600 sm:grid-cols-2 dark:text-slate-300">
@@ -217,7 +217,7 @@ Content-Type: application/json
           <div className="space-y-4">
             {/* Workflow */}
             <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
-              <h2 className="text-sm font-semibold  text-slate-500 dark:text-slate-300">
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-300">
                 Planned workflow · how AvidiaAPI will run
               </h2>
               <ol className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-300">
@@ -283,7 +283,7 @@ Content-Type: application/json
 
             {/* Integrations */}
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/70">
-              <h3 className="text-xs font-semibold  text-slate-500 dark:text-slate-400">
+              <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 Planned integrations
               </h3>
               <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">

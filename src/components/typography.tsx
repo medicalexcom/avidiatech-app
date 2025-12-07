@@ -3,7 +3,6 @@
 import * as React from "react";
 import clsx from "clsx";
 
-/* SEE problem_statement: this is the full file content to write */
 export type TextVariant =
   | "pageTitle"
   | "pageKicker"
