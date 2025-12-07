@@ -31,9 +31,10 @@ export default function ProfileMenu() {
   useEffect(() => {
     if (!mounted) return;
     try {
-      const saved = typeof window !== "undefined"
-        ? window.localStorage.getItem("theme")
-        : null;
+      const saved =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("theme")
+          : null;
       const rootHasDark =
         typeof document !== "undefined" &&
         document.documentElement.classList.contains("dark");
@@ -45,7 +46,6 @@ export default function ProfileMenu() {
 
       setIsDark(!!effectiveDark);
     } catch {
-      // if anything goes wrong, just rely on context
       setIsDark((resolvedTheme ?? theme) === "dark");
     }
   }, [mounted, theme, resolvedTheme]);
@@ -210,9 +210,7 @@ export default function ProfileMenu() {
             <div className="text-sm font-medium text-slate-900 dark:text-slate-50">
               Appearance
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Light / dark theme
-            </div>
+            {/* Removed the “Light / dark theme” subtitle as requested */}
           </div>
 
           {mounted && (
@@ -220,24 +218,19 @@ export default function ProfileMenu() {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className={[
-                "relative inline-flex h-7 w-12 items-center rounded-full p-1 transition-colors",
+              className={`relative inline-flex h-8 w-16 items-center rounded-full border p-1 transition-colors ${
                 isDark
-                  ? "bg-slate-900 border border-slate-600"
-                  : "bg-slate-200 border border-slate-300",
-              ].join(" ")}
+                  ? "bg-slate-900 border-slate-600"
+                  : "bg-slate-100 border-slate-300"
+              }`}
             >
+              {/* Thumb with icon */}
               <span
-                className={[
-                  "inline-flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm transform transition-transform",
-                  isDark ? "translate-x-5" : "translate-x-0",
-                ].join(" ")}
+                className={`inline-flex h-6 w-6 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm transform text-[13px] transition-transform ${
+                  isDark ? "translate-x-7" : "translate-x-0"
+                }`}
               >
-                {isDark ? (
-                  <span className="block h-3 w-3 rounded-full bg-slate-100 shadow-[0_0_0_1px_rgba(148,163,184,0.8)]" />
-                ) : (
-                  <span className="block h-3 w-3 rounded-full bg-amber-400 shadow-[0_0_0_1px_rgba(251,191,36,0.9)]" />
-                )}
+                {isDark ? "🌙" : "☀️"}
               </span>
             </button>
           )}
