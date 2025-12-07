@@ -22,11 +22,11 @@ export default function ApiPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {/* COMPACT HEADER */}
+        {/* HEADER / CLUSTER-STYLE HERO */}
         <section className="mb-4">
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            {/* Left: pill + title + copy */}
-            <div className="space-y-3 max-w-2xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            {/* Left: title + description */}
+            <div className="max-w-2xl space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
                 <span className="inline-flex h-1.5 w-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.9)]" />
                 Developer Tools · AvidiaAPI
@@ -64,7 +64,7 @@ export default function ApiPage() {
                     Tenant-scoped API keys with role-aware permissions and quotas.
                   </span>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-slate-700 shadow-sm bg-white/90 dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                   <span>Pagination, filters, and webhooks for production workloads.</span>
                 </div>
@@ -72,7 +72,7 @@ export default function ApiPage() {
             </div>
 
             {/* Right: module status + mini code sample */}
-            <div className="w-full max-w-xs space-y-3 sm:max-w-sm">
+            <div className="mt-1 w-full max-w-xs space-y-3 lg:mt-0 lg:max-w-sm">
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-950/90">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -124,7 +124,7 @@ Content-Type: application/json
                 </p>
               </div>
             </div>
-          </header>
+          </div>
         </section>
 
         {/* BODY: two-column layout */}
