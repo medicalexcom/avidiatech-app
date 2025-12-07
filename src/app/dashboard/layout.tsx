@@ -73,7 +73,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Sidebar />
         </aside>
 
-        <main className="flex-1">
+        <main className="flex-1 md:ml-56">
           {children}
         </main>
       </div>
