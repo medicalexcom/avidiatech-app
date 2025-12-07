@@ -2,7 +2,6 @@
 "use client";
 
 import * as React from "react";
-import type { JSX } from "react";
 import clsx from "clsx";
 
 /**
@@ -32,9 +31,20 @@ export type TextVariant =
 
 export type TextTone = "default" | "muted" | "subtle" | "accent";
 
-export interface TextProps
-  extends React.HTMLAttributes<HTMLParagraphElement> {
-  as?: keyof JSX.IntrinsicElements;
+type TextTag =
+  | "p"
+  | "span"
+  | "div"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "h4"
+  | "h5"
+  | "h6"
+  | "label";
+
+export interface TextProps extends React.HTMLAttributes<HTMLElement> {
+  as?: TextTag;
   variant?: TextVariant;
   tone?: TextTone;
 }
