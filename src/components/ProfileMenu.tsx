@@ -227,9 +227,7 @@ export default function ProfileMenu() {
               <span className="absolute inset-0 flex items-center justify-between px-2 text-[10px] font-medium select-none">
                 <span
                   className={`inline-flex items-center gap-1 ${
-                    isDark
-                      ? "text-slate-500"
-                      : "text-amber-600"
+                    isDark ? "text-amber-300" : "text-amber-600"
                   }`}
                 >
                   <span aria-hidden>☀️</span>
@@ -237,9 +235,7 @@ export default function ProfileMenu() {
                 </span>
                 <span
                   className={`inline-flex items-center gap-1 ${
-                    isDark
-                      ? "text-indigo-200"
-                      : "text-slate-500"
+                    isDark ? "text-sky-200" : "text-slate-600"
                   }`}
                 >
                   <span>Dark</span>
@@ -250,7 +246,9 @@ export default function ProfileMenu() {
               {/* Thumb */}
               <span
                 className={`relative z-10 inline-flex h-6 w-11 items-center justify-center rounded-full bg-white dark:bg-slate-900 shadow-sm text-[11px] font-semibold transition-transform ${
-                  isDark ? "translate-x-7" : "translate-x-0"
+                  isDark
+                    ? "translate-x-7 text-slate-50"
+                    : "translate-x-0 text-slate-900"
                 }`}
               >
                 {isDark ? "Dark" : "Light"}
