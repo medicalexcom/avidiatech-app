@@ -10,6 +10,16 @@ import { useTheme } from "next-themes";
  * - Uses next-themes (ThemeProvider) with light as default.
  * - Menu styling matches the premium dashboard look.
  * - Robust nav via window.history/window.location fallback.
+ *
+ * Fixes:
+ * - Ensure toggle always applies the chosen theme even if next-themes'
+ *   resolvedTheme is temporarily unavailable or a different attribute
+ *   strategy is used.
+ * - Allow clicking the individual "Light"/"Dark" pills to explicitly set
+ *   the theme (stopPropagation so clicks don't just toggle).
+ * - Apply a fallback immediate DOM update to `html`/`body` classes and
+ *   `data-theme` attribute so UI updates instantly if next-themes takes
+ *   a tick to synchronize.
  */
 
 export default function ProfileMenu() {
@@ -49,26 +59,71 @@ export default function ProfileMenu() {
   }, [open]);
 
   // Reliable theme detection helper: prefer next-themes' resolvedTheme,
-  // fall back to checking html.dark class (in case class strategy is used).
+  // fall back to checking html.dark class or data-theme attribute.
   function getCurrentTheme(): "dark" | "light" {
     if (resolvedTheme === "dark" || resolvedTheme === "light") {
       return resolvedTheme;
     }
     if (typeof document !== "undefined") {
-      return document.documentElement.classList.contains("dark")
-        ? "dark"
-        : "light";
+      const html = document.documentElement;
+      // attribute-based strategies
+      if (html.hasAttribute("data-theme")) {
+        const t = html.getAttribute("data-theme");
+        if (t === "dark" || t === "light") return t;
+      }
+      // class-based strategy
+      if (html.classList.contains("dark")) return "dark";
+      if (document.body.classList.contains("dark")) return "dark";
+      // default to light
+      return "light";
     }
     return "light";
+  }
+
+  // Immediate, best-effort DOM update to reflect theme while next-themes
+  // synchronizes. This helps the UI feel instantaneous and avoids cases
+  // where setTheme doesn't update class/attribute the same tick.
+  function applyDomTheme(next: "dark" | "light") {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    const body = document.body;
+
+    // class-based
+    if (next === "dark") {
+      html.classList.add("dark");
+      body.classList.add("dark");
+    } else {
+      html.classList.remove("dark");
+      body.classList.remove("dark");
+    }
+
+    // data-theme attribute (some setups use this)
+    html.setAttribute("data-theme", next);
   }
 
   // Compute isDark from the reliable getter. Use mounted guard to avoid SSR mismatch.
   const isDark = mounted ? getCurrentTheme() === "dark" : false;
 
   // Toggle theme reading the current theme at click time (avoids stale closures).
+  // Also apply an immediate DOM fallback so visual state updates instantly.
   function toggleTheme() {
     const current = getCurrentTheme();
-    setTheme(current === "dark" ? "light" : "dark");
+    const next = current === "dark" ? "light" : "dark";
+    // Update next-themes
+    setTheme(next);
+    // Immediate fallback to update DOM so UI responds instantly
+    applyDomTheme(next);
+  }
+
+  // Explicitly set theme (used by individual pill click handlers).
+  function setExplicitTheme(next: "dark" | "light", e?: React.MouseEvent) {
+    if (e) {
+      // prevent the parent button from toggling
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setTheme(next);
+    applyDomTheme(next);
   }
 
   function nav(href: string, e?: React.MouseEvent) {
@@ -173,21 +228,25 @@ export default function ProfileMenu() {
           </div>
 
           {/* Premium toggle pill */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label="Toggle dark mode"
-            aria-pressed={isDark}
+          <div
+            role="group"
+            aria-label="Appearance toggle"
             className={[
               "inline-flex items-center rounded-full border px-1 py-0.5 text-[11px] font-medium shadow-sm transition-colors",
               isDark
                 ? "border-slate-700 bg-slate-900 text-slate-100"
                 : "border-slate-200 bg-white text-slate-700",
             ].join(" ")}
+            // clicking the outer group toggles theme for convenience
+            onClick={toggleTheme}
           >
+            {/* Light pill: explicit setter (stopPropagation so parent doesn't just toggle) */}
             <span
+              onClick={(e) => setExplicitTheme("light", e)}
+              role="button"
+              aria-pressed={!isDark}
               className={[
-                "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                "inline-flex cursor-pointer select-none items-center gap-1 rounded-full px-2 py-1 transition-colors",
                 !isDark
                   ? "bg-slate-900 text-slate-50"
                   : "text-slate-500 dark:text-slate-300",
@@ -196,9 +255,14 @@ export default function ProfileMenu() {
               <span className="text-xs">☀️</span>
               <span>Light</span>
             </span>
+
+            {/* Dark pill: explicit setter */}
             <span
+              onClick={(e) => setExplicitTheme("dark", e)}
+              role="button"
+              aria-pressed={isDark}
               className={[
-                "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors",
+                "inline-flex cursor-pointer select-none items-center gap-1 rounded-full px-2 py-1 transition-colors",
                 isDark
                   ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900"
                   : "text-slate-500",
@@ -207,7 +271,7 @@ export default function ProfileMenu() {
               <span className="text-xs">🌙</span>
               <span>Dark</span>
             </span>
-          </button>
+          </div>
         </div>
 
         <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
