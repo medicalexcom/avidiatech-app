@@ -23,126 +23,118 @@ export default function ImportPage() {
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
-        {/* Header / hero row */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-sky-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(56,189,248,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-sky-500/45 dark:bg-gradient-to-br dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(56,189,248,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + copy */}
-              <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
-                  Commerce &amp; Automation · AvidiaImport
-                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-                  <span className="text-sky-600 dark:text-sky-200">
-                    Export &amp; connector engine
+        {/* Compact Cluster-style header (no hero frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: title + copy */}
+          <div className="space-y-4 max-w-2xl flex-1 min-w-[260px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
+              Commerce &amp; Automation · AvidiaImport
+              <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+              <span className="text-sky-600 dark:text-sky-200">
+                Export &amp; connector engine
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                Turn your unified Avidia JSON into{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 dark:from-sky-300 dark:via-cyan-300 dark:to-emerald-300">
+                  platform-perfect import files
+                </span>
+                .
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract,
+                Describe, SEO, Specs, and Variants have done their work, Import reshapes that
+                single product model into Shopify, BigCommerce, WooCommerce, and feed-ready
+                payloads&mdash;without touching Excel.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/60 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                <span>Export profiles tuned per platform schema.</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/55 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span>One normalized source model, many downstream destinations.</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/55 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Designed for future direct API pushes, not just CSVs.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: module status + export preview skeleton */}
+          <div className="w-full max-w-xs lg:max-w-sm space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
+                    <span className="text-sm font-semibold text-sky-700 dark:text-sky-200">
+                      Export profiles in design · Connectors planned
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+                  Export engine
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                AvidiaImport will be your final hop from AvidiaTech&apos;s unified model into
+                stores, feeds, and marketplaces.
+              </p>
+            </div>
+
+            {/* Static export-profile skeleton */}
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
+                Export profile preview
+              </p>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      Shopify · Full products
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-500">
+                      CSV · Title, variants, SEO, images
+                    </span>
+                  </div>
+                  <span className="rounded-full border border-sky-400/60 bg-sky-100/80 px-2 py-0.5 text-[10px] text-sky-700 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
+                    Profile
                   </span>
                 </div>
-
-                <div className="space-y-2">
-                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                    Turn your unified Avidia JSON into{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 dark:from-sky-300 dark:via-cyan-300 dark:to-emerald-300">
-                      platform-perfect import files
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      BigCommerce · MedicalEx
                     </span>
-                    .
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract,
-                    Describe, SEO, Specs, and Variants have done their work, Import reshapes that
-                    single product model into Shopify, BigCommerce, WooCommerce, and feed-ready
-                    payloads&mdash;without touching Excel.
-                  </p>
+                    <span className="text-slate-500 dark:text-slate-500">
+                      JSON · Variants + custom fields
+                    </span>
+                  </div>
+                  <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    Draft
+                  </span>
                 </div>
-
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/60 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span>Export profiles tuned per platform schema.</span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/55 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                    <span>
-                      One normalized source model, many downstream destinations.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/55 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>
-                      Designed for future direct API pushes, not just CSVs.
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+                  <span className="text-slate-500 dark:text-slate-500">
+                    + Add WooCommerce or custom feed profile
+                  </span>
                 </div>
               </div>
-
-              {/* Right: module status + export preview skeleton */}
-              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
-                        <span className="text-sm font-semibold text-sky-700 dark:text-sky-200">
-                          Export profiles in design · Connectors planned
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                      Export engine
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    AvidiaImport will be your final hop from AvidiaTech&apos;s unified model into
-                    stores, feeds, and marketplaces.
-                  </p>
-                </div>
-
-                {/* Static export-profile skeleton */}
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
-                    Export profile preview
-                  </p>
-                  <div className="space-y-2 text-[11px]">
-                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-800 dark:text-slate-100">
-                          Shopify · Full products
-                        </span>
-                        <span className="text-slate-500 dark:text-slate-500">
-                          CSV · Title, variants, SEO, images
-                        </span>
-                      </div>
-                      <span className="rounded-full border border-sky-400/60 bg-sky-100/80 px-2 py-0.5 text-[10px] text-sky-700 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
-                        Profile
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-slate-800 dark:text-slate-100">
-                          BigCommerce · MedicalEx
-                        </span>
-                        <span className="text-slate-500 dark:text-slate-500">
-                          JSON · Variants + custom fields
-                        </span>
-                      </div>
-                      <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                        Draft
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-                      <span className="text-slate-500 dark:text-slate-500">
-                        + Add WooCommerce or custom feed profile
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                    Planned: choose a profile, preview mapped fields, then download or push via
-                    API.
-                  </p>
-                </div>
-              </div>
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                Planned: choose a profile, preview mapped fields, then download or push via
+                API.
+              </p>
             </div>
           </div>
         </section>
