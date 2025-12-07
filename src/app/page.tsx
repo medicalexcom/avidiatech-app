@@ -813,3 +813,4 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
       </div>
     </main>
   );
+}
