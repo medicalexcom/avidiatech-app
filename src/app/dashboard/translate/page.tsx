@@ -38,9 +38,8 @@ export default function TranslateListPage() {
   }, []);
 
   const totalProducts = products.length;
-  const totalLanguages = Array.from(
-    new Set(products.flatMap((p) => p.translated_languages || []))
-  ).length;
+  const totalLanguages =
+    new Set(products.flatMap((p) => p.translated_languages || [])).size || 0;
 
   const formatDate = (value?: string) => {
     if (!value) return "";
@@ -59,7 +58,7 @@ export default function TranslateListPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Ambient background / grid */}
+      {/* Ambient background / grid (kept) */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 -left-24 h-64 w-64 rounded-full bg-sky-400/20 blur-3xl dark:bg-sky-500/25" />
         <div className="absolute -bottom-32 right-[-8rem] h-72 w-72 rounded-full bg-fuchsia-400/16 blur-3xl dark:bg-fuchsia-500/20" />
@@ -69,22 +68,23 @@ export default function TranslateListPage() {
         </div>
       </div>
 
-      {/* Wrapper aligned with Describe/Cluster */}
-      <div className="relative mx-auto flex max-w-7xl flex-col gap-10 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HEADER / HERO */}
-        <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full bg-sky-50/90 px-4 py-1.5 text-xs font-semibold text-sky-900 ring-1 ring-sky-200 dark:bg-white/5 dark:text-sky-100 dark:ring-white/10">
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] uppercase tracking-wide text-sky-700 dark:bg-sky-500/25 dark:text-sky-100">
-                Module
+      {/* Wrapper aligned with Cluster (more compact gap) */}
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+        {/* COMPACT HEADER */}
+        <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            {/* Module pill – Cluster-style */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-sky-700 shadow-sm dark:border-sky-500/60 dark:bg-slate-950/90 dark:text-sky-100">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-sky-400/80 bg-sky-50 dark:bg-slate-900">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
               </span>
-              <span>AvidiaTranslate · Multilingual product catalogs</span>
+              AvidiaTranslate • Multilingual catalogs
             </div>
 
-            <div className="space-y-3">
-              {/* Hero typography scaled down to match Cluster */}
-              <h1 className="text-xl font-semibold leading-tight sm:text-2xl lg:text-2xl text-slate-900 dark:text-slate-50">
-                Translate your entire catalog without breaking{" "}
+            {/* Title + subtitle (Cluster scale) */}
+            <div className="space-y-2">
+              <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl dark:text-slate-50">
+                Translate your catalog without breaking{" "}
                 <span className="bg-gradient-to-r from-sky-500 via-fuchsia-500 to-emerald-500 bg-clip-text text-transparent dark:from-sky-300 dark:via-fuchsia-300 dark:to-emerald-200">
                   structure, SEO, or compliance.
                 </span>
@@ -96,111 +96,87 @@ export default function TranslateListPage() {
               </p>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-4 text-xs">
+            {/* CTAs + brief helper text (compact row) */}
+            <div className="flex flex-wrap items-center gap-3 text-xs">
               <Link
                 href="/dashboard/translate/new"
-                className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-5 py-2.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
+                className="inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2 text-xs font-semibold text-slate-50 shadow-sm shadow-sky-500/30 transition hover:bg-sky-400"
               >
-                Create New Translation Job
+                Create translation job
               </Link>
               <Link
                 href="/dashboard/extract"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/70 px-5 py-2.5 text-xs font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white/80 px-4 py-2 text-xs font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
               >
-                Start from Extracted Products
+                Start from extracted products
               </Link>
               <p className="max-w-xs text-[11px] text-slate-500 dark:text-slate-400">
-                Plug in any supported language pair. AvidiaTech handles routing,
+                Plug in supported language pairs; AvidiaTech keeps routing,
                 consistency, and audit trails in the background.
               </p>
             </div>
           </div>
 
-          {/* Snapshot card */}
-          <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-md shadow-slate-200/40 backdrop-blur-sm dark:border-white/12 dark:bg-slate-950/80 dark:shadow-xl dark:shadow-sky-900/40">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Translation workspace · Snapshot
+          {/* Compact snapshot card (metrics) */}
+          <div className="mt-3 w-full max-w-sm rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-950/85">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Workspace snapshot
             </p>
-            <div className="mt-4 grid gap-3 text-sm">
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-white/5">
+            <div className="mt-3 grid gap-3 text-xs">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-900/70">
                 <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Products with translations
                   </p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">
                     {totalProducts}
                   </p>
                 </div>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   Live queue
                 </span>
               </div>
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 dark:bg-white/5">
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-900/70">
                 <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Languages covered
                   </p>
                   <p className="text-lg font-semibold text-slate-900 dark:text-slate-50">
                     {totalLanguages > 0 ? totalLanguages : "--"}
                   </p>
                 </div>
-                <span className="rounded-full bg-sky-500/10 px-3 py-1 text-xs text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2.5 py-1 text-[11px] font-medium text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
                   Multi-region
                 </span>
               </div>
-              <div className="rounded-xl bg-gradient-to-r from-sky-100 via-fuchsia-100 to-emerald-100 px-4 py-3 text-xs text-slate-800 dark:from-sky-500/15 dark:via-fuchsia-500/10 dark:to-emerald-500/10 dark:text-slate-100">
-                Keep canonical specs in one place while AvidiaTranslate maintains
-                language-specific titles and descriptions that map cleanly to each
+              <p className="rounded-xl bg-gradient-to-r from-sky-100 via-fuchsia-100 to-emerald-100 px-3 py-2 text-[11px] text-slate-800 dark:from-sky-500/15 dark:via-fuchsia-500/10 dark:to-emerald-500/10 dark:text-slate-100">
+                Keep canonical specs in one place while translations maintain
+                language-specific titles and descriptions mapped cleanly to each
                 SKU.
-              </div>
-
-              {/* Quick start language presets (UI stub, ready to wire later) */}
-              <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 text-xs dark:border-white/10 dark:bg-slate-950/60">
-                <p className="mb-2 font-semibold text-slate-800 dark:text-slate-100">
-                  Quick start
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-50 dark:bg-slate-50 dark:text-slate-900"
-                  >
-                    EN → ES (US / LATAM)
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-800 dark:bg-white/10 dark:text-slate-100"
-                  >
-                    EN → FR (CA / EU)
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-800 dark:bg-white/10 dark:text-slate-100"
-                  >
-                    EN → DE
-                  </button>
-                </div>
-              </div>
+              </p>
             </div>
           </div>
         </section>
 
-        {/* BODY: LEFT = LIST, RIGHT = EXPLANATION */}
+        {/* BODY: LEFT = LIST, RIGHT = EXPLANATION (layout preserved) */}
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr),minmax(320px,0.9fr)]">
           {/* LEFT: RECENT TRANSLATIONS */}
-          <div className="space-y-4 rounded-3xl border border-slate-200 bg-white/90 p-6 backdrop-blur-sm shadow-sm dark:border-white/10 dark:bg-slate-950/80">
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-950/80">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                   Recent translation jobs
                 </h2>
-                <p className="text-xs text-slate-500 sm:text-sm dark:text-slate-300">
+                <p className="text-xs text-slate-500 dark:text-slate-300">
                   Pick up where you left off, refine language pairs, or push
                   localized copy to your store.
                 </p>
               </div>
 
               <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                {/* Filter stub (non-functional for now, but ready) */}
+                {/* Filter stub (kept, compact) */}
                 <div className="hidden items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-600 dark:bg-slate-900/60 dark:text-slate-300 sm:flex">
                   <span className="mr-1 text-slate-500 dark:text-slate-400">
                     Filter:
@@ -259,13 +235,13 @@ export default function TranslateListPage() {
                     href="/dashboard/extract"
                     className="inline-flex items-center justify-center rounded-lg bg-sky-500 px-4 py-2 text-xs font-semibold text-slate-50 hover:bg-sky-400"
                   >
-                    View Extracted Products
+                    View extracted products
                   </Link>
                   <Link
                     href="/dashboard/translate/new"
                     className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white/80 px-4 py-2 text-xs font-semibold text-slate-900 hover:border-sky-300 hover:bg-sky-50 dark:border-white/20 dark:bg-transparent dark:text-slate-50 dark:hover:border-white/40 dark:hover:bg-white/5"
                   >
-                    Create Translation Job
+                    Create translation job
                   </Link>
                 </div>
               </div>
@@ -325,10 +301,10 @@ export default function TranslateListPage() {
             )}
           </div>
 
-          {/* RIGHT: PIPELINE EXPLANATION */}
+          {/* RIGHT: PIPELINE EXPLANATION (unchanged content, tighter frame) */}
           <div className="space-y-4 self-start lg:sticky lg:top-24">
-            <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 backdrop-blur-sm shadow-sm dark:border-white/10 dark:bg-white/5">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-white/5">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                 How AvidiaTranslate fits into the pipeline
               </h2>
               <div className="mt-4 space-y-3 text-sm text-slate-700 dark:text-slate-200">
@@ -365,21 +341,18 @@ export default function TranslateListPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 backdrop-blur-sm shadow-sm dark:border-white/10 dark:bg-slate-950/80">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-950/80">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                 What this module gives you
               </h3>
               <ul className="mt-3 grid gap-2 text-sm text-slate-700 dark:text-slate-200 sm:grid-cols-2">
                 <li>• Centralized control of languages per tenant and product.</li>
                 <li>• Translation jobs that stay in sync with Extract updates.</li>
                 <li>• Audit trail for who triggered which language updates.</li>
-                <li>
-                  • Consistent formatting and internal linking rules across
-                  locales.
-                </li>
+                <li>• Consistent formatting and internal linking rules across locales.</li>
               </ul>
 
-              <h4 className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              <h4 className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Typical language setup
               </h4>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-800 dark:text-slate-100">
