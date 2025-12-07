@@ -8,9 +8,12 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 export default function MatchPage() {
-  const featureEnabled =
-    process.env.NEXT_PUBLIC_FEATURE_MATCH === "true" ||
-    process.env.FEATURE_MATCH === "true";
+  // Temporarily force-enable AvidiaMatch.
+  // Flip this back to env-based gating when you’re ready:
+  // const featureEnabled =
+  //   process.env.NEXT_PUBLIC_FEATURE_MATCH === "true" ||
+  //   process.env.FEATURE_MATCH === "true";
+  const featureEnabled = true;
 
   if (!featureEnabled) {
     return (
