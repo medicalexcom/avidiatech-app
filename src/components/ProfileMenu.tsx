@@ -8,24 +8,47 @@ import { useTheme } from "next-themes";
 
 /**
  * ProfileMenu — premium account dropdown
- * - Uses next-themes for light/dark (same as the rest of the app).
- * - Light mode is default (handled by ThemeProvider).
- * - Menu items share consistent spacing & styles.
- * - Subtle glass/gradient feel to match dashboard premium look.
+ * - Uses next-themes + a local isDark mirror so the toggle never feels "stuck".
+ * - Light mode is default (handled by global ThemeProvider).
+ * - Still manually updates <html class="dark"> and localStorage as a fallback.
  */
 
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isDark, setIsDark] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // Avoid hydration issues with theme
+  // Mount flag to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Sync local isDark with theme, localStorage, and <html> class
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      const saved = typeof window !== "undefined"
+        ? window.localStorage.getItem("theme")
+        : null;
+      const rootHasDark =
+        typeof document !== "undefined" &&
+        document.documentElement.classList.contains("dark");
+
+      const ctxTheme = (resolvedTheme ?? theme) as string | undefined;
+
+      const effectiveDark =
+        saved === "dark" || ctxTheme === "dark" || rootHasDark;
+
+      setIsDark(!!effectiveDark);
+    } catch {
+      // if anything goes wrong, just rely on context
+      setIsDark((resolvedTheme ?? theme) === "dark");
+    }
+  }, [mounted, theme, resolvedTheme]);
 
   // Close on outside click / ESC
   useEffect(() => {
@@ -51,11 +74,29 @@ export default function ProfileMenu() {
     };
   }, [open]);
 
-  const isDark = mounted ? theme === "dark" : false;
-
   function toggleTheme() {
     if (!mounted) return;
-    setTheme(isDark ? "light" : "dark");
+    setIsDark((prev) => {
+      const next = !prev;
+      const mode = next ? "dark" : "light";
+
+      // Update next-themes (preferred)
+      try {
+        setTheme(mode);
+      } catch {
+        // ignore if ThemeProvider not fully wired
+      }
+
+      // Fallback: directly control <html> class + localStorage
+      try {
+        document.documentElement.classList.toggle("dark", next);
+        window.localStorage.setItem("theme", mode);
+      } catch {
+        /* ignore */
+      }
+
+      return next;
+    });
   }
 
   function nav(href: string, e?: React.MouseEvent) {
@@ -88,7 +129,6 @@ export default function ProfileMenu() {
   const role = (user as any)?.publicMetadata?.role ?? "member";
   const orgName = (user as any)?.publicMetadata?.orgName ?? "";
 
-  // Single menu item render to ensure consistent spacing
   const Item = ({
     href,
     children,
@@ -112,10 +152,10 @@ export default function ProfileMenu() {
       role="menu"
       aria-orientation="vertical"
     >
-      {/* Subtle top accent bar */}
+      {/* Accent bar */}
       <div className="h-1 w-full bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-emerald-400" />
 
-      {/* Header: user info */}
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80">
         <div className="relative">
           <img
@@ -150,7 +190,7 @@ export default function ProfileMenu() {
         </div>
       </div>
 
-      {/* Navigation items */}
+      {/* Links */}
       <nav className="py-2 px-2">
         <Item href="/settings/profile">Account settings</Item>
 
@@ -171,11 +211,10 @@ export default function ProfileMenu() {
               Appearance
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              Choose light or dark theme
+              Light / dark theme
             </div>
           </div>
 
-          {/* Theme toggle */}
           {mounted && (
             <button
               type="button"
@@ -195,10 +234,8 @@ export default function ProfileMenu() {
                 ].join(" ")}
               >
                 {isDark ? (
-                  // Moon glyph
                   <span className="block h-3 w-3 rounded-full bg-slate-100 shadow-[0_0_0_1px_rgba(148,163,184,0.8)]" />
                 ) : (
-                  // Sun glyph
                   <span className="block h-3 w-3 rounded-full bg-amber-400 shadow-[0_0_0_1px_rgba(251,191,36,0.9)]" />
                 )}
               </span>
