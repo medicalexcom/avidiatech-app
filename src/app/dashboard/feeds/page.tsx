@@ -22,129 +22,125 @@ export default function FeedsPage() {
       </div>
 
       <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
-        {/* HEADER / HERO */}
-        <section className="mb-2">
-          <div className="relative overflow-hidden rounded-3xl border border-emerald-300/70 bg-gradient-to-br from-slate-50 via-white to-slate-50 shadow-[0_0_70px_rgba(16,185,129,0.28)] px-4 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-7 dark:border-emerald-500/45 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:shadow-[0_0_80px_rgba(16,185,129,0.45)]">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              {/* Left: title + description */}
-              <div className="space-y-3 max-w-2xl">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
-                  Commerce &amp; Automation · AvidiaFeeds
-                  <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-                  <span className="text-emerald-600 dark:text-emerald-200">
-                    Feeds pipeline
+        {/* HEADER – compact Cluster-style (no hero frame) */}
+        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          {/* Left: title + description */}
+          <div className="space-y-3 max-w-2xl flex-1 min-w-[260px]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]" />
+              Commerce &amp; Automation · AvidiaFeeds
+              <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
+              <span className="text-emerald-600 dark:text-emerald-200">
+                Feeds pipeline
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                One{" "}
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-400 dark:from-emerald-300 dark:via-sky-200 dark:to-emerald-200">
+                  clean feed
+                </span>{" "}
+                for every channel you care about.
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                AvidiaFeeds consolidates and normalizes supplier, distributor, and
+                marketplace feeds into a single, trusted view. From there, you can push
+                channel-ready feeds to Shopify, BigCommerce, marketplaces, and custom
+                destinations without reinventing mappings each time.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-[11px]">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/60 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>
+                  Normalize multiple supplier feeds into one canonical catalog.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/55 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                <span>
+                  Fill gaps with AvidiaExtract and AvidiaSEO when fields are missing.
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-slate-200 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-slate-700/70 dark:text-slate-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                <span>
+                  Output channel-specific feeds without duplicating work.
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: module status + feed snapshot */}
+          <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Module status
+                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
+                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
+                      Feed model in design · Connectors planned
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+                  Multi-source feeds
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                AvidiaFeeds will live alongside Import / Export so you can go from
+                supplier feeds to channel-ready output without custom glue scripts.
+              </p>
+            </div>
+
+            {/* Static feed health snapshot */}
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
+              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
+                Sample feed consolidation
+              </p>
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    Sources
+                  </span>
+                  <span className="text-slate-800 font-medium dark:text-slate-200">
+                    3 suppliers
                   </span>
                 </div>
-
-                <div className="space-y-2">
-                  <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                    One{" "}
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 via-sky-500 to-emerald-400 dark:from-emerald-300 dark:via-sky-200 dark:to-emerald-200">
-                      clean feed
-                    </span>{" "}
-                    for every channel you care about.
-                  </h1>
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    AvidiaFeeds consolidates and normalizes supplier, distributor, and
-                    marketplace feeds into a single, trusted view. From there, you can push
-                    channel-ready feeds to Shopify, BigCommerce, marketplaces, and custom
-                    destinations without reinventing mappings each time.
-                  </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    Raw rows
+                  </span>
+                  <span className="text-slate-800 font-medium dark:text-slate-200">
+                    14,820
+                  </span>
                 </div>
-
-                <div className="flex flex-wrap gap-3 text-[11px]">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/60 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    <span>
-                      Normalize multiple supplier feeds into one canonical catalog.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/55 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                    <span>
-                      Fill gaps with AvidiaExtract and AvidiaSEO when fields are missing.
-                    </span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-slate-200 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-slate-700/70 dark:text-slate-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    <span>
-                      Output channel-specific feeds without duplicating work.
-                    </span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    Normalized SKUs
+                  </span>
+                  <span className="text-emerald-600 font-medium dark:text-emerald-300">
+                    12,430
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 dark:border-slate-800">
+                  <span className="text-slate-600 dark:text-slate-300">
+                    Ready for export
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-400/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                    11,972 rows
+                  </span>
                 </div>
               </div>
-
-              {/* Right: module status + feed snapshot */}
-              <div className="w-full max-w-xs lg:max-w-sm mt-1 lg:mt-0 space-y-3">
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                        Module status
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
-                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-200">
-                          Feed model in design · Connectors planned
-                        </span>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                      Multi-source feeds
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                    AvidiaFeeds will live alongside Import / Export so you can go from
-                    supplier feeds to channel-ready output without custom glue scripts.
-                  </p>
-                </div>
-
-                {/* Static feed health snapshot */}
-                <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
-                    Sample feed consolidation
-                  </p>
-                  <div className="space-y-1.5 text-[11px]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-300">
-                        Sources
-                      </span>
-                      <span className="text-slate-800 font-medium dark:text-slate-200">
-                        3 suppliers
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-300">
-                        Raw rows
-                      </span>
-                      <span className="text-slate-800 font-medium dark:text-slate-200">
-                        14,820
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-300">
-                        Normalized SKUs
-                      </span>
-                      <span className="text-emerald-600 font-medium dark:text-emerald-300">
-                        12,430
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 dark:border-slate-800">
-                      <span className="text-slate-600 dark:text-slate-300">
-                        Ready for export
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-400/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                        11,972 rows
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                    UI will surface feed health: coverage, deduped SKUs, missing fields
-                    resolved from AvidiaExtract / SEO.
-                  </p>
-                </div>
-              </div>
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
+                UI will surface feed health: coverage, deduped SKUs, missing fields
+                resolved from AvidiaExtract / SEO.
+              </p>
             </div>
           </div>
         </section>
