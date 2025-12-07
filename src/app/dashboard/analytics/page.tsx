@@ -54,9 +54,7 @@ export default function AnalyticsPage() {
         {/* TOP SUMMARY STRIP */}
         <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/85">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Monthly ingests
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Monthly ingests</p>
             <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-50">
               —
             </p>
