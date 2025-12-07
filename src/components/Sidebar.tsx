@@ -53,7 +53,6 @@ const sections = [
 function getAccentClasses(name: string) {
   const key = name.toLowerCase();
 
-  // Core modules with known palettes
   if (key === "extract") {
     return {
       dot: "bg-cyan-400",
@@ -169,13 +168,13 @@ export default function Sidebar() {
       className="flex h-screen w-60 flex-col border-r border-slate-800/80 bg-slate-950/98 px-3 py-4 text-slate-100 md:w-56"
     >
       {/* Brand / context */}
-      <div className="mb-4 px-2">
+      <div className="mb-3 px-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col">
-            <span className="text-[11px] font-semibold tracking-[0.14em] text-slate-500">
+            <span className="text-[10px] font-semibold tracking-[0.14em] text-slate-500">
               AvidiaTech
             </span>
-            <span className="text-[13px] font-semibold text-slate-50">
+            <span className="text-[12px] font-semibold text-slate-50">
               Product Data OS
             </span>
           </div>
@@ -188,42 +187,43 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Scrollable menu region with custom-ish vertical scroll */}
+      {/* Scrollable menu region with vertical scrollbar */}
       <div
-        className="
-          flex-1 space-y-4 overflow-y-auto pr-1
+        className={`
+          flex-1 overflow-y-auto pr-1
+          space-y-3
           scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/40
-        "
+        `}
       >
         {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && (
-              <div className="my-3 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
+              <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
             )}
 
-            {/* Section heading row: title + tiny chip */}
-            <div className="mb-1.5 flex items-center justify-between px-2">
-              <h2 className="text-[11px] font-semibold text-slate-400 capitalize">
+            {/* Section heading row: small, single-line, truncated if needed */}
+            <div className="mb-1 flex items-center justify-between px-2">
+              <h2 className="max-w-[60%] truncate text-[10px] font-medium text-slate-400">
                 {section.title}
               </h2>
               {section.tag && (
-                <span className="rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] text-slate-500 ring-1 ring-slate-800">
+                <span className="rounded-full bg-slate-900/80 px-2 py-0.5 text-[9px] text-slate-500 ring-1 ring-slate-800">
                   {section.tag}
                 </span>
               )}
             </div>
 
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {section.items.map((item) => {
                 const active = pathname === item.href;
                 const accent = getAccentClasses(item.name);
 
                 return (
                   <li key={item.href} className="relative">
-                    {/* Vertical active rail – no layout jump */}
+                    {/* Vertical active rail – purely visual, no layout jump */}
                     <span
                       className={[
-                        "pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 h-7 w-[3px] rounded-full transition-opacity duration-150",
+                        "pointer-events-none absolute left-1 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full transition-opacity duration-150",
                         active
                           ? `${accent.dot} opacity-100`
                           : "bg-slate-700 opacity-0",
@@ -233,7 +233,7 @@ export default function Sidebar() {
                     <Link
                       href={item.href}
                       className={[
-                        "group relative ml-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium",
+                        "group relative ml-2 flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-[12px] font-medium",
                         "transition-colors duration-150 ease-out",
                         active
                           ? [
@@ -245,7 +245,7 @@ export default function Sidebar() {
                           : "border-slate-800/70 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-900/70",
                       ].join(" ")}
                     >
-                      {/* Accent dot / icon placeholder */}
+                      {/* Accent dot */}
                       <span
                         className={[
                           "h-1.5 w-1.5 rounded-full transition-colors duration-150",
@@ -265,8 +265,8 @@ export default function Sidebar() {
                         {item.name}
                       </span>
 
-                      {/* Tiny tag to hint category on hover */}
-                      <span className="text-[10px] text-slate-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                      {/* Tiny tag on hover */}
+                      <span className="text-[9px] text-slate-500 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                         {sectionIndex === 0
                           ? "AI"
                           : sectionIndex === 1
@@ -284,11 +284,35 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Bottom meta */}
-      <div className="mt-4 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
-        <div className="flex items-center justify-between">
+      {/* Bottom meta: version + support / chat / status */}
+      <div className="mt-3 border-t border-slate-800/80 px-2 pt-3 text-[10px] text-slate-500">
+        <div className="mb-2 flex items-center justify-between">
           <span>AvidiaTech • Dashboard</span>
           <span className="text-slate-600">v0.1</span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/80 px-2 py-1 text-left text-[10px] text-slate-300 hover:bg-slate-800/90"
+          >
+            <span>💬</span>
+            <span>Open support chat</span>
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-900"
+          >
+            <span>📚</span>
+            <span>Documentation &amp; guides</span>
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-900/60 px-2 py-1 text-left text-[10px] text-slate-400 hover:bg-slate-900"
+          >
+            <span>🟢</span>
+            <span>System status: all good</span>
+          </button>
         </div>
       </div>
     </aside>
