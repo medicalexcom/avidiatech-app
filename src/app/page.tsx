@@ -113,6 +113,8 @@ export default function Home() {
   const [demoRunsLeft, setDemoRunsLeft] = useState(1);
   const [demoError, setDemoError] = useState<string | null>(null);
 
+  const [showStickyCta, setShowStickyCta] = useState(false);
+
   const handleDemoRun = () => {
     if (!demoUrl.trim()) {
       setDemoError("Add a manufacturer URL to preview a sample pipeline output.");
@@ -139,11 +141,58 @@ export default function Home() {
     }, 700);
   };
 
+  // Sticky CTA after scroll (conversion flow improvement)
+  useEffect(() => {
+    const onScroll = () => {
+      if (typeof window === "undefined") return;
+      setShowStickyCta(window.scrollY > 220);
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("scroll", onScroll);
+      onScroll();
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("scroll", onScroll);
+      }
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-6">
+      {/* Sticky CTA bar (appears after scrolling past hero) */}
+      {showStickyCta && (
+        <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200 bg-slate-50/85 px-4 py-2 text-xs backdrop-blur sm:px-6 lg:px-10 dark:border-slate-800 dark:bg-slate-950/85">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <span className="hidden text-[11px] text-slate-600 sm:inline dark:text-slate-300">
+              Ready to see AvidiaTech on your own catalog?
+            </span>
+            <span className="inline text-[11px] text-slate-600 sm:hidden dark:text-slate-300">
+              Try AvidiaTech on your catalog.
+            </span>
+            <div className="flex items-center gap-2">
+              <a
+                href="#hero-url"
+                className="hidden text-[11px] text-cyan-700 underline-offset-2 hover:underline dark:text-cyan-300 sm:inline"
+              >
+                Paste a vendor URL
+              </a>
+              <a
+                href="/sign-up"
+                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-400"
+              >
+                Create free workspace
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-h-screen flex-col">
         {/* HEADER */}
-        <header className="mb-8 flex items-center justify-between">
+        <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6 lg:px-10">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-cyan-500 via-emerald-400 to-amber-400 shadow-sm shadow-cyan-500/40" />
             <div className="flex flex-col leading-tight">
@@ -191,191 +240,222 @@ export default function Home() {
         </header>
 
         {/* BODY CONTENT */}
-        <div className="flex flex-1 flex-col gap-16 pb-12 lg:pb-16">
-          {/* HERO (with central URL input + pipeline preview, stretched) */}
-          <section className="grid gap-10 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:items-stretch">
-            {/* Left side: copy + URL input + CTAs + stats */}
-            <div className="space-y-8">
-              <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
-                  New
-                </span>
-                <span>AvidiaTech · Product data automation for serious catalogs</span>
-              </div>
-
-              <div className="space-y-4">
-                <h1 className="text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
-                  Turn messy manufacturer URLs into
-                  <span className="bg-gradient-to-r from-cyan-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
-                    {" "}
-                    revenue-ready product pages.
+        <div className="flex-1 space-y-16 pb-14 lg:space-y-20 lg:pb-20">
+          {/* HERO BAND (full-width background, inner content constrained) */}
+          <section className="border-y border-slate-200/60 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 py-8 dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+            <div className="mx-auto grid max-w-7xl items-stretch gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:px-10">
+              {/* Left side: copy + URL input + CTAs + stats + outcomes */}
+              <div className="space-y-7">
+                <div className="inline-flex flex-wrap items-center gap-2 rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800">
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200">
+                    New
                   </span>
-                </h1>
-                <p className="max-w-xl text-base sm:text-lg text-slate-600 dark:text-slate-200">
-                  AvidiaTech ingests, enriches, and monitors your entire catalog—so you
-                  can launch new products, regions, and channels without rewriting the
-                  same description three times.
-                </p>
-              </div>
-
-              {/* CENTRAL URL INPUT – main action */}
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Step 1 · Paste a manufacturer URL to see a sample pipeline output
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
-                    <input
-                      className="w-full border-none bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
-                      value={demoUrl}
-                      onChange={(e) => setDemoUrl(e.target.value)}
-                      placeholder="https://vendor.com/products/your-sku"
-                    />
-                  </div>
-                  <button
-                    onClick={handleDemoRun}
-                    disabled={demoStatus === "running"}
-                    className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {demoStatus === "running"
-                      ? "Generating sample…"
-                      : "Try pipeline sample"}
-                  </button>
+                  <span>AvidiaTech · Product data automation for serious catalogs</span>
                 </div>
-                {demoError && (
-                  <p className="text-[11px] text-rose-600 dark:text-rose-300">
-                    {demoError}
+
+                <div className="space-y-3">
+                  <h1 className="text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
+                    Turn messy manufacturer URLs into
+                    <span className="bg-gradient-to-r from-cyan-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
+                      {" "}
+                      revenue-ready product pages.
+                    </span>
+                  </h1>
+                  <p className="max-w-xl text-base sm:text-lg text-slate-600 dark:text-slate-200">
+                    AvidiaTech ingests, enriches, and monitors your entire catalog—so
+                    you can launch new products, regions, and channels without
+                    rewriting the same description three times.
                   </p>
-                )}
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  This runs a lightweight simulation of Extract → Describe on a single
-                  URL. In your workspace, AvidiaDescribe can also start from short
-                  internal notes instead of a URL. Sample runs remaining:{" "}
-                  <span className="font-semibold">{demoRunsLeft} / 1</span>.
-                </p>
-              </div>
-
-              {/* Primary CTAs */}
-              <div className="flex flex-wrap items-center gap-4">
-                <a
-                  href="/sign-up"
-                  className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:brightness-110"
-                >
-                  Get Started – free trial
-                </a>
-
-                <a
-                  href="/sign-in?redirect_url=/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-800 backdrop-blur transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900"
-                >
-                  Open Dashboard
-                </a>
-
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                  No credit card required to explore modules. Upgrade only when you’re
-                  ready to ship.
-                </p>
-              </div>
-
-              {/* Social proof / quick stats */}
-              <div className="grid gap-4 sm:grid-cols-3">
-                {stats.map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                      {stat.label}
-                    </p>
-                    <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-50">
-                      {stat.value}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      {stat.hint}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right side: pipeline preview fills height */}
-            <div className="relative flex h-full" id="pipeline-preview">
-              <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
-              <div className="relative z-10 flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
-                {/* Top bar */}
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <span>Pipeline sample · URL → Describe</span>
-                  </div>
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
-                    Guardrails active
-                  </span>
                 </div>
 
-                {/* Main content fills space */}
-                <div className="mt-4 flex flex-1 flex-col gap-4">
-                  {/* Flow strip */}
-                  <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      Pipeline snapshot
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-medium text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-100">
-                        AvidiaExtract · URL ingests
-                      </span>
-                      <span className="text-slate-400">→</span>
-                      <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
-                        AvidiaDescribe · AI copy
-                      </span>
-                      <span className="text-slate-400">→</span>
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
-                        AvidiaSEO · pages & feeds
-                      </span>
+                {/* CENTRAL URL INPUT – main action */}
+                <div className="space-y-2" id="hero-url">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Step 1 · Paste a manufacturer URL to see a sample pipeline output
+                  </p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-950">
+                      <input
+                        className="w-full border-none bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                        value={demoUrl}
+                        onChange={(e) => setDemoUrl(e.target.value)}
+                        placeholder="https://vendor.com/products/your-sku"
+                      />
                     </div>
+                    <button
+                      onClick={handleDemoRun}
+                      disabled={demoStatus === "running"}
+                      className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {demoStatus === "running"
+                        ? "Generating sample…"
+                        : "Try pipeline sample"}
+                    </button>
+                  </div>
+                  {demoError && (
+                    <p className="text-[11px] text-rose-600 dark:text-rose-300">
+                      {demoError}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    We’ll simulate Extract → Describe on this URL. In your workspace,
+                    AvidiaDescribe can also start from short internal notes instead of
+                    a URL. Sample runs remaining:{" "}
+                    <span className="font-semibold">{demoRunsLeft} / 1</span>.
+                  </p>
+                </div>
+
+                {/* Primary CTAs */}
+                <div className="flex flex-wrap items-center gap-4">
+                  <a
+                    href="/sign-up"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:brightness-110"
+                  >
+                    Get Started – free trial
+                  </a>
+
+                  <a
+                    href="/sign-in?redirect_url=/dashboard"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-800 backdrop-blur transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900"
+                  >
+                    Open Dashboard
+                  </a>
+
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                    No credit card required to explore modules. Upgrade only when
+                    you’re ready to ship.
+                  </p>
+                </div>
+
+                {/* Social proof / quick stats */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {stats.map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {stat.label}
+                      </p>
+                      <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-50">
+                        {stat.value}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {stat.hint}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Outcome strip (trust + premium feel) */}
+                <div className="mt-2 grid gap-3 text-xs sm:grid-cols-3">
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-slate-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-50">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">
+                      Outcomes
+                    </p>
+                    <p className="mt-1">
+                      Cut time-to-listing from days to hours for new vendor catalogs.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      Catalog control
+                    </p>
+                    <p className="mt-1">
+                      Keep naming, SEO and warnings consistent across thousands of SKUs.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                      For serious teams
+                    </p>
+                    <p className="mt-1">
+                      Best when you manage large catalogs or multiple channels—not a fit
+                      for 5-SKU side projects.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right side: pipeline preview fills height */}
+              <div className="relative flex h-full" id="pipeline-preview">
+                <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
+                <div className="relative z-10 flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
+                  {/* Top bar */}
+                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <span>Pipeline sample · URL → Describe</span>
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+                      Guardrails active
+                    </span>
                   </div>
 
-                  {/* Output card takes remaining space */}
-                  <div className="flex flex-1 flex-col rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                      Step 2 · Sample description (Describe step)
-                    </p>
-                    <div className="mt-2 flex-1 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
-                      <pre className="h-full max-h-60 overflow-auto whitespace-pre-wrap p-3 text-[11px] leading-relaxed">
-                        {demoOutput ??
-                          `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
+                  {/* Main content fills space */}
+                  <div className="mt-4 flex flex-1 flex-col gap-4">
+                    {/* Flow strip */}
+                    <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Pipeline snapshot
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-cyan-50 px-3 py-1 text-[11px] font-medium text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-100">
+                          AvidiaExtract · URL ingests
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-[11px] font-medium text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">
+                          AvidiaDescribe · AI copy
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
+                          AvidiaSEO · pages &amp; feeds
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Output card takes remaining space */}
+                    <div className="flex flex-1 flex-col rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                        Step 2 · Sample description (Describe step)
+                      </p>
+                      <div className="mt-2 flex-1 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                        <pre className="h-full max-h-60 overflow-auto whitespace-pre-wrap p-3 text-[11px] leading-relaxed">
+                          {demoOutput ??
+                            `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
                         
 We’ll simulate the Describe step in your pipeline: a compliant, search-aware paragraph built from your ingestion rules. In the real workspace, this feeds AvidiaSEO, which builds the full product page and SEO JSON.`}
-                      </pre>
+                        </pre>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Metrics + helper pinned at bottom */}
-                  <div className="mt-auto space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span>Ingest</span>
-                        <span className="text-emerald-600 dark:text-emerald-300">
-                          ✓ Wired to your engine
-                        </span>
+                    {/* Metrics + helper pinned at bottom */}
+                    <div className="mt-auto space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span>Ingest</span>
+                          <span className="text-emerald-600 dark:text-emerald-300">
+                            ✓ Wired to your engine
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>AI description</span>
+                          <span className="text-emerald-600 dark:text-emerald-300">
+                            ✓ Custom GPT instructions
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>SEO checks</span>
+                          <span className="text-amber-600 dark:text-amber-300">
+                            • Enforced in workspace
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span>AI description</span>
-                        <span className="text-emerald-600 dark:text-emerald-300">
-                          ✓ Custom GPT instructions
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>SEO checks</span>
-                        <span className="text-amber-600 dark:text-amber-300">
-                          • Enforced in workspace
-                        </span>
-                      </div>
+                      <p>
+                        Like what you see? Create a free workspace to unlock full
+                        modules, saved ingestions, and end-to-end SEO flows.
+                      </p>
                     </div>
-                    <p>
-                      Like what you see? Create a free workspace to unlock full modules,
-                      saved ingestions, and end-to-end SEO flows.
-                    </p>
                   </div>
                 </div>
               </div>
@@ -383,8 +463,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
           </section>
 
           {/* MODULES – show capabilities early */}
-          <section className="space-y-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <section className="mx-auto max-w-6xl space-y-6 px-4 pt-6 sm:px-6 lg:px-10">
+            <div className="space-y-3 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:space-y-0">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
                   Start with one module or run the full stack.
@@ -404,7 +484,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
               {modules.map((mod) => (
                 <div
                   key={mod.name}
-                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-900"
+                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-950"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -428,7 +508,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
           </section>
 
           {/* NEW SECTION: Describe + SEO, and notes-based input */}
-          <section className="grid gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm lg:grid-cols-[1.05fr,0.95fr] dark:border-slate-800 dark:bg-slate-950">
+          <section className="mx-auto grid max-w-6xl gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm px-4 sm:px-6 lg:grid-cols-[1.05fr,0.95fr] lg:px-10 dark:border-slate-800 dark:bg-slate-950">
             {/* Left: Describe focus */}
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
@@ -469,9 +549,9 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
                     <p className="text-[11px] leading-relaxed">
                       The ACME Infusion Pump 9000 is a four-channel, hospital-grade IV
-                      pump designed to help standardize medication workflows. A
-                      color touch-screen interface, dose-error reduction software,
-                      and configurable smart alarms support consistent setup across
+                      pump designed to help standardize medication workflows. A color
+                      touch-screen interface, dose-error reduction software, and
+                      configurable smart alarms support consistent setup across
                       bedsides while reducing manual double-entry.
                     </p>
                   </div>
@@ -545,7 +625,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
           </section>
 
           {/* PILLARS + WHO IT'S FOR */}
-          <section className="grid gap-8">
+          <section className="mx-auto max-w-6xl space-y-8 px-4 sm:px-6 lg:px-10">
             {/* Pillars */}
             <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-950">
               {pillars.map((item) => (
@@ -570,6 +650,10 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   AvidiaTech exists for teams who own product data—from first ingest to
                   SEO page and every downstream feed.
                 </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Not a good fit if you only manage a handful of SKUs or don&apos;t care
+                  about structured SEO quality.
+                </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 {audiences.map((aud) => (
@@ -590,7 +674,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
           </section>
 
           {/* HOW IT WORKS + CAPABILITIES */}
-          <section className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr]">
+          <section className="mx-auto grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:px-10">
             <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                 How AvidiaTech fits into your stack.
@@ -627,19 +711,59 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   </span>
                 ))}
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Your catalog and rules stay in your workspace. We don&apos;t train a
+                public model on your product data.
+              </p>
+            </div>
+          </section>
+
+          {/* Micro FAQ (conversion friction reducer) */}
+          <section className="mx-auto max-w-6xl space-y-4 px-4 sm:px-6 lg:px-10">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+              Common questions before teams try AvidiaTech
+            </h3>
+            <div className="grid gap-4 text-xs sm:grid-cols-3 sm:text-sm">
+              <div className="space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">
+                  Do I need a developer to start?
+                </p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  No. You can begin with vendor URLs and internal notes. Developers
+                  help when you&apos;re ready to wire exports and feeds.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">
+                  Will it change my store automatically?
+                </p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  Not until you connect exports or apps. You stay in control of what
+                  gets synced and when.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">
+                  Is there a free way to try it?
+                </p>
+                <p className="text-slate-600 dark:text-slate-300">
+                  Yes. Paste a URL above, then create a free workspace to explore
+                  modules on a small slice of your catalog.
+                </p>
+              </div>
             </div>
           </section>
 
           {/* FINAL CTA STRIP */}
-          <section className="rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+          <section className="mx-auto max-w-6xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm px-4 sm:px-6 lg:px-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">
                   Ready to see your catalog in AvidiaTech?
                 </p>
                 <p className="text-sm text-slate-700 dark:text-slate-200">
-                  Start with a single manufacturer URL. If you like the output, bring
-                  the rest of your products.
+                  Paste one manufacturer URL above, then create a workspace if the
+                  output looks like something you&apos;d ship to customers.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -661,17 +785,26 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
         </div>
 
         {/* FOOTER */}
-        <footer className="mt-auto border-t border-slate-200 pt-4 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <footer className="mt-auto border-t border-slate-200 py-4 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
             <span>© {new Date().getFullYear()} AvidiaTech. All rights reserved.</span>
             <div className="flex flex-wrap items-center gap-3">
-              <a href="/status" className="hover:text-slate-800 dark:hover:text-slate-200">
+              <a
+                href="/status"
+                className="hover:text-slate-800 dark:hover:text-slate-200"
+              >
                 Status
               </a>
-              <a href="/privacy" className="hover:text-slate-800 dark:hover:text-slate-200">
+              <a
+                href="/privacy"
+                className="hover:text-slate-800 dark:hover:text-slate-200"
+              >
                 Privacy
               </a>
-              <a href="/terms" className="hover:text-slate-800 dark:hover:text-slate-200">
+              <a
+                href="/terms"
+                className="hover:text-slate-800 dark:hover:text-slate-200"
+              >
                 Terms
               </a>
             </div>
@@ -680,4 +813,3 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
       </div>
     </main>
   );
-}
