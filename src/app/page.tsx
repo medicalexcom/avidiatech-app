@@ -335,20 +335,24 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Output card */}
-                  <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
+                  {/* Output card takes remaining space */}
+                  <div className="flex flex-1 flex-col rounded-xl bg-slate-50 p-4 text-xs text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
                     <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
                       Step 2 · Sample description (Describe step)
                     </p>
-                    <div className="h-32 overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-[11px] leading-relaxed text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                      <pre className="whitespace-pre-wrap text-[11px]">
+                    <div className="mt-2 flex-1 rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                      <pre className="h-full max-h-60 overflow-auto whitespace-pre-wrap p-3 text-[11px] leading-relaxed">
                         {demoOutput ??
                           `Paste a manufacturer URL on the left and click “Try pipeline sample”. 
-                
+                        
 We’ll simulate the Describe step in your pipeline: a compliant, search-aware paragraph built from your ingestion rules. In the real workspace, this feeds AvidiaSEO, which builds the full product page and SEO JSON.`}
                       </pre>
                     </div>
-                    <div className="space-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  </div>
+
+                  {/* Metrics + helper pinned at bottom */}
+                  <div className="mt-auto space-y-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <span>Ingest</span>
                         <span className="text-emerald-600 dark:text-emerald-300">
@@ -368,14 +372,12 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                         </span>
                       </div>
                     </div>
+                    <p>
+                      Like what you see? Create a free workspace to unlock full modules,
+                      saved ingestions, and end-to-end SEO flows.
+                    </p>
                   </div>
                 </div>
-
-                {/* Bottom helper text stays pinned at bottom */}
-                <p className="mt-4 text-[11px] text-slate-500 dark:text-slate-400">
-                  Like what you see? Create a free workspace to unlock full modules,
-                  saved ingestions, and end-to-end SEO flows.
-                </p>
               </div>
             </div>
           </section>
