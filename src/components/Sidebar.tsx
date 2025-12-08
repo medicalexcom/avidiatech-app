@@ -201,6 +201,19 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                 const active = pathname === item.href;
                 const accent = getAccentClasses(item.name);
 
+                // Active styles differ for desktop vs mobile drawer
+                const activeLinkClasses = isDesktop
+                  ? [
+                      accent.activeBg,
+                      accent.activeBorder,
+                      accent.pillGlow,
+                      "text-slate-50",
+                    ].join(" ")
+                  : "bg-slate-100 border-slate-300 text-slate-900 dark:bg-slate-900/80 dark:border-slate-600 dark:text-slate-50";
+
+                const inactiveLinkClasses =
+                  "bg-transparent border-transparent text-slate-500 dark:text-slate-200";
+
                 return (
                   <li key={item.href}>
                     <Link
@@ -209,14 +222,7 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                         "group flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] font-medium border",
                         "transition-all duration-150 ease-out",
                         "hover:bg-slate-100 hover:border-slate-200 hover:translate-x-[2px] dark:hover:bg-slate-900 dark:hover:border-slate-500/70",
-                        active
-                          ? [
-                              accent.activeBg,
-                              accent.activeBorder,
-                              accent.pillGlow,
-                              "text-slate-50",
-                            ].join(" ")
-                          : "bg-transparent border-transparent text-slate-500 dark:text-slate-200",
+                        active ? activeLinkClasses : inactiveLinkClasses,
                       ].join(" ")}
                     >
                       {/* Accent dot / icon placeholder */}
@@ -230,7 +236,13 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                       />
 
                       {/* Item label */}
-                      <span className="flex-1 truncate text-slate-700 group-hover:text-slate-900 dark:text-slate-600 dark:group-hover:text-slate-50">
+                      <span
+                        className={
+                          active
+                            ? "flex-1 truncate text-slate-900 dark:text-slate-50"
+                            : "flex-1 truncate text-slate-700 group-hover:text-slate-900 dark:text-slate-600 dark:group-hover:text-slate-50"
+                        }
+                      >
                         {item.name}
                       </span>
                     </Link>
