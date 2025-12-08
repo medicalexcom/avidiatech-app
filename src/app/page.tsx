@@ -758,7 +758,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
 
           {/* FINAL CTA – now a centered card, not edge-to-edge full width */}
           <section className="w-full px-4 sm:px-6 lg:px-10">
-            <div className="mx-auto max-w-4xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+            <div className="mx-auto max-w-6xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">
