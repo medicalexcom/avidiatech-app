@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import PlanModal from "../../components/PlanModal";
 import TopNav from "../../components/TopNav";
 import Sidebar from "../../components/Sidebar";
+import MobileTopNav from "../../components/MobileTopNav"; // ✅ NEW
 import { useUser } from "@clerk/nextjs";
 
 /**
@@ -64,8 +65,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      {/* Top navigation (your real topbar) */}
-      <TopNav />
+      {/* Top navigation */}
+      <div className="hidden md:block">
+        <TopNav />
+      </div>
+      <div className="md:hidden">
+        <MobileTopNav />
+      </div>
 
       {/* Shell layout: render your Sidebar component (short sidebar) and main content */}
       <div className="dashboard-shell min-h-[calc(100vh-56px)] flex overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
