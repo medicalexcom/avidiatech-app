@@ -4,7 +4,6 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
-import { Menu, X } from "lucide-react";
 
 function getCurrentModule(pathname: string | null): string {
   if (!pathname) return "Dashboard";
@@ -61,7 +60,12 @@ export default function MobileTopNav() {
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
           >
-            <Menu className="h-4 w-4" />
+            {/* Simple hamburger icon */}
+            <span className="block h-[14px] w-[16px]" aria-hidden="true">
+              <span className="block h-[2px] w-full rounded bg-slate-700 dark:bg-slate-200" />
+              <span className="mt-[3px] block h-[2px] w-full rounded bg-slate-700 dark:bg-slate-200" />
+              <span className="mt-[3px] block h-[2px] w-full rounded bg-slate-700 dark:bg-slate-200" />
+            </span>
           </button>
         </div>
       </header>
@@ -100,7 +104,10 @@ export default function MobileTopNav() {
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
               >
-                <X className="h-4 w-4" />
+                {/* Simple close icon */}
+                <span className="text-base leading-none" aria-hidden="true">
+                  ×
+                </span>
               </button>
             </div>
 
