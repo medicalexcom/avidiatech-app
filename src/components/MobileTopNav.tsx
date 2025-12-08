@@ -30,17 +30,21 @@ export default function MobileTopNav() {
   return (
     <>
       {/* Fixed mobile top bar */}
-      <header className="fixed top-0 inset-x-0 z-40 flex items-center justify-between border-b bg-background/80 px-3 py-2 backdrop-blur md:hidden">
+      <header className="fixed top-0 inset-x-0 z-40 flex items-center justify-between border-b border-slate-200/70 bg-background/90 px-3 py-2 backdrop-blur-sm shadow-[0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-800/80 dark:bg-slate-950/95 dark:shadow-[0_1px_0_rgba(15,23,42,0.85)] md:hidden">
         <div className="flex items-center gap-2">
           {/* Logo mark (simple placeholder) */}
           <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300" />
+
           <div className="flex flex-col leading-tight">
-            <span className="text-xs font-semibold tracking-tight">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
               AvidiaTech
             </span>
-            <span className="text-[11px] text-muted-foreground">
-              {currentModule}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {/* Current module as a subtle pill */}
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-2 py-0.5 text-[11px] font-medium text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100">
+                {currentModule}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -48,7 +52,7 @@ export default function MobileTopNav() {
           {/* Avatar placeholder – wire to Clerk user later if you want */}
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-medium"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
           >
             RR
           </button>
@@ -56,7 +60,7 @@ export default function MobileTopNav() {
           {/* Menu toggle */}
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
           >
@@ -83,11 +87,11 @@ export default function MobileTopNav() {
           />
 
           {/* Drawer with existing Sidebar inside */}
-          <nav className="fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-xs flex-col border-r border-slate-800 bg-slate-950 md:hidden">
+          <nav className="fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-xs flex-col border-r border-slate-800 bg-slate-950 shadow-[0_0_40px_rgba(15,23,42,0.85)] transition-transform duration-200 ease-out md:hidden">
             {/* Drawer header */}
             <div className="flex items-center justify-between px-3 py-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300" />
+                <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700" />
                 <div className="flex flex-col leading-tight">
                   <span className="text-xs font-semibold tracking-tight text-slate-50">
                     AvidiaTech
@@ -100,7 +104,7 @@ export default function MobileTopNav() {
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 text-slate-200"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 text-slate-200 hover:bg-slate-900/80"
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
               >
