@@ -155,13 +155,31 @@ function getAccentClasses(name: string) {
   };
 }
 
-export default function Sidebar() {
+type SidebarProps = {
+  /**
+   * desktop: fixed left rail under the top nav
+   * drawer: full-width inside the mobile slide-in panel
+   */
+  variant?: "desktop" | "drawer";
+};
+
+export default function Sidebar({ variant = "desktop" }: SidebarProps) {
   const pathname = usePathname();
+  const isDesktop = variant === "desktop";
+
+  const containerClasses = [
+    // layout
+    isDesktop
+      ? "fixed top-[56px] bottom-0 left-0 w-56"
+      : "relative h-full w-full",
+    // visual
+    "flex flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100",
+  ].join(" ");
 
   return (
     <nav
       aria-label="AvidiaTech main navigation"
-      className="fixed top-[56px] bottom-0 left-0 flex w-56 flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
+      className={containerClasses}
     >
       {/* Small top spacer so content isn’t glued to the top */}
       <div className="mb-1 shrink-0" />
