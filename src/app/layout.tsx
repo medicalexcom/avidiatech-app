@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       {/* Light by default; dark mode comes from `html.dark` via next-themes */}
-      <body className="min-h-screen bg-slate-50 text-slate-950 antialiased">
+      <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
         <Providers>{children}</Providers>
       </body>
     </html>
