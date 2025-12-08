@@ -1,7 +1,13 @@
 "use client";
 
+import React, { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+type Props = {
+  open: boolean;
+  onClose: () => void;
+};
 
 // Define sections with titles and their respective items
 const sections = [
@@ -155,97 +161,187 @@ function getAccentClasses(name: string) {
   };
 }
 
-export default function Sidebar() {
+export default function Sidebar({ open, onClose }: Props) {
   const pathname = usePathname();
 
+  // Close on Escape (from second snippet)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   return (
-    <nav
-      aria-label="AvidiaTech main navigation"
-      className="fixed top-[56px] bottom-0 left-0 flex w-56 flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
-    >
-      {/* Small top spacer so content isn’t glued to the top */}
-      <div className="mb-1 shrink-0" />
+    <>
+      {/* Backdrop for mobile (from second snippet) */}
+      <div
+        className={`fixed inset-0 z-30 bg-black bg-opacity-40 transition-opacity duration-200 ${
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        } md:hidden`}
+        aria-hidden={open ? "false" : "true"}
+        onClick={onClose}
+      />
 
-      {/* Scrollable section area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1">
-        {sections.map((section, sectionIndex) => (
-          <div key={section.title}>
-            {sectionIndex > 0 && (
-              <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
-            )}
-            <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-900 dark:text-slate-300 whitespace-nowrap">
-              {section.title}
-            </h2>
-            <ul className="space-y-1">
-              {section.items.map((item) => {
-                const active = pathname === item.href;
-                const accent = getAccentClasses(item.name);
-
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={[
-                        "group flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] font-medium border",
-                        "transition-all duration-150 ease-out",
-                        "hover:bg-slate-900 hover:border-slate-500/70 hover:translate-x-[2px]",
-                        active
-                          ? [
-                              accent.activeBg,
-                              accent.activeBorder,
-                              accent.pillGlow,
-                              "text-slate-50",
-                            ].join(" ")
-                          : "bg-transparent border-transparent text-slate-200",
-                      ].join(" ")}
-                    >
-                      {/* Accent dot / icon placeholder */}
-                      <span
-                        className={[
-                          "h-1.5 w-1.5 rounded-full transition-colors duration-150",
-                          active
-                            ? accent.dot
-                            : "bg-slate-500 group-hover:bg-slate-300",
-                        ].join(" ")}
-                      />
-
-                      {/* Item label */}
-                      <span className="flex-1 truncate text-slate-600 group-hover:text-slate-50">
-                        {item.name}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      {/* Pinned bottom simple support block, light/dark friendly */}
-      <div className="mt-3 shrink-0 border-t border-slate-200/20 px-2 pt-3 text-[10px] text-slate-600 dark:border-slate-800/80 dark:text-slate-500">
-        <div className="flex flex-col gap-1">
+      {/* Sidebar panel (structure from second snippet, content from first) */}
+      <aside
+        className={`fixed top-[56px] bottom-0 left-0 z-40 w-56 border-r border-slate-800/80 bg-slate-950/98 shadow-lg transform transition-transform duration-200 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 md:static md:shadow-none`}
+        role="navigation"
+        aria-label="Sidebar"
+      >
+        {/* Mobile header bar (from second snippet, text unchanged) */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 md:hidden">
+          <div className="font-semibold">Navigation</div>
           <button
-            type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
+            onClick={onClose}
+            aria-label="Close navigation"
+            className="p-2 rounded-md text-gray-200 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
-              💬
-            </span>
-            <span className="font-medium">Open support chat</span>
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
-          >
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
-              📚
-            </span>
-            <span className="font-medium">Documentation &amp; guides</span>
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
-      </div>
-    </nav>
+
+        {/* Main nav content from first snippet */}
+        <nav
+          aria-label="AvidiaTech main navigation"
+          className="flex h-full flex-col overflow-hidden px-3 py-4 text-slate-100"
+        >
+          {/* Small top spacer so content isn’t glued to the top */}
+          <div className="mb-1 shrink-0" />
+
+          {/* Scrollable section area */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-3 pr-1">
+            {sections.map((section, sectionIndex) => (
+              <div key={section.title}>
+                {sectionIndex > 0 && (
+                  <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
+                )}
+                <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-900 dark:text-slate-300 whitespace-nowrap">
+                  {section.title}
+                </h2>
+                <ul className="space-y-1">
+                  {section.items.map((item) => {
+                    const active = pathname === item.href;
+                    const accent = getAccentClasses(item.name);
+
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className={[
+                            "group flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] font-medium border",
+                            "transition-all duration-150 ease-out",
+                            "hover:bg-slate-900 hover:border-slate-500/70 hover:translate-x-[2px]",
+                            active
+                              ? [
+                                  accent.activeBg,
+                                  accent.activeBorder,
+                                  accent.pillGlow,
+                                  "text-slate-50",
+                                ].join(" ")
+                              : "bg-transparent border-transparent text-slate-200",
+                          ].join(" ")}
+                          onClick={onClose}
+                        >
+                          {/* Accent dot / icon placeholder */}
+                          <span
+                            className={[
+                              "h-1.5 w-1.5 rounded-full transition-colors duration-150",
+                              active
+                                ? accent.dot
+                                : "bg-slate-500 group-hover:bg-slate-300",
+                            ].join(" ")}
+                          />
+
+                          {/* Item label */}
+                          <span className="flex-1 truncate text-slate-600 group-hover:text-slate-50">
+                            {item.name}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+
+            {/* Simple links block from second snippet (Dashboard / Settings / Sign in / Sign up) */}
+            <div className="mt-4 space-y-1">
+              <Link
+                href="/dashboard"
+                className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
+                onClick={onClose}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/settings"
+                className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
+                onClick={onClose}
+              >
+                Settings
+              </Link>
+              <Link
+                href="/sign-in"
+                className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
+                onClick={onClose}
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/sign-up"
+                className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
+                onClick={onClose}
+              >
+                Sign up
+              </Link>
+            </div>
+          </div>
+
+          {/* Pinned bottom simple support block, light/dark friendly (from first snippet) */}
+          <div className="mt-3 shrink-0 border-t border-slate-200/20 px-2 pt-3 text-[10px] text-slate-600 dark:border-slate-800/80 dark:text-slate-500">
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
+                  💬
+                </span>
+                <span className="font-medium">Open support chat</span>
+              </button>
+
+              <button
+                type="button"
+                className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
+                  📚
+                </span>
+                <span className="font-medium">Documentation &amp; guides</span>
+              </button>
+            </div>
+          </div>
+        </nav>
+      </aside>
+
+      {/* Desktop static sidebar spacer so main content doesn't jump (from second snippet) */}
+      <div className="hidden md:block md:w-56" aria-hidden="true" />
+    </>
   );
 }
