@@ -1,9 +1,14 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import ProfileMenu from "./ProfileMenu";
+
+type Props = {
+  onToggleSidebar?: () => void;
+};
 
 const primaryLinks = [
   { name: "Dashboard", href: "/dashboard" },
@@ -16,7 +21,7 @@ const secondaryLinks = [
   { name: "Versioning", href: "/dashboard/versioning" },
 ];
 
-export default function TopNav() {
+export default function TopNav({ onToggleSidebar }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const { isLoaded, isSignedIn } = useUser();
@@ -31,8 +36,36 @@ export default function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/90">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 lg:px-8">
-        {/* Left: brand + workspace */}
+        {/* Left: hamburger + brand + workspace */}
         <div className="flex min-w-0 items-center gap-3">
+          {/* Hamburger / sidebar toggle (mobile) — from second snippet */}
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            aria-label="Open navigation"
+            className="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+
+          {/* Brand from second snippet */}
+          <Link href="/" className="text-lg font-semibold">
+            Avidiatech
+          </Link>
+
+          {/* Brand + workspace from first snippet */}
           <div className="flex flex-col leading-tight">
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
               AvidiaTech
@@ -41,13 +74,15 @@ export default function TopNav() {
               Product Data OS
             </span>
           </div>
+
+          {/* Live dashboard pill from first snippet */}
           <span className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[10px] text-slate-600 sm:inline-flex dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Live dashboard
           </span>
         </div>
 
-        {/* Center: primary navigation */}
+        {/* Center: primary navigation from first snippet */}
         <nav
           aria-label="Primary"
           className="flex flex-1 items-center justify-center gap-1 sm:gap-2"
@@ -83,9 +118,9 @@ export default function TopNav() {
           })}
         </nav>
 
-        {/* Right: secondary links + notifications + profile/auth */}
+        {/* Right: secondary links (first snippet) + desktop utilities (second snippet) + notifications/auth (first snippet) */}
         <div className="flex min-w-[190px] items-center justify-end gap-4">
-          {/* Secondary nav (Roles / Versioning) */}
+          {/* Secondary nav (Roles / Versioning) from first snippet */}
           <nav
             aria-label="Secondary"
             className="hidden items-center gap-2 border-r border-slate-200 pr-2 dark:border-slate-800/70 md:flex"
@@ -109,6 +144,29 @@ export default function TopNav() {
             })}
           </nav>
 
+          {/* Desktop utilities / links from second snippet */}
+          <nav className="hidden md:flex md:items-center md:space-x-4">
+            <Link
+              href="/dashboard"
+              className="text-sm px-3 py-2 rounded hover:bg-gray-100"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/settings"
+              className="text-sm px-3 py-2 rounded hover:bg-gray-100"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/sign-in"
+              className="text-sm px-3 py-2 rounded hover:bg-gray-100"
+            >
+              Sign in
+            </Link>
+          </nav>
+
+          {/* Notifications + profile/auth from first snippet */}
           <div className="flex items-center gap-3">
             {/* Notifications */}
             <Link
