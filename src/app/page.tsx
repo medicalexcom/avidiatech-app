@@ -462,8 +462,8 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* MODULES – full width */}
-          <section className="w-full space-y-6 px-4 pt-6 sm:px-6 lg:px-10">
+          {/* MODULES – full width, slightly pulled up */}
+          <section className="w-full -mt-4 space-y-6 px-4 pt-4 sm:px-6 lg:px-10">
             <div className="space-y-3 sm:flex sm:items-end sm:justify-between sm:gap-4 sm:space-y-0">
               <div>
                 <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
@@ -756,31 +756,33 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* FINAL CTA – full width, buttons locked on one row */}
-          <section className="w-full rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm px-4 sm:px-6 lg:px-10 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">
-                  Ready to see your catalog in AvidiaTech?
-                </p>
-                <p className="text-sm text-slate-700 dark:text-slate-200">
-                  Paste one manufacturer URL above, then create a workspace if the
-                  output looks like something you&apos;d ship to customers.
-                </p>
-              </div>
-              <div className="flex flex-nowrap items-center gap-3">
-                <a
-                  href="/sign-up"
-                  className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
-                >
-                  Get Started
-                </a>
-                <a
-                  href="/sign-in?redirect_url=/dashboard"
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
-                >
-                  Open Dashboard
-                </a>
+          {/* FINAL CTA – now a centered card, not edge-to-edge full width */}
+          <section className="w-full px-4 sm:px-6 lg:px-10">
+            <div className="mx-auto max-w-4xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-cyan-800 dark:text-cyan-200">
+                    Ready to see your catalog in AvidiaTech?
+                  </p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200">
+                    Paste one manufacturer URL above, then create a workspace if the
+                    output looks like something you&apos;d ship to customers.
+                  </p>
+                </div>
+                <div className="flex flex-nowrap items-center gap-3">
+                  <a
+                    href="/sign-up"
+                    className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
+                  >
+                    Get Started
+                  </a>
+                  <a
+                    href="/sign-in?redirect_url=/dashboard"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
+                  >
+                    Open Dashboard
+                  </a>
+                </div>
               </div>
             </div>
           </section>
