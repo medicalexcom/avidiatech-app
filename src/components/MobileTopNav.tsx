@@ -2,8 +2,10 @@
 "use client";
 
 import React from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import Sidebar from "./Sidebar";
+import ProfileMenu from "./ProfileMenu";
 
 function getCurrentModule(pathname: string | null): string {
   if (!pathname) return "Dashboard";
@@ -17,6 +19,8 @@ function getCurrentModule(pathname: string | null): string {
 export default function MobileTopNav() {
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { isLoaded, isSignedIn } = useUser();
   const currentModule = getCurrentModule(pathname || "/dashboard");
 
   // Auto-close drawer when route changes (tap a link in Sidebar)
@@ -49,13 +53,19 @@ export default function MobileTopNav() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Avatar placeholder – wire to Clerk user later if you want */}
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
-          >
-            RR
-          </button>
+          {/* Profile / auth – same behavior as TopNav, just more compact */}
+          {isLoaded && isSignedIn ? (
+            <ProfileMenu />
+          ) : (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
+              onClick={() => router.push("/sign-in?redirect=/dashboard")}
+              disabled={!isLoaded}
+            >
+              Sign in
+            </button>
+          )}
 
           {/* Menu toggle */}
           <button
