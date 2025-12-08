@@ -180,14 +180,14 @@ export default function Home() {
       {/* Sticky CTA bar (full width) */}
       {showStickyCta && (
         <div className="fixed inset-x-0 top-0 z-40 border-b border-slate-200 bg-slate-50/85 px-4 py-2 text-xs backdrop-blur sm:px-6 lg:px-10 dark:border-slate-800 dark:bg-slate-950/85">
-          <div className="flex w-full items-center justify-between gap-3">
+          <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
             <span className="hidden text-[11px] text-slate-600 sm:inline dark:text-slate-300">
               Ready to see AvidiaTech on your own catalog?
             </span>
             <span className="inline text-[11px] text-slate-600 sm:hidden dark:text-slate-300">
               Try AvidiaTech on your catalog.
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
               <a
                 href="#hero-url"
                 className="hidden text-[11px] text-cyan-700 underline-offset-2 hover:underline dark:text-cyan-300 sm:inline"
@@ -207,7 +207,7 @@ export default function Home() {
 
       <div className="flex min-h-screen flex-col">
         {/* HEADER – full width */}
-        <header className="flex w-full items-center justify-between px-4 py-5 sm:px-6 lg:px-10">
+        <header className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-5 text-xs sm:flex-nowrap sm:px-6 sm:text-sm lg:px-10">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-cyan-500 via-emerald-400 to-amber-400 shadow-sm shadow-cyan-500/40" />
             <div className="flex flex-col leading-tight">
@@ -220,7 +220,7 @@ export default function Home() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-4 text-xs sm:text-sm">
+          <nav className="flex flex-wrap items-center gap-3 sm:gap-4">
             <a
               href="https://avidiatech.com"
               className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-50"
@@ -272,7 +272,7 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-3">
-                  <h1 className="text-balance text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
+                  <h1 className="text-balance text-3xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
                     Turn messy manufacturer URLs into
                     <span className="bg-gradient-to-r from-cyan-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
                       {" "}
@@ -642,7 +642,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                     SEO JSON (excerpt)
                   </p>
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px]">
 {`{
   "name": "ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow Ready",
   "h1": "ACME Infusion Pump 9000",
@@ -810,7 +810,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                     output looks like something you&apos;d ship to customers.
                   </p>
                 </div>
-                <div className="flex flex-nowrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
                   <Link
                     href="/sign-up"
                     className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 active:translate-y-0 whitespace-nowrap"
