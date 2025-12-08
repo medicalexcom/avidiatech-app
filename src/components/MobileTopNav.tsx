@@ -31,10 +31,12 @@ export default function MobileTopNav() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  const drawerId = "avidia-mobile-drawer-title";
+
   return (
     <>
       {/* Fixed mobile top bar */}
-      <header className="fixed top-0 inset-x-0 z-40 flex items-center justify-between border-b border-slate-200/70 bg-background/90 px-3 py-2 backdrop-blur-sm shadow-[0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-800/80 dark:bg-slate-950/95 dark:shadow-[0_1px_0_rgba(15,23,42,0.85)] md:hidden">
+      <header className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-slate-200/70 bg-background/90 px-3 py-2 pt-[env(safe-area-inset-top)] backdrop-blur-sm shadow-[0_1px_0_rgba(15,23,42,0.06)] dark:border-slate-800/80 dark:bg-slate-950/95 dark:shadow-[0_1px_0_rgba(15,23,42,0.85)] md:hidden">
         <div className="flex items-center gap-2">
           {/* Logo mark (simple placeholder) */}
           <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300" />
@@ -59,7 +61,7 @@ export default function MobileTopNav() {
           ) : (
             <button
               type="button"
-              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300 hover:shadow-md active:scale-95 active:opacity-90 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
               onClick={() => router.push("/sign-in?redirect=/dashboard")}
               disabled={!isLoaded}
             >
@@ -70,9 +72,12 @@ export default function MobileTopNav() {
           {/* Menu toggle */}
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md active:scale-95 active:opacity-90 dark:border-slate-700 dark:bg-slate-900"
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? "avidia-mobile-drawer" : undefined}
           >
             {/* Simple hamburger icon */}
             <span className="block h-[14px] w-[16px]" aria-hidden="true">
@@ -92,18 +97,27 @@ export default function MobileTopNav() {
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            className="fixed inset-0 z-40 bg-black/40 transition-opacity md:hidden"
             onClick={() => setOpen(false)}
           />
 
           {/* Drawer with existing Sidebar inside */}
-          <nav className="fixed inset-y-0 left-0 z-50 flex w-[70%] max-w-[14rem] flex-col border-r border-slate-200 bg-white shadow-[0_0_40px_rgba(15,23,42,0.22)] transition-transform duration-200 ease-out md:hidden dark:border-slate-800 dark:bg-slate-950 dark:shadow-[0_0_40px_rgba(15,23,42,0.85)]">
+          <nav
+            id="avidia-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={drawerId}
+            className="fixed inset-y-0 left-0 z-50 flex w-[70%] max-w-[14rem] flex-col border-r border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_0_40px_rgba(15,23,42,0.22)] transition-transform duration-200 ease-out md:hidden dark:border-slate-800 dark:bg-slate-950 dark:shadow-[0_0_40px_rgba(15,23,42,0.85)]"
+          >
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-3 py-3 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700" />
                 <div className="flex flex-col leading-tight">
-                  <span className="text-xs font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+                  <span
+                    id={drawerId}
+                    className="text-xs font-semibold tracking-tight text-slate-900 dark:text-slate-50"
+                  >
                     AvidiaTech
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -114,7 +128,7 @@ export default function MobileTopNav() {
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900/80"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:bg-slate-100 active:scale-95 active:opacity-90 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900/80"
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
               >
