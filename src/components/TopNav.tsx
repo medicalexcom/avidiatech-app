@@ -30,8 +30,9 @@ export default function TopNav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/90">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 lg:px-8">
-        {/* Left: brand + workspace */}
+      {/* full-width bar, aligned with sidebar (px-3 like sidebar) */}
+      <div className="flex h-14 w-full items-center justify-between gap-4 px-3 lg:px-4">
+        {/* Left: brand + workspace, now anchored to far left */}
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex flex-col leading-tight">
             <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-500">
