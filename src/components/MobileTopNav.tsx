@@ -83,16 +83,16 @@ export default function MobileTopNav() {
           />
 
           {/* Drawer with existing Sidebar inside */}
-          <nav className="fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-xs flex-col border-r bg-background md:hidden">
+          <nav className="fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-xs flex-col border-r border-slate-800 bg-slate-950 md:hidden">
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-3 py-3 border-b">
+            <div className="flex items-center justify-between px-3 py-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300" />
                 <div className="flex flex-col leading-tight">
-                  <span className="text-xs font-semibold tracking-tight">
+                  <span className="text-xs font-semibold tracking-tight text-slate-50">
                     AvidiaTech
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-[11px] text-slate-400">
                     Workspace
                   </span>
                 </div>
@@ -100,7 +100,7 @@ export default function MobileTopNav() {
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 text-slate-200"
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
               >
