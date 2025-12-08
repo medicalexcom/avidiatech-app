@@ -1,6 +1,8 @@
+// src/app/layout.tsx
 import "./globals.css";
 import type { ReactNode } from "react";
 import Providers from "./providers";
+import Header from "../components/Header"; // adjust path if needed
 
 export const metadata = {
   title: "AvidiaTech | Product Data Automation",
@@ -18,7 +20,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       {/* Light by default; dark mode comes from `html.dark` via next-themes */}
       <body className="min-h-screen bg-slate-50 text-slate-950 antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          {/* Header is a client component that contains TopNav + Sidebar + mobile handling */}
+          <Header>
+            <main className="container py-6">{children}</main>
+          </Header>
+        </Providers>
       </body>
     </html>
   );
