@@ -167,14 +167,16 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
   const pathname = usePathname();
   const isDesktop = variant === "desktop";
 
-  const containerClasses = [
-    // layout
-    isDesktop
-      ? "fixed top-[56px] bottom-0 left-0 w-56"
-      : "relative h-full w-full",
-    // visual
-    "flex flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100",
-  ].join(" ");
+  const positionClasses = isDesktop
+    ? "fixed top-[56px] bottom-0 left-0 w-56"
+    : "relative h-full w-full";
+
+  // Light-mode-first for drawer, original dark rail for desktop
+  const baseClasses = isDesktop
+    ? "flex flex-col overflow-hidden bg-slate-950/98 border-r border-slate-800/80 px-3 py-4 text-slate-100"
+    : "flex flex-col overflow-hidden bg-white border-r border-slate-200 px-3 py-4 text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-100";
+
+  const containerClasses = `${positionClasses} ${baseClasses}`;
 
   return (
     <nav
@@ -189,9 +191,9 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
         {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && (
-              <div className="my-2 h-px bg-gradient-to-r from-slate-800 via-slate-800/40 to-transparent" />
+              <div className="my-2 h-px bg-gradient-to-r from-slate-200 via-slate-200/60 to-transparent dark:from-slate-800 dark:via-slate-800/40" />
             )}
-            <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-900 dark:text-slate-300 whitespace-nowrap">
+            <h2 className="px-2 mb-1 text-[7px] font-medium uppercase tracking-[0.12em] text-slate-400 dark:text-slate-300 whitespace-nowrap">
               {section.title}
             </h2>
             <ul className="space-y-1">
@@ -206,7 +208,7 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                       className={[
                         "group flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] font-medium border",
                         "transition-all duration-150 ease-out",
-                        "hover:bg-slate-900 hover:border-slate-500/70 hover:translate-x-[2px]",
+                        "hover:bg-slate-100 hover:border-slate-200 hover:translate-x-[2px] dark:hover:bg-slate-900 dark:hover:border-slate-500/70",
                         active
                           ? [
                               accent.activeBg,
@@ -214,7 +216,7 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                               accent.pillGlow,
                               "text-slate-50",
                             ].join(" ")
-                          : "bg-transparent border-transparent text-slate-200",
+                          : "bg-transparent border-transparent text-slate-500 dark:text-slate-200",
                       ].join(" ")}
                     >
                       {/* Accent dot / icon placeholder */}
@@ -223,12 +225,12 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                           "h-1.5 w-1.5 rounded-full transition-colors duration-150",
                           active
                             ? accent.dot
-                            : "bg-slate-500 group-hover:bg-slate-300",
+                            : "bg-slate-300 group-hover:bg-slate-500 dark:bg-slate-500 dark:group-hover:bg-slate-300",
                         ].join(" ")}
                       />
 
                       {/* Item label */}
-                      <span className="flex-1 truncate text-slate-600 group-hover:text-slate-50">
+                      <span className="flex-1 truncate text-slate-700 group-hover:text-slate-900 dark:text-slate-600 dark:group-hover:text-slate-50">
                         {item.name}
                       </span>
                     </Link>
@@ -241,11 +243,11 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
       </div>
 
       {/* Pinned bottom simple support block, light/dark friendly */}
-      <div className="mt-3 shrink-0 border-t border-slate-200/20 px-2 pt-3 text-[10px] text-slate-600 dark:border-slate-800/80 dark:text-slate-500">
+      <div className="mt-3 shrink-0 border-t border-slate-200/60 px-2 pt-3 text-[10px] text-slate-500 dark:border-slate-800/80 dark:text-slate-500">
         <div className="flex flex-col gap-1">
           <button
             type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
+            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/80 dark:text-slate-200 dark:hover:bg-slate-900/80"
           >
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               💬
@@ -255,7 +257,7 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
 
           <button
             type="button"
-            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/10 dark:text-slate-200 dark:hover:bg-slate-900/80"
+            className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/80 dark:text-slate-200 dark:hover:bg-slate-900/80"
           >
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               📚
