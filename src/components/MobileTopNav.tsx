@@ -87,16 +87,16 @@ export default function MobileTopNav() {
           />
 
           {/* Drawer with existing Sidebar inside */}
-          <nav className="fixed inset-y-0 left-0 z-50 flex w-[82%] max-w-xs flex-col border-r border-slate-800 bg-slate-950 shadow-[0_0_40px_rgba(15,23,42,0.85)] transition-transform duration-200 ease-out md:hidden">
+          <nav className="fixed inset-y-0 left-0 z-50 flex w-[70%] max-w-[14rem] flex-col border-r border-slate-200 bg-white shadow-[0_0_40px_rgba(15,23,42,0.22)] transition-transform duration-200 ease-out md:hidden dark:border-slate-800 dark:bg-slate-950 dark:shadow-[0_0_40px_rgba(15,23,42,0.85)]">
             {/* Drawer header */}
-            <div className="flex items-center justify-between px-3 py-3 border-b border-slate-800">
+            <div className="flex items-center justify-between px-3 py-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-xl bg-gradient-to-tr from-slate-900 to-slate-700" />
                 <div className="flex flex-col leading-tight">
-                  <span className="text-xs font-semibold tracking-tight text-slate-50">
+                  <span className="text-xs font-semibold tracking-tight text-slate-900 dark:text-slate-50">
                     AvidiaTech
                   </span>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Workspace
                   </span>
                 </div>
@@ -104,7 +104,7 @@ export default function MobileTopNav() {
 
               <button
                 type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 text-slate-200 hover:bg-slate-900/80"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900/80"
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
               >
