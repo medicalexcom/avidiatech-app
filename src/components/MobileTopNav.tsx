@@ -20,6 +20,14 @@ export default function MobileTopNav() {
   const pathname = usePathname();
   const currentModule = getCurrentModule(pathname || "/dashboard");
 
+  // Auto-close drawer when route changes (tap a link in Sidebar)
+  React.useEffect(() => {
+    if (open) {
+      setOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   return (
     <>
       {/* Fixed mobile top bar */}
@@ -61,9 +69,10 @@ export default function MobileTopNav() {
       {/* Spacer so content doesn't hide under fixed header on mobile */}
       <div className="h-12 md:hidden" />
 
-      {/* Overlay */}
+      {/* Overlay + Drawer */}
       {open && (
         <>
+          {/* Backdrop */}
           <div
             className="fixed inset-0 z-40 bg-black/40 md:hidden"
             onClick={() => setOpen(false)}
@@ -97,8 +106,7 @@ export default function MobileTopNav() {
 
             {/* Drawer body: reuse your Sidebar */}
             <div className="flex-1 overflow-y-auto">
-              {/* Sidebar will be updated separately to have good spacing + support block, etc. */}
-              <Sidebar />
+              <Sidebar variant="drawer" />
             </div>
           </nav>
         </>
