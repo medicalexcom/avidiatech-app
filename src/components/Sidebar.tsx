@@ -53,7 +53,7 @@ function getAccentClasses(name: string) {
     return {
       dot: "bg-cyan-400",
       activeBorder: "border-cyan-500/70",
-      activeBg: "bg-slate-900/95",
+      activeBg: "bg-slate-900/95", // no longer used directly
       textActive: "text-cyan-50",
       pillGlow: "shadow-[0_0_18px_rgba(34,211,238,0.45)]",
     };
@@ -201,15 +201,13 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
                 const active = pathname === item.href;
                 const accent = getAccentClasses(item.name);
 
-                // Active styles differ for desktop vs mobile drawer
-                const activeLinkClasses = isDesktop
-                  ? [
-                      accent.activeBg,
-                      accent.activeBorder,
-                      accent.pillGlow,
-                      "text-slate-50",
-                    ].join(" ")
-                  : "bg-slate-100 border-slate-300 text-slate-900 dark:bg-slate-900/80 dark:border-slate-600 dark:text-slate-50";
+                // unified active style (desktop + mobile)
+                const activeLinkClasses = [
+                  "bg-slate-100 border-slate-300 text-slate-900",
+                  "dark:bg-slate-900/80 dark:border-slate-600 dark:text-slate-50",
+                  accent.activeBorder,
+                  accent.pillGlow,
+                ].join(" ");
 
                 const inactiveLinkClasses =
                   "bg-transparent border-transparent text-slate-500 dark:text-slate-200";
