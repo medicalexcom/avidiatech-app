@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 
 export const dynamic = "force-dynamic";
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 const pillars = [
   {
@@ -22,9 +25,21 @@ const pillars = [
 ];
 
 const stats = [
-  { label: "SKUs processed", value: "1M+", hint: "Designed for very large catalogs" },
-  { label: "Modules", value: "15+", hint: "Extract, Describe, SEO & more" },
-  { label: "Time saved", value: "10–20 hrs/wk", hint: "Per ops or content lead" },
+  {
+    label: "SKUs processed",
+    value: "1M+",
+    hint: "Designed for very large catalogs",
+  },
+  {
+    label: "Modules",
+    value: "15+",
+    hint: "Extract, Describe, SEO & more",
+  },
+  {
+    label: "Time saved",
+    value: "10–20 hrs/wk",
+    hint: "Per ops or content lead",
+  },
 ];
 
 const modules = [
@@ -179,12 +194,12 @@ export default function Home() {
               >
                 Paste a vendor URL
               </a>
-              <a
+              <Link
                 href="/sign-up"
-                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
+                className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-3 py-1.5 text-[11px] font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 active:translate-y-0 whitespace-nowrap"
               >
                 Create free workspace
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -212,37 +227,40 @@ export default function Home() {
             >
               Back to main site
             </a>
-            <a
+            <Link
               href="/docs"
               className="hidden text-slate-600 hover:text-slate-900 sm:inline dark:text-slate-300 dark:hover:text-slate-50"
             >
               Docs
-            </a>
-            <a
+            </Link>
+            <Link
               href="/support"
               className="hidden text-slate-600 hover:text-slate-900 sm:inline dark:text-slate-300 dark:hover:text-slate-50"
             >
               Support
-            </a>
-            <a
+            </Link>
+            <Link
               href="/sign-in"
               className="rounded-lg px-3 py-1.5 text-slate-700 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900"
             >
               Sign in
-            </a>
-            <a
+            </Link>
+            <Link
               href="/sign-up"
               className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-50 hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-100"
             >
               Create free workspace
-            </a>
+            </Link>
           </nav>
         </header>
 
         {/* BODY CONTENT */}
         <div className="flex-1 space-y-16 pb-14 lg:space-y-20 lg:pb-20">
           {/* HERO – full-width band */}
-          <section className="border-y border-slate-200/60 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 py-8 dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+          <section className="relative border-y border-slate-200/60 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 py-8 dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900">
+            {/* soft background halo */}
+            <div className="pointer-events-none absolute inset-x-0 -top-24 bottom-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.28),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(251,191,36,0.18),_transparent_65%)]" />
+
             <div className="grid w-full items-stretch gap-10 px-4 sm:px-6 lg:grid-cols-[1.1fr,0.9fr] lg:gap-12 lg:px-10">
               {/* Left side */}
               <div className="space-y-7">
@@ -254,14 +272,14 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-3">
-                  <h1 className="text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
+                  <h1 className="text-balance text-4xl font-semibold leading-snug sm:text-5xl lg:text-[2.9rem]">
                     Turn messy manufacturer URLs into
                     <span className="bg-gradient-to-r from-cyan-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
                       {" "}
                       revenue-ready product pages.
                     </span>
                   </h1>
-                  <p className="max-w-xl text-base sm:text-lg text-slate-600 dark:text-slate-200">
+                  <p className="max-w-xl text-base text-slate-600 sm:text-lg dark:text-slate-200">
                     AvidiaTech ingests, enriches, and monitors your entire catalog—so
                     you can launch new products, regions, and channels without
                     rewriting the same description three times.
@@ -269,7 +287,10 @@ export default function Home() {
                 </div>
 
                 {/* URL input */}
-                <div className="space-y-2" id="hero-url">
+                <div
+                  className="space-y-2 scroll-mt-24"
+                  id="hero-url"
+                >
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Step 1 · Paste a manufacturer URL to see a sample pipeline output
                   </p>
@@ -285,7 +306,7 @@ export default function Home() {
                     <button
                       onClick={handleDemoRun}
                       disabled={demoStatus === "running"}
-                      className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70 whitespace-nowrap"
+                      className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70 active:translate-y-0 whitespace-nowrap"
                     >
                       {demoStatus === "running"
                         ? "Generating sample…"
@@ -307,21 +328,21 @@ export default function Home() {
 
                 {/* Primary CTAs */}
                 <div className="flex flex-wrap items-center gap-4">
-                  <a
+                  <Link
                     href="/sign-up"
-                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:brightness-110 whitespace-nowrap"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300 px-6 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/30 transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 sm:text-base whitespace-nowrap"
                   >
                     Get Started – free trial
-                  </a>
+                  </Link>
 
-                  <a
+                  <Link
                     href="/sign-in?redirect_url=/dashboard"
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm sm:text-base font-semibold text-slate-800 backdrop-blur transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-800 backdrop-blur transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-100 active:translate-y-0 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 sm:text-base whitespace-nowrap"
                   >
                     Open Dashboard
-                  </a>
+                  </Link>
 
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-slate-500 sm:text-sm dark:text-slate-400">
                     No credit card required to explore modules. Upgrade only when
                     you’re ready to ship.
                   </p>
@@ -332,7 +353,7 @@ export default function Home() {
                   {stats.map((stat) => (
                     <div
                       key={stat.label}
-                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-600"
                     >
                       <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         {stat.label}
@@ -379,8 +400,8 @@ export default function Home() {
 
               {/* Right side – pipeline preview */}
               <div className="relative flex h-full" id="pipeline-preview">
-                <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
-                <div className="relative z-10 flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
+                <div className="pointer-events-none absolute -inset-4 -z-10 rounded-3xl bg-gradient-to-tr from-cyan-200/40 via-emerald-200/30 to-amber-200/40 blur-2xl dark:from-cyan-500/20 dark:via-fuchsia-500/10 dark:to-amber-400/10" />
+                <div className="relative z-10 flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-950 dark:shadow-slate-900/40">
                   {/* Top bar */}
                   <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
                     <div className="flex items-center gap-2">
@@ -484,7 +505,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
               {modules.map((mod) => (
                 <div
                   key={mod.name}
-                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-950"
+                  className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -507,105 +528,121 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* Describe + SEO – full width */}
-          <section className="grid w-full gap-8 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm px-4 sm:px-6 lg:grid-cols-[1.05fr,0.95fr] lg:px-10 dark:border-slate-800 dark:bg-slate-950">
-            {/* Left */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-                AvidiaDescribe: from messy notes to clean, compliant copy.
-              </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-200">
-                In the workspace, AvidiaDescribe doesn&apos;t need a perfect source.
-                Start from your ingest JSON, a short internal paragraph, or rough
-                stakeholder notes—Describe turns it into structured, SEO-aware copy
-                that respects your catalog rules.
-              </p>
-              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-200">
-                <li>• Works with either manufacturer ingest or your own short notes.</li>
-                <li>• Applies your custom GPT instructions and compliance guardrails.</li>
-                <li>• Returns HTML + fields for titles, bullets, warnings, and manuals blocks.</li>
-                <li>• Feeds directly into AvidiaSEO for full-page and feed generation.</li>
-              </ul>
+          {/* Describe + SEO – full width, normalized width & padding */}
+          <section className="w-full px-4 sm:px-6 lg:px-10">
+            <div className="grid gap-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:grid-cols-[1.05fr,0.95fr] dark:border-slate-800 dark:bg-slate-950">
+              {/* Left */}
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
+                  AvidiaDescribe: from messy notes to clean, compliant copy.
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-slate-200">
+                  In the workspace, AvidiaDescribe doesn&apos;t need a perfect source.
+                  Start from your ingest JSON, a short internal paragraph, or rough
+                  stakeholder notes—Describe turns it into structured, SEO-aware copy
+                  that respects your catalog rules.
+                </p>
+                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-200">
+                  <li>
+                    • Works with either manufacturer ingest or your own short notes.
+                  </li>
+                  <li>
+                    • Applies your custom GPT instructions and compliance guardrails.
+                  </li>
+                  <li>
+                    • Returns HTML + fields for titles, bullets, warnings, and manuals
+                    blocks.
+                  </li>
+                  <li>
+                    • Feeds directly into AvidiaSEO for full-page and feed generation.
+                  </li>
+                </ul>
 
-              {/* Notes example */}
-              <div className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-xs text-slate-700 md:grid-cols-2 dark:bg-slate-900 dark:text-slate-200">
-                <div className="space-y-2">
+                {/* Notes example */}
+                <div className="grid gap-4 rounded-2xl bg-slate-50 p-4 text-xs text-slate-700 md:grid-cols-2 dark:bg-slate-900 dark:text-slate-200">
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Example notes input
+                    </p>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                      <p className="text-[11px] leading-relaxed">
+                        &quot;Need SEO copy for ACME Infusion Pump 9000. 4-channel,
+                        dose-error reduction, touchscreen, hospital-grade. Focus on
+                        safety, standardizing IV workflows, and smart alarms. Avoid
+                        clinical claims we can&apos;t back.&quot;
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Describe output snippet
+                    </p>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                      <p className="text-[11px] leading-relaxed">
+                        The ACME Infusion Pump 9000 is a four-channel, hospital-grade
+                        IV pump designed to help standardize medication workflows. A
+                        color touch-screen interface, dose-error reduction software,
+                        and configurable smart alarms support consistent setup across
+                        bedsides while reducing manual double-entry.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  You control the rules. AvidiaDescribe enforces them every time, so
+                  new products land on-brand instead of copy-pasted from vendors.
+                </p>
+              </div>
+
+              {/* Right */}
+              <div className="flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span className="font-medium">
+                    From Describe to full SEO output
+                  </span>
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    Example
+                  </span>
+                </div>
+
+                {/* Page preview, shorter w/ scroll and fills column */}
+                <div className="flex-1 space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Example notes input
+                    Page preview
                   </p>
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-                    <p className="text-[11px] leading-relaxed">
-                      &quot;Need SEO copy for ACME Infusion Pump 9000. 4-channel,
-                      dose-error reduction, touchscreen, hospital-grade. Focus on
-                      safety, standardizing IV workflows, and smart alarms. Avoid
-                      clinical claims we can&apos;t back.&quot;
+                  <div className="max-h-28 space-y-2 overflow-auto pr-1">
+                    <h3 className="text-sm font-semibold">
+                      ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow
+                      Ready
+                    </h3>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                      The ACME Infusion Pump 9000 is a four-channel, smart IV pump
+                      designed for high-acuity environments. Pre-configured drug
+                      libraries, a color touch-screen, and dose-error reduction
+                      features help standardize IV workflows while reducing manual
+                      entry.
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                      <li>4 independent channels with shared drug library</li>
+                      <li>Color touch-screen with guided setup</li>
+                      <li>
+                        Dose-error reduction support for standardized workflows
+                      </li>
+                    </ul>
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Manuals, warranty details, and compliance language are included
+                      below the fold and in the JSON payload.
                     </p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Describe output snippet
+
+                {/* JSON snippet */}
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-900 p-4 text-[11px] text-slate-100 dark:border-slate-700">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    SEO JSON (excerpt)
                   </p>
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-                    <p className="text-[11px] leading-relaxed">
-                      The ACME Infusion Pump 9000 is a four-channel, hospital-grade IV
-                      pump designed to help standardize medication workflows. A color
-                      touch-screen interface, dose-error reduction software, and
-                      configurable smart alarms support consistent setup across
-                      bedsides while reducing manual double-entry.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                You control the rules. AvidiaDescribe enforces them every time, so new
-                products land on-brand instead of copy-pasted from vendors.
-              </p>
-            </div>
-
-            {/* Right */}
-            <div className="space-y-4 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
-              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-medium">From Describe to full SEO output</span>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  Example
-                </span>
-              </div>
-
-              {/* Page preview, shorter w/ scroll */}
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Page preview
-                </p>
-                <div className="max-h-32 space-y-2 overflow-auto pr-1">
-                  <h3 className="text-sm font-semibold">
-                    ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow Ready
-                  </h3>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                    The ACME Infusion Pump 9000 is a four-channel, smart IV pump
-                    designed for high-acuity environments. Pre-configured drug
-                    libraries, a color touch-screen, and dose-error reduction features
-                    help standardize IV workflows while reducing manual entry.
-                  </p>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>4 independent channels with shared drug library</li>
-                    <li>Color touch-screen with guided setup</li>
-                    <li>Dose-error reduction support for standardized workflows</li>
-                  </ul>
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    Manuals, warranty details, and compliance language are included
-                    below the fold and in the JSON payload.
-                  </p>
-                </div>
-              </div>
-
-              {/* JSON snippet */}
-              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-900 p-4 text-[11px] text-slate-100 dark:border-slate-700">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  SEO JSON (excerpt)
-                </p>
-                <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">
 {`{
   "name": "ACME Infusion Pump 9000 – 4-Channel, Smart Alarms, IV Workflow Ready",
   "h1": "ACME Infusion Pump 9000",
@@ -616,13 +653,14 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
     "manuals_html": "<ul>...</ul>"
   }
 }`}
-                </pre>
-              </div>
+                  </pre>
+                </div>
 
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                AvidiaSEO runs this inside the dashboard so you can queue URLs, review
-                changes, and sync only when you&apos;re ready to publish.
-              </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  AvidiaSEO runs this inside the dashboard so you can queue URLs,
+                  review changes, and sync only when you&apos;re ready to publish.
+                </p>
+              </div>
             </div>
           </section>
 
@@ -631,7 +669,10 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             {/* Pillars */}
             <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm sm:grid-cols-3 dark:border-slate-800 dark:bg-slate-950">
               {pillars.map((item) => (
-                <div key={item.title} className="space-y-3">
+                <div
+                  key={item.title}
+                  className="space-y-3"
+                >
                   <p className="text-sm font-semibold text-cyan-700 dark:text-cyan-200">
                     {item.title}
                   </p>
@@ -648,25 +689,25 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                 <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
                   Built for people living inside catalogs.
                 </h2>
-                <p className="text-sm sm:text-base text-slate-600 dark:text-slate-200">
+                <p className="text-sm text-slate-600 sm:text-base dark:text-slate-200">
                   AvidiaTech exists for teams who own product data—from first ingest to
                   SEO page and every downstream feed.
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Not a good fit if you only manage a handful of SKUs or don&apos;t care
-                  about structured SEO quality.
+                  Not a good fit if you only manage a handful of SKUs or don&apos;t
+                  care about structured SEO quality.
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 {audiences.map((aud) => (
                   <div
                     key={aud.title}
-                    className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                    className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600"
                   >
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                       {aud.title}
                     </p>
-                    <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-200">
+                    <p className="mt-2 text-xs text-slate-600 sm:text-sm dark:text-slate-200">
                       {aud.copy}
                     </p>
                   </div>
@@ -702,7 +743,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
               <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
                 Why teams standardize on AvidiaTech.
               </h3>
-              <div className="flex flex-wrap gap-3 text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+              <div className="flex flex-wrap gap-3 text-xs text-slate-700 sm:text-sm dark:text-slate-200">
                 {capabilities.map((item) => (
                   <span
                     key={item}
@@ -756,7 +797,7 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
             </div>
           </section>
 
-          {/* FINAL CTA – now a centered card, not edge-to-edge full width */}
+          {/* FINAL CTA – centered card, not edge-to-edge full width */}
           <section className="w-full px-4 sm:px-6 lg:px-10">
             <div className="mx-auto max-w-6xl rounded-3xl border border-cyan-500/40 bg-gradient-to-r from-cyan-50 via-emerald-50 to-amber-50 p-8 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -770,18 +811,18 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
                   </p>
                 </div>
                 <div className="flex flex-nowrap items-center gap-3">
-                  <a
+                  <Link
                     href="/sign-up"
-                    className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400 whitespace-nowrap"
+                    className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-400 active:translate-y-0 whitespace-nowrap"
                   >
                     Get Started
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/sign-in?redirect_url=/dashboard"
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:-translate-y-0.5 hover:bg-slate-100 active:translate-y-0 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-900 whitespace-nowrap"
                   >
                     Open Dashboard
-                  </a>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -791,26 +832,26 @@ We’ll simulate the Describe step in your pipeline: a compliant, search-aware p
         {/* FOOTER – full width */}
         <footer className="mt-auto border-t border-slate-200 py-4 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
           <div className="flex w-full flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
-            <span>© {new Date().getFullYear()} AvidiaTech. All rights reserved.</span>
+            <span>© {CURRENT_YEAR} AvidiaTech. All rights reserved.</span>
             <div className="flex flex-wrap items-center gap-3">
-              <a
+              <Link
                 href="/status"
                 className="hover:text-slate-800 dark:hover:text-slate-200"
               >
                 Status
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/privacy"
                 className="hover:text-slate-800 dark:hover:text-slate-200"
               >
                 Privacy
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/terms"
                 className="hover:text-slate-800 dark:hover:text-slate-200"
               >
                 Terms
-              </a>
+              </Link>
             </div>
           </div>
         </footer>
