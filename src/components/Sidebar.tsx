@@ -251,29 +251,32 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
           </div>
         ))}
       </div>
-
+            
+      // (Replace the bottom block in your existing Sidebar.tsx with the following)
       {/* Pinned bottom simple support block, light/dark friendly */}
       <div className="mt-3 shrink-0 border-t border-slate-200/60 px-2 pt-3 text-[10px] text-slate-500 dark:border-slate-800/80 dark:text-slate-500">
         <div className="flex flex-col gap-1">
-          <button
-            type="button"
+          <Link
+            href="/dashboard/support"
             className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/80 dark:text-slate-200 dark:hover:bg-slate-900/80"
+            aria-label="Open support chat"
           >
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               💬
             </span>
             <span className="font-medium">Open support chat</span>
-          </button>
+          </Link>
 
-          <button
-            type="button"
+          <Link
+            href="/docs/support" // adapt to your docs route if needed
             className="inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[10px] text-slate-700 hover:bg-slate-100/80 dark:text-slate-200 dark:hover:bg-slate-900/80"
+            aria-label="Documentation and guides"
           >
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] dark:bg-slate-800">
               📚
             </span>
             <span className="font-medium">Documentation &amp; guides</span>
-          </button>
+          </Link>
         </div>
       </div>
     </nav>
