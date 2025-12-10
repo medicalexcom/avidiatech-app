@@ -14,7 +14,7 @@ import { RealtimeChannel } from "@supabase/supabase-js";
 
 /**
  * Support Chat Page
- * 
+ *
  * A real-time support chat interface with:
  * - Thread creation/retrieval
  * - Real-time message updates via Supabase Realtime
@@ -31,6 +31,8 @@ export default function SupportChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +109,28 @@ export default function SupportChatPage() {
 
       const data: GetMessagesResponse = await response.json();
       setMessages(data.messages);
+
+      // Preload signed urls for any attached files returned with messages
+      data.messages.forEach(async (msg: any) => {
+        // If messages include chat_files relation (server returns chat_files in select)
+        if (msg.chat_files && Array.isArray(msg.chat_files)) {
+          for (const f of msg.chat_files) {
+            if (f?.id && f?.storage_path) {
+              try {
+                const supabase = getChatSupabaseClient();
+                const { data: urlData } = await supabase.storage
+                  .from("chat-uploads")
+                  .createSignedUrl(f.storage_path, 60 * 60 * 24 * 7);
+                if (urlData?.signedUrl) {
+                  setSignedUrls((s) => ({ ...s, [f.id]: urlData.signedUrl }));
+                }
+              } catch (err) {
+                // ignore
+              }
+            }
+          }
+        }
+      });
     } catch (err: any) {
       console.error("Error loading messages:", err);
       setError(err.message || "Failed to load messages");
@@ -219,9 +243,7 @@ export default function SupportChatPage() {
         throw new Error(errorData.error || "Failed to send message");
       }
 
-      const data: CreateMessageResponse = await response.json();
-
-      // Clear input
+      // Server will broadcast the message via Realtime; we don't need to append locally.
       setMessageInput("");
 
       // Update typing indicator
@@ -263,34 +285,70 @@ export default function SupportChatPage() {
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
-      // Get signed URL for the file
-      const { data: urlData } = await supabase.storage
-        .from("chat-uploads")
-        .createSignedUrl(filePath, 3600 * 24 * 7); // 7 days
+      // Prepare metadata we send to server so server can create canonical chat_files row
+      const metadata = {
+        storagePath: filePath,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+      };
 
-      const fileUrl = urlData?.signedUrl || "";
-
-      // Send a message with file attachment info
-      const fileMessage = `📎 Uploaded file: ${file.name}\n${fileUrl}`;
-
+      // Send a message creation request to server. Server will:
+      //  - insert a chat_messages row
+      //  - insert a chat_files row linked to the message (if storagePath present)
       const response = await fetch("/api/chat/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           threadId: thread.id,
-          content: fileMessage,
+          content: `📎 ${file.name}`,
           messageType: "file",
-          metadata: {
-            fileName: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            storagePath: filePath,
-          },
+          metadata,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to send file message");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to send file message");
+      }
+
+      const result = await response.json();
+
+      // If server returned a canonical file record, prefer that to create signed URL mapping
+      if (result?.file?.id && result?.file?.storage_path) {
+        try {
+          const { data: urlData } = await supabase.storage
+            .from("chat-uploads")
+            .createSignedUrl(result.file.storage_path, 60 * 60 * 24 * 7);
+          if (urlData?.signedUrl) {
+            setSignedUrls((s) => ({ ...s, [result.file.id]: urlData.signedUrl }));
+          }
+        } catch (err) {
+          // fallback: try to create signed URL from the client-side path
+          try {
+            const { data: urlData } = await supabase.storage
+              .from("chat-uploads")
+              .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+            if (urlData?.signedUrl) {
+              // since we don't have the file id (server returned none), store keyed by filePath
+              setSignedUrls((s) => ({ ...s, [filePath]: urlData.signedUrl }));
+            }
+          } catch (err2) {
+            // ignore
+          }
+        }
+      } else {
+        // Fallback: server didn't return file record — generate signed URL using client path
+        try {
+          const { data: urlData } = await supabase.storage
+            .from("chat-uploads")
+            .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+          if (urlData?.signedUrl) {
+            setSignedUrls((s) => ({ ...s, [filePath]: urlData.signedUrl }));
+          }
+        } catch (err) {
+          // ignore
+        }
       }
 
       // Clear file input
@@ -391,6 +449,14 @@ export default function SupportChatPage() {
             const isAgent = message.sender_role === "agent";
             const isSystem = message.sender_role === "system";
 
+            // If message has a linked chat_files row returned by server, prefer that signed URL
+            let fileUrl: string | undefined = undefined;
+            if ((message as any).chat_files && Array.isArray((message as any).chat_files) && (message as any).chat_files.length > 0) {
+              const f = (message as any).chat_files[0];
+              if (f?.id && signedUrls[f.id]) fileUrl = signedUrls[f.id];
+              else if (f?.storage_path && signedUrls[f?.storage_path]) fileUrl = signedUrls[f.storage_path];
+            }
+
             return (
               <div
                 key={message.id}
@@ -413,6 +479,16 @@ export default function SupportChatPage() {
                   <p className="whitespace-pre-wrap break-words">
                     {message.content}
                   </p>
+
+                  {/* If there's an attached file url, render link */}
+                  {fileUrl && (
+                    <div className="mt-2">
+                      <a href={fileUrl} target="_blank" rel="noreferrer" className="underline">
+                        Open attachment
+                      </a>
+                    </div>
+                  )}
+
                   <p className="text-xs opacity-70 mt-1">
                     {formatTimestamp(message.created_at)}
                   </p>
