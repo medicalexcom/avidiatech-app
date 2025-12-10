@@ -4,10 +4,10 @@ import { getServerSupabase } from "@/lib/supabase";
 
 /**
  * POST /api/chat/messages
- * 
+ *
  * Creates a new message in a chat thread.
  * Automatically updates the thread's last_message_at and last_sender_role via database trigger.
- * 
+ *
  * Request body:
  * {
  *   threadId: string (UUID),
@@ -15,10 +15,11 @@ import { getServerSupabase } from "@/lib/supabase";
  *   messageType?: 'text' | 'file' | 'system',
  *   metadata?: object
  * }
- * 
+ *
  * Response:
  * {
- *   message: { id, thread_id, sender_id, content, ... }
+ *   message: { id, thread_id, sender_id, content, ... },
+ *   file?: { id, message_id, storage_path, ... } // present for file messages when server stored file metadata
  * }
  */
 export async function POST(req: Request) {
@@ -37,9 +38,9 @@ export async function POST(req: Request) {
     const { threadId, content, messageType, metadata } = body;
 
     // Validate required fields
-    if (!threadId || !content) {
+    if (!threadId || (messageType !== "file" && !content)) {
       return NextResponse.json(
-        { error: "Missing required fields: threadId and content" },
+        { error: "Missing required fields: threadId and content (for non-file messages)" },
         { status: 400 }
       );
     }
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
           thread_id: threadId,
           sender_id: userId,
           sender_role: senderRole,
-          content: content,
+          content: content ?? "",
           message_type: messageType || "text",
           metadata: metadata || {},
         },
@@ -87,10 +88,10 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (createError) {
+    if (createError || !newMessage) {
       console.error("Error creating message:", createError);
       return NextResponse.json(
-        { error: "Failed to create message", details: createError.message },
+        { error: "Failed to create message", details: createError?.message },
         { status: 500 }
       );
     }
@@ -102,11 +103,49 @@ export async function POST(req: Request) {
       .eq("thread_id", threadId)
       .eq("user_id", userId);
 
-    // Note: Thread's last_message_at and last_sender_role are automatically updated
-    // via the database trigger created in migration 1_create_chat_tables.sql
+    // For file messages: if metadata contains storage path info, create a chat_files row
+    let createdFile: any = null;
+    try {
+      // Accept different keys: storagePath or storage_path
+      const storagePath = metadata?.storagePath ?? metadata?.storage_path ?? metadata?.storage_path;
+      if (messageType === "file" && storagePath) {
+        const fileName = metadata?.fileName ?? metadata?.file_name ?? metadata?.name ?? null;
+        const fileSize = metadata?.fileSize ?? metadata?.file_size ?? null;
+        const fileType = metadata?.fileType ?? metadata?.file_type ?? null;
 
+        const { data: fileRow, error: fileErr } = await supabase
+          .from("chat_files")
+          .insert([
+            {
+              message_id: newMessage.id,
+              thread_id: threadId,
+              uploaded_by: userId,
+              file_name: fileName ?? (typeof fileName === "string" ? fileName : (fileName ?? "upload")),
+              file_size: fileSize ?? 0,
+              file_type: fileType ?? "application/octet-stream",
+              storage_path: storagePath,
+              metadata: metadata ?? {},
+            },
+          ])
+          .select()
+          .single();
+
+        if (fileErr) {
+          console.error("Failed to insert chat_files row:", fileErr);
+          // Not fatal - we still return the created message
+        } else {
+          createdFile = fileRow;
+        }
+      }
+    } catch (fileInsertErr) {
+      console.error("Error creating chat_files record:", fileInsertErr);
+      // swallow error so message flow isn't broken
+    }
+
+    // Return message and optionally file record
     return NextResponse.json({
       message: newMessage,
+      file: createdFile,
     });
   } catch (err: any) {
     console.error("Message creation error:", err);
@@ -119,14 +158,14 @@ export async function POST(req: Request) {
 
 /**
  * GET /api/chat/messages
- * 
+ *
  * Retrieves messages for a specific thread.
- * 
+ *
  * Query params:
  * - threadId: UUID of the thread (required)
  * - limit: Number of messages to return (default: 100)
  * - before: ISO timestamp - get messages before this time (for pagination)
- * 
+ *
  * Response:
  * {
  *   messages: [...],
@@ -179,7 +218,7 @@ export async function GET(req: Request) {
     // Fetch messages
     let query = supabase
       .from("chat_messages")
-      .select("*")
+      .select("*, chat_files(*)") // include any linked chat_files rows
       .eq("thread_id", threadId)
       .is("deleted_at", null) // Exclude soft-deleted messages
       .order("created_at", { ascending: true });
