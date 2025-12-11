@@ -4,16 +4,16 @@ import { getServerSupabase } from "@/lib/supabase";
 
 /**
  * POST /api/chat/threads
- * 
+ *
  * Creates a new support thread or returns an existing open thread for the user.
- * 
+ *
  * Request body (optional):
  * {
  *   subject?: string,
  *   tenantId?: string,
  *   forceNew?: boolean  // If true, always create a new thread
  * }
- * 
+ *
  * Response:
  * {
  *   thread: { id, tenant_id, subject, status, ... },
@@ -35,40 +35,50 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { subject, tenantId, forceNew } = body;
 
-    // Get Supabase client with service role
+    // Get Supabase server client
     const supabase = getServerSupabase();
 
-    // Determine tenant_id (you may want to fetch this from user metadata or a database table)
-    // For now, we'll use the provided tenantId or default to userId as tenant
+    // Determine tenant. Use provided tenantId or fallback to userId (or adjust to your tenant resolution)
     const tenant = tenantId || userId;
 
-    // If not forcing a new thread, check for existing open thread
+    // If not forcing a new thread, attempt to locate an existing open thread where the user is a participant
     if (!forceNew) {
-      const { data: existingThread, error: fetchError } = await supabase
-        .from("chat_threads")
-        .select("*")
-        .eq("created_by", userId)
-        .eq("tenant_id", tenant)
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // 1) fetch participant rows for this user
+      const { data: participantRows, error: partErr } = await supabase
+        .from("chat_participants")
+        .select("thread_id")
+        .eq("user_id", userId);
 
-      if (fetchError) {
-        console.error("Error fetching existing thread:", fetchError);
-        // Continue to create new thread if fetch fails
-      }
+      if (partErr) {
+        console.error("Error fetching participant rows:", partErr);
+        // continue to creation flow — don't bail out (server is trusted)
+      } else if (participantRows && participantRows.length > 0) {
+        const threadIds = participantRows.map((r: any) => r.thread_id).filter(Boolean);
 
-      if (existingThread) {
-        // Return existing open thread
-        return NextResponse.json({
-          thread: existingThread,
-          isNew: false,
-        });
+        if (threadIds.length > 0) {
+          // 2) find an open thread for these ids matching tenant
+          const { data: existingThreads, error: threadErr } = await supabase
+            .from("chat_threads")
+            .select("*")
+            .in("id", threadIds)
+            .eq("tenant_id", tenant)
+            .eq("status", "open")
+            .order("last_message_at", { ascending: false })
+            .limit(1);
+
+          if (threadErr) {
+            console.error("Error fetching existing thread:", threadErr);
+          } else if (existingThreads && existingThreads.length > 0) {
+            return NextResponse.json({
+              thread: existingThreads[0],
+              isNew: false,
+            });
+          }
+        }
       }
     }
 
-    // Create a new thread
+    // Create a new thread (do not attempt to insert 'created_by' if the column may not exist)
     const { data: newThread, error: createError } = await supabase
       .from("chat_threads")
       .insert([
@@ -77,34 +87,37 @@ export async function POST(req: Request) {
           subject: subject || "Support Request",
           status: "open",
           priority: "normal",
-          created_by: userId,
         },
       ])
       .select()
       .single();
 
-    if (createError) {
+    if (createError || !newThread) {
       console.error("Error creating thread:", createError);
       return NextResponse.json(
-        { error: "Failed to create support thread", details: createError.message },
+        { error: "Failed to create support thread", details: createError?.message },
         { status: 500 }
       );
     }
 
-    // Add the creator as a participant
-    const { error: participantError } = await supabase
-      .from("chat_participants")
-      .insert([
-        {
-          thread_id: newThread.id,
-          user_id: userId,
-          role: "participant",
-        },
-      ]);
+    // Add the creator as a participant (if your chat_participants table exists)
+    try {
+      const { error: pErr } = await supabase
+        .from("chat_participants")
+        .insert([
+          {
+            thread_id: newThread.id,
+            user_id: userId,
+            role: "participant",
+          },
+        ]);
 
-    if (participantError) {
-      console.error("Error adding participant:", participantError);
-      // Non-fatal - thread is already created
+      if (pErr) {
+        console.error("Error adding participant:", pErr);
+        // non-fatal - thread created successfully
+      }
+    } catch (e) {
+      console.error("Unexpected error adding participant:", e);
     }
 
     return NextResponse.json({
@@ -122,13 +135,13 @@ export async function POST(req: Request) {
 
 /**
  * GET /api/chat/threads
- * 
+ *
  * Retrieves all threads for the authenticated user.
- * 
+ *
  * Query params:
  * - status: Filter by status (open, closed, archived)
  * - limit: Number of threads to return (default: 50)
- * 
+ *
  * Response:
  * {
  *   threads: [...],
@@ -148,28 +161,41 @@ export async function GET(req: Request) {
 
     // Parse query parameters
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") || "open";
+    const status = searchParams.get("status") || undefined;
     const limit = parseInt(searchParams.get("limit") || "50", 10);
 
-    // Get Supabase client
     const supabase = getServerSupabase();
 
-    // Fetch threads where user is the creator or a participant
+    // First get thread IDs where the user is a participant
+    const { data: participantRows, error: pErr } = await supabase
+      .from("chat_participants")
+      .select("thread_id")
+      .eq("user_id", userId);
+
+    if (pErr) {
+      console.error("Error fetching participant thread ids:", pErr);
+      return NextResponse.json(
+        { error: "Failed to fetch threads", details: pErr.message },
+        { status: 500 }
+      );
+    }
+
+    const threadIds = (participantRows || []).map((r: any) => r.thread_id).filter(Boolean);
+    if (threadIds.length === 0) {
+      return NextResponse.json({ threads: [], count: 0 });
+    }
+
     let query = supabase
       .from("chat_threads")
       .select("*")
+      .in("id", threadIds)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
       .limit(limit);
 
-    if (status) {
-      query = query.eq("status", status);
-    }
+    if (status) query = query.eq("status", status);
 
-    // Filter to threads where user is creator
-    query = query.eq("created_by", userId);
-
-    const { data: threads, error, count } = await query;
+    const { data: threads, error } = await query;
 
     if (error) {
       console.error("Error fetching threads:", error);
@@ -181,7 +207,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       threads: threads || [],
-      count: count || threads?.length || 0,
+      count: (threads && threads.length) || 0,
     });
   } catch (err: any) {
     console.error("Thread fetch error:", err);
