@@ -252,7 +252,6 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
         ))}
       </div>
             
-      // (Replace the bottom block in your existing Sidebar.tsx with the following)
       {/* Pinned bottom simple support block, light/dark friendly */}
       <div className="mt-3 shrink-0 border-t border-slate-200/60 px-2 pt-3 text-[10px] text-slate-500 dark:border-slate-800/80 dark:text-slate-500">
         <div className="flex flex-col gap-1">
