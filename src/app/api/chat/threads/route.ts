@@ -2,66 +2,43 @@ import { NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServerSupabase } from "@/lib/supabase";
 
-/**
- * Helper: isUuid
- * Returns true if the string looks like a UUID v1-5 (hex + dashes).
- * We use this to avoid sending Clerk text IDs into equality checks that expect UUIDs.
- */
 function isUuid(s?: string) {
   if (!s) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
-/**
- * POST /api/chat/threads
- *
- * Creates a new support thread or returns an existing open thread for the user.
- * Expected body:
- *  { subject?: string, tenantId?: string, forceNew?: boolean }
- *
- * Notes:
- * - tenant_id in DB is TEXT and NOT NULL; we must provide a value when inserting.
- * - Prefer explicit tenantId from the client; otherwise default to the auth user id (user_ref).
- * - Use user_ref (text) for Clerk ids; only compare against user_id when it looks like a UUID.
- */
 export async function POST(req: Request) {
   try {
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     const { subject, tenantId: explicitTenantId, forceNew } = body ?? {};
     const supabase = getServerSupabase();
 
-    // Determine tenant: prefer explicit tenantId; otherwise use the auth user id (text)
-    // (Using userId as tenant temporarily prevents not-null insert failures; replace with real tenant resolution later)
+    // tenant must be non-null because chat_threads.tenant_id is NOT NULL in your DB
     const tenant = explicitTenantId ?? userId;
 
-    // If not forcing a new thread, attempt to find an existing open thread where the user is a participant
+    // Find existing open thread where user is participant (if not forcing new)
     if (!forceNew) {
       try {
         let participantRows: any[] = [];
 
         if (isUuid(userId)) {
-          // safe to compare against user_id or user_ref
-          const { data } = await supabase
-            .from("chat_participants")
-            .select("thread_id")
-            .or(`user_id.eq.${userId},user_ref.eq.${userId}`);
-          participantRows = data ?? [];
+          // run both queries (safe) and merge results
+          const [byUserIdRes, byUserRefRes] = await Promise.all([
+            supabase.from("chat_participants").select("thread_id").eq("user_id", userId),
+            supabase.from("chat_participants").select("thread_id").eq("user_ref", userId),
+          ]);
+          participantRows = [...(byUserIdRes.data ?? []), ...(byUserRefRes.data ?? [])];
         } else {
-          // Clerk-style id -> match user_ref only
-          const { data } = await supabase
-            .from("chat_participants")
-            .select("thread_id")
-            .eq("user_ref", userId);
+          // Clerk-style id -> only query user_ref
+          const { data } = await supabase.from("chat_participants").select("thread_id").eq("user_ref", userId);
           participantRows = data ?? [];
         }
 
         if (participantRows.length > 0) {
-          const threadIds = participantRows.map((r: any) => r.thread_id).filter(Boolean);
+          const threadIds = Array.from(new Set(participantRows.map((r: any) => r.thread_id).filter(Boolean)));
           if (threadIds.length > 0) {
             let q = supabase
               .from("chat_threads")
@@ -70,24 +47,22 @@ export async function POST(req: Request) {
               .eq("status", "open")
               .order("last_message_at", { ascending: false })
               .limit(1);
-
             if (tenant) q = q.eq("tenant_id", tenant);
 
             const { data: existingThreads, error: threadErr } = await q;
-            if (threadErr) {
-              console.error("Error fetching existing thread:", threadErr);
-            } else if (existingThreads && existingThreads.length > 0) {
+            if (threadErr) console.error("Error fetching existing thread:", threadErr);
+            else if (existingThreads && existingThreads.length > 0) {
               return NextResponse.json({ thread: existingThreads[0], isNew: false });
             }
           }
         }
       } catch (err) {
         console.error("Error locating existing thread:", err);
-        // continue to create a new thread
+        // continue to create new thread
       }
     }
 
-    // Create new thread (tenant present because we defaulted to explicitTenantId || userId)
+    // Create thread (tenant guaranteed)
     const threadInsert: any = {
       tenant_id: tenant,
       subject: subject || "Support Request",
@@ -106,7 +81,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to create support thread", details: createError?.message }, { status: 500 });
     }
 
-    // Add the creator as a participant. Use user_ref (text) for Clerk IDs; use user_id if auth id is UUID.
+    // Insert participant — prefer user_ref for Clerk ids
     try {
       const participantInsert: any = { thread_id: newThread.id, role: "participant" };
       if (isUuid(userId)) participantInsert.user_id = userId;
@@ -125,20 +100,10 @@ export async function POST(req: Request) {
   }
 }
 
-/**
- * GET /api/chat/threads
- *
- * Returns threads for the authenticated user (threads where user is a participant).
- * Query params:
- *  - status (optional)
- *  - limit (optional)
- */
 export async function GET(req: Request) {
   try {
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
-    }
+    if (!userId) return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
@@ -146,23 +111,19 @@ export async function GET(req: Request) {
 
     const supabase = getServerSupabase();
 
-    // Find thread IDs where the user is a participant (prefer user_ref when Clerk id)
     let participantRows: any[] = [];
     if (isUuid(userId)) {
-      const { data } = await supabase
-        .from("chat_participants")
-        .select("thread_id")
-        .or(`user_id.eq.${userId},user_ref.eq.${userId}`);
-      participantRows = data ?? [];
+      const [byUserIdRes, byUserRefRes] = await Promise.all([
+        supabase.from("chat_participants").select("thread_id").eq("user_id", userId),
+        supabase.from("chat_participants").select("thread_id").eq("user_ref", userId),
+      ]);
+      participantRows = [...(byUserIdRes.data ?? []), ...(byUserRefRes.data ?? [])];
     } else {
-      const { data } = await supabase
-        .from("chat_participants")
-        .select("thread_id")
-        .eq("user_ref", userId);
+      const { data } = await supabase.from("chat_participants").select("thread_id").eq("user_ref", userId);
       participantRows = data ?? [];
     }
 
-    const threadIds = participantRows.map((r: any) => r.thread_id).filter(Boolean);
+    const threadIds = Array.from(new Set(participantRows.map((r: any) => r.thread_id).filter(Boolean)));
     if (threadIds.length === 0) return NextResponse.json({ threads: [], count: 0 });
 
     let query = supabase
