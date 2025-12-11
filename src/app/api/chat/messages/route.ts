@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServerSupabase } from "@/lib/supabase";
 
+function isUuid(s?: string) {
+  if (!s) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
@@ -15,7 +20,7 @@ export async function POST(req: Request) {
 
     const supabase = getServerSupabase();
 
-    // Fetch participants for the thread, then check in JS so we don't attempt to cast Clerk id to uuid
+    // Fetch participants for thread (no filters) then verify in JS to avoid uuid casting
     const { data: participants, error: participantsErr } = await supabase
       .from("chat_participants")
       .select("*")
@@ -27,7 +32,6 @@ export async function POST(req: Request) {
     }
 
     const isParticipant = Array.isArray(participants) && participants.some((p: any) => {
-      // Match by user_ref (text) OR by user_id (if stored as a uuid that stringifies to Clerk id — unlikely)
       if (p.user_ref && p.user_ref === userId) return true;
       try {
         if (p.user_id && String(p.user_id) === userId) return true;
@@ -37,27 +41,31 @@ export async function POST(req: Request) {
       return false;
     });
 
-    // You can also allow support agents via DB helper (if implemented)
-    // For now, deny if not participant
     if (!isParticipant) {
       return NextResponse.json({ error: "You are not a participant of this thread" }, { status: 403 });
     }
 
-    // Determine sender role from participant row
+    // derive participant row to set sender fields
     const participantRow = participants.find((p: any) => p.user_ref === userId || String(p.user_id) === userId) || participants[0];
     const senderRole = participantRow?.role === "agent" ? "agent" : (messageType === "system" ? "system" : "user");
 
-    // Insert the message (existing behavior)
+    // Insert message (set sender_id only if participantRow.user_id is a UUID)
+    const insertPayload: any = {
+      thread_id: threadId,
+      sender_role: senderRole,
+      message_type: messageType || "text",
+      content: content ?? "",
+      metadata: metadata ?? {},
+    };
+    if (participantRow?.user_id && isUuid(String(participantRow.user_id))) {
+      insertPayload.sender_id = participantRow.user_id;
+    } else {
+      insertPayload.sender_id = null;
+    }
+
     const { data: msg, error: insertErr } = await supabase
       .from("chat_messages")
-      .insert([{
-        thread_id: threadId,
-        sender_id: participantRow?.user_id ?? null,
-        sender_role: senderRole,
-        message_type: messageType || "text",
-        content: content ?? "",
-        metadata: metadata ?? {}
-      }])
+      .insert([insertPayload])
       .select()
       .single();
 
@@ -66,12 +74,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
     }
 
-    // Update participant last_read_at
-    await supabase
-      .from("chat_participants")
-      .update({ last_read_at: new Date().toISOString() })
-      .eq("thread_id", threadId)
-      .or(`user_ref.eq.${userId},user_id.eq.${participantRow?.user_id ?? ""}`);
+    // Update participant last_read_at for matching participant row(s)
+    try {
+      if (participantRow?.user_ref) {
+        await supabase.from("chat_participants").update({ last_read_at: new Date().toISOString() }).eq("thread_id", threadId).eq("user_ref", participantRow.user_ref);
+      } else if (participantRow?.user_id && isUuid(String(participantRow.user_id))) {
+        await supabase.from("chat_participants").update({ last_read_at: new Date().toISOString() }).eq("thread_id", threadId).eq("user_id", participantRow.user_id);
+      }
+    } catch (e) {
+      // non-fatal
+      console.error("Error updating last_read_at:", e);
+    }
 
     return NextResponse.json({ message: msg });
   } catch (err: any) {
