@@ -54,7 +54,7 @@ export default function AdminSupportPage() {
           <p className="mt-2 text-slate-600">This area is for support staff and owners only.</p>
           <div className="mt-4 flex justify-center gap-3">
             <Link href="/dashboard" className="px-4 py-2 bg-sky-600 text-white rounded">Back to dashboard</Link>
-            <Link href="/sign-in" className="px-4 py-2 border rounded">Sign in</Link>
+            <Link href="/sign-in?redirect_url=/internal/support" className="px-4 py-2 border rounded">Sign in</Link>
           </div>
         </div>
       </div>
