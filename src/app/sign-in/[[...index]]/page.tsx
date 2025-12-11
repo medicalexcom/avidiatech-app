@@ -48,7 +48,7 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
         {!clerkFailed ? (
-          // Use Clerk's modern redirect prop: forceRedirectUrl ensures user ends up at requested page
+          // Use modern prop to guarantee redirect to the requested path after sign-in
           <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" forceRedirectUrl={redirect} />
         ) : (
           <div className="space-y-4">
