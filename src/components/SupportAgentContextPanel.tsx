@@ -1,4 +1,3 @@
- url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/components/SupportAgentContextPanel.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
