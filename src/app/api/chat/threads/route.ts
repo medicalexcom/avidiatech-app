@@ -7,61 +7,40 @@ function isUuid(s?: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+/**
+ * POST /api/chat/threads
+ *
+ * Creates a new support thread or returns an existing open thread for the user.
+ * Body:
+ * { subject?: string, tenantId?: string, forceNew?: boolean }
+ *
+ * Notes:
+ * - tenant_id in DB is TEXT and NOT NULL; we must always pass a non-null value.
+ * - We prefer an explicit tenantId from client; otherwise we default to the auth user id (user_ref).
+ * - We avoid comparing Clerk string IDs with UUID columns; participant lookups use user_ref or safe JS checks.
+ */
 export async function POST(req: Request) {
   try {
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized - Please sign in" }, { status: 401 });
+    }
 
     const body = await req.json().catch(() => ({}));
     const { subject, tenantId: explicitTenantId, forceNew } = body ?? {};
     const supabase = getServerSupabase();
 
-    // Resolve tenant (prefer explicit, try workspace_members/profile if available)
-    let tenant: string | null = null;
-    if (explicitTenantId) {
-      tenant = explicitTenantId;
-    } else {
-      try {
-        const { data: wmByRef } = await supabase
-          .from("workspace_members")
-          .select("tenant_id")
-          .eq("user_ref", userId)
-          .limit(1)
-          .maybeSingle();
-        if (wmByRef?.tenant_id) {
-          tenant = wmByRef.tenant_id;
-        } else if (isUuid(userId)) {
-          // only attempt UUID-based lookup if userId looks like a UUID
-          const { data: wmByUUID } = await supabase
-            .from("workspace_members")
-            .select("tenant_id")
-            .eq("user_id", userId)
-            .limit(1)
-            .maybeSingle();
-          if (wmByUUID?.tenant_id) tenant = wmByUUID.tenant_id;
-        } else {
-          // try profiles table (match on id which may be text)
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("tenant_id")
-            .eq("id", userId)
-            .limit(1)
-            .maybeSingle();
-          if (profile?.tenant_id) tenant = profile.tenant_id;
-        }
-      } catch (err) {
-        console.error("Error resolving tenant for user:", err);
-        tenant = null;
-      }
-    }
+    // Determine tenant: prefer explicit, else default to the auth user id (text).
+    // This guarantees tenant_id is never null. Replace with real tenant resolution when available.
+    const tenant = explicitTenantId ?? userId;
 
     // Try to find an existing open thread where the user is a participant (only if not forceNew)
     if (!forceNew) {
       try {
-        let participantRows: any[] | null = null;
+        let participantRows: any[] = [];
 
         if (isUuid(userId)) {
-          // if it's a UUID, we can safely compare against user_id and user_ref
+          // safe to compare against user_id or user_ref if userId looks like UUID
           const { data } = await supabase
             .from("chat_participants")
             .select("thread_id")
@@ -76,7 +55,7 @@ export async function POST(req: Request) {
           participantRows = data ?? [];
         }
 
-        if (participantRows && participantRows.length > 0) {
+        if (participantRows.length > 0) {
           const threadIds = participantRows.map((r: any) => r.thread_id).filter(Boolean);
           if (threadIds.length > 0) {
             let q = supabase
@@ -86,7 +65,9 @@ export async function POST(req: Request) {
               .eq("status", "open")
               .order("last_message_at", { ascending: false })
               .limit(1);
+            // tenant_id is TEXT in DB; safe to compare against tenant (text)
             if (tenant) q = q.eq("tenant_id", tenant);
+
             const { data: existingThreads, error: threadErr } = await q;
             if (threadErr) {
               console.error("Error fetching existing thread:", threadErr);
@@ -97,12 +78,17 @@ export async function POST(req: Request) {
         }
       } catch (err) {
         console.error("Error locating existing thread:", err);
+        // continue to create new thread
       }
     }
 
-    // Create a new thread. Only include tenant_id if resolved (avoid writing Clerk id as tenant)
-    const threadInsert: any = { subject: subject || "Support Request", status: "open", priority: "normal" };
-    if (tenant) threadInsert.tenant_id = tenant;
+    // Create a new thread. tenant is always present (explicitTenantId or userId).
+    const threadInsert: any = {
+      tenant_id: tenant,
+      subject: subject || "Support Request",
+      status: "open",
+      priority: "normal",
+    };
 
     const { data: newThread, error: createError } = await supabase
       .from("chat_threads")
@@ -115,7 +101,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to create support thread", details: createError?.message }, { status: 500 });
     }
 
-    // Add creator as participant: write user_ref with Clerk id (leave user_id NULL when Clerk id present)
+    // Add creator as participant: store Clerk id in user_ref (text). If userId is UUID, set user_id instead.
     try {
       const participantInsert: any = { thread_id: newThread.id, role: "participant" };
       if (isUuid(userId)) participantInsert.user_id = userId;
@@ -158,8 +144,16 @@ export async function GET(req: Request) {
     const threadIds = participantRows.map((r: any) => r.thread_id).filter(Boolean);
     if (threadIds.length === 0) return NextResponse.json({ threads: [], count: 0 });
 
-    let query = supabase.from("chat_threads").select("*").in("id", threadIds).order("last_message_at", { ascending: false }).order("created_at", { ascending: false }).limit(limit);
+    let query = supabase
+      .from("chat_threads")
+      .select("*")
+      .in("id", threadIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
     if (status) query = query.eq("status", status);
+
     const { data: threads, error } = await query;
     if (error) {
       console.error("Error fetching threads:", error);
