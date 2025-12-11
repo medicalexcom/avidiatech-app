@@ -1,4 +1,3 @@
- url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/api/support/admin/threads/route.ts
 import { NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServerSupabase } from "@/lib/supabase";
