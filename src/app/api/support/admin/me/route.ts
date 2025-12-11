@@ -4,13 +4,16 @@ import { getServerSupabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
-    // Read Clerk user id from the incoming request
+    // Read Clerk user id from the incoming request (safeGetAuth reads cookies/context)
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) return NextResponse.json({ isAgent: false }, { status: 200 });
+    if (!userId) {
+      // No clerk session or safeGetAuth couldn't resolve auth
+      return NextResponse.json({ isAgent: false }, { status: 200 });
+    }
 
     const supabase = getServerSupabase();
 
-    // Primary authorization check via RPC (expects Clerk user id text)
+    // Primary authorization check: DB RPC should accept Clerk user id (text)
     const { data: agentCheck, error } = await supabase.rpc("is_support_agent", { user_id: userId });
     if (error) {
       console.error("is_support_agent rpc error:", error);
