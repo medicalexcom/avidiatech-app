@@ -1,20 +1,20 @@
-// src/app/api/debug/whoami/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServerSupabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   try {
-    // Get clerk auth from the incoming request
+    // safeGetAuth should read the Clerk session from the incoming request cookies
     const auth = safeGetAuth(req as any) as any;
-    // Also call is_support_agent so we see rpc behavior
+
+    // call is_support_agent RPC (wrap in try/catch so we still return auth if RPC fails)
     let isAgent = null;
     try {
       const supabase = getServerSupabase();
-      const { data } = await supabase.rpc("is_support_agent", { user_id: auth?.userId ?? null });
-      isAgent = data;
+      const { data, error } = await supabase.rpc("is_support_agent", { user_id: auth?.userId ?? null });
+      if (error) isAgent = { rpc_error: String(error?.message ?? error) };
+      else isAgent = data;
     } catch (e) {
-      // capture rpc error
       isAgent = { rpc_error: String(e) };
     }
 
