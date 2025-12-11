@@ -1,4 +1,3 @@
- url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/components/ThreadRow.tsx
 "use client";
 
 import React from "react";
