@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 export default function SignInPage() {
   const params = useSearchParams();
+  // accept either ?redirect or ?redirect_url for compatibility
   const redirect = params?.get("redirect") ?? params?.get("redirect_url") ?? "/dashboard";
 
   const [clerkFailed, setClerkFailed] = useState(false);
@@ -48,7 +49,9 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
         {!clerkFailed ? (
-          <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" afterSignInUrl={redirect} />
+          // Use Clerk's new prop: forceRedirectUrl (guarantees redirect after sign-in)
+          // If you prefer Clerk to only use the url when no other redirect was provided, use fallbackRedirectUrl instead.
+          <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" forceRedirectUrl={redirect} />
         ) : (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">Sign in</h2>
