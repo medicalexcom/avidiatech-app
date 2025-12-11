@@ -1,5 +1,3 @@
- url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/internal/support/[threadId]/page.tsx
-// simple server shell that renders the client components (routing consistency)
 import React from "react";
 
 export default function ThreadPage({ params }: { params: { threadId: string } }) {
