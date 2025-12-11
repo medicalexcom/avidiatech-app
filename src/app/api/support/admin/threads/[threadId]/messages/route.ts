@@ -1,21 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServerSupabase } from "@/lib/supabase";
 
 /**
  * GET: list messages for a thread (admin)
  * POST: create agent message (admin)
+ *
+ * Use NextRequest + loose context typing to avoid Next.js type mismatch.
  */
-export async function GET(req: Request, { params }: { params: { threadId: string } }) {
+export async function GET(request: NextRequest, context: any) {
   try {
-    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+    const params = context?.params || {};
+    const threadId = params.threadId;
+
+    const { userId } = (safeGetAuth(request as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const supabase = getServerSupabase();
     const { data: agentCheck } = await supabase.rpc("is_support_agent", { user_id: userId });
     if (!agentCheck) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { data, error } = await supabase.from("chat_messages").select("*, chat_files(*)").eq("thread_id", params.threadId).order("created_at", { ascending: true });
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*, chat_files(*)")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true });
+
     if (error) {
       console.error("Error listing messages:", error);
       return NextResponse.json({ error: "Failed to list messages" }, { status: 500 });
@@ -28,22 +38,24 @@ export async function GET(req: Request, { params }: { params: { threadId: string
   }
 }
 
-export async function POST(req: Request, { params }: { params: { threadId: string } }) {
+export async function POST(request: NextRequest, context: any) {
   try {
-    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+    const params = context?.params || {};
+    const threadId = params.threadId;
+
+    const { userId } = (safeGetAuth(request as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const supabase = getServerSupabase();
     const { data: agentCheck } = await supabase.rpc("is_support_agent", { user_id: userId });
     if (!agentCheck) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const body = await req.json();
+    const body = await request.json();
     const { content, messageType = "text", internal = false, attachments = [] } = body;
     if (!content && (!attachments || attachments.length === 0)) return NextResponse.json({ error: "Missing content or attachments" }, { status: 400 });
 
     // Determine sender fields
-    // If agent has a UUID in your system, this can be set; otherwise leave sender_id null and rely on user_ref in participants.
-    const senderPayload: any = { thread_id: params.threadId, sender_role: "agent", message_type: messageType, content, metadata: { internal } };
+    const senderPayload: any = { thread_id: threadId, sender_role: "agent", message_type: messageType, content, metadata: { internal } };
 
     // Try to find the participant row for the agent to set sender_id when possible
     const { data: agentParticipants } = await supabase.from("chat_participants").select("*").eq("user_ref", userId).limit(1).maybeSingle();
@@ -55,10 +67,10 @@ export async function POST(req: Request, { params }: { params: { threadId: strin
       return NextResponse.json({ error: "Failed to insert message" }, { status: 500 });
     }
 
-    // Insert chat_files rows for attachments (if any). attachments expected to have storage_path, file_name, size, mime
+    // Insert chat_files rows for attachments (if any)
     if (Array.isArray(attachments) && attachments.length > 0) {
       const fileInserts = attachments.map((a: any) => ({
-        thread_id: params.threadId,
+        thread_id: threadId,
         message_id: newMessage.id,
         storage_path: a.storage_path,
         file_name: a.file_name,
