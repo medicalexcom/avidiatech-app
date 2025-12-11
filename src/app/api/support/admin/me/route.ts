@@ -4,20 +4,20 @@ import { getServerSupabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
-    // Read clerk user id from incoming request (safeGetAuth reads cookies/context)
+    // Read Clerk user id from the incoming request
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
     if (!userId) return NextResponse.json({ isAgent: false }, { status: 200 });
 
     const supabase = getServerSupabase();
 
-    // Primary authorization check: DB RPC should return boolean for Clerk user_id (text).
+    // Primary authorization check via RPC (expects Clerk user id text)
     const { data: agentCheck, error } = await supabase.rpc("is_support_agent", { user_id: userId });
     if (error) {
       console.error("is_support_agent rpc error:", error);
       return NextResponse.json({ isAgent: false }, { status: 200 });
     }
 
-    // Fetch profile by profiles.user_id (NOT the uuid id). Many schemas keep Clerk id in user_id column.
+    // Fetch profile by profiles.user_id (NOT the uuid id)
     const { data: profile } = await supabase
       .from("profiles")
       .select("user_id, role, tenant_id, full_name, email")
