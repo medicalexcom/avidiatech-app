@@ -5,13 +5,11 @@ import crypto from "crypto";
 const MODULES = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
 
 function clerkUserIdToUuid(clerkUserId: string): string {
-  // Deterministic UUID derived from Clerk userId (fits uuid column).
-  // uuid-ish formatting: xxxxxxxx-xxxx-5xxx-8xxx-xxxxxxxxxxxx
   const hash = crypto.createHash("sha1").update(`clerk:${clerkUserId}`).digest("hex");
   const a = hash.slice(0, 8);
   const b = hash.slice(8, 12);
-  const c = ((parseInt(hash.slice(12, 16), 16) & 0x0fff) | 0x5000).toString(16).padStart(4, "0"); // v5
-  const d = ((parseInt(hash.slice(16, 20), 16) & 0x3fff) | 0x8000).toString(16).padStart(4, "0"); // variant
+  const c = ((parseInt(hash.slice(12, 16), 16) & 0x0fff) | 0x5000).toString(16).padStart(4, "0");
+  const d = ((parseInt(hash.slice(16, 20), 16) & 0x3fff) | 0x8000).toString(16).padStart(4, "0");
   const e = hash.slice(20, 32);
   return `${a}-${b}-${c}-${d}-${e}`;
 }
@@ -21,7 +19,6 @@ function getSupabaseServerClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
-  // Lazy import so build doesn’t fail if supabase-js isn’t evaluated in some contexts.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { createClient } = require("@supabase/supabase-js");
   return createClient(url, key, { auth: { persistSession: false } });
@@ -39,12 +36,17 @@ export async function POST(req: Request) {
     );
   }
 
-  let payload: any = null;
-  try {
-    payload = await req.json();
-  } catch {
-    payload = null;
-  }
+  const body = (await req.json().catch(() => ({}))) as any;
+
+  const ingestionId = body?.ingestionId?.toString() || "";
+  if (!ingestionId) return NextResponse.json({ error: "missing_ingestionId" }, { status: 400 });
+
+  const payload = {
+    ingestionId,
+    triggerModule: body?.triggerModule ?? "seo",
+    steps: Array.isArray(body?.steps) ? body.steps : [...MODULES],
+    options: body?.options ?? {},
+  };
 
   const requestId = crypto.randomUUID();
   const createdBy = clerkUserIdToUuid(userId);
@@ -69,6 +71,7 @@ export async function POST(req: Request) {
     module_name,
     module_index,
     status: "queued",
+    input_ref: ingestionId,
   }));
 
   const { error: modErr } = await supabase.from("module_runs").insert(moduleRows);
@@ -79,7 +82,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Trigger edge function runner (service role auth; server-side only)
+  // Trigger edge function runner
   const fnName = process.env.PIPELINE_RUNNER_FUNCTION_NAME || "pipeline-runner";
   const fnUrl = `${process.env.SUPABASE_URL!.replace(/\/$/, "")}/functions/v1/${fnName}`;
 
@@ -93,11 +96,10 @@ export async function POST(req: Request) {
       body: JSON.stringify({ pipelineRunId }),
     });
 
-    // Don’t fail the request if runner fails to start; return 202 with warning
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
+      const text = await resp.text().catch(() => "");
       return NextResponse.json(
-        { pipelineRunId, warning: "runner_invocation_failed", status: resp.status, body },
+        { pipelineRunId, warning: "runner_invocation_failed", status: resp.status, body: text },
         { status: 202 }
       );
     }
