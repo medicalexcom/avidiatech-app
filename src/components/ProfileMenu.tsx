@@ -3,7 +3,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useUser, SignOutButton } from "@clerk/nextjs";
+import {
+  useUser,
+  SignOutButton,
+  OrganizationSwitcher,
+  OrganizationProfile,
+} from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 
 /**
@@ -13,13 +18,15 @@ import { useTheme } from "next-themes";
  */
 
 export default function ProfileMenu() {
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [showOrgProfile, setShowOrgProfile] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const orgSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Mount flag to avoid hydration mismatch
   useEffect(() => {
@@ -59,11 +66,15 @@ export default function ProfileMenu() {
           !buttonRef.current.contains(target)
         ) {
           setOpen(false);
+          setShowOrgProfile(false);
         }
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        setShowOrgProfile(false);
+      }
     }
     document.addEventListener("click", onDoc);
     document.addEventListener("keydown", onKey);
@@ -101,17 +112,30 @@ export default function ProfileMenu() {
       const me = e as unknown as MouseEvent;
       if (me.metaKey || me.ctrlKey || me.shiftKey || me.button !== 0) {
         setOpen(false);
+        setShowOrgProfile(false);
         return;
       }
       e.preventDefault();
     }
     setOpen(false);
+    setShowOrgProfile(false);
     try {
       window.history.pushState({}, "", href);
       window.location.href = href;
     } catch {
       window.location.href = href;
     }
+  }
+
+  function openOrgSection(e: React.MouseEvent) {
+    e.preventDefault();
+    // Keep dropdown open; just reveal org UI inside it.
+    setShowOrgProfile(false);
+
+    // Scroll/focus to org section inside the dropdown (no route changes).
+    requestAnimationFrame(() => {
+      orgSectionRef.current?.scrollIntoView({ block: "nearest" });
+    });
   }
 
   if (!isLoaded) return null;
@@ -129,13 +153,15 @@ export default function ProfileMenu() {
   const Item = ({
     href,
     children,
+    onClick,
   }: {
     href: string;
     children: React.ReactNode;
+    onClick?: (e: React.MouseEvent) => void;
   }) => (
     <a
       href={href}
-      onClick={(e) => nav(href, e)}
+      onClick={onClick ?? ((e) => nav(href, e))}
       className="block px-3 py-2 rounded-lg text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-colors"
     >
       {children}
@@ -145,7 +171,7 @@ export default function ProfileMenu() {
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-[340px] rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.35)] backdrop-blur-xl overflow-hidden"
+      className="fixed right-4 top-16 z-[9999] w-[340px] rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.35)] backdrop-blur-md"
       role="menu"
       aria-orientation="vertical"
     >
@@ -160,7 +186,7 @@ export default function ProfileMenu() {
             alt="avatar"
             className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
           />
-          <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-semibold text-slate-950 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(15,23,42,1)]">
+          <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-semibold text-slate-950 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(2,6,23,0.9)]">
             ✓
           </span>
         </div>
@@ -193,11 +219,67 @@ export default function ProfileMenu() {
 
         <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
 
-        <Item href="/settings/organization">Organization</Item>
+        {/* Keep the existing "Organization" item, but wire it to open in-menu org tools */}
+        <Item href="/settings/organization" onClick={openOrgSection}>
+          Organization
+        </Item>
+
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
         <Item href="/settings/billing">Subscription &amp; billing</Item>
+
+        {/* Org tools section (switch/create/select) */}
+        {mounted && isSignedIn ? (
+          <div
+            ref={orgSectionRef}
+            className="mt-2 rounded-xl border border-slate-200/70 dark:border-slate-800/70 bg-slate-50/60 dark:bg-slate-900/30 p-2"
+          >
+            <div className="px-1.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+              Organization
+            </div>
+
+            <div className="px-1.5">
+              <OrganizationSwitcher
+                hidePersonal={false}
+                createOrganizationMode="modal"
+                organizationProfileMode="modal"
+                afterSelectOrganizationUrl="/dashboard/import"
+                afterCreateOrganizationUrl="/dashboard/import"
+                appearance={{
+                  elements: {
+                    rootBox: "w-full",
+                    organizationSwitcherTrigger:
+                      "w-full h-9 justify-between rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900",
+                  },
+                }}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowOrgProfile((v) => !v)}
+              className="mt-2 w-full rounded-lg border border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-950/80 px-3 py-2 text-left text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900 transition-colors"
+            >
+              {showOrgProfile ? "Hide organization settings" : "Manage organization"}
+            </button>
+
+            {showOrgProfile ? (
+              <div className="mt-2 max-h-[420px] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-2">
+                <OrganizationProfile
+                  routing="hash"
+                  appearance={{
+                    elements: {
+                      card: "shadow-none border-0",
+                      navbar: "hidden",
+                      pageScrollBox: "p-0",
+                    },
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </nav>
 
       {/* Appearance + sign out */}
@@ -251,8 +333,11 @@ export default function ProfileMenu() {
         <div>
           <SignOutButton>
             <button
-              onClick={() => setOpen(false)}
-              className="w-full rounded-lg border border-red-100/70 dark:border-red-500/40 bg-red-50/70 dark:bg-red-500/10 px-3 py-2 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
+              onClick={() => {
+                setOpen(false);
+                setShowOrgProfile(false);
+              }}
+              className="w-full rounded-lg border border-red-100/70 dark:border-red-500/40 bg-red-50/70 dark:bg-red-500/10 px-3 py-2 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-100/70 dark:hover:bg-red-500/20 transition-colors"
             >
               Sign out
             </button>
@@ -268,7 +353,7 @@ export default function ProfileMenu() {
         ref={buttonRef}
         aria-expanded={open}
         onClick={() => setOpen((s) => !s)}
-        className="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 px-1.5 py-1 shadow-sm hover:bg-slate-100/90 dark:hover:bg-slate-800/90 transition-colors"
+        className="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 px-1.5 py-1 shadow-sm hover:bg-slate-100/90 dark:hover:bg-slate-800/70 transition-colors"
         title="Account"
         type="button"
       >
