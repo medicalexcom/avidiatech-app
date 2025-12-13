@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useUser, OrganizationSwitcher } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import ProfileMenu from "./ProfileMenu";
 
 const primaryLinks = [
@@ -114,37 +114,19 @@ export default function TopNav() {
             {/* Notifications */}
             <Link
               href="/dashboard/notifications"
-              className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
+              className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:text-slate-50"
               aria-label="Notifications"
             >
               <span className="text-[14px]">🔔</span>
               <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border border-white bg-rose-500 dark:border-slate-900" />
             </Link>
 
-            {/* Org switcher (tenant selector) */}
-            {isLoaded && isSignedIn ? (
-              <OrganizationSwitcher
-                hidePersonal={false}
-                createOrganizationMode="navigation"
-                organizationProfileMode="navigation"
-                afterSelectOrganizationUrl="/dashboard/import"
-                afterCreateOrganizationUrl="/dashboard/import"
-                appearance={{
-                  elements: {
-                    rootBox: "flex items-center",
-                    organizationSwitcherTrigger:
-                      "h-8 rounded-full border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900",
-                  },
-                }}
-              />
-            ) : null}
-
             {/* Profile / auth */}
             {isLoaded && isSignedIn ? (
               <ProfileMenu />
             ) : (
               <button
-                className="inline-flex items-center gap-1 rounded-full bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-md shadow-cyan-500/30 transition-transform hover:-translate-y-[1px] hover:bg-cyan-400 active:translate-y-0 disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-full bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 shadow-md shadow-cyan-500/30 transition-transform hover:-translate-y-[1px] hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none"
                 onClick={() => router.push("/sign-in?redirect=/dashboard")}
                 type="button"
                 disabled={!isLoaded}
