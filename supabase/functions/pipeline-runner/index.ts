@@ -17,6 +17,14 @@ async function uploadJson(supabase: any, key: string, payload: any) {
   if (error) throw error;
 }
 
+function skipReasonPayload(reason: string, details?: any) {
+  return {
+    skipped: true,
+    reason,
+    details: details ?? null,
+  };
+}
+
 Deno.serve(async (req) => {
   try {
     // Ensure caller is server-side (service role)
@@ -98,6 +106,10 @@ Deno.serve(async (req) => {
       requestedSteps.length ? requestedSteps : (modules ?? []).map((m: any) => m.module_name)
     );
 
+    // Soft gate flags
+    let auditPassedOrNotRun = true;
+    let auditFailureDetails: any = null;
+
     for (const m of modules ?? []) {
       const moduleId = m.id as string;
       const moduleName = m.module_name as string;
@@ -108,6 +120,37 @@ Deno.serve(async (req) => {
           .from("module_runs")
           .update({ status: "skipped" satisfies ModuleStatus, finished_at: new Date().toISOString() })
           .eq("id", moduleId);
+        continue;
+      }
+
+      // Soft gate policy:
+      // If audit failed, automatically skip import/monitor/price (and anything after audit you choose later).
+      const shouldSkipDueToAudit =
+        auditPassedOrNotRun === false && ["import", "monitor", "price"].includes(moduleName);
+
+      if (shouldSkipDueToAudit) {
+        const key = `${pipelineRunId}/${moduleIndex}-${moduleName}.json`;
+
+        await uploadJson(supabase, key, {
+          pipelineRunId,
+          ingestionId: ingestionId ?? null,
+          module: { name: moduleName, index: moduleIndex },
+          generatedAt: new Date().toISOString(),
+          ...skipReasonPayload("skipped_due_to_audit_fail", {
+            audit: auditFailureDetails,
+          }),
+        });
+
+        await supabase
+          .from("module_runs")
+          .update({
+            status: "skipped" satisfies ModuleStatus,
+            finished_at: new Date().toISOString(),
+            output_ref: key,
+            error: { message: "skipped_due_to_audit_fail", audit: auditFailureDetails },
+          })
+          .eq("id", moduleId);
+
         continue;
       }
 
@@ -237,11 +280,36 @@ Deno.serve(async (req) => {
             throw new Error(`audit_internal_http_${resp.status}`);
           }
 
-          // Gate (recommended for "full pipeline"): fail fast if audit fails
           const auditOk = Boolean(json?.audit?.ok ?? json?.ok);
           if (!auditOk) {
-            throw new Error(`audit_failed_score_${json?.audit?.score ?? json?.score ?? "unknown"}`);
+            // Soft gate: DO NOT fail the runner immediately. Record the failure and continue,
+            // but downstream import/monitor/price will be skipped.
+            auditPassedOrNotRun = false;
+            auditFailureDetails = {
+              score: json?.audit?.score ?? json?.score ?? null,
+              blockers: json?.audit?.blockers ?? [],
+              warnings: json?.audit?.warnings ?? [],
+              summary: json?.audit?.summary ?? null,
+            };
+
+            // Mark audit module "failed" (it ran, but did not pass). Artifact still exists.
+            await supabase
+              .from("module_runs")
+              .update({
+                status: "failed" satisfies ModuleStatus,
+                finished_at: new Date().toISOString(),
+                output_ref: key,
+                error: { message: "audit_failed", audit: auditFailureDetails },
+              })
+              .eq("id", moduleId);
+
+            // Continue loop; downstream modules will be skipped.
+            continue;
           }
+
+          // Audit passed
+          auditPassedOrNotRun = true;
+          auditFailureDetails = null;
 
           await supabase
             .from("module_runs")
@@ -290,22 +358,24 @@ Deno.serve(async (req) => {
           .update({ status: "failed", finished_at: new Date().toISOString() })
           .eq("id", pipelineRunId);
 
-        return new Response(
-          JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }
-        );
+        return new Response(JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       }
     }
 
+    // Final pipeline status:
+    // - if audit failed (soft gate), mark pipeline as failed (but runner execution is "ok")
+    // - otherwise succeeded
+    const finalStatus: PipelineRunStatus = auditPassedOrNotRun ? "succeeded" : "failed";
+
     await supabase
       .from("pipeline_runs")
-      .update({ status: "succeeded", finished_at: new Date().toISOString() })
+      .update({ status: finalStatus, finished_at: new Date().toISOString() })
       .eq("id", pipelineRunId);
 
-    return new Response(JSON.stringify({ ok: true, pipelineRunId }), {
+    return new Response(JSON.stringify({ ok: true, pipelineRunId, status: finalStatus }), {
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
