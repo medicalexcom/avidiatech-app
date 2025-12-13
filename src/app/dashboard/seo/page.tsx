@@ -6,20 +6,54 @@ import { useSearchParams, useRouter } from "next/navigation";
 /**
  * AvidiaSEO page (client)
  *
- * - Works with ?ingestionId=... OR ?url=...
- * - If ingest returns jobId (202), poll /api/v1/ingest/job/:jobId until ingestion row appears AND is completed.
- * - Then call /api/v1/seo with ingestionId. If persist denied (401), fall back to preview (persist:false).
+ * Modes:
+ * - Quick SEO: ingest → poll → pipeline(extract+seo) → refresh ingestion
+ * - Full Pipeline: ingest → poll → pipeline(extract+seo+audit+import+monitor+price) → refresh ingestion
+ *
+ * Notes:
+ * - We no longer call /api/v1/seo directly from this page.
+ * - Both modes still create pipeline_runs + module_runs so there is always traceability and durable artifacts.
  */
 
 type AnyObj = Record<string, any>;
+
+type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
+type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+
+type PipelineModule = {
+  id?: string;
+  module_index: number;
+  module_name: string;
+  status: ModuleRunStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+  output_ref?: string | null;
+  error?: any;
+};
+
+type PipelineSnapshot = {
+  run?: { id: string; status: PipelineRunStatus } & Record<string, any>;
+  modules?: PipelineModule[];
+};
+
+type Mode = "quick" | "full";
+
+const QUICK_STEPS = ["extract", "seo"] as const;
+const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export default function AvidiaSeoPage() {
   const params = useSearchParams();
   const router = useRouter();
   const ingestionIdParam = params?.get("ingestionId") || null;
   const urlParam = params?.get("url") || null;
+  const pipelineRunIdParam = params?.get("pipelineRunId") || null;
 
   const ingestionId = ingestionIdParam;
+
   const [urlInput, setUrlInput] = useState<string>(urlParam || "");
   const [job, setJob] = useState<AnyObj | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,17 +61,20 @@ export default function AvidiaSeoPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
-    "idle"
-  );
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [showRawExtras, setShowRawExtras] = useState(false);
 
   // Debug / polling state
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
   const [pollingState, setPollingState] = useState<string | null>(null);
 
-  // track whether current seo result is preview (not persisted)
+  // We no longer support front-end "preview persist:false" for /api/v1/seo
   const [isPreviewResult, setIsPreviewResult] = useState(false);
+
+  // Pipeline state
+  const [pipelineRunId, setPipelineRunId] = useState<string | null>(pipelineRunIdParam);
+  const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
+  const [lastMode, setLastMode] = useState<Mode>("quick");
 
   // Remember the URL that came from query params; used to decide if we should reuse ingestionId
   const [initialUrl] = useState(urlParam || "");
@@ -51,11 +88,7 @@ export default function AvidiaSeoPage() {
         const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
         const json = await res.json();
         if (!res.ok) {
-          throw new Error(
-            json?.error?.message ||
-              json?.error ||
-              `Ingest fetch failed: ${res.status}`
-          );
+          throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
         }
         if (!isCancelled()) {
           // API returns either the row directly or wrapped in { data }
@@ -76,6 +109,80 @@ export default function AvidiaSeoPage() {
     []
   );
 
+  const fetchPipelineSnapshot = useCallback(
+    async (runId: string) => {
+      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`;
+        throw new Error(msg);
+      }
+      return json as PipelineSnapshot;
+    },
+    []
+  );
+
+  async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2000) {
+    const start = Date.now();
+    setStatusMessage("Pipeline running");
+    while (Date.now() - start < timeoutMs) {
+      const snap = await fetchPipelineSnapshot(runId);
+      setPipelineSnapshot(snap);
+
+      const status = snap?.run?.status;
+      if (status === "succeeded" || status === "failed") {
+        return snap;
+      }
+      await sleep(intervalMs);
+    }
+    throw new Error("Pipeline did not complete within timeout");
+  }
+
+  async function startPipelineRun(ingestionId: string, mode: Mode) {
+    setLastMode(mode);
+    setGenerating(true);
+    setError(null);
+    setIsPreviewResult(false);
+
+    const steps = mode === "quick" ? [...QUICK_STEPS] : [...FULL_STEPS];
+    setStatusMessage(mode === "quick" ? "Starting Quick SEO pipeline" : "Starting Full pipeline");
+
+    const res = await fetch("/api/v1/pipeline/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ingestionId,
+        triggerModule: "seo",
+        steps,
+        options: {
+          seo: {
+            // keep this optional—runner currently ignores it but artifact records it
+            profile: "medicalex_v1",
+            strict: true,
+            model: null,
+          },
+        },
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
+    }
+
+    const newRunId = json?.pipelineRunId?.toString?.() || "";
+    if (!newRunId) throw new Error("Pipeline start did not return pipelineRunId");
+
+    setPipelineRunId(newRunId);
+
+    // Persist runId into the URL so refresh keeps status visible
+    router.push(
+      `/dashboard/seo?ingestionId=${encodeURIComponent(ingestionId)}&pipelineRunId=${encodeURIComponent(newRunId)}`
+    );
+
+    return newRunId;
+  }
+
   useEffect(() => {
     if (!ingestionId) return;
     let cancelled = false;
@@ -86,150 +193,33 @@ export default function AvidiaSeoPage() {
     };
   }, [fetchIngestionData, ingestionId]);
 
-  async function generateFromIngestion(id: string, tryPersist = true) {
-    if (generating) return;
-    setGenerating(true);
-    setError(null);
-    setIsPreviewResult(false);
-    setStatusMessage("Generating AvidiaSEO");
+  useEffect(() => {
+    if (!pipelineRunId) return;
+    let cancelled = false;
 
-    async function callSeo(persistFlag: boolean) {
+    (async () => {
       try {
-        const res = await fetch("/api/v1/seo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ingestionId: id, persist: persistFlag }),
-        });
-        const json = await res.json().catch(() => null);
-        return { status: res.status, ok: res.ok, json, rawStatus: res.status };
-      } catch (err) {
-        return { status: 0, ok: false, json: null, error: String(err) };
+        setStatusMessage("Loading pipeline run");
+        const snap = await fetchPipelineSnapshot(pipelineRunId);
+        if (!cancelled) setPipelineSnapshot(snap);
+      } catch (e: any) {
+        if (!cancelled) setError(String(e?.message || e));
       }
-    }
+    })();
 
-    try {
-      if (tryPersist) {
-        const first = await callSeo(true);
-        if (first.ok) {
-          setIsPreviewResult(false);
-          const seoPayload =
-            first.json?.seo_payload ?? first.json?.seoPayload ?? null;
-          const descriptionHtml =
-            first.json?.description_html ??
-            first.json?.descriptionHtml ??
-            null;
-          const features = first.json?.features ?? null;
-          if (seoPayload || descriptionHtml || features) {
-            setJob((prev) => ({
-              ...(prev || {}),
-              seo_payload:
-                seoPayload ?? (prev as AnyObj)?.seo_payload ?? null,
-              description_html:
-                descriptionHtml ??
-                (prev as AnyObj)?.description_html ??
-                null,
-              features: features ?? (prev as AnyObj)?.features ?? null,
-            }));
-            setStatusMessage("SEO persisted to Supabase");
-          }
-          await fetchIngestionData(id);
-          router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(id)}`);
-          return;
-        }
-
-        const code = first.json?.error?.code ?? "";
-        if (
-          first.status === 401 ||
-          code === "UNAUTHORIZED_TO_PERSIST" ||
-          first.status === 403
-        ) {
-          const preview = await callSeo(false);
-          if (preview.ok) {
-            setIsPreviewResult(true);
-            const previewBody = preview.json;
-            const previewJob = {
-              ...(job || {}),
-              seo_payload:
-                previewBody?.seoPayload ??
-                previewBody?.seo_payload ??
-                previewBody,
-              description_html:
-                previewBody?.descriptionHtml ??
-                previewBody?.description_html ??
-                previewBody?.descriptionHtml ??
-                previewBody?.description_html,
-              _debug: previewBody?._debug ?? null,
-            };
-            setJob(previewJob);
-            setError(
-              "Preview generated. Sign in to persist SEO for this ingestion."
-            );
-            setStatusMessage("Preview SEO ready");
-            return;
-          } else {
-            setError(
-              preview.json?.error?.message ??
-                `Preview failed: ${preview.status}`
-            );
-            setStatusMessage(null);
-            return;
-          }
-        }
-
-        setError(
-          first.json?.error?.message ??
-            `SEO generation failed: ${first.status}`
-        );
-        setStatusMessage(null);
-        return;
-      }
-
-      const result = await callSeo(false);
-      if (result.ok) {
-        setIsPreviewResult(true);
-        const previewBody = result.json;
-        const previewJob = {
-          ...(job || {}),
-          seo_payload:
-            previewBody?.seoPayload ??
-            previewBody?.seo_payload ??
-            previewBody,
-          description_html:
-            previewBody?.descriptionHtml ??
-            previewBody?.description_html ??
-            previewBody,
-        };
-        setJob(previewJob);
-        setStatusMessage("Preview SEO ready");
-      } else {
-        setError(
-          result.json?.error?.message ??
-            `SEO preview failed: ${result.status}`
-        );
-        setStatusMessage(null);
-      }
-    } catch (e: any) {
-      setError(String(e?.message || e));
-      setStatusMessage(null);
-    } finally {
-      setGenerating(false);
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPipelineSnapshot, pipelineRunId]);
 
   // Polling helper: polls /api/v1/ingest/job/:jobId until ingestion row is completed (normalized_payload or status completed)
-  async function pollForIngestion(
-    jobId: string,
-    timeoutMs = 120_000,
-    intervalMs = 3000
-  ) {
+  async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
     const start = Date.now();
     setPollingState(`polling job ${jobId}`);
     setStatusMessage("Scraping & normalizing");
     while (Date.now() - start < timeoutMs) {
       try {
-        const res = await fetch(
-          `/api/v1/ingest/job/${encodeURIComponent(jobId)}`
-        );
+        const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
         // 200 -> completed; 202 -> still processing
         if (res.status === 200) {
           const j = await res.json();
@@ -245,173 +235,136 @@ export default function AvidiaSeoPage() {
         setPollingState(`error polling: ${String(e)}`);
         setStatusMessage(null);
       }
-      await new Promise((r) => setTimeout(r, intervalMs));
+      await sleep(intervalMs);
     }
     setPollingState("timeout");
     setStatusMessage(null);
     throw new Error("Ingestion did not complete within timeout");
   }
 
-  // Safer ingestion + generate flow
-  async function createIngestionThenGenerate(url: string) {
-    if (generating) return;
-    if (!url) {
-      setError("Please enter a URL");
-      return;
-    }
-    setGenerating(true);
+  async function createIngestion(url: string) {
+    if (!url) throw new Error("Please enter a URL");
+
     setError(null);
     setRawIngestResponse(null);
     setPollingState(null);
     setStatusMessage("Submitting ingestion");
+
+    const res = await fetch("/api/v1/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        persist: true,
+        options: { includeSeo: true }, // request SEO extraction during ingestion
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+    console.debug("POST /api/v1/ingest response:", res.status, json);
+    setRawIngestResponse({ status: res.status, body: json });
+
+    if (!res.ok) {
+      throw new Error(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
+    }
+
+    const possibleIngestionId =
+      json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
+
+    if (possibleIngestionId) {
+      // If accepted async, poll until completed
+      if (json?.status === "accepted" || res.status === 202) {
+        const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
+        const pollResult = await pollForIngestion(jobId, 120_000, 3000);
+        return pollResult?.ingestionId ?? possibleIngestionId;
+      }
+      return possibleIngestionId;
+    }
+
+    const jobId = json?.jobId ?? json?.job?.id ?? null;
+    if (!jobId) {
+      throw new Error("Ingest did not return an ingestionId or jobId. See debug pane.");
+    }
+
+    const pollResult = await pollForIngestion(jobId, 120_000, 3000);
+    const newIngestionId = pollResult?.ingestionId ?? pollResult?.id ?? null;
+    if (!newIngestionId) throw new Error("Polling returned no ingestionId. See debug pane.");
+    return newIngestionId;
+  }
+
+  async function runMode(mode: Mode) {
+    if (generating) return;
+
+    setGenerating(true);
+    setError(null);
+    setIsPreviewResult(false);
+    setPipelineSnapshot(null);
+
     try {
-      // 1) create ingestion (persist:true) and request SEO extraction
-      const res = await fetch("/api/v1/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url,
-          persist: true,
-          options: { includeSeo: true }, // request SEO extraction during ingestion
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      console.debug("POST /api/v1/ingest response:", res.status, json);
-      setRawIngestResponse({ status: res.status, body: json });
-      setStatusMessage("Ingestion accepted; waiting for callback");
+      // Decide ingestionId to use
+      let idToUse: string | null = null;
 
-      if (!res.ok) {
-        setError(
-          json?.error?.message || json?.error || `Ingest failed: ${res.status}`
-        );
-        return;
+      const isSameAsInitial = Boolean(initialUrl && urlInput === initialUrl);
+
+      if (ingestionId && isSameAsInitial) {
+        idToUse = ingestionId;
+      } else {
+        // New URL run: clear previous outputs and create new ingestion
+        setJob(null);
+        setRawIngestResponse(null);
+        setPollingState(null);
+        setStatusMessage(null);
+
+        idToUse = await createIngestion(urlInput);
+        router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(idToUse)}`);
       }
 
-      // If ingest returned a synchronous ingestionId, use it
-      const possibleIngestionId =
-        json?.ingestionId ??
-        json?.id ??
-        json?.data?.id ??
-        json?.data?.ingestionId ??
-        null;
+      if (!idToUse) throw new Error("No ingestionId available to run pipeline");
 
-      if (possibleIngestionId) {
-        router.push(
-          `/dashboard/seo?ingestionId=${encodeURIComponent(
-            possibleIngestionId
-          )}`
-        );
-        // If the ingest returned completed payload immediately (status 200 and normalized_payload present), pollForIngestion will return quickly.
-        if (json?.status === "accepted" || res.status === 202) {
-          // if the engine accepted job, poll until normalized_payload exists
-          const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
-          try {
-            const pollResult = await pollForIngestion(jobId, 120_000, 3000);
-            const newIngestionId =
-              pollResult?.ingestionId ?? possibleIngestionId;
-            router.push(
-              `/dashboard/seo?ingestionId=${encodeURIComponent(
-                newIngestionId
-              )}`
-            );
-            await generateFromIngestion(newIngestionId, true);
-            return;
-          } catch (e: any) {
-            setError(String(e?.message || e));
-            return;
-          }
-        } else {
-          // otherwise call SEO directly
-          await generateFromIngestion(possibleIngestionId, true);
-          return;
-        }
-      }
+      // Refresh ingestion immediately
+      await fetchIngestionData(idToUse);
 
-      // Otherwise, if ingest returned a jobId (async), poll for ingestion completion
-      const jobId = json?.jobId ?? json?.job?.id ?? null;
-      if (!jobId) {
-        setError(
-          "Ingest did not return an ingestionId or jobId. See debug pane."
-        );
-        return;
-      }
+      // Start pipeline
+      const runId = await startPipelineRun(idToUse, mode);
 
-      let pollResult;
-      try {
-        pollResult = await pollForIngestion(jobId, 120_000, 3000);
-      } catch (e: any) {
-        setError(String(e?.message || e));
-        return;
-      }
+      // Poll pipeline
+      await pollPipeline(runId, mode === "quick" ? 180_000 : 300_000, 2000);
 
-      const newIngestionId =
-        pollResult?.ingestionId ?? pollResult?.id ?? null;
-      if (!newIngestionId) {
-        setError("Polling returned no ingestionId. See debug pane.");
-        return;
-      }
+      // Refresh ingestion to show persisted SEO fields
+      await fetchIngestionData(idToUse);
 
-      router.push(
-        `/dashboard/seo?ingestionId=${encodeURIComponent(newIngestionId)}`
-      );
-      await generateFromIngestion(newIngestionId, true);
-    } catch (err: any) {
-      setError(String(err?.message || err));
+      setStatusMessage(mode === "quick" ? "Quick SEO completed" : "Full pipeline completed");
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      setStatusMessage(null);
     } finally {
       setGenerating(false);
       setPollingState(null);
     }
   }
 
-  async function handleGenerateAndSave() {
-    setError(null);
-
-    // If we have an ingestionId AND the URL hasn't changed from the original,
-    // treat this as "re-run SEO on existing ingestion."
-    const isSameAsInitial = initialUrl && urlInput === initialUrl;
-
-    if (ingestionId && isSameAsInitial) {
-      await generateFromIngestion(ingestionId, true);
-      return;
-    }
-
-    // Otherwise, always treat as a brand-new run:
-    // clear previous data and kick off full ingest → poll → SEO cascade.
-    setJob(null);
-    setIsPreviewResult(false);
-    setRawIngestResponse(null);
-    setPollingState(null);
-    setStatusMessage(null);
-
-    await createIngestionThenGenerate(urlInput);
-  }
-
   const jobData = useMemo(() => {
     if (!job) return null;
     // allow shapes: { ok, data }, { data }, plain row, or nested { data: { data } }
-    if (job?.data?.data) return job.data.data;
-    if (job?.data) return job.data;
+    if ((job as any)?.data?.data) return (job as any).data.data;
+    if ((job as any)?.data) return (job as any).data;
     return job;
   }, [job]);
 
-  const seoPayload = jobData?.seo_payload ?? jobData?.seoPayload ?? null;
+  const seoPayload = jobData?.seo_payload ?? (jobData as any)?.seoPayload ?? null;
 
   const rawDescriptionHtml =
     jobData?.description_html ??
-    jobData?.descriptionHtml ??
-    jobData?.seo_payload?.description_html ??
-    jobData?._debug?.description_html ??
+    (jobData as any)?.descriptionHtml ??
+    (jobData as any)?.seo_payload?.description_html ??
+    (jobData as any)?._debug?.description_html ??
     null;
   const descriptionHtml =
-    typeof rawDescriptionHtml === "string" &&
-    rawDescriptionHtml.trim().length > 0
-      ? rawDescriptionHtml
-      : null;
+    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
 
   const features = useMemo(() => {
     if (Array.isArray(jobData?.features)) return jobData.features;
-    if (Array.isArray(jobData?.seo_payload?.features))
-      return jobData.seo_payload.features;
+    if (Array.isArray((jobData as any)?.seo_payload?.features)) return (jobData as any).seo_payload.features;
     return null;
   }, [jobData]);
 
@@ -421,10 +374,7 @@ export default function AvidiaSeoPage() {
     try {
       const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(${escaped})`, "gi");
-      return descriptionHtml.replace(
-        regex,
-        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
-      );
+      return descriptionHtml.replace(regex, '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>');
     } catch (err) {
       console.warn("Unable to highlight search term", err);
       return descriptionHtml;
@@ -445,11 +395,8 @@ export default function AvidiaSeoPage() {
   ];
 
   const parkedExtras = useMemo(() => {
-    if (!seoPayload || typeof seoPayload !== "object")
-      return [] as [string, any][];
-    return Object.entries(seoPayload).filter(
-      ([key]) => !knownSeoKeys.includes(key)
-    );
+    if (!seoPayload || typeof seoPayload !== "object") return [] as [string, any][];
+    return Object.entries(seoPayload).filter(([key]) => !knownSeoKeys.includes(key));
   }, [seoPayload]);
 
   const handleCopyDescription = async () => {
@@ -478,44 +425,83 @@ export default function AvidiaSeoPage() {
 
   const hasSeo = Boolean(seoPayload || descriptionHtml || features);
 
+  const moduleStatusByName = useMemo(() => {
+    const map = new Map<string, PipelineModule>();
+    for (const m of pipelineSnapshot?.modules ?? []) map.set(m.module_name, m);
+    return map;
+  }, [pipelineSnapshot]);
+
+  const stepsForPills = useMemo(() => {
+    // If we have a run and module list, we can infer what ran.
+    // Else use lastMode (default quick).
+    const available = new Set((pipelineSnapshot?.modules ?? []).map((m) => m.module_name));
+    if (available.size > 0) {
+      // preserve canonical order
+      const out = [];
+      for (const name of FULL_STEPS) if (available.has(name)) out.push(name);
+      return out.length ? out : (lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS]);
+    }
+    return lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS];
+  }, [lastMode, pipelineSnapshot]);
+
   const statusPills = useMemo(() => {
-    return [
-      {
-        key: "scrape",
-        label: "Scraping & Normalizing",
-        state:
-          loading || pollingState
-            ? "active"
-            : jobData?.status === "completed" || jobData?.normalized_payload
-            ? "done"
-            : "idle",
-        hint: pollingState || jobData?.status || "waiting",
-      },
-      {
-        key: "seo",
-        label: "AvidiaSEO Generation",
-        state: generating ? "active" : hasSeo ? "done" : "idle",
-        hint: generating
-          ? "Calling central GPT"
-          : hasSeo
-          ? "SEO saved"
-          : "ready",
-      },
-      {
-        key: "review",
-        label: "Human-ready Preview",
-        state: hasSeo ? "done" : "idle",
-        hint: hasSeo ? "Rendered" : "awaiting generation",
-      },
-    ];
-  }, [
-    generating,
-    hasSeo,
-    jobData?.normalized_payload,
-    jobData?.status,
-    loading,
-    pollingState,
-  ]);
+    const pills = [];
+
+    // Ingestion (scrape/normalize) still uses polling + ingestion row presence
+    pills.push({
+      key: "scrape",
+      label: "Scraping & Normalizing",
+      state:
+        loading || pollingState
+          ? "active"
+          : jobData?.status === "completed" || jobData?.normalized_payload || jobData?.completed_at
+          ? "done"
+          : "idle",
+      hint: pollingState || jobData?.status || (jobData?.normalized_payload ? "normalized" : "waiting"),
+    });
+
+    for (const stepName of stepsForPills) {
+      if (stepName === "extract") {
+        const m = moduleStatusByName.get("extract");
+        pills.push({
+          key: "extract",
+          label: "Extract module",
+          state: m?.status === "running" ? "active" : m?.status === "succeeded" ? "done" : m?.status === "failed" ? "idle" : "idle",
+          hint: m?.status || "ready",
+        });
+        continue;
+      }
+
+      if (stepName === "seo") {
+        const m = moduleStatusByName.get("seo");
+        pills.push({
+          key: "seo",
+          label: "AvidiaSEO Generation",
+          state: generating || m?.status === "running" ? "active" : hasSeo || m?.status === "succeeded" ? "done" : "idle",
+          hint: m?.status ? `module: ${m.status}` : generating ? "starting" : hasSeo ? "SEO saved" : "ready",
+        });
+        continue;
+      }
+
+      // For future modules, show module status if present
+      const m = moduleStatusByName.get(stepName);
+      pills.push({
+        key: stepName,
+        label: `${stepName[0].toUpperCase()}${stepName.slice(1)} module`,
+        state: m?.status === "running" ? "active" : m?.status === "succeeded" ? "done" : m?.status === "skipped" ? "idle" : "idle",
+        hint: m?.status || "not run",
+      });
+    }
+
+    pills.push({
+      key: "review",
+      label: "Human-ready Preview",
+      state: hasSeo ? "done" : "idle",
+      hint: hasSeo ? "Rendered" : "awaiting generation",
+    });
+
+    return pills;
+  }, [generating, hasSeo, jobData, loading, moduleStatusByName, pollingState, stepsForPills]);
 
   const demoUrl = "https://www.apple.com/iphone-17/";
 
@@ -546,9 +532,13 @@ export default function AvidiaSeoPage() {
               {ingestionId && (
                 <>
                   <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">
-                    {ingestionId.slice(0, 8)}…
-                  </span>
+                  <span className="font-mono text-[10px]">{ingestionId.slice(0, 8)}…</span>
+                </>
+              )}
+              {pipelineRunId && (
+                <>
+                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
+                  <span className="font-mono text-[10px]">run:{pipelineRunId.slice(0, 8)}…</span>
                 </>
               )}
             </div>
@@ -563,53 +553,8 @@ export default function AvidiaSeoPage() {
                 .
               </h1>
               <p className="text-sm text-slate-600 max-w-xl dark:text-slate-300">
-                Paste a product URL and fire the whole pipeline: ingestion,
-                cleanup, and compliant copy — rendered exactly how your store
-                needs it. No prompts, no copy-paste gymnastics.
+                Paste a product URL to run Quick SEO, or run the Full Pipeline when you’re ready for audit/import/monitor/price.
               </p>
-            </div>
-
-            {/* Value props strip */}
-            <div className="flex flex-wrap gap-2 text-[11px]">
-              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                <span className="h-5 w-5 rounded-lg bg-cyan-500/10 border border-cyan-300 flex items-center justify-center text-[13px] text-cyan-700 dark:bg-cyan-500/15 dark:border-cyan-500/40 dark:text-cyan-100">
-                  1
-                </span>
-                <div className="space-y-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    Ingest engine native
-                  </p>
-                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                    Reuses the same ingestion layer powering AvidiaExtract.
-                  </p>
-                </div>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                <span className="h-5 w-5 rounded-lg bg-sky-500/10 border border-sky-300 flex items-center justify-center text-[13px] text-sky-700 dark:bg-sky-500/15 dark:border-sky-500/40 dark:text-sky-100">
-                  2
-                </span>
-                <div className="space-y-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    Custom GPT brain
-                  </p>
-                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                    Runs your instruction sheet, not a generic prompt.
-                  </p>
-                </div>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                <span className="h-5 w-5 rounded-lg bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-[13px] text-emerald-700 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-100">
-                  3
-                </span>
-                <div className="space-y-0">
-                  <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    JSON + HTML ready
-                  </p>
-                  <p className="text-slate-500 text-[10px] dark:text-slate-400">
-                    Mirrors your BigCommerce / automation schema.
-                  </p>
-                </div>
-              </div>
             </div>
 
             {/* Callout row (Compact guidance + status pill) */}
@@ -620,15 +565,12 @@ export default function AvidiaSeoPage() {
                 </span>
                 <span className="text-[11px] text-slate-600 dark:text-slate-300">
                   Paste the manufacturer URL in the{" "}
-                  <span className="font-semibold text-cyan-700 dark:text-cyan-200">
-                    URL box directly below
-                  </span>
-                  .
+                  <span className="font-semibold text-cyan-700 dark:text-cyan-200">URL box directly below</span>.
                 </span>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:bg-slate-950/80 dark:border-slate-700 dark:text-slate-300">
                 <span className="text-xs">⬇</span>
-                <span>Step 2 — hit “Generate &amp; Save” for full cascade.</span>
+                <span>Step 2 — choose Quick SEO or Full Pipeline.</span>
               </div>
               {statusMessage && (
                 <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-cyan-200 px-3 py-1.5 text-[11px] text-cyan-700 shadow-sm dark:bg-slate-950/80 dark:border-cyan-500/40 dark:text-cyan-100">
@@ -639,32 +581,29 @@ export default function AvidiaSeoPage() {
             </div>
           </div>
 
-          {/* Right: 3-step flow + live pipeline snapshot (compact cards) */}
+          {/* Right: flow + live pipeline snapshot */}
           <div className="w-full lg:w-[430px] xl:w-[480px] flex flex-col gap-3">
             <div className="flex items-center justify-between mb-1">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Real-time pipeline
               </p>
               <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                {loading || generating ? "Running…" : "Idle"}
+                {loading || generating ? "Running…" : pipelineRunId ? "Ready" : "Idle"}
               </span>
             </div>
 
             <div className="flex flex-col md:flex-row gap-3">
-              {/* 3-step visual flow */}
+              {/* Visual flow */}
               <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/80">
                 <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  3-step visual flow
+                  Pipeline steps
                 </p>
                 <ol className="space-y-2.5 text-xs mt-1">
                   {statusPills.map((pill, index) => {
                     const isDone = pill.state === "done";
                     const isActive = pill.state === "active";
                     return (
-                      <li
-                        key={pill.key}
-                        className="flex items-center gap-3 relative"
-                      >
+                      <li key={pill.key} className="flex items-center gap-3 relative">
                         <div className="flex flex-col items-center">
                           <div
                             className={[
@@ -690,12 +629,8 @@ export default function AvidiaSeoPage() {
                           )}
                         </div>
                         <div className="flex-1">
-                          <p className="text-[11px] font-medium text-slate-800 dark:text-slate-100">
-                            {pill.label}
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {pill.hint}
-                          </p>
+                          <p className="text-[11px] font-medium text-slate-800 dark:text-slate-100">{pill.label}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{pill.hint}</p>
                         </div>
                       </li>
                     );
@@ -703,17 +638,13 @@ export default function AvidiaSeoPage() {
                 </ol>
               </div>
 
-              {/* Live pipeline status */}
+              {/* Live status */}
               <div className="flex-1 rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 space-y-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/80">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Live pipeline status
                   </p>
-                  {loading && (
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Loading…
-                    </span>
-                  )}
+                  {loading && <span className="text-[11px] text-slate-500 dark:text-slate-400">Loading…</span>}
                 </div>
                 <div className="space-y-2 mt-1">
                   {statusPills.map((pill) => (
@@ -744,15 +675,14 @@ export default function AvidiaSeoPage() {
                   ))}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1 dark:text-slate-500">
-                  Every state here reflects real ingestion + SEO calls — not a
-                  fake demo.
+                  This reflects real module_runs + durable artifacts.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Error banner (compact, inline) */}
+        {/* Error banner */}
         {error && (
           <div className="rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
             {error}
@@ -762,22 +692,18 @@ export default function AvidiaSeoPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Main work column */}
           <div className="lg:col-span-2 space-y-4">
-            {/* URL + Generate (directly under header, no heavy hero frame) */}
+            {/* URL + Generate */}
             <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 lg:p-5 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    One-click AvidiaSEO
-                  </h4>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">AvidiaSEO</h4>
                   <p className="text-xs text-slate-600 max-w-xl dark:text-slate-400">
-                    Step 1 — paste the manufacturer URL. Step 2 — hit{" "}
-                    <span className="font-semibold text-cyan-700 dark:text-cyan-300">
-                      Generate &amp; Save
-                    </span>
-                    . AvidiaSEO runs ingest → poll → GPT SEO in a single shot.
+                    Quick SEO runs <span className="font-mono">extract → seo</span>. Full Pipeline runs{" "}
+                    <span className="font-mono">extract → seo → audit → import → monitor → price</span>.
                   </p>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
@@ -786,44 +712,66 @@ export default function AvidiaSeoPage() {
                       const next = e.target.value;
                       setUrlInput(next);
 
-                      // User is preparing a new run: clear previous outputs
+                      // New run intent: clear view state
                       setJob(null);
-                      setIsPreviewResult(false);
                       setRawIngestResponse(null);
                       setPollingState(null);
                       setStatusMessage(null);
                       setError(null);
+
+                      // Pipeline state should reset when URL changes
+                      setPipelineRunId(null);
+                      setPipelineSnapshot(null);
+                      setIsPreviewResult(false);
                     }}
                     placeholder="https://manufacturer.com/product..."
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                     type="url"
                   />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleGenerateAndSave();
-                    }}
-                    disabled={generating}
-                    className="sm:w-48 w-full px-4 py-3 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
-                  >
-                    {generating ? "Generating…" : "Generate & Save"}
-                  </button>
+
+                  <div className="flex gap-2 sm:w-[360px] w-full">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        runMode("quick");
+                      }}
+                      disabled={generating}
+                      className="w-1/2 px-4 py-3 rounded-lg bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
+                      title="Runs extract + seo"
+                    >
+                      {generating && lastMode === "quick" ? "Running…" : "Quick SEO"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        runMode("full");
+                      }}
+                      disabled={generating}
+                      className="w-1/2 px-4 py-3 rounded-lg bg-slate-900 text-slate-50 text-sm font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      title="Runs extract + seo + audit + import + monitor + price"
+                    >
+                      {generating && lastMode === "full" ? "Running…" : "Full Pipeline"}
+                    </button>
+                  </div>
                 </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-slate-500 dark:text-slate-500">
-                    This always runs the full cascade for the current URL. If
-                    the URL matches an existing ingestion, AvidiaSEO reuses it.
+                    Both modes create a pipeline run and durable artifacts. Quick SEO is the fastest path to an SEO-ready description.
                   </p>
                   <button
                     type="button"
                     onClick={() => {
                       setUrlInput(demoUrl);
                       setJob(null);
-                      setIsPreviewResult(false);
                       setRawIngestResponse(null);
                       setPollingState(null);
-                      setStatusMessage("Demo URL loaded — hit Generate & Save");
+                      setPipelineRunId(null);
+                      setPipelineSnapshot(null);
+                      setStatusMessage("Demo URL loaded — choose Quick SEO or Full Pipeline");
                       setError(null);
                     }}
                     className="text-[11px] text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
@@ -831,23 +779,29 @@ export default function AvidiaSeoPage() {
                     Try a demo URL
                   </button>
                 </div>
+
+                {pipelineRunId && (
+                  <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                    Pipeline run:{" "}
+                    <span className="font-mono">{pipelineRunId}</span>{" "}
+                    {pipelineSnapshot?.run?.status ? (
+                      <span className="ml-2">(status: {pipelineSnapshot.run.status})</span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Premium HTML viewer (flattened: no big gradient halo) */}
+            {/* Premium HTML viewer */}
             <div className="rounded-2xl bg-white text-slate-900 shadow-sm p-5 border border-slate-200 dark:bg-slate-900/85 dark:text-white dark:border-slate-700/80">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-1 dark:text-slate-400">
                     Description window
                   </p>
-                  <h3 className="text-xl sm:text-2xl font-semibold mb-1">
-                    Premium HTML viewer
-                  </h3>
+                  <h3 className="text-xl sm:text-2xl font-semibold mb-1">Premium HTML viewer</h3>
                   <p className="text-slate-600 text-xs max-w-2xl dark:text-slate-300">
-                    See the final copy exactly as it will appear on a product
-                    page. Highlight any claim, copy it into your CMS, or export
-                    the HTML for your automation layer.
+                    See the final copy exactly as it will appear on a product page. Highlight any claim, copy it into your CMS, or export the HTML.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -889,25 +843,20 @@ export default function AvidiaSeoPage() {
                     placeholder="Search headline, claims, or FAQs"
                     className="flex-1 bg-transparent text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white dark:placeholder:text-slate-300"
                   />
-                  <span className="text-[11px] text-slate-500 dark:text-slate-200">
-                    Live highlight
-                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-200">Live highlight</span>
                 </div>
 
                 <div className="rounded-2xl bg-white text-slate-900 shadow-inner border border-slate-200 overflow-hidden dark:bg-white dark:text-slate-900 dark:border-slate-200">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 dark:bg-slate-50">
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">
-                        Rendered description
-                      </p>
+                      <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Rendered description</p>
                       <p className="text-xs text-slate-600 m-0">
-                        Mirrors your custom GPT instructions — headings, lists,
-                        disclaimers, and manuals stay structured.
+                        Mirrors your custom GPT instructions — headings, lists, disclaimers, and manuals stay structured.
                       </p>
                     </div>
                     {isPreviewResult && (
                       <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
-                        Preview only — sign in to persist
+                        Preview only
                       </span>
                     )}
                   </div>
@@ -915,14 +864,11 @@ export default function AvidiaSeoPage() {
                     {descriptionHtml ? (
                       <article
                         className="prose-headings:scroll-mt-20 prose-h2:mt-6 prose-h3:mt-4 prose-ul:list-disc prose-li:marker:text-slate-400"
-                        dangerouslySetInnerHTML={{
-                          __html: highlightedDescription,
-                        }}
+                        dangerouslySetInnerHTML={{ __html: highlightedDescription }}
                       />
                     ) : (
                       <div className="text-slate-500 text-sm italic">
-                        No description generated yet. Paste a URL above and run
-                        the pipeline.
+                        No description generated yet. Paste a URL above and run Quick SEO or Full Pipeline.
                       </div>
                     )}
                   </div>
@@ -936,66 +882,44 @@ export default function AvidiaSeoPage() {
             {/* SEO structure */}
             <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  SEO structure
-                </h4>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">SEO structure</h4>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   Driven by custom instructions
                 </span>
               </div>
               <div className="space-y-2 text-xs">
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
-                    H1
-                  </p>
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">H1</p>
                   <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    {seoPayload?.h1 ??
-                      seoPayload?.name_best ??
-                      "Not yet generated"}
+                    {seoPayload?.h1 ?? seoPayload?.name_best ?? "Not yet generated"}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
-                    Page title
-                  </p>
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Page title</p>
                   <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    {seoPayload?.pageTitle ??
-                      seoPayload?.title ??
-                      "Not yet generated"}
+                    {seoPayload?.pageTitle ?? seoPayload?.title ?? "Not yet generated"}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
-                    Meta description
-                  </p>
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Meta description</p>
                   <p className="text-slate-800 leading-relaxed dark:text-slate-100">
-                    {seoPayload?.metaDescription ??
-                      seoPayload?.meta_description ??
-                      "Not yet generated"}
+                    {seoPayload?.metaDescription ?? seoPayload?.meta_description ?? "Not yet generated"}
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">
-                    Short description
-                  </p>
+                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Short description</p>
                   <p className="text-slate-800 dark:text-slate-100">
-                    {seoPayload?.seoShortDescription ??
-                      seoPayload?.seo_short_description ??
-                      "Not yet generated"}
+                    {seoPayload?.seoShortDescription ?? seoPayload?.seo_short_description ?? "Not yet generated"}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Features + parked extras */}
+            {/* Features */}
             <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Feature bullets
-                </h4>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  What the enforcer kept
-                </span>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Feature bullets</h4>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">From SEO output</span>
               </div>
               {Array.isArray(features) && features.length > 0 ? (
                 <ul className="list-disc list-inside space-y-1 text-xs text-slate-800 dark:text-slate-100">
@@ -1005,8 +929,7 @@ export default function AvidiaSeoPage() {
                 </ul>
               ) : (
                 <p className="text-slate-500 text-xs dark:text-slate-400">
-                  No features captured yet. Generate SEO to see normalized
-                  bullets.
+                  No features captured yet. Run Quick SEO to generate.
                 </p>
               )}
 
@@ -1017,39 +940,26 @@ export default function AvidiaSeoPage() {
                     onClick={() => setShowRawExtras((v) => !v)}
                     className="text-xs text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
                   >
-                    {showRawExtras ? "Hide" : "Show"} parked extras (
-                    {parkedExtras.length})
+                    {showRawExtras ? "Hide" : "Show"} parked extras ({parkedExtras.length})
                   </button>
                   {showRawExtras && (
                     <pre className="mt-2 p-3 rounded-lg bg-slate-900 text-[11px] text-slate-100 border border-slate-700 overflow-auto dark:bg-slate-950/70">
-                      {JSON.stringify(
-                        Object.fromEntries(parkedExtras),
-                        null,
-                        2
-                      )}
+                      {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
                     </pre>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Debug: Source SEO */}
+            {/* Debug: Source payload */}
             {jobData && ingestionId && (
               <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Source SEO (scraped)
-                  </h4>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Live from ingestion
-                  </span>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Source payload (normalized)</h4>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Live from ingestion</span>
                 </div>
                 <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
-                  {JSON.stringify(
-                    jobData.normalized_payload ?? jobData,
-                    null,
-                    2
-                  )}
+                  {JSON.stringify(jobData.normalized_payload ?? jobData, null, 2)}
                 </pre>
               </div>
             )}
@@ -1058,50 +968,12 @@ export default function AvidiaSeoPage() {
             {rawIngestResponse && (
               <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Raw /api/v1/ingest response
-                  </h4>
-                  {pollingState && (
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {pollingState}
-                    </span>
-                  )}
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Raw /api/v1/ingest response</h4>
+                  {pollingState && <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span>}
                 </div>
                 <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
                   {JSON.stringify(rawIngestResponse, null, 2)}
                 </pre>
-              </div>
-            )}
-
-            {/* Inline preview if no ingestionId but we got a payload */}
-            {job && !ingestionId && (job.seo_payload || job.seoPayload) && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-2 text-xs text-slate-800 dark:bg-slate-900/80 dark:border-slate-700/60 dark:text-slate-100">
-                <h5 className="text-xs font-semibold text-slate-900 dark:text-slate-50">
-                  Preview Generated SEO
-                </h5>
-                <p>
-                  <strong>H1:</strong>{" "}
-                  {(job.seo_payload ?? job.seoPayload)?.h1 ?? ""}
-                </p>
-                <p>
-                  <strong>Title:</strong>{" "}
-                  {(job.seo_payload ?? job.seoPayload)?.title ?? ""}
-                </p>
-                <p>
-                  <strong>Meta:</strong>{" "}
-                  {(job.seo_payload ?? job.seoPayload)?.meta_description ??
-                    (job.seo_payload ?? job.seoPayload)?.metaDescription ??
-                    ""}
-                </p>
-                <div
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/70"
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      job.description_html ||
-                      job.descriptionHtml ||
-                      "<em>No description generated</em>",
-                  }}
-                />
               </div>
             )}
           </div>
