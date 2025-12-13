@@ -15,9 +15,9 @@ if (!url || !serviceKey) {
   console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
 }
 
-const supabase = createClient(url, serviceKey, {
+const supabase = (url && serviceKey) ? createClient(url, serviceKey, {
   auth: { persistSession: false },
-});
+}) : null;
 
 /**
  * saveIngestion - non-destructive insertion that avoids inserting explicit NULLs
@@ -39,7 +39,7 @@ export async function saveIngestion({
   userId?: string | null;
   sourceUrl?: string | null;
 }) {
-  if (!url || !serviceKey) return { id: null };
+  if (!url || !serviceKey || !supabase) return { id: null };
 
   const payload: Record<string, any> = {
     // Use explicit fallback tenant ID to avoid null inserts
@@ -86,7 +86,7 @@ export async function incrementUsageCounter({
   metric?: string;
   incrementBy?: number;
 }) {
-  if (!url || !serviceKey) return null;
+  if (!url || !serviceKey || !supabase) return null;
 
   const now = new Date().toISOString();
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
@@ -155,7 +155,7 @@ export async function checkQuota({
   metric?: string;
   limit?: number;
 }) {
-  if (!url || !serviceKey) return true;
+  if (!url || !serviceKey || !supabase) return true;
 
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
 
