@@ -193,7 +193,7 @@ export default function ProfileMenu() {
 
         <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
 
-        {/* Wired Organization control (select/create org) */}
+        {/* Org selector (sets active organization, fixes missing_tenant end-to-end) */}
         {mounted && (
           <div className="px-3 py-2">
             <OrganizationSwitcher
@@ -213,9 +213,7 @@ export default function ProfileMenu() {
           </div>
         )}
 
-        {/* Keep existing Organization link (no duplication in UI flow; this is the manage/settings entry) */}
         <Item href="/settings/organization">Organization</Item>
-
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
