@@ -202,5 +202,5 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
 /* Narrow matcher for production */
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/:path*"],
+  matcher: ["/dashboard/:path*", "/settings/:path*", "/api/:path*"],
 };
