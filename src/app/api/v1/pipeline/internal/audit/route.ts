@@ -22,12 +22,18 @@ export async function POST(req: Request) {
   } catch (err: any) {
     const msg = err?.message || String(err);
 
-    if (msg === "ingestion_not_found") return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
-    if (msg === "ingestion_not_ready") return NextResponse.json({ error: "ingestion_not_ready" }, { status: 409 });
-    if (msg.startsWith("ingestion_load_failed:"))
+    if (msg === "ingestion_not_found") {
+      return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
+    }
+    if (msg === "ingestion_not_ready") {
+      return NextResponse.json({ error: "ingestion_not_ready" }, { status: 409 });
+    }
+    if (msg.startsWith("ingestion_load_failed:")) {
       return NextResponse.json({ error: "ingestion_load_failed", detail: msg }, { status: 500 });
-    if (msg.startsWith("audit_persist_failed:"))
+    }
+    if (msg.startsWith("audit_persist_failed:")) {
       return NextResponse.json({ error: "audit_persist_failed", detail: msg }, { status: 500 });
+    }
 
     return NextResponse.json({ error: "audit_internal_failed", detail: msg }, { status: 500 });
   }
