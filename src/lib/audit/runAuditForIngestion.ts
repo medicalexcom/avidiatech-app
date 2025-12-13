@@ -20,10 +20,10 @@ function clamp(n: number, min: number, max: number) {
 
 /**
  * Minimal v1 audit:
- * - Ensures SEO fields exist and meet basic quality gates.
- * - Produces deterministic scoring so downstream gating is consistent.
+ * - Ensures core SEO fields exist and meet basic quality gates
+ * - Provides deterministic scoring for downstream gating
  *
- * You can evolve this later into a richer policy engine.
+ * Evolve this later into your full compliance engine (claims, contraindications, manuals, etc.).
  */
 export function auditSeoPayload(input: {
   seo_payload: any;
@@ -58,59 +58,95 @@ export function auditSeoPayload(input: {
       ? seo.seo_short_description.trim()
       : "";
 
-  // Checks (simple, transparent)
+  // H1
   if (!h1) {
     blockers.push("Missing H1");
-    checks.push({ key: "h1", label: "H1 present", status: "fail", detail: "seo_payload.h1 is empty" });
+    checks.push({
+      key: "h1",
+      label: "H1 present",
+      status: "fail",
+      detail: "seo_payload.h1 is empty",
+    });
   } else {
     checks.push({ key: "h1", label: "H1 present", status: "pass" });
     if (h1.length < 10) warnings.push("H1 is unusually short");
   }
 
+  // Title
   if (!title) {
     blockers.push("Missing page title");
-    checks.push({ key: "title", label: "Page title present", status: "fail", detail: "seo_payload.pageTitle/title is empty" });
+    checks.push({
+      key: "title",
+      label: "Page title present",
+      status: "fail",
+      detail: "seo_payload.pageTitle/title is empty",
+    });
   } else {
     checks.push({ key: "title", label: "Page title present", status: "pass" });
     if (title.length < 15) warnings.push("Page title is short");
     if (title.length > 70) warnings.push("Page title may be too long (>70 chars)");
   }
 
+  // Meta description
   if (!meta) {
     blockers.push("Missing meta description");
-    checks.push({ key: "meta", label: "Meta description present", status: "fail", detail: "seo_payload.metaDescription/meta_description is empty" });
+    checks.push({
+      key: "meta",
+      label: "Meta description present",
+      status: "fail",
+      detail: "seo_payload.metaDescription/meta_description is empty",
+    });
   } else {
     checks.push({ key: "meta", label: "Meta description present", status: "pass" });
     if (meta.length < 50) warnings.push("Meta description is short (<50 chars)");
     if (meta.length > 160) warnings.push("Meta description may be too long (>160 chars)");
   }
 
+  // Short description
   if (!shortDesc) {
     warnings.push("Missing short description");
-    checks.push({ key: "short", label: "Short description present", status: "warn", detail: "seo_payload.seoShortDescription is empty" });
+    checks.push({
+      key: "short",
+      label: "Short description present",
+      status: "warn",
+      detail: "seo_payload.seoShortDescription is empty",
+    });
   } else {
     checks.push({ key: "short", label: "Short description present", status: "pass" });
   }
 
+  // Description HTML
   if (!description) {
     blockers.push("Missing HTML description");
-    checks.push({ key: "html", label: "HTML description present", status: "fail", detail: "description_html is empty" });
+    checks.push({
+      key: "html",
+      label: "HTML description present",
+      status: "fail",
+      detail: "description_html is empty",
+    });
   } else {
     checks.push({ key: "html", label: "HTML description present", status: "pass" });
     if (description.length < 200) warnings.push("HTML description is short");
-    if (!description.includes("<h2") && !description.includes("<h3")) warnings.push("HTML lacks section headings (h2/h3)");
+    if (!description.includes("<h2") && !description.includes("<h3")) {
+      warnings.push("HTML lacks section headings (h2/h3)");
+    }
   }
 
+  // Features
   if (!features.length) {
     warnings.push("No feature bullets found");
-    checks.push({ key: "features", label: "Feature bullets present", status: "warn", detail: "features[] is empty" });
+    checks.push({
+      key: "features",
+      label: "Feature bullets present",
+      status: "warn",
+      detail: "features[] is empty",
+    });
   } else {
     checks.push({ key: "features", label: "Feature bullets present", status: "pass" });
     if (features.length < 3) warnings.push("Less than 3 feature bullets");
   }
 
-  // Simple score model:
-  // Start 100, subtract for blockers and warnings.
+  // Deterministic score
   let score = 100;
   score -= blockers.length * 20;
   score -= warnings.length * 5;
@@ -130,9 +166,7 @@ export async function runAuditForIngestion(ingestionId: string) {
 
   const { data: ingestion, error: loadErr } = await supabase
     .from("product_ingestions")
-    .select(
-      "id, tenant_id, source_url, normalized_payload, seo_payload, description_html, features, diagnostics"
-    )
+    .select("id, seo_payload, description_html, features, normalized_payload, diagnostics")
     .eq("id", ingestionId)
     .maybeSingle();
 
@@ -150,7 +184,7 @@ export async function runAuditForIngestion(ingestionId: string) {
 
   const finishedAt = new Date().toISOString();
 
-  // Persist audit into diagnostics (no schema migration needed)
+  // Persist into diagnostics.audit (no schema changes)
   const diagnostics = ingestion.diagnostics || {};
   const auditDiagnostics = {
     ...(diagnostics.audit || {}),
