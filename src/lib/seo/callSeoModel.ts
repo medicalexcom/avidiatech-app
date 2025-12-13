@@ -36,7 +36,8 @@ export async function callSeoModel(
     customInstructions?: string | null;
     instructionsSource?: string | null;
   }) => {
-    const trimmedInstructions = typeof customInstructions === "string" ? customInstructions.trim() : "";
+    const trimmedInstructions =
+      typeof customInstructions === "string" ? customInstructions.trim() : "";
 
     return {
       module,
@@ -62,12 +63,17 @@ export async function callSeoModel(
         (enforcerModule as any).buildSeoRequestBody ||
         (enforcerModule as any).default?.buildSeoRequestBody ||
         buildSeoRequestBody;
-      console.log("[seo/callSeoModel] using shared gptInstructionsEnforcer module");
+      console.log("[api/v1/seo] using shared gptInstructionsEnforcer module");
     } else {
-      console.log("[seo/callSeoModel] shared gptInstructionsEnforcer not present; using built-in body builder");
+      console.log(
+        "[api/v1/seo] shared gptInstructionsEnforcer not present; using built-in body builder"
+      );
     }
   } catch (err: any) {
-    console.warn("[seo/callSeoModel] unable to load shared gptInstructionsEnforcer", err?.message || err);
+    console.warn(
+      "[api/v1/seo] unable to load shared gptInstructionsEnforcer",
+      err?.message || err
+    );
   }
 
   const body = buildSeoRequestBody
@@ -99,7 +105,7 @@ export async function callSeoModel(
   const text = await res.text();
 
   if (!res.ok) {
-    console.error("[seo/callSeoModel] central GPT non-200", res.status, text?.slice(0, 500));
+    console.error("[api/v1/seo] central GPT non-200", res.status, text?.slice(0, 500));
     throw new Error(`central_gpt_seo_error: ${res.status} ${text || "(empty body)"}`);
   }
 
@@ -107,16 +113,17 @@ export async function callSeoModel(
   try {
     json = JSON.parse(text);
   } catch (err: any) {
-    console.error("[seo/callSeoModel] central GPT returned non-JSON", err?.message || err, "raw=", text?.slice(0, 500));
+    console.error("[api/v1/seo] central GPT returned non-JSON", err?.message || err, "raw=", text?.slice(0, 500));
     throw new Error("central_gpt_invalid_json");
   }
 
   const normalized = normalizedPayload || {};
   const seoPayload = json?.seo || normalized?.seo || {};
-  const descriptionHtml = json?.description_html || json?.description || normalized?.description_html || null;
+  const descriptionHtml =
+    json?.description_html || json?.description || normalized?.description_html || null;
   const features = Array.isArray(json?.features) ? json.features : normalized?.features ?? null;
 
-  console.log("[seo/callSeoModel] central GPT SEO summary", {
+  console.log("[api/v1/seo] central GPT SEO summary", {
     hasSeo: !!seoPayload,
     hasDescription: !!descriptionHtml,
     featuresCount: Array.isArray(features) ? features.length : null,
