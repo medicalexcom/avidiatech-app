@@ -1,18 +1,18 @@
 import { safeFetch } from "@/lib/utils/safeFetch";
 
 export type BigCommerceCredentials = {
-  store_hash: string; // config or secrets
+  store_hash: string;
   access_token: string;
 };
 
 export type BigCommerceUpsertOptions = {
-  allowOverwriteExisting?: boolean; // default false (safe gate)
+  allowOverwriteExisting?: boolean; // default false (safe)
 };
 
 export type BigCommerceImportResult = {
   ok: boolean;
   platform: "bigcommerce";
-  action: "created" | "needs_review" | "updated" | "noop";
+  action: "created" | "needs_review" | "updated";
   product_id?: number;
   sku?: string | null;
   warnings: string[];
@@ -32,15 +32,15 @@ function headers(token: string) {
   };
 }
 
-// Conservative SKU extraction: looks for common fields
+// Conservative SKU extraction: extend later as normalized model gets richer
 export function extractSkuFromIngestion(row: any): string | null {
   const normalized = row?.normalized_payload ?? {};
   const candidates = [
     normalized?.sku,
     normalized?.mpn,
     normalized?.part_number,
-    row?.normalized_payload?.specs?.sku,
-    row?.normalized_payload?.specs?.mpn,
+    normalized?.specs?.sku,
+    normalized?.specs?.mpn,
   ];
 
   for (const c of candidates) {
@@ -50,13 +50,9 @@ export function extractSkuFromIngestion(row: any): string | null {
   return null;
 }
 
-export async function findProductBySku(args: {
-  creds: BigCommerceCredentials;
-  sku: string;
-}) {
-  const url = `${bcBaseUrl(args.creds.store_hash)}/catalog/products?keyword=${encodeURIComponent(
-    args.sku
-  )}&limit=10`;
+export async function findProductBySku(args: { creds: BigCommerceCredentials; sku: string }) {
+  // BC keyword is broad; we filter for exact sku match once we get results
+  const url = `${bcBaseUrl(args.creds.store_hash)}/catalog/products?keyword=${encodeURIComponent(args.sku)}&limit=50`;
 
   const res = await safeFetch(url, {
     method: "GET",
@@ -72,7 +68,6 @@ export async function findProductBySku(args: {
   }
 
   const data = json?.data ?? [];
-  // keyword is loose; require exact SKU match on base SKU if present
   const exact = data.find((p: any) => String(p?.sku ?? "").trim() === args.sku);
   return exact ?? null;
 }
@@ -89,25 +84,21 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
       ? seo.h1.trim()
       : "New Product";
 
-  // Minimal v3 create payload
-  // (we can extend categories, brand, images, custom fields later)
   const payload: any = {
     name,
     type: "physical",
     weight: 1,
     description: typeof description_html === "string" ? description_html : "",
     sku: sku || undefined,
-    is_visible: false, // safe default: create hidden until reviewed
+    is_visible: false, // safe default: keep hidden until reviewed
     custom_fields: [
       { name: "Avidia Ingestion ID", value: String(row?.id ?? "") },
       { name: "Avidia Source URL", value: String(row?.source_url ?? "") },
     ].filter((x) => x.value),
   };
 
-  // SEO fields (BigCommerce uses "page_title" "meta_description" in v3)
   if (typeof seo?.pageTitle === "string" && seo.pageTitle.trim()) payload.page_title = seo.pageTitle.trim();
-  if (typeof seo?.metaDescription === "string" && seo.metaDescription.trim())
-    payload.meta_description = seo.metaDescription.trim();
+  if (typeof seo?.metaDescription === "string" && seo.metaDescription.trim()) payload.meta_description = seo.metaDescription.trim();
 
   return payload;
 }
@@ -124,9 +115,7 @@ export async function importToBigCommerce(args: {
   if (!sku) warnings.push("missing_sku");
 
   let existing: any = null;
-  if (sku) {
-    existing = await findProductBySku({ creds: args.creds, sku });
-  }
+  if (sku) existing = await findProductBySku({ creds: args.creds, sku });
 
   if (existing && !allowOverwriteExisting) {
     return {
@@ -141,7 +130,6 @@ export async function importToBigCommerce(args: {
     };
   }
 
-  // If existing and overwrite allowed, update (later we can compute diffs)
   if (existing && allowOverwriteExisting) {
     const updateUrl = `${bcBaseUrl(args.creds.store_hash)}/catalog/products/${existing.id}`;
     const updatePayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
@@ -169,7 +157,6 @@ export async function importToBigCommerce(args: {
     };
   }
 
-  // Create
   const createUrl = `${bcBaseUrl(args.creds.store_hash)}/catalog/products`;
   const createPayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
 
