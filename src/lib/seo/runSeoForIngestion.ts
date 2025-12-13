@@ -1,17 +1,7 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
-export async function runSeoForIngestion({
-  ingestionId,
-  options,
-}: {
-  ingestionId: string;
-  options?: {
-    profile?: string | null;
-    strict?: boolean;
-    model?: string | null;
-  };
-}) {
+export async function runSeoForIngestion(ingestionId: string) {
   const supabase = getServiceSupabaseClient();
 
   const { data: ingestion, error: loadErr } = await supabase
@@ -39,33 +29,29 @@ export async function runSeoForIngestion({
   const normalized = ingestion.normalized_payload as any;
   const startedAt = new Date().toISOString();
 
-  // call central SEO model; options are passed through as metadata hints for now
+  // identical call shape to existing route
   const seoResult = await callSeoModel(
     normalized,
     ingestion.correlation_id || null,
     ingestion.source_url || null,
-    ingestion.tenant_id || null,
-    options ?? {}
+    ingestion.tenant_id || null
   );
 
   const finishedAt = new Date().toISOString();
 
-  // merge diagnostics
   const diagnostics = ingestion.diagnostics || {};
   const seoDiagnostics = {
     ...(diagnostics.seo || {}),
     last_run_at: finishedAt,
     started_at: startedAt,
     status: "completed",
-    options: options ?? null,
   };
   const updatedDiagnostics = {
     ...diagnostics,
     seo: seoDiagnostics,
   };
 
-  // persist to product_ingestions (same contract as your existing route)
-  const { data: updated, error: updErr } = await supabase
+  const { data: updatedRows, error: updErr } = await supabase
     .from("product_ingestions")
     .update({
       seo_payload: seoResult.seo_payload,
@@ -76,7 +62,7 @@ export async function runSeoForIngestion({
       updated_at: finishedAt,
     })
     .eq("id", ingestion.id)
-    .select("id, tenant_id, source_url, seo_payload, description_html, features, seo_generated_at")
+    .select("id, seo_payload, description_html, features")
     .maybeSingle();
 
   if (updErr) {
@@ -85,12 +71,8 @@ export async function runSeoForIngestion({
 
   return {
     ingestionId: ingestion.id,
-    tenantId: ingestion.tenant_id ?? null,
-    sourceUrl: ingestion.source_url ?? null,
-    startedAt,
-    finishedAt,
-    options: options ?? null,
-    result: seoResult,
-    persisted: updated,
+    seo_payload: updatedRows?.seo_payload ?? seoResult.seo_payload,
+    description_html: updatedRows?.description_html ?? seoResult.description_html,
+    features: updatedRows?.features ?? seoResult.features,
   };
 }
