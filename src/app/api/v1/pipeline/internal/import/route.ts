@@ -36,16 +36,17 @@ export async function POST(req: Request) {
     if (msg === "missing_tenant_id_for_import") return NextResponse.json({ error: "missing_tenant_id_for_import" }, { status: 422 });
 
     if (msg === "connection_not_found") return NextResponse.json({ error: "connection_not_found" }, { status: 409 });
-    if (msg === "bigcommerce_connection_incomplete") return NextResponse.json({ error: "bigcommerce_connection_incomplete" }, { status: 409 });
+    if (msg.startsWith("connection_load_failed:"))
+      return NextResponse.json({ error: "connection_load_failed", detail: msg }, { status: 500 });
 
-    // BigCommerce errors bubble up as bigcommerce_*_failed:status:body
-    if (msg.startsWith("bigcommerce_")) {
+    if (msg === "bigcommerce_connection_incomplete")
+      return NextResponse.json({ error: "bigcommerce_connection_incomplete" }, { status: 409 });
+
+    if (msg.startsWith("bigcommerce_"))
       return NextResponse.json({ error: "bigcommerce_error", detail: msg }, { status: 502 });
-    }
 
-    if (msg.startsWith("import_persist_failed:")) {
+    if (msg.startsWith("import_persist_failed:"))
       return NextResponse.json({ error: "import_persist_failed", detail: msg }, { status: 500 });
-    }
 
     return NextResponse.json({ error: "import_internal_failed", detail: msg }, { status: 500 });
   }
