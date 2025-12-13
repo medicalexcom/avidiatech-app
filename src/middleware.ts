@@ -74,7 +74,8 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 
   let clerkUser: any;
   try {
-    clerkUser = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();
+    clerkUser = await client.users.getUser(userId);
   } catch (err) {
     console.warn("Unable to fetch Clerk user:", err);
   }
@@ -87,7 +88,10 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
           e?.emailAddress &&
           ownerEmails.has(String(e.emailAddress).toLowerCase())
         ) {
-          console.info("Owner detected by email list, bypassing Stripe:", e.emailAddress);
+          console.info(
+            "Owner detected by email list, bypassing Stripe:",
+            e.emailAddress
+          );
           return true;
         }
       }
@@ -100,7 +104,10 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     const privateMeta = (clerkUser?.privateMetadata as any) || {};
     const publicMeta = (clerkUser?.publicMetadata as any) || {};
     if (privateMeta?.role === "owner" || publicMeta?.role === "owner") {
-      console.info("Owner detected by Clerk metadata; bypassing Stripe for user:", userId);
+      console.info(
+        "Owner detected by Clerk metadata; bypassing Stripe for user:",
+        userId
+      );
       return true;
     }
   } catch (err) {
