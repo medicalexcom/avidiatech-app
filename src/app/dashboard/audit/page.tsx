@@ -698,7 +698,13 @@ export default function AuditPage() {
               <div className="space-y-2">
                 <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl dark:text-slate-50">
                   Turn your product rules into a{" "}
-                  <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-200 dark:to-emerald-200">
+                  <span
+                    className="audit-title-gradient bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(90deg, rgba(251,191,36,1), rgba(249,115,22,1), rgba(236,72,153,1), rgba(251,191,36,1))",
+                    }}
+                  >
                     measurable, enforceable audit score
                   </span>
                   .
@@ -1315,6 +1321,28 @@ export default function AuditPage() {
           </section>
         ) : null}
       </div>
+      <style jsx>{`
+      .audit-title-gradient {
+        background-size: 220% 220%;
+        animation: auditGradientShift 7s ease-in-out infinite;
+        filter: drop-shadow(0 8px 22px rgba(249, 115, 22, 0.18));
+      }
+    
+      @keyframes auditGradientShift {
+        0% {
+          background-position: 0% 50%;
+          transform: translateZ(0) scale(1);
+        }
+        50% {
+          background-position: 100% 50%;
+          transform: translateZ(0) scale(1.01);
+        }
+        100% {
+          background-position: 0% 50%;
+          transform: translateZ(0) scale(1);
+        }
+      }
+    `}</style>     
     </main>
   );
 }
