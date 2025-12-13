@@ -178,8 +178,8 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.next();
   }
 
-  // Clerk session
-  const { userId } = auth();
+  // Clerk session (async in this Clerk version)
+  const { userId } = await auth();
 
   if (!userId) {
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
