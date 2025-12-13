@@ -33,9 +33,15 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
  * Use this in server-only code paths that need elevated privileges.
  */
 let _serverSupabase: SupabaseClient | null = null;
-export function getServerSupabase(): SupabaseClient {
+
+/**
+ * Safe server client getter.
+ * Returns null (instead of throwing) when SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are missing.
+ * Useful for build/CI environments where secrets are not present.
+ */
+export function getServerSupabaseSafe(): SupabaseClient | null {
   if (!url || !serviceRoleKey) {
-    throw new Error("Server Supabase client is not configured. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in the environment.");
+    return null;
   }
   if (!_serverSupabase) {
     _serverSupabase = createClient(url, serviceRoleKey, {
@@ -43,6 +49,14 @@ export function getServerSupabase(): SupabaseClient {
     });
   }
   return _serverSupabase;
+}
+
+export function getServerSupabase(): SupabaseClient {
+  const client = getServerSupabaseSafe();
+  if (!client) {
+    throw new Error("Server Supabase client is not configured. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set in the environment.");
+  }
+  return client;
 }
 
 /**
