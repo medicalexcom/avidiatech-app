@@ -1,10 +1,10 @@
-// src/components/ProfileMenu.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUser, SignOutButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
+import { usePathname } from "next/navigation";
 
 /**
  * ProfileMenu — premium account dropdown
@@ -15,6 +15,8 @@ import { useTheme } from "next-themes";
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const pathname = usePathname();
+
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -25,6 +27,11 @@ export default function ProfileMenu() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Close menu on route change to avoid portal overlay blocking page inputs (e.g. Clerk CreateOrganization)
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   // Sync local isDark with theme, localStorage, and <html> class
   useEffect(() => {
@@ -231,7 +238,6 @@ export default function ProfileMenu() {
             </div>
           </div>
 
-          {/* ⬇️ New pill from the snippet, wired to our isDark / toggleTheme */}
           {mounted && (
             <button
               type="button"
