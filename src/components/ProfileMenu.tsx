@@ -215,7 +215,7 @@ export default function ProfileMenu() {
           </div>
         )}
 
-        <Item href="/settings/organization">Organization</Item>
+        <Item href="/settings/organization/new">Organization</Item>
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
