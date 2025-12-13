@@ -1,35 +1,40 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
-export async function runSeoForIngestion(ingestionId: string) {
+export async function runSeoForIngestion(ingestionId: string): Promise<{
+  ingestionId: string;
+  seo_payload: any;
+  description_html: string | null;
+  features: string[] | null;
+}> {
   const supabase = getServiceSupabaseClient();
 
+  // 3) Load ingestion row
   const { data: ingestion, error: loadErr } = await supabase
     .from("product_ingestions")
     .select(
-      "id, tenant_id, user_id, source_url, normalized_payload, correlation_id, diagnostics, status"
+      "id, tenant_id, user_id, source_url, normalized_payload, seo_payload, description_html, features, correlation_id, diagnostics, status"
     )
     .eq("id", ingestionId)
     .maybeSingle();
 
   if (loadErr) {
+    // Previously the route returned ingestion_load_failed 500
     throw new Error(`ingestion_load_failed: ${loadErr.message || String(loadErr)}`);
   }
+
   if (!ingestion) {
-    const e: any = new Error("ingestion_not_found");
-    e.code = "ingestion_not_found";
-    throw e;
+    throw new Error("ingestion_not_found");
   }
+
   if (!ingestion.normalized_payload) {
-    const e: any = new Error("ingestion_not_ready");
-    e.code = "ingestion_not_ready";
-    throw e;
+    throw new Error("ingestion_not_ready");
   }
 
   const normalized = ingestion.normalized_payload as any;
   const startedAt = new Date().toISOString();
 
-  // identical call shape to existing route
+  // 4) Call central GPT (same args as before)
   const seoResult = await callSeoModel(
     normalized,
     ingestion.correlation_id || null,
@@ -39,6 +44,7 @@ export async function runSeoForIngestion(ingestionId: string) {
 
   const finishedAt = new Date().toISOString();
 
+  // 5) Merge diagnostics
   const diagnostics = ingestion.diagnostics || {};
   const seoDiagnostics = {
     ...(diagnostics.seo || {}),
@@ -51,6 +57,7 @@ export async function runSeoForIngestion(ingestionId: string) {
     seo: seoDiagnostics,
   };
 
+  // 6) Persist SEO into product_ingestions
   const { data: updatedRows, error: updErr } = await supabase
     .from("product_ingestions")
     .update({
@@ -69,6 +76,14 @@ export async function runSeoForIngestion(ingestionId: string) {
     throw new Error(`seo_persist_failed: ${updErr.message || String(updErr)}`);
   }
 
+  console.log("[api/v1/seo] SEO persisted", {
+    ingestionId: ingestion.id,
+    hasSeo: !!updatedRows?.seo_payload,
+    hasDescription: !!updatedRows?.description_html,
+    featuresCount: Array.isArray(updatedRows?.features) ? updatedRows?.features.length : null,
+  });
+
+  // 7) Return SEO to frontend (same output preference order as before)
   return {
     ingestionId: ingestion.id,
     seo_payload: updatedRows?.seo_payload ?? seoResult.seo_payload,
