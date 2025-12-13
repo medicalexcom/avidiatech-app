@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import Providers from "./providers";
 import { ClerkProvider } from "@clerk/nextjs";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export const metadata = {
   title: "AvidiaTech | Product Data Automation",
@@ -20,7 +21,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <html lang="en" suppressHydrationWarning>
         {/* Light by default; dark mode comes from `html.dark` via next-themes */}
         <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
-          <Providers>{children}</Providers>
+          <ErrorBoundary>
+            <Providers>{children}</Providers>
+          </ErrorBoundary>
         </body>
       </html>
     </ClerkProvider>
