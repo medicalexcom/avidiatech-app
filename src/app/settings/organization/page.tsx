@@ -4,9 +4,9 @@ import { getUserRole } from "@/lib/auth/getUserRole";
 import BackToDashboard from "@/components/BackToDashboard";
 import { auth } from "@clerk/nextjs/server";
 
-export default function OrganizationPage() {
+export default async function OrganizationPage() {
   const role = getUserRole();
-  const { orgId } = auth();
+  const { orgId } = await auth();
 
   if (!orgId) {
     return (
