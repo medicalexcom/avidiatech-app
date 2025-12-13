@@ -37,7 +37,13 @@ type PipelineModule = {
 };
 
 type PipelineSnapshot = {
-  run?: { id: string; status: PipelineRunStatus; created_at?: string; started_at?: string; finished_at?: string } & AnyObj;
+  run?: {
+    id: string;
+    status: PipelineRunStatus;
+    created_at?: string;
+    started_at?: string;
+    finished_at?: string;
+  } & AnyObj;
   modules?: PipelineModule[];
 };
 
@@ -56,14 +62,6 @@ function fmtMs(ms: number | null) {
   if (ms < 1000) return `${ms}ms`;
   const s = Math.round(ms / 100) / 10;
   return `${s}s`;
-}
-
-function safeJsonParse(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
 }
 
 function moduleLabel(name: string) {
@@ -89,7 +87,7 @@ function badgeClassForSeverity(sev: string) {
   const s = (sev || "").toLowerCase();
   if (s === "critical" || s === "blocker" || s === "high" || s === "error") {
     return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500/40";
-    }
+  }
   if (s === "warn" || s === "warning" || s === "medium") {
     return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/40";
   }
@@ -98,10 +96,14 @@ function badgeClassForSeverity(sev: string) {
 
 function statusChipClass(status: string) {
   const s = (status || "").toLowerCase();
-  if (s === "running") return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/40";
-  if (s === "failed") return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500/40";
-  if (s === "succeeded" || s === "completed") return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-500/40";
-  if (s === "skipped") return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
+  if (s === "running")
+    return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/40";
+  if (s === "failed")
+    return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500/40";
+  if (s === "succeeded" || s === "completed")
+    return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-500/40";
+  if (s === "skipped")
+    return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
   return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
 }
 
@@ -121,14 +123,18 @@ function normalizeAudit(auditAny: any) {
       blockers: [] as string[],
       warnings: [] as string[],
       checks: [] as any[],
-      categories: [] as Array<{ key: string; label: string; score: number | null; status: string | null }>,
+      categories: [] as Array<{
+        key: string;
+        label: string;
+        score: number | null;
+        status: string | null;
+      }>,
       issues: [] as Array<any>,
       raw: auditAny ?? null,
       lastRunAt: null as string | null,
     };
   }
 
-  // Preferred fields (current implementation)
   const score = typeof audit.score === "number" ? audit.score : null;
 
   const status =
@@ -148,7 +154,6 @@ function normalizeAudit(auditAny: any) {
   const blockers = Array.isArray(audit.blockers) ? audit.blockers : [];
   const warnings = Array.isArray(audit.warnings) ? audit.warnings : [];
 
-  // Some future formats might emit "issues"
   const issues = Array.isArray(audit.issues)
     ? audit.issues
     : Array.isArray(audit.findings)
@@ -157,7 +162,6 @@ function normalizeAudit(auditAny: any) {
 
   const checks = Array.isArray(audit.checks) ? audit.checks : [];
 
-  // Category scoring (future-proof)
   const categoriesRaw = audit.categories || audit.categoryScores || null;
   const categories =
     Array.isArray(categoriesRaw)
@@ -194,6 +198,30 @@ function normalizeAudit(auditAny: any) {
   };
 }
 
+/** tiny UI helpers (no deps) */
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+function ProgressRing({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(100, value));
+  return (
+    <div
+      className="relative h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-950/50"
+      style={{
+        background: `conic-gradient(from 225deg, rgba(34,211,238,0.95) ${v}%, rgba(226,232,240,1) 0)`,
+      }}
+      aria-label={`Progress ${v}%`}
+      title={`Progress ${v}%`}
+    >
+      <div className="absolute inset-1.5 rounded-full bg-slate-50 dark:bg-slate-950" />
+      <div className="absolute inset-0 grid place-items-center text-[10px] font-semibold text-slate-700 dark:text-slate-200">
+        {v}%
+      </div>
+    </div>
+  );
+}
+
 export default function AuditPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -203,7 +231,8 @@ export default function AuditPage() {
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
 
   const [mode, setMode] = useState<Mode>(urlParam ? "url" : "ingestion");
-  const [ingestionAuditMode, setIngestionAuditMode] = useState<IngestionAuditMode>("extract_seo_audit");
+  const [ingestionAuditMode, setIngestionAuditMode] =
+    useState<IngestionAuditMode>("extract_seo_audit");
 
   const [urlInput, setUrlInput] = useState(urlParam || "");
   const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
@@ -224,13 +253,15 @@ export default function AuditPage() {
   const [showRawAuditJson, setShowRawAuditJson] = useState(false);
   const [issueFilter, setIssueFilter] = useState<"all" | "errors" | "warnings">("all");
   const [search, setSearch] = useState("");
+  const [showDevPanels, setShowDevPanels] = useState(false);
 
   const fetchIngestionData = useCallback(async (id: string) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
+      if (!res.ok)
+        throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
       setJob(json?.data ?? json);
       return json?.data ?? json;
     } finally {
@@ -241,7 +272,8 @@ export default function AuditPage() {
   const fetchPipelineSnapshot = useCallback(async (runId: string) => {
     const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
     return json as PipelineSnapshot;
   }, []);
 
@@ -333,7 +365,8 @@ export default function AuditPage() {
       }),
     });
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
     const runId = String(json?.pipelineRunId ?? "");
     if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
     setPipelineRunId(runId);
@@ -391,11 +424,12 @@ export default function AuditPage() {
 
       await fetchIngestionData(id);
 
-      const steps =
-        ingestionAuditMode === "audit_only" ? [...STEPS_AUDIT_ONLY] : [...STEPS_URL_FLOW];
+      const steps = ingestionAuditMode === "audit_only" ? [...STEPS_AUDIT_ONLY] : [...STEPS_URL_FLOW];
 
       const runId = await startPipeline(id, steps);
-      router.push(`/dashboard/audit?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`);
+      router.push(
+        `/dashboard/audit?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`
+      );
 
       await pollPipeline(runId, 300_000, 2000);
       await fetchIngestionData(id);
@@ -449,12 +483,6 @@ export default function AuditPage() {
 
   const runStatus = pipelineSnapshot?.run?.status ?? null;
 
-  const moduleByName = useMemo(() => {
-    const map = new Map<string, PipelineModule>();
-    for (const m of pipelineSnapshot?.modules ?? []) map.set(m.module_name, m);
-    return map;
-  }, [pipelineSnapshot]);
-
   const moduleRuntimeMs = useMemo(() => {
     const map = new Map<string, number>();
     for (const m of pipelineSnapshot?.modules ?? []) {
@@ -475,29 +503,14 @@ export default function AuditPage() {
   }, [pipelineSnapshot]);
 
   const derivedIssues = useMemo(() => {
-    // v1: blockers/warnings become issues if there is no explicit issues array
     const issues: any[] = [];
-
     for (const b of audit.blockers ?? []) {
-      issues.push({
-        severity: "blocker",
-        rule: "blocker",
-        message: b,
-        location: "audit",
-      });
+      issues.push({ severity: "blocker", rule: "blocker", message: b, location: "audit" });
     }
     for (const w of audit.warnings ?? []) {
-      issues.push({
-        severity: "warning",
-        rule: "warning",
-        message: w,
-        location: "audit",
-      });
+      issues.push({ severity: "warning", rule: "warning", message: w, location: "audit" });
     }
-
-    // If structured issues exist in the future, include them too
     for (const it of audit.issues ?? []) issues.push(it);
-
     return issues;
   }, [audit.blockers, audit.issues, audit.warnings]);
 
@@ -506,7 +519,15 @@ export default function AuditPage() {
     return derivedIssues.filter((i) => {
       const sev = String(i?.severity ?? i?.level ?? "").toLowerCase();
       if (issueFilter === "errors") {
-        if (!(sev.includes("block") || sev.includes("crit") || sev.includes("high") || sev.includes("error") || sev.includes("fail"))) {
+        if (
+          !(
+            sev.includes("block") ||
+            sev.includes("crit") ||
+            sev.includes("high") ||
+            sev.includes("error") ||
+            sev.includes("fail")
+          )
+        ) {
           return false;
         }
       }
@@ -514,20 +535,13 @@ export default function AuditPage() {
         if (!(sev.includes("warn") || sev.includes("medium"))) return false;
       }
       if (!term) return true;
-
       const hay = `${i?.rule ?? ""} ${i?.message ?? ""} ${i?.location ?? ""}`.toLowerCase();
       return hay.includes(term);
     });
   }, [derivedIssues, issueFilter, search]);
 
   const scoreTone =
-    audit.score == null
-      ? "slate"
-      : audit.score >= 90
-      ? "emerald"
-      : audit.score >= 75
-      ? "amber"
-      : "rose";
+    audit.score == null ? "slate" : audit.score >= 90 ? "emerald" : audit.score >= 75 ? "amber" : "rose";
 
   const scoreChipClass =
     scoreTone === "emerald"
@@ -558,98 +572,187 @@ export default function AuditPage() {
     URL.revokeObjectURL(url);
   };
 
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatusMessage("Copied to clipboard");
+      setTimeout(() => setStatusMessage(null), 1500);
+    } catch {
+      // silent (no blocking)
+    }
+  };
+
   const demoUrl = "https://www.apple.com/iphone-17/";
 
+  const ingestionId = String(jobData?.id ?? ingestionIdInput ?? "");
+  const blockersCount = (audit.blockers ?? []).length;
+  const warningsCount = (audit.warnings ?? []).length;
+  const checksCount = Array.isArray(audit.checks) ? audit.checks.length : 0;
+
+  const headerState =
+    running || loading || pollingState || runStatus === "running"
+      ? "Running…"
+      : pipelineRunId
+      ? "Ready"
+      : "Idle";
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Ambient background */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/15" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-emerald-300/15 blur-3xl dark:bg-emerald-500/10" />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
+    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Ambient background — SEO-style cyan/emerald */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/15" />
+        <div className="absolute -bottom-44 right-[-12rem] h-96 w-96 rounded-full bg-emerald-300/18 blur-3xl dark:bg-emerald-500/12" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 opacity-[0.035] mix-blend-soft-light dark:opacity-[0.07]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-5 lg:px-8 lg:py-6 space-y-4">
+      <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
         {/* Top bar */}
-        <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-amber-500/40 dark:bg-slate-950/70 dark:text-amber-100">
-              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-amber-300 dark:bg-slate-900 dark:border-amber-400/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-300">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
+                <span className={cx("h-1.5 w-1.5 rounded-full", running ? "bg-amber-400 animate-pulse" : "bg-cyan-400")} />
               </span>
-              AvidiaAudit
-              {(jobData?.id || ingestionIdInput) && (
+              Data Intelligence · AvidiaAudit
+              {ingestionId ? (
                 <>
                   <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">
-                    {(jobData?.id || ingestionIdInput).slice(0, 8)}…
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyText(ingestionId)}
+                    className="font-mono text-[10px] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    title="Copy ingestionId"
+                  >
+                    {ingestionId.slice(0, 8)}…
+                  </button>
                 </>
-              )}
-              {pipelineRunId && (
+              ) : null}
+              {pipelineRunId ? (
                 <>
                   <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">run:{pipelineRunId.slice(0, 8)}…</span>
+                  <button
+                    type="button"
+                    onClick={() => copyText(pipelineRunId)}
+                    className="font-mono text-[10px] text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    title="Copy pipelineRunId"
+                  >
+                    run:{pipelineRunId.slice(0, 8)}…
+                  </button>
                 </>
-              )}
+              ) : null}
             </div>
 
-            <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
-              {running || loading || pollingState || runStatus === "running" ? "Running…" : pipelineRunId ? "Ready" : "Idle"}
+            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
+              {headerState}
             </div>
           </div>
 
-          {statusMessage && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-amber-200 px-3 py-1.5 text-[11px] text-amber-700 shadow-sm dark:bg-slate-950/70 dark:border-amber-500/40 dark:text-amber-100">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-              {statusMessage}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {statusMessage ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[11px] text-cyan-800 shadow-sm dark:border-cyan-500/30 dark:bg-slate-950/70 dark:text-cyan-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                {statusMessage}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  setError(null);
+                  if (!pipelineRunId) return;
+                  const snap = await fetchPipelineSnapshot(pipelineRunId);
+                  setPipelineSnapshot(snap);
+                  setStatusMessage("Snapshot refreshed");
+                  setTimeout(() => setStatusMessage(null), 1500);
+                } catch (e: any) {
+                  setError(String(e?.message || e));
+                }
+              }}
+              disabled={!pipelineRunId || running}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm hover:bg-white disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-950"
+              title="Refresh pipeline snapshot"
+            >
+              Refresh
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowDevPanels((v) => !v)}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm hover:bg-white dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-950"
+            >
+              {showDevPanels ? "Hide dev panels" : "Show dev panels"}
+            </button>
+          </div>
         </section>
 
-        {/* Above the fold: CTA + score card */}
-        <section className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:bg-slate-950/60 dark:border-slate-800">
-          <div className="p-4 lg:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* CTA */}
-            <div className="lg:col-span-7 space-y-3">
-              <div className="space-y-1">
-                <h1 className="text-xl lg:text-2xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
-                  Audit your product content before it reaches production
+        {/* Hero / CTA + Scoreboard */}
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
+          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
+            {/* Left: headline + run */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="space-y-2">
+                <h1 className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl dark:text-slate-50">
+                  Turn your product rules into a{" "}
+                  <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-200 dark:to-emerald-200">
+                    measurable, enforceable audit score
+                  </span>
+                  .
                 </h1>
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  Run deterministic checks (v1) and persist a structured audit result. If audit fails, downstream import/monitor/price are skipped (soft gate).
+                <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+                  Run deterministic checks now (v1), persist a structured audit payload, and use it as a guardrail for
+                  safe automation. When audit fails, downstream modules can be skipped automatically.
                 </p>
               </div>
 
+              {/* quick chips */}
               <div className="flex flex-wrap gap-2 text-[11px]">
-                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 dark:bg-slate-950/70 dark:border-slate-800">
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
                   <span className="font-mono text-slate-600 dark:text-slate-300">URL flow</span>
                   <span className="text-slate-500 dark:text-slate-400">ingest → extract → seo → audit</span>
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 dark:bg-slate-950/70 dark:border-slate-800">
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
                   <span className="font-mono text-slate-600 dark:text-slate-300">Ingestion flow</span>
                   <span className="text-slate-500 dark:text-slate-400">audit-only or full chain</span>
                 </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                  auditResult JSON per run
+                </span>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-3 dark:bg-slate-950/60 dark:border-slate-800">
-                <div className="flex items-center justify-between gap-2">
+              {/* Run mode */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/50">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Run mode
                   </div>
+
                   <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-[11px] dark:border-slate-800 dark:bg-slate-950/60">
                     <button
                       type="button"
-                      className={`px-3 py-1 rounded-full ${mode === "url" ? "bg-amber-500 text-slate-950" : "text-slate-600 dark:text-slate-300"}`}
+                      className={cx(
+                        "px-3 py-1 rounded-full transition",
+                        mode === "url"
+                          ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500 text-white shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                      )}
                       onClick={() => setMode("url")}
                     >
                       From URL
                     </button>
                     <button
                       type="button"
-                      className={`px-3 py-1 rounded-full ${mode === "ingestion" ? "bg-amber-500 text-slate-950" : "text-slate-600 dark:text-slate-300"}`}
+                      className={cx(
+                        "px-3 py-1 rounded-full transition",
+                        mode === "ingestion"
+                          ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500 text-white shadow-sm"
+                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                      )}
                       onClick={() => setMode("ingestion")}
                     >
                       From ingestionId
@@ -662,19 +765,19 @@ export default function AuditPage() {
                     <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                       Manufacturer Product URL
                     </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
                         placeholder="https://manufacturer.com/product/..."
-                        className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                         type="url"
                       />
                       <button
                         type="button"
                         onClick={runAuditFromUrl}
                         disabled={running}
-                        className="sm:w-44 w-full px-4 py-3 rounded-xl bg-amber-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-amber-400 disabled:opacity-60 disabled:shadow-none"
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
                       >
                         {running ? "Running…" : "Run Audit"}
                       </button>
@@ -682,11 +785,11 @@ export default function AuditPage() {
 
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[11px] text-slate-500 dark:text-slate-500">
-                        Creates ingestion + pipeline run, then persists an audit result to diagnostics.
+                        Creates an ingestion + pipeline run, then persists an audit result to diagnostics.
                       </p>
                       <button
                         type="button"
-                        className="text-[11px] text-amber-700 hover:text-amber-600 underline underline-offset-4 dark:text-amber-300 dark:hover:text-amber-200"
+                        className="text-[11px] text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
                         onClick={() => setUrlInput(demoUrl)}
                       >
                         Try demo URL
@@ -698,25 +801,26 @@ export default function AuditPage() {
                     <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                       ingestionId
                     </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         value={ingestionIdInput}
                         onChange={(e) => setIngestionIdInput(e.target.value)}
                         placeholder="b0324634-1593-4fad-a9de-70215a2deb38"
-                        className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                         type="text"
                       />
                       <button
                         type="button"
                         onClick={runAuditOnIngestion}
                         disabled={running}
-                        className="sm:w-44 w-full px-4 py-3 rounded-xl bg-amber-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-amber-400 disabled:opacity-60 disabled:shadow-none"
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
                       >
                         {running ? "Running…" : "Run Audit"}
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="inline-flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
                         <span className="text-slate-500 dark:text-slate-400">Steps:</span>
                         <select
@@ -729,172 +833,328 @@ export default function AuditPage() {
                         </select>
                       </div>
 
-                      <button
-                        type="button"
-                        className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-4 dark:text-slate-400 dark:hover:text-slate-200"
-                        onClick={async () => {
-                          try {
-                            setError(null);
-                            if (!ingestionIdInput.trim()) throw new Error("Enter an ingestionId first.");
-                            await fetchIngestionData(ingestionIdInput.trim());
-                            setStatusMessage("Loaded ingestion");
-                          } catch (e: any) {
-                            setError(String(e?.message || e));
-                          }
-                        }}
-                      >
-                        Load existing
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-4 dark:text-slate-400 dark:hover:text-slate-200"
+                          onClick={async () => {
+                            try {
+                              setError(null);
+                              if (!ingestionIdInput.trim()) throw new Error("Enter an ingestionId first.");
+                              await fetchIngestionData(ingestionIdInput.trim());
+                              setStatusMessage("Loaded ingestion");
+                            } catch (e: any) {
+                              setError(String(e?.message || e));
+                            }
+                          }}
+                        >
+                          Load existing
+                        </button>
+                        {ingestionIdInput ? (
+                          <button
+                            type="button"
+                            className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-4 dark:text-slate-400 dark:hover:text-slate-200"
+                            onClick={() => copyText(ingestionIdInput)}
+                          >
+                            Copy id
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              {error && (
-                <div className="rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
+              {error ? (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800 shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
                   {error}
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Score card */}
+            {/* Right: score + live stats */}
             <div className="lg:col-span-5">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                      Audit score
+                      Audit scoreboard
                     </p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold ${scoreChipClass}`}>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span
+                        className={cx(
+                          "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold",
+                          scoreChipClass
+                        )}
+                      >
                         {audit.score == null ? "—" : `${audit.score} / 100`}
                       </span>
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(audit.status ?? (audit.ok === true ? "passed" : audit.ok === false ? "failed" : "unknown"))}`}>
+
+                      <span
+                        className={cx(
+                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px]",
+                          statusChipClass(
+                            audit.status ?? (audit.ok === true ? "passed" : audit.ok === false ? "failed" : "unknown")
+                          )
+                        )}
+                      >
                         {audit.status ?? (audit.ok === true ? "passed" : audit.ok === false ? "failed" : "unknown")}
                       </span>
+
+                      {blockersCount ? (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] text-rose-800 dark:border-rose-500/30 dark:bg-rose-950/40 dark:text-rose-100">
+                          <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          {blockersCount} blockers
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/35 dark:text-emerald-100">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          No blockers
+                        </span>
+                      )}
+
+                      {warningsCount ? (
+                        <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/35 dark:text-amber-100">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          {warningsCount} warnings
+                        </span>
+                      ) : null}
                     </div>
+
                     <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                      {audit.summary ?? "Run an audit to see a score and structured results."}
+                      {audit.summary ?? "Run an audit to see a score, categories, and structured results."}
                     </p>
                   </div>
 
-                  <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
-                    <div>Run</div>
-                    <div className="font-mono">{pipelineRunId ? `${pipelineRunId.slice(0, 8)}…` : "—"}</div>
-                    <div className="mt-1">Last audit</div>
-                    <div className="font-mono">{audit.lastRunAt ? new Date(audit.lastRunAt).toLocaleString() : "—"}</div>
+                  <div className="flex flex-col items-end gap-2">
+                    <ProgressRing value={pipelineSnapshot?.modules?.length ? progress : 0} />
+                    <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
+                      <div>Last audit</div>
+                      <div className="font-mono">
+                        {audit.lastRunAt ? new Date(audit.lastRunAt).toLocaleString() : "—"}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Progress */}
+                {/* Pipeline progress bar */}
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                     <span>Pipeline progress</span>
                     <span>{pipelineSnapshot?.modules?.length ? `${progress}%` : "—"}</span>
                   </div>
-                  <div className="mt-1 h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                  <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                     <div
-                      className="h-full bg-gradient-to-r from-amber-400 via-amber-300 to-emerald-300"
+                      className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
                 </div>
 
-                {/* Gate status (your policy B) */}
+                {/* Categories (if present) */}
+                {audit.categories?.length ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40">
+                    <div className="flex items-center justify-between">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Category scores
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {audit.categories.length} categories
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {audit.categories.slice(0, 6).map((c) => {
+                        const v = c.score == null ? 0 : Math.max(0, Math.min(100, c.score));
+                        return (
+                          <div key={c.key} className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="truncate text-slate-700 dark:text-slate-200">{c.label}</span>
+                              <span className="font-mono text-slate-500 dark:text-slate-400">
+                                {c.score == null ? "—" : `${c.score}`}
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                              <div
+                                className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
+                                style={{ width: `${v}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Gate status */}
                 <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
                   <div className="font-semibold">Gate policy</div>
                   <div className="mt-1 text-slate-600 dark:text-slate-300">
-                    If audit fails: <span className="font-semibold">Import</span>, <span className="font-semibold">Monitor</span>, and <span className="font-semibold">Price</span> are skipped automatically.
+                    If audit fails: <span className="font-semibold">Import</span>,{" "}
+                    <span className="font-semibold">Monitor</span>, and <span className="font-semibold">Price</span> are
+                    skipped automatically.
                   </div>
                 </div>
 
-                {/* Export */}
+                {/* Actions */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => downloadJson(`audit-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, downloadableAuditJson)}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 dark:bg-white/5 dark:border-white/20 dark:hover:bg-white/10"
+                    onClick={() =>
+                      downloadJson(`audit-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, downloadableAuditJson)
+                    }
+                    className="rounded-lg border border-slate-900 bg-slate-900 px-3 py-2 text-xs text-slate-50 shadow-sm hover:bg-slate-800 dark:border-white/20 dark:bg-white/5 dark:hover:bg-white/10"
                   >
                     Export JSON
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setShowRawAuditJson((v) => !v)}
-                    className="px-3 py-2 rounded-lg bg-slate-100 text-xs text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50 dark:bg-slate-950/40 dark:border-slate-800 dark:text-slate-100"
+                    className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-xs text-slate-900 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
                   >
                     {showRawAuditJson ? "Hide raw" : "Show raw"}
                   </button>
+
+                  {pipelineRunId ? (
+                    <button
+                      type="button"
+                      onClick={() => copyText(JSON.stringify(downloadableAuditJson, null, 2))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200"
+                      title="Copy full JSON payload"
+                    >
+                      Copy payload
+                    </button>
+                  ) : null}
                 </div>
 
-                {showRawAuditJson && (
+                {showRawAuditJson ? (
                   <pre className="mt-3 max-h-[320px] overflow-auto rounded-xl border border-slate-200 bg-slate-900 p-3 text-[11px] text-slate-100 dark:border-slate-800">
                     {JSON.stringify(downloadableAuditJson, null, 2)}
                   </pre>
-                )}
+                ) : null}
+
+                {/* tiny live footer */}
+                <div className="mt-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                  <span>Checks: {checksCount || "—"}</span>
+                  <span>{pollingState ? `Ingest: ${pollingState}` : runStatus ? `Run: ${runStatus}` : ""}</span>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Live pipeline modules */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-5 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Live pipeline</h2>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(runStatus ?? "idle")}`}>
+        {/* Body: pipeline + issues/checks */}
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Live pipeline */}
+          <div className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Live pipeline</h2>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Status, runtime, output refs — in the order your pipeline executed.
+                </p>
+              </div>
+              <span
+                className={cx(
+                  "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px]",
+                  statusChipClass(runStatus ?? "idle")
+                )}
+              >
                 {runStatus ?? "idle"}
               </span>
             </div>
 
-            <div className="mt-3 space-y-2">
+            <div className="mt-4 space-y-2">
               {(pipelineSnapshot?.modules ?? [])
                 .slice()
                 .sort((a, b) => a.module_index - b.module_index)
                 .map((m) => (
                   <div
                     key={`${m.module_index}-${m.module_name}`}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                    className="group flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 transition hover:bg-white dark:border-slate-800 dark:bg-slate-950/40 dark:hover:bg-slate-950/60"
                   >
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">
-                        {m.module_index}. {moduleLabel(m.module_name)}
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cx(
+                            "h-2 w-2 rounded-full",
+                            m.status === "succeeded"
+                              ? "bg-emerald-400"
+                              : m.status === "failed"
+                              ? "bg-rose-400"
+                              : m.status === "running"
+                              ? "bg-amber-400 animate-pulse"
+                              : "bg-slate-400"
+                          )}
+                        />
+                        <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">
+                          {m.module_index}. {moduleLabel(m.module_name)}
+                        </div>
+                        <span
+                          className={cx(
+                            "ml-auto inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                            statusChipClass(m.status)
+                          )}
+                        >
+                          {m.status}
+                        </span>
                       </div>
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                        output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="font-mono">
+                          {fmtMs(moduleRuntimeMs.get(m.module_name) ?? null)}
+                        </span>
+                        <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
+                        <span className="truncate">
+                          output_ref:{" "}
+                          <span className="font-mono text-slate-600 dark:text-slate-300">
+                            {m.output_ref ?? "—"}
+                          </span>
+                        </span>
+                        {m.output_ref ? (
+                          <button
+                            type="button"
+                            onClick={() => copyText(String(m.output_ref))}
+                            className="ml-auto rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300 dark:hover:bg-slate-950"
+                            title="Copy output_ref"
+                          >
+                            Copy
+                          </button>
+                        ) : null}
                       </div>
+
                       {m.error ? (
-                        <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-200 truncate">
+                        <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-200">
                           error: {typeof m.error === "string" ? m.error : JSON.stringify(m.error)}
                         </div>
                       ) : null}
                     </div>
-
-                    <div className="text-right shrink-0">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(m.status)}`}>
-                        {m.status}
-                      </span>
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                        {fmtMs(moduleRuntimeMs.get(m.module_name) ?? null)}
-                      </div>
-                    </div>
                   </div>
                 ))}
 
-              {!(pipelineSnapshot?.modules ?? []).length && (
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+              {!(pipelineSnapshot?.modules ?? []).length ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
                   No pipeline run selected yet. Run an audit to see module telemetry.
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
           {/* Issues + Checks */}
           <div className="lg:col-span-7 space-y-4">
             {/* Issues */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
+            <div className="rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Issues</h2>
-                <div className="flex flex-wrap gap-2 items-center">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Issues</h2>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Blockers and warnings (v1). Filter, search, and export for workflows.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={issueFilter}
                     onChange={(e) => setIssueFilter(e.target.value as any)}
@@ -904,18 +1164,19 @@ export default function AuditPage() {
                     <option value="errors">Errors/Blockers</option>
                     <option value="warnings">Warnings</option>
                   </select>
+
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search issues..."
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] w-44 dark:border-slate-800 dark:bg-slate-950/60"
+                    placeholder="Search issues…"
+                    className="w-44 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-800 dark:bg-slate-950/60"
                   />
                 </div>
               </div>
 
-              <div className="mt-3 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="mt-3 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-800">
                 <table className="min-w-full text-xs">
-                  <thead className="bg-slate-50 text-slate-600 dark:bg-slate-950/60 dark:text-slate-300">
+                  <thead className="sticky top-0 bg-slate-50 text-slate-600 dark:bg-slate-950/80 dark:text-slate-300">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold">Severity</th>
                       <th className="px-3 py-2 text-left font-semibold">Rule</th>
@@ -923,14 +1184,22 @@ export default function AuditPage() {
                       <th className="px-3 py-2 text-left font-semibold">Location</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-slate-900/40">
+                  <tbody className="bg-white dark:bg-slate-900/30">
                     {filteredIssues.length ? (
                       filteredIssues.map((i, idx) => {
                         const sev = String(i?.severity ?? i?.level ?? "info");
                         return (
-                          <tr key={idx} className="border-t border-slate-200 dark:border-slate-800">
+                          <tr
+                            key={idx}
+                            className="border-t border-slate-200 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-950/40"
+                          >
                             <td className="px-3 py-2">
-                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${badgeClassForSeverity(sev)}`}>
+                              <span
+                                className={cx(
+                                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                                  badgeClassForSeverity(sev)
+                                )}
+                              >
                                 {sev}
                               </span>
                             </td>
@@ -948,7 +1217,7 @@ export default function AuditPage() {
                       })
                     ) : (
                       <tr>
-                        <td className="px-3 py-3 text-slate-500 dark:text-slate-400" colSpan={4}>
+                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400" colSpan={4}>
                           No issues found (or run an audit to populate results).
                         </td>
                       </tr>
@@ -963,15 +1232,20 @@ export default function AuditPage() {
             </div>
 
             {/* Checks */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Checks</h2>
+            <div className="rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Checks</h2>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    A per-check view you can trust for “go / no-go”.
+                  </p>
+                </div>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   {Array.isArray(audit.checks) ? `${audit.checks.length} checks` : "—"}
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(audit.checks ?? []).map((c: any, idx: number) => {
                   const st = String(c?.status ?? "pass");
                   const badge =
@@ -984,11 +1258,11 @@ export default function AuditPage() {
                   return (
                     <div
                       key={`${c?.key ?? idx}`}
-                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                      className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">
+                          <div className="truncate font-semibold text-slate-900 dark:text-slate-50">
                             {String(c?.label ?? c?.key ?? `Check ${idx + 1}`)}
                           </div>
                           {c?.detail ? (
@@ -997,7 +1271,8 @@ export default function AuditPage() {
                             </div>
                           ) : null}
                         </div>
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${badge}`}>
+
+                        <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]", badge)}>
                           {st}
                         </span>
                       </div>
@@ -1005,38 +1280,40 @@ export default function AuditPage() {
                   );
                 })}
 
-                {!(audit.checks ?? []).length && (
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                {!(audit.checks ?? []).length ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
                     No checks available yet. Run an audit to populate.
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
         </section>
 
-        {/* Debug: ingestion + ingest API response */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-6 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Normalized payload</h3>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">Ingestion</span>
+        {/* Dev panels (collapsed by default) */}
+        {showDevPanels ? (
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <div className="lg:col-span-6 rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Normalized payload</h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">Ingestion</span>
+              </div>
+              <pre className="mt-3 whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
+                {jobData ? JSON.stringify(jobData.normalized_payload ?? jobData, null, 2) : "Run an audit to load ingestion data."}
+              </pre>
             </div>
-            <pre className="mt-3 bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
-              {jobData ? JSON.stringify(jobData.normalized_payload ?? jobData, null, 2) : "Run an audit to load ingestion data."}
-            </pre>
-          </div>
 
-          <div className="lg:col-span-6 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Raw /api/v1/ingest</h3>
-              {pollingState && <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span>}
+            <div className="lg:col-span-6 rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Raw /api/v1/ingest</h3>
+                {pollingState ? <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span> : null}
+              </div>
+              <pre className="mt-3 whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
+                {rawIngestResponse ? JSON.stringify(rawIngestResponse, null, 2) : "Shown when you run from URL."}
+              </pre>
             </div>
-            <pre className="mt-3 bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
-              {rawIngestResponse ? JSON.stringify(rawIngestResponse, null, 2) : "Shown when you run from URL."}
-            </pre>
-          </div>
-        </section>
+          </section>
+        ) : null}
       </div>
     </main>
   );
