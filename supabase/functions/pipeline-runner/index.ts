@@ -1,14 +1,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const BUCKET = "pipeline-outputs";
-
 type ModuleStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function uploadJson(supabase: any, key: string, payload: any) {
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(key, new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), {
+      upsert: true,
+      contentType: "application/json",
+    });
+  if (error) throw error;
+}
 
 Deno.serve(async (req) => {
   try {
-    // Require exact service role key as Bearer token (server triggers this)
+    // Ensure caller is server-side (service role)
     const auth = req.headers.get("authorization") ?? "";
     const incoming = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -35,9 +42,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    const appUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/$/, "");
+    const internalSecret = Deno.env.get("PIPELINE_INTERNAL_SECRET") ?? "";
+    if (!appUrl || !internalSecret) {
+      return new Response(JSON.stringify({ error: "missing_APP_URL_or_PIPELINE_INTERNAL_SECRET" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Mark pipeline running (set started_at once)
+    // Mark pipeline running
     const now = new Date().toISOString();
     await supabase
       .from("pipeline_runs")
@@ -46,6 +62,19 @@ Deno.serve(async (req) => {
       .is("started_at", null);
 
     await supabase.from("pipeline_runs").update({ status: "running" }).eq("id", pipelineRunId);
+
+    // Load run metadata for ingestionId/options/steps
+    const { data: runRow, error: runErr } = await supabase
+      .from("pipeline_runs")
+      .select("id, metadata")
+      .eq("id", pipelineRunId)
+      .maybeSingle();
+
+    if (runErr) throw runErr;
+    const payload = (runRow?.metadata as any)?.payload ?? {};
+    const ingestionId = payload?.ingestionId ?? null;
+    const options = payload?.options ?? {};
+    const requestedSteps: string[] = Array.isArray(payload?.steps) ? payload.steps : [];
 
     // Load module runs
     const { data: modules, error: modErr } = await supabase
@@ -56,41 +85,126 @@ Deno.serve(async (req) => {
 
     if (modErr) throw modErr;
 
+    const stepSet = new Set(requestedSteps.length ? requestedSteps : (modules ?? []).map((m: any) => m.module_name));
+
     for (const m of modules ?? []) {
       const moduleId = m.id as string;
       const moduleName = m.module_name as string;
       const moduleIndex = m.module_index as number;
 
+      if (!stepSet.has(moduleName)) {
+        await supabase
+          .from("module_runs")
+          .update({ status: "skipped" satisfies ModuleStatus, finished_at: new Date().toISOString() })
+          .eq("id", moduleId);
+        continue;
+      }
+
       await supabase
         .from("module_runs")
-        .update({ status: "running" satisfies ModuleStatus, started_at: new Date().toISOString() })
+        .update({
+          status: "running" satisfies ModuleStatus,
+          started_at: new Date().toISOString(),
+          input_ref: ingestionId ? String(ingestionId) : null,
+        })
         .eq("id", moduleId);
 
       try {
-        await sleep(150);
-
         const key = `${pipelineRunId}/${moduleIndex}-${moduleName}.json`;
-        const payload = {
+
+        if (moduleName === "extract") {
+          if (!ingestionId) throw new Error("missing_ingestionId_for_extract");
+
+          const { data: ing, error: ingErr } = await supabase
+            .from("product_ingestions")
+            .select("id, tenant_id, source_url, status, normalized_payload, diagnostics, created_at, updated_at")
+            .eq("id", ingestionId)
+            .maybeSingle();
+
+          if (ingErr) throw ingErr;
+          if (!ing) throw new Error("ingestion_not_found");
+
+          await uploadJson(supabase, key, {
+            pipelineRunId,
+            ingestionId,
+            module: { name: moduleName, index: moduleIndex },
+            generatedAt: new Date().toISOString(),
+            extract: ing,
+          });
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "succeeded" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              output_ref: key,
+              error: null,
+            })
+            .eq("id", moduleId);
+
+          continue;
+        }
+
+        if (moduleName === "seo") {
+          if (!ingestionId) throw new Error("missing_ingestionId_for_seo");
+
+          const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/seo`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-pipeline-secret": internalSecret,
+            },
+            body: JSON.stringify({ ingestionId, options: options?.seo ?? null }),
+          });
+
+          const text = await resp.text().catch(() => "");
+          let json: any;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = { raw: text };
+          }
+
+          await uploadJson(supabase, key, {
+            pipelineRunId,
+            ingestionId,
+            module: { name: moduleName, index: moduleIndex },
+            generatedAt: new Date().toISOString(),
+            http: { status: resp.status },
+            seo: json,
+          });
+
+          if (!resp.ok) {
+            throw new Error(`seo_internal_http_${resp.status}`);
+          }
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "succeeded" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              output_ref: key,
+              error: null,
+            })
+            .eq("id", moduleId);
+
+          continue;
+        }
+
+        // Other modules not implemented yet: still write a durable artifact
+        await uploadJson(supabase, key, {
           pipelineRunId,
+          ingestionId: ingestionId ?? null,
           module: { name: moduleName, index: moduleIndex },
           generatedAt: new Date().toISOString(),
-          note: "placeholder output from pipeline-runner",
-        };
-
-        const { error: uploadErr } = await supabase.storage
-          .from(BUCKET)
-          .upload(
-            key,
-            new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
-            { upsert: true, contentType: "application/json" },
-          );
-
-        if (uploadErr) throw uploadErr;
+          note: "module not implemented yet; artifact records requested options",
+          options: options?.[moduleName] ?? null,
+        });
 
         await supabase
           .from("module_runs")
           .update({
-            status: "succeeded" satisfies ModuleStatus,
+            status: "skipped" satisfies ModuleStatus,
             finished_at: new Date().toISOString(),
             output_ref: key,
             error: null,
