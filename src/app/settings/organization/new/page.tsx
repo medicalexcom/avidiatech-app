@@ -1,6 +1,6 @@
 import React from "react";
-import { CreateOrganization } from "@clerk/nextjs";
 import BackToDashboard from "@/components/BackToDashboard";
+import CreateOrganizationClient from "@/components/settings/CreateOrganizationClient";
 
 export default function NewOrganizationPage() {
   return (
@@ -15,7 +15,7 @@ export default function NewOrganizationPage() {
         </div>
 
         <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 shadow-sm">
-          <CreateOrganization afterCreateOrganizationUrl="/dashboard/import" />
+          <CreateOrganizationClient />
         </div>
       </div>
     </main>
