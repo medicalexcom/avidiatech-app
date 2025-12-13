@@ -1,327 +1,788 @@
 "use client";
 
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
 /**
- * AvidiaImport module page
+ * AvidiaImport workspace (client)
  *
- * AvidiaImport transforms Avidia’s structured product JSON into
- * platform-ready import files for Shopify, BigCommerce, WooCommerce and
- * other e-commerce systems. It will support both downloadable exports
- * and direct API pushes in later phases.
+ * Now that Import is a real pipeline module, this page is a real operations workspace:
+ *
+ * - Connect BigCommerce securely (store hash + access token) via server route.
+ *   Tokens are never persisted client-side after save.
+ *
+ * - Run pipeline import for an ingestionId:
+ *   - Recommended: extract → seo → audit → import
+ *   - Or import-only after an ingestion has already passed audit
+ *
+ * - Live pipeline telemetry (module_runs) + durable artifact viewer.
+ * - Safe-gated upsert:
+ *   - If SKU exists and allowOverwriteExisting=false → action=needs_review (no updates performed)
+ *   - If allowOverwriteExisting=true → update allowed
+ *   - If audit fails, runner skips import (soft gate); this page will show it in module status/output.
  */
 
+type AnyObj = Record<string, any>;
+
+type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
+type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+
+type PipelineModule = {
+  id?: string;
+  module_index: number;
+  module_name: string;
+  status: ModuleRunStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+  output_ref?: string | null;
+  error?: any;
+};
+
+type PipelineSnapshot = {
+  run?: { id: string; status: PipelineRunStatus; created_at?: string; started_at?: string; finished_at?: string } & AnyObj;
+  modules?: PipelineModule[];
+};
+
+type ImportMode = "full" | "import_only";
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function fmtMs(ms: number | null) {
+  if (ms == null || Number.isNaN(ms)) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 100) / 10;
+  return `${s}s`;
+}
+
+function statusChipClass(status?: string | null) {
+  const s = (status || "").toLowerCase();
+  if (s === "running") return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/40";
+  if (s === "failed") return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500/40";
+  if (s === "succeeded" || s === "completed") return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-500/40";
+  if (s === "skipped") return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
+  return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
+}
+
+function moduleLabel(name: string) {
+  switch (name) {
+    case "extract":
+      return "Extract";
+    case "seo":
+      return "SEO";
+    case "audit":
+      return "Audit";
+    case "import":
+      return "Import";
+    case "monitor":
+      return "Monitor";
+    case "price":
+      return "Price";
+    default:
+      return name;
+  }
+}
+
+function downloadJson(filename: string, data: any) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ImportPage() {
+  const params = useSearchParams();
+  const router = useRouter();
+
+  const ingestionIdParam = params?.get("ingestionId") || "";
+  const pipelineRunIdParam = params?.get("pipelineRunId") || "";
+
+  // BigCommerce connection UI state
+  const [connName, setConnName] = useState("BigCommerce Store");
+  const [storeHash, setStoreHash] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [connections, setConnections] = useState<any[]>([]);
+  const [connSaving, setConnSaving] = useState(false);
+  const [connStatus, setConnStatus] = useState<string | null>(null);
+
+  // Pipeline controls
+  const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
+  const [importMode, setImportMode] = useState<ImportMode>("full");
+  const [allowOverwriteExisting, setAllowOverwriteExisting] = useState(false);
+
+  // Runtime states
+  const [job, setJob] = useState<any | null>(null);
+  const [pipelineRunId, setPipelineRunId] = useState<string>(pipelineRunIdParam || "");
+  const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
+  const [importArtifact, setImportArtifact] = useState<any | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refreshConnections() {
+    const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce");
+    const json = await res.json().catch(() => null);
+    if (res.ok) {
+      setConnections(json?.connections ?? []);
+      // Pre-fill store hash from most recent connection config (token never returned)
+      const latest = (json?.connections ?? [])[0];
+      if (latest?.config?.store_hash) setStoreHash(String(latest.config.store_hash));
+    }
+  }
+
+  async function saveConnection() {
+    setConnSaving(true);
+    setConnStatus(null);
+    try {
+      const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: connName,
+          store_hash: storeHash,
+          access_token: accessToken,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setConnStatus(json?.error || `Save failed: ${res.status}`);
+        return;
+      }
+      setConnStatus("Saved BigCommerce connection.");
+      setAccessToken(""); // never keep token in UI after save
+      await refreshConnections();
+    } finally {
+      setConnSaving(false);
+    }
+  }
+
+  async function fetchIngestion(id: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
+      const row = json?.data ?? json;
+      setJob(row);
+      return row;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchPipelineSnapshot(runId: string) {
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
+    return json as PipelineSnapshot;
+  }
+
+  async function pollPipeline(runId: string, timeoutMs = 300_000, intervalMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const snap = await fetchPipelineSnapshot(runId);
+      setPipelineSnapshot(snap);
+      const s = snap?.run?.status;
+      if (s === "succeeded" || s === "failed") return snap;
+      await sleep(intervalMs);
+    }
+    throw new Error("Pipeline did not complete within timeout");
+  }
+
+  async function fetchImportArtifact(runId: string, modules?: PipelineModule[]) {
+    const importMod = (modules ?? []).find((m) => m.module_name === "import");
+    if (!importMod) return null;
+
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Import artifact fetch failed: ${res.status}`);
+
+    setImportArtifact(json);
+    return json;
+  }
+
+  async function runImport() {
+    if (running) return;
+    setError(null);
+    setStatusMessage(null);
+    setPipelineSnapshot(null);
+    setImportArtifact(null);
+
+    const id = ingestionIdInput.trim();
+    if (!id) {
+      setError("Enter an ingestionId first.");
+      return;
+    }
+
+    setRunning(true);
+    try {
+      setStatusMessage("Loading ingestion");
+      await fetchIngestion(id);
+
+      const steps =
+        importMode === "import_only"
+          ? ["import"] // assumes audit already passed
+          : ["extract", "seo", "audit", "import"];
+
+      setStatusMessage("Starting pipeline run");
+      const res = await fetch("/api/v1/pipeline/run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ingestionId: id,
+          triggerModule: "import",
+          steps,
+          options: {
+            import: {
+              platform: "bigcommerce",
+              allowOverwriteExisting,
+            },
+          },
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
+
+      const runId = String(json?.pipelineRunId ?? "");
+      if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
+
+      setPipelineRunId(runId);
+      router.push(`/dashboard/import?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`);
+
+      setStatusMessage("Pipeline running");
+      const snap = await pollPipeline(runId, 300_000, 2000);
+
+      setStatusMessage("Refreshing ingestion");
+      await fetchIngestion(id);
+
+      setStatusMessage("Loading import artifact");
+      await fetchImportArtifact(runId, snap?.modules ?? []);
+
+      setStatusMessage("Import run completed");
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      setStatusMessage(null);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  // Initial loads
+  useEffect(() => {
+    refreshConnections().catch(() => null);
+  }, []);
+
+  useEffect(() => {
+    if (ingestionIdParam) {
+      fetchIngestion(ingestionIdParam).catch((e) => setError(String((e as any)?.message || e)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ingestionIdParam]);
+
+  useEffect(() => {
+    if (pipelineRunIdParam) {
+      (async () => {
+        try {
+          const snap = await fetchPipelineSnapshot(pipelineRunIdParam);
+          setPipelineSnapshot(snap);
+          setPipelineRunId(pipelineRunIdParam);
+
+          // best-effort load import artifact
+          await fetchImportArtifact(pipelineRunIdParam, snap?.modules ?? []);
+        } catch (e: any) {
+          setError(String(e?.message || e));
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineRunIdParam]);
+
+  const jobData = useMemo(() => {
+    if (!job) return null;
+    if ((job as any)?.data?.data) return (job as any).data.data;
+    if ((job as any)?.data) return (job as any).data;
+    return job;
+  }, [job]);
+
+  const auditDiag = jobData?.diagnostics?.audit ?? null;
+  const auditStatus = typeof auditDiag?.status === "string" ? auditDiag.status : null;
+  const auditScore = typeof auditDiag?.score === "number" ? auditDiag.score : null;
+
+  const importDiag = jobData?.diagnostics?.import ?? null;
+  const importResult = importDiag?.result ?? null;
+
+  const runStatus = pipelineSnapshot?.run?.status ?? null;
+
+  const moduleRuntime = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of pipelineSnapshot?.modules ?? []) {
+      if (m.started_at && m.finished_at) {
+        const ms = new Date(m.finished_at).getTime() - new Date(m.started_at).getTime();
+        if (!Number.isNaN(ms) && ms >= 0) map.set(m.module_name, ms);
+      }
+    }
+    return map;
+  }, [pipelineSnapshot]);
+
+  const progress = useMemo(() => {
+    const mods = pipelineSnapshot?.modules ?? [];
+    if (!mods.length) return 0;
+    const done = mods.filter((m) => ["succeeded", "failed", "skipped"].includes(m.status)).length;
+    return Math.round((done / mods.length) * 100);
+  }, [pipelineSnapshot]);
+
+  const importAction = importResult?.action ?? importArtifact?.output?.import?.result?.action ?? null;
+  const importNeedsReview = Boolean(importResult?.needs_review ?? importArtifact?.output?.import?.result?.needs_review);
+
+  const topInfo = (() => {
+    if (!pipelineRunId) return "Idle";
+    if (running || runStatus === "running") return "Running…";
+    return `Run ${pipelineRunId.slice(0, 8)}…`;
+  })();
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
+    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* Background gradients + subtle grid */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-500/25" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/30 blur-3xl dark:bg-cyan-500/20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl dark:bg-sky-500/15" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/12" />
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
         </div>
       </div>
 
-      <div className="relative px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto space-y-6">
-        {/* Compact Cluster-style header (no hero frame) */}
-        <section className="mb-2 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          {/* Left: title + copy */}
-          <div className="space-y-4 max-w-2xl flex-1 min-w-[260px]">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/90 dark:text-slate-300">
-              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
-              Commerce &amp; Automation · AvidiaImport
-              <span className="h-1 w-px bg-slate-300 dark:bg-slate-700" />
-              <span className="text-sky-600 dark:text-sky-200">
-                Export &amp; connector engine
+      <div className="mx-auto max-w-7xl px-4 py-5 lg:px-8 lg:py-6 space-y-4">
+        {/* Top bar */}
+        <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-sky-500/40 dark:bg-slate-950/70 dark:text-sky-100">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-sky-300 dark:bg-slate-900 dark:border-sky-400/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
               </span>
+              AvidiaImport
+              {(jobData?.id || ingestionIdInput) && (
+                <>
+                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
+                  <span className="font-mono text-[10px]">
+                    {(jobData?.id || ingestionIdInput).slice(0, 8)}…
+                  </span>
+                </>
+              )}
+              {pipelineRunId && (
+                <>
+                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
+                  <span className="font-mono text-[10px]">run:{pipelineRunId.slice(0, 8)}…</span>
+                </>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-slate-50">
-                Turn your unified Avidia JSON into{" "}
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 dark:from-sky-300 dark:via-cyan-300 dark:to-emerald-300">
-                  platform-perfect import files
+            <div className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">{topInfo}</div>
+          </div>
+
+          {statusMessage && (
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-sky-200 px-3 py-1.5 text-[11px] text-sky-700 shadow-sm dark:bg-slate-950/70 dark:border-sky-500/40 dark:text-sky-100">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+              {statusMessage}
+            </div>
+          )}
+        </section>
+
+        {/* Above the fold: Connect + Run + Score */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Connection */}
+          <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:bg-slate-950/60 dark:border-slate-800">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+                    BigCommerce connection
+                  </h1>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                    Store hash is saved as config. Token is encrypted server-side and never shown again.
+                  </p>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
+                  v3 Catalog
                 </span>
-                .
-              </h1>
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract,
-                Describe, SEO, Specs, and Variants have done their work, Import reshapes that
-                single product model into Shopify, BigCommerce, WooCommerce, and feed-ready
-                payloads&mdash;without touching Excel.
-              </p>
-            </div>
+              </div>
 
-            <div className="flex flex-wrap gap-2 text-[11px]">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-sky-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-sky-500/60 dark:text-slate-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                <span>Export profiles tuned per platform schema.</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-cyan-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-cyan-500/55 dark:text-slate-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                <span>One normalized source model, many downstream destinations.</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 border border-emerald-300/70 px-3 py-1.5 text-slate-700 shadow-sm dark:bg-slate-950/90 dark:border-emerald-500/55 dark:text-slate-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span>Designed for future direct API pushes, not just CSVs.</span>
+              {connStatus && (
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-950/40">
+                  {connStatus}
+                </div>
+              )}
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Connection name
+                  </label>
+                  <input
+                    value={connName}
+                    onChange={(e) => setConnName(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950/60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Store hash
+                  </label>
+                  <input
+                    value={storeHash}
+                    onChange={(e) => setStoreHash(e.target.value)}
+                    placeholder="abcd1234"
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950/60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Access token
+                  </label>
+                  <input
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    placeholder="x-auth-token..."
+                    type="password"
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950/60"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Stored encrypted using <span className="font-mono">INTEGRATIONS_ENCRYPTION_KEY</span>.
+                  </p>
+                </div>
+
+                <button
+                  onClick={saveConnection}
+                  disabled={connSaving || !storeHash || !accessToken}
+                  className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  {connSaving ? "Saving…" : "Save BigCommerce connection"}
+                </button>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => refreshConnections()}
+                    className="text-[11px] text-sky-700 hover:text-sky-600 underline underline-offset-4 dark:text-sky-300 dark:hover:text-sky-200"
+                  >
+                    Refresh connections
+                  </button>
+                </div>
+
+                <div className="mt-2 space-y-2 text-xs">
+                  {(connections ?? []).slice(0, 3).map((c) => (
+                    <div
+                      key={c.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-slate-900 dark:text-slate-50">
+                          {c.name || "BigCommerce"}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">{c.status}</div>
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                        store_hash: <span className="font-mono">{c.config?.store_hash ?? "—"}</span>
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                        updated: {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
+                      </div>
+                    </div>
+                  ))}
+                  {(!connections || connections.length === 0) && (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      No connections saved yet for this tenant.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right: module status + export preview skeleton */}
-          <div className="w-full max-w-xs lg:max-w-sm space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 sm:px-5 sm:py-4 space-y-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-              <div className="flex items-center justify-between gap-3">
+          {/* Run import */}
+          <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:bg-slate-950/60 dark:border-slate-800">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Module status
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+                    Run Import (pipeline)
+                  </h2>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                    Safe-gated upsert: SKU match will require manual overwrite approval unless you enable overwrite.
+                    If audit fails, import is skipped automatically.
                   </p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="inline-flex h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
-                    <span className="text-sm font-semibold text-sky-700 dark:text-sky-200">
-                      Export profiles in design · Connectors planned
-                    </span>
-                  </div>
                 </div>
-                <span className="inline-flex items-center rounded-full bg-slate-50 border border-slate-200 px-2.5 py-0.5 text-[10px] text-slate-600 shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
-                  Export engine
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(runStatus ?? "idle")}`}>
+                  {runStatus ?? "idle"}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                AvidiaImport will be your final hop from AvidiaTech&apos;s unified model into
-                stores, feeds, and marketplaces.
-              </p>
-            </div>
 
-            {/* Static export-profile skeleton */}
-            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-none">
-              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 mb-2">
-                Export profile preview
-              </p>
-              <div className="space-y-2 text-[11px]">
-                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-slate-800 dark:text-slate-100">
-                      Shopify · Full products
-                    </span>
-                    <span className="text-slate-500 dark:text-slate-500">
-                      CSV · Title, variants, SEO, images
-                    </span>
-                  </div>
-                  <span className="rounded-full border border-sky-400/60 bg-sky-100/80 px-2 py-0.5 text-[10px] text-sky-700 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
-                    Profile
-                  </span>
+              {error && (
+                <div className="mt-3 rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
+                  {error}
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex flex-col">
-                    <span className="font-medium text-slate-800 dark:text-slate-100">
-                      BigCommerce · MedicalEx
-                    </span>
-                    <span className="text-slate-500 dark:text-slate-500">
-                      JSON · Variants + custom fields
-                    </span>
+              )}
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-7 space-y-2">
+                  <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    ingestionId
+                  </label>
+                  <input
+                    value={ingestionIdInput}
+                    onChange={(e) => setIngestionIdInput(e.target.value)}
+                    placeholder="b0324634-1593-4fad-a9de-70215a2deb38"
+                    className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                    <div className="inline-flex items-center gap-2">
+                      <span className="text-slate-500 dark:text-slate-400">Mode:</span>
+                      <select
+                        value={importMode}
+                        onChange={(e) => setImportMode(e.target.value as ImportMode)}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-800 dark:bg-slate-950/60"
+                      >
+                        <option value="full">extract + seo + audit + import</option>
+                        <option value="import_only">import only</option>
+                      </select>
+                    </div>
+
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={allowOverwriteExisting}
+                        onChange={(e) => setAllowOverwriteExisting(e.target.checked)}
+                      />
+                      <span className="text-[11px]">
+                        Allow overwrite existing SKU (unsafe)
+                      </span>
+                    </label>
                   </div>
-                  <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                    Draft
-                  </span>
                 </div>
-                <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
-                  <span className="text-slate-500 dark:text-slate-500">
-                    + Add WooCommerce or custom feed profile
-                  </span>
+
+                <div className="md:col-span-5 space-y-2">
+                  <button
+                    type="button"
+                    onClick={runImport}
+                    disabled={running}
+                    className="w-full px-4 py-3 rounded-xl bg-sky-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-sky-400 disabled:opacity-60"
+                  >
+                    {running ? "Running…" : "Run Import"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        setError(null);
+                        if (!ingestionIdInput.trim()) throw new Error("Enter an ingestionId first.");
+                        await fetchIngestion(ingestionIdInput.trim());
+                        setStatusMessage("Loaded ingestion");
+                      } catch (e: any) {
+                        setError(String(e?.message || e));
+                      }
+                    }}
+                    className="w-full px-4 py-3 rounded-xl bg-slate-900 text-slate-50 text-sm font-semibold shadow-sm hover:bg-slate-800 dark:bg-white/10 dark:hover:bg-white/15"
+                  >
+                    Load ingestion (no run)
+                  </button>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] dark:border-slate-800 dark:bg-slate-950/40">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Audit</span>
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(auditStatus ?? "unknown")}`}>
+                        {auditStatus ?? "unknown"}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Score</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-200">
+                        {typeof auditScore === "number" ? `${auditScore}/100` : "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] dark:border-slate-800 dark:bg-slate-950/40">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 dark:text-slate-400">Import action</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-50">
+                        {importAction ?? "—"}
+                      </span>
+                    </div>
+                    {importNeedsReview && (
+                      <div className="mt-1 text-amber-700 dark:text-amber-200">
+                        Needs review: SKU exists and overwrite is disabled.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-500">
-                Planned: choose a profile, preview mapped fields, then download or push via
-                API.
-              </p>
+
+              {/* Progress */}
+              {pipelineSnapshot?.modules?.length ? (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Pipeline progress</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="mt-1 h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
 
-        {/* Two-column layout: overview + workflow */}
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)]">
-          {/* Left column: what it does / value */}
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-[0_18px_45px_rgba(148,163,184,0.35)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_18px_45px_rgba(15,23,42,0.7)]">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                Platform-ready exports from your master JSON
-              </h2>
-              <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
-                AvidiaImport sits at the end of the AvidiaTech pipeline. After Extract, Describe,
-                SEO, Specs, and Variants have done their work, Import converts that unified
-                product model into the exact schema required by each commerce platform or feed
-                target.
-              </p>
-
-              <ul className="mt-4 space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span>
-                    <span className="font-medium">Platform exports:</span> generate Shopify CSV,
-                    BigCommerce JSON, WooCommerce CSV, and additional formats as export profiles.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span>
-                    <span className="font-medium">Simple export dropdown:</span> select the
-                    desired destination (e.g., Shopify, BigCommerce) and download a
-                    ready-to-upload file with one click.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span>
-                    <span className="font-medium">Custom mapping layer:</span> automatically map
-                    internal fields to each platform&apos;s schema; advanced mappings can be
-                    adjusted in a UI instead of custom scripts.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="mt-1 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span>
-                    <span className="font-medium">Future direct integrations:</span> connect
-                    directly to Shopify, BigCommerce, and WooCommerce APIs to push products
-                    without leaving the dashboard.
-                  </span>
-                </li>
-              </ul>
+        {/* Live pipeline + results */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Live pipeline status */}
+          <div className="lg:col-span-5 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Live pipeline</h3>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(runStatus ?? "idle")}`}>
+                {runStatus ?? "idle"}
+              </span>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                Why Import / Export matters
-              </h3>
-              <div className="mt-3 grid gap-3 text-xs text-slate-700 sm:grid-cols-2 dark:text-slate-300">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-300">
-                    Less CSV pain
+            <div className="mt-3 space-y-2">
+              {(pipelineSnapshot?.modules ?? [])
+                .slice()
+                .sort((a, b) => a.module_index - b.module_index)
+                .map((m) => (
+                  <div
+                    key={`${m.module_index}-${m.module_name}`}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">
+                        {m.module_index}. {moduleLabel(m.module_name)}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span>
+                      </div>
+                      {m.error ? (
+                        <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-200 truncate">
+                          error: {typeof m.error === "string" ? m.error : JSON.stringify(m.error)}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(m.status)}`}>
+                        {m.status}
+                      </span>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {fmtMs(moduleRuntime.get(m.module_name) ?? null)}
+                      </div>
+                    </div>
                   </div>
-                  <p className="mt-1.5">
-                    Instead of manually building CSV templates or patching exports in Excel, use
-                    export profiles that always match the latest platform schema.
-                  </p>
+                ))}
+
+              {!(pipelineSnapshot?.modules ?? []).length && (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  No pipeline run selected yet. Run import to see module telemetry.
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-300">
-                    Single source of truth
-                  </div>
-                  <p className="mt-1.5">
-                    Keep one normalized product model inside AvidiaTech and let Import reshape it
-                    for each downstream destination: storefronts, feeds, and marketplaces.
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Right column: planned workflow / integration story */}
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/85">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                Planned workflow · how AvidiaImport will run
-              </h2>
-              <ol className="mt-3 space-y-3 text-sm text-slate-700 dark:text-slate-300">
-                <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
-                    1
-                  </div>
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                      Pick a dataset
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Choose a slice of your catalog from AvidiaExtract / SEO (e.g., a brand,
-                      collection, or recently ingested batch) as the export source.
-                    </p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
-                    2
-                  </div>
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                      Select export profile
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Pick an export profile like &quot;Shopify – Full Products&quot; or
-                      &quot;BigCommerce – MedicalEx&quot;. Each profile knows exactly how to map
-                      Avidia fields into platform fields.
-                    </p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-sky-700 dark:bg-slate-800 dark:text-sky-300">
-                    3
-                  </div>
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                      Download or push via API
-                    </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      Download a CSV/JSON file ready to upload, or (in later phases) push
-                      directly to Shopify, BigCommerce, or WooCommerce with one click.
-                    </p>
-                  </div>
-                </li>
-              </ol>
+          {/* Results / artifact viewer */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Import result</h3>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadJson(
+                        `import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`,
+                        {
+                          ingestionId: jobData?.id ?? ingestionIdInput ?? null,
+                          pipelineRunId: pipelineRunId || null,
+                          diagnostics_import: importDiag ?? null,
+                          import_artifact: importArtifact ?? null,
+                        }
+                      )
+                    }
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 dark:bg-white/5 dark:border-white/20 dark:hover:bg-white/10"
+                  >
+                    Export JSON
+                  </button>
+                </div>
+              </div>
 
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-50 shadow-[0_12px_32px_rgba(56,189,248,0.55)] hover:bg-sky-400 disabled:opacity-70 dark:text-slate-950"
-                  disabled
-                >
-                  Export workspace (coming soon)
-                </button>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  A dedicated Import / Export workspace will let you preview payloads, tweak
-                  mappings, and schedule recurring exports for specific destinations.
-                </p>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Status
+                  </div>
+                  <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">
+                    {importDiag?.status ?? "—"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Action
+                  </div>
+                  <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">
+                    {importAction ?? "—"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Product ID
+                  </div>
+                  <div className="mt-1 font-mono text-slate-900 dark:text-slate-50">
+                    {importResult?.product_id ??
+                      importArtifact?.output?.import?.result?.product_id ??
+                      "—"}
+                  </div>
+                </div>
+              </div>
+
+              {importNeedsReview && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+                  SKU already exists in BigCommerce. Import is in <strong>needs_review</strong>{" "}
+                  mode and did not update anything. If you intend to overwrite, check{" "}
+                  <strong>Allow overwrite existing SKU</strong> and re-run.
+                </div>
+              )}
+
+              <div className="mt-3">
+                <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Raw artifact (durable output)
+                </div>
+                <pre className="mt-2 max-h-[380px] overflow-auto rounded-xl border border-slate-200 bg-slate-900 p-3 text-[11px] text-slate-100 dark:border-slate-800">
+                  {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see output_ref JSON."}
+                </pre>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/70">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                Planned integrations
-              </h3>
-              <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <li>
-                  •{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                    Shopify
-                  </span>{" "}
-                  — product &amp; variant CSVs, plus future direct API sync.
-                </li>
-                <li>
-                  •{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                    BigCommerce
-                  </span>{" "}
-                  — JSON &amp; CSV exports tuned for MedicalEx plus other BC stores.
-                </li>
-                <li>
-                  •{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                    WooCommerce
-                  </span>{" "}
-                  — CSV exports aligned to Woo&apos;s core product schema.
-                </li>
-                <li>
-                  •{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                    Feeds &amp; marketplaces
-                  </span>{" "}
-                  — Google Shopping, marketplaces, and custom feeds based on the same export
-                  engine.
-                </li>
-              </ul>
-              <p className="mt-3 text-[10px] text-slate-500 dark:text-slate-500">
-                Over time, AvidiaImport becomes the single connector layer between AvidiaTech and
-                every storefront, feed, and marketplace you care about.
-              </p>
+            {/* Ingestion viewer */}
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Ingestion (context)</h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  product_ingestions
+                </span>
+              </div>
+              <pre className="mt-3 max-h-[340px] overflow-auto rounded-xl border border-slate-200 bg-slate-900 p-3 text-[11px] text-slate-100 dark:border-slate-800">
+                {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
+              </pre>
             </div>
           </div>
         </section>
