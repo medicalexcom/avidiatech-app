@@ -161,46 +161,39 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
   return false;
 }
 
-/**
- * IMPORTANT: This must be the exported middleware, using clerkMiddleware(),
- * so Clerk can detect it and allow auth() in server components/routes.
- */
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
-  // Only guard dashboard and API routes here (matcher controls which requests hit this middleware)
-  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
+  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/settings") && !pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  // Allow explicitly public paths
   if (isAllowedPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Clerk session (async in this Clerk version)
   const { userId } = await auth();
 
+  // IMPORTANT: don't redirect API requests (frontend expects JSON)
   if (!userId) {
+    if (pathname.startsWith("/api")) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
     signInUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  // Only subscription-gate dashboard pages; allow API access as-is once authenticated
+  // subscription gate only dashboard pages
   if (pathname.startsWith("/dashboard")) {
     const hasActive = await userHasActiveSubscription(userId);
     if (hasActive) return NextResponse.next();
-
-    // Signed-in but unsubscribed -> redirect deep dashboard routes to dashboard root
-    const dashboardRoot = new URL("/dashboard", req.nextUrl.origin);
-    return NextResponse.redirect(dashboardRoot);
+    return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
 
   return NextResponse.next();
 });
 
-/* Narrow matcher for production */
 export const config = {
   matcher: ["/dashboard/:path*", "/settings/:path*", "/api/:path*"],
 };
