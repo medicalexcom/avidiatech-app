@@ -3,10 +3,10 @@ create extension if not exists "pgcrypto";
 create table if not exists public.ecommerce_connections (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null,
-  platform text not null, -- 'bigcommerce', etc.
+  platform text not null, -- e.g. 'bigcommerce'
   status text not null default 'active',
-  config jsonb not null default '{}'::jsonb,      -- non-sensitive config (store_hash, etc.)
-  secrets_enc text not null,                      -- encrypted token blob (base64/utf-8)
+  config jsonb not null default '{}'::jsonb, -- non-sensitive config (store_hash etc.)
+  secrets_enc text not null,                -- encrypted token blob (base64/utf-8)
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
