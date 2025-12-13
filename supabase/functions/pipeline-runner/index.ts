@@ -324,6 +324,52 @@ Deno.serve(async (req) => {
           continue;
         }
 
+                if (moduleName === "import") {
+          if (!ingestionId) throw new Error("missing_ingestionId_for_import");
+
+          const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/import`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-pipeline-secret": internalSecret,
+            },
+            body: JSON.stringify({ ingestionId, options: options?.import ?? null }),
+          });
+
+          const text = await resp.text().catch(() => "");
+          let json: any;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = { raw: text };
+          }
+
+          await uploadJson(supabase, key, {
+            pipelineRunId,
+            ingestionId,
+            module: { name: moduleName, index: moduleIndex },
+            generatedAt: new Date().toISOString(),
+            http: { status: resp.status },
+            import: json,
+          });
+
+          if (!resp.ok) {
+            throw new Error(`import_internal_http_${resp.status}`);
+          }
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "succeeded" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              output_ref: key,
+              error: null,
+            })
+            .eq("id", moduleId);
+
+          continue;
+        }
+        
         // Other modules not implemented yet: still write a durable artifact
         await uploadJson(supabase, key, {
           pipelineRunId,
