@@ -19,7 +19,7 @@ export async function getActiveConnectionForTenant(args: {
 
   const { data, error } = await supabase
     .from("ecommerce_connections")
-    .select("id, tenant_id, platform, status, config, secrets_enc")
+    .select("id, tenant_id, platform, status, config, secrets_enc, updated_at")
     .eq("tenant_id", args.tenantId)
     .eq("platform", args.platform)
     .eq("status", "active")
