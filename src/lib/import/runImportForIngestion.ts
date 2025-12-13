@@ -11,9 +11,7 @@ export async function runImportForIngestion(args: {
 
   const { data: ingestion, error: loadErr } = await supabase
     .from("product_ingestions")
-    .select(
-      "id, tenant_id, source_url, normalized_payload, seo_payload, description_html, features, diagnostics"
-    )
+    .select("id, tenant_id, source_url, normalized_payload, seo_payload, description_html, diagnostics")
     .eq("id", args.ingestionId)
     .maybeSingle();
 
@@ -29,13 +27,8 @@ export async function runImportForIngestion(args: {
 
   const conn = await getActiveConnectionForTenant({ tenantId, platform });
 
-  if (platform !== "bigcommerce") {
-    throw new Error(`unsupported_platform:${platform}`);
-  }
-
-  // creds can be split between config + secrets; we’ll support both
-  const storeHash = String(conn.config?.store_hash ?? conn.secrets?.store_hash ?? "");
-  const token = String(conn.secrets?.access_token ?? "");
+  const storeHash = String((conn.config as any)?.store_hash ?? (conn.secrets as any)?.store_hash ?? "");
+  const token = String((conn.secrets as any)?.access_token ?? "");
   if (!storeHash || !token) throw new Error("bigcommerce_connection_incomplete");
 
   const result = await importToBigCommerce({
