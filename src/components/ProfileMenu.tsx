@@ -193,12 +193,13 @@ export default function ProfileMenu() {
 
         <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
 
-        {/* Organization switcher: sets active org and unblocks missing_tenant end-to-end */}
+        {/* Organization switcher: navigation mode so creation definitely works */}
         {mounted && (
           <div className="px-3 py-2">
             <OrganizationSwitcher
               hidePersonal={false}
-              createOrganizationMode="modal"
+              createOrganizationMode="navigation"
+              createOrganizationUrl="/settings/organization/new"
               organizationProfileMode="navigation"
               organizationProfileUrl="/settings/organization"
               afterSelectOrganizationUrl="/dashboard/import"
