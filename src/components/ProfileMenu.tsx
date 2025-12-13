@@ -193,13 +193,13 @@ export default function ProfileMenu() {
 
         <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
 
-        {/* Org selector (sets active organization, fixes missing_tenant end-to-end) */}
+        {/* Organization switcher: sets active org and unblocks missing_tenant end-to-end */}
         {mounted && (
           <div className="px-3 py-2">
             <OrganizationSwitcher
               hidePersonal={false}
               createOrganizationMode="modal"
-              organizationProfileMode="modal"
+              organizationProfileMode="navigation"
               afterSelectOrganizationUrl="/dashboard/import"
               afterCreateOrganizationUrl="/dashboard/import"
               appearance={{
@@ -213,7 +213,9 @@ export default function ProfileMenu() {
           </div>
         )}
 
+        {/* Existing link stays: this is your manage/settings page (no duplication) */}
         <Item href="/settings/organization">Organization</Item>
+
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
