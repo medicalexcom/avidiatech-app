@@ -200,6 +200,7 @@ export default function ProfileMenu() {
               hidePersonal={false}
               createOrganizationMode="modal"
               organizationProfileMode="navigation"
+              organizationProfileUrl="/settings/organization"
               afterSelectOrganizationUrl="/dashboard/import"
               afterCreateOrganizationUrl="/dashboard/import"
               appearance={{
@@ -213,9 +214,7 @@ export default function ProfileMenu() {
           </div>
         )}
 
-        {/* Existing link stays: this is your manage/settings page (no duplication) */}
         <Item href="/settings/organization">Organization</Item>
-
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
