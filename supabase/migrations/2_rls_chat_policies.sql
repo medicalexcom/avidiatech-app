@@ -1,38 +1,73 @@
 -- Migration: Row Level Security (RLS) policies for chat tables
--- Updated to match the repo schema:
+-- This migration enables RLS and creates security policies for the chat system
+--
+-- Updated to match the repo's chat schema (migration 1):
 -- - chat_threads.created_by_user_id (NOT created_by)
--- - tenant_id is UUID
+-- - chat_messages.sender_user_id (NOT sender_id)
+-- - chat_files.uploaded_by_user_id (NOT uploaded_by)
+-- - tenant_id is UUID (not TEXT)
+-- - read receipts are per (thread_id, user_id) with last_read_message_id pointer
 --
 -- IMPORTANT:
--- These policies assume you are using Supabase Auth (auth.uid()) for end-user access.
--- If your application uses Clerk without Supabase JWT integration, your client queries
--- should use the service role (server-side) or you must configure Supabase JWT auth.
+-- These rules use auth.uid() and only work for direct client access if you are using
+-- Supabase Auth JWTs. If your app uses Clerk without Supabase JWT integration,
+-- access should happen via server routes using the service role key (bypasses RLS),
+-- OR you must implement JWT integration for RLS to be meaningful.
 
--- Helper: check if user is support agent
--- Replace this logic with your real role model if needed.
-create or replace function public.is_support_agent(user_id uuid)
-returns boolean as $$
+-- Helper function to get current user's tenant_id
+-- Placeholder: replace with your actual logic if you enforce tenant filtering in RLS
+create or replace function public.get_user_tenant_id(user_id uuid)
+returns uuid as $$
+declare
+  tenant uuid;
 begin
-  -- Placeholder: default false
-  return false;
+  -- Option 1: From team_members table
+  -- select tenant_id into tenant from public.team_members where user_id = $1 limit 1;
+
+  -- Option 2: From JWT claims (if tenant_id is in the JWT)
+  -- select (current_setting('request.jwt.claims', true)::json->>'tenant_id')::uuid into tenant;
+
+  -- Placeholder: return NULL (disables tenant enforcement unless you wire it in)
+  tenant := null;
+  return tenant;
 end;
 $$ language plpgsql security definer;
 
--- Helper: check if user is a participant in a thread
+-- Helper function to check if user is an agent/support staff
+create or replace function public.is_support_agent(user_id uuid)
+returns boolean as $$
+declare
+  is_agent boolean;
+begin
+  -- Option 1: Check roles table
+  -- select exists (
+  --   select 1 from public.roles
+  --   where roles.user_id = $1 and roles.role in ('agent','admin','support')
+  -- ) into is_agent;
+
+  -- Placeholder: Return false by default
+  is_agent := false;
+  return coalesce(is_agent, false);
+end;
+$$ language plpgsql security definer;
+
+-- Helper function to check if user is a participant in a thread
 create or replace function public.is_thread_participant(user_id uuid, thread_id uuid)
 returns boolean as $$
 begin
   return exists (
     select 1
-    from public.chat_participants p
-    where p.user_id = $1 and p.thread_id = $2
+    from public.chat_participants
+    where chat_participants.user_id = $1
+      and chat_participants.thread_id = $2
   );
 end;
 $$ language plpgsql security definer;
 
 -- ====================
--- ENABLE RLS
+-- ENABLE RLS ON ALL CHAT TABLES
 -- ====================
+
 alter table public.chat_threads enable row level security;
 alter table public.chat_participants enable row level security;
 alter table public.chat_messages enable row level security;
@@ -50,9 +85,18 @@ for select
 using (
   auth.uid() is not null
   and (
+    -- User created the thread
     created_by_user_id = auth.uid()
-    or public.is_thread_participant(auth.uid(), chat_threads.id)
-    or public.is_support_agent(auth.uid())
+    or
+    -- User is a participant in the thread
+    exists (
+      select 1 from public.chat_participants
+      where chat_participants.thread_id = chat_threads.id
+        and chat_participants.user_id = auth.uid()
+    )
+    or
+    -- User is a support agent (can see all threads)
+    public.is_support_agent(auth.uid())
   )
 );
 
@@ -73,6 +117,7 @@ using (
   auth.uid() is not null
   and (
     created_by_user_id = auth.uid()
+    or public.is_thread_participant(auth.uid(), id)
     or public.is_support_agent(auth.uid())
   )
 )
@@ -80,6 +125,7 @@ with check (
   auth.uid() is not null
   and (
     created_by_user_id = auth.uid()
+    or public.is_thread_participant(auth.uid(), id)
     or public.is_support_agent(auth.uid())
   )
 );
@@ -88,115 +134,131 @@ with check (
 -- CHAT_PARTICIPANTS POLICIES
 -- ====================
 
-drop policy if exists "Users can view participants for accessible threads" on public.chat_participants;
-create policy "Users can view participants for accessible threads"
+drop policy if exists "Users can view thread participants" on public.chat_participants;
+create policy "Users can view thread participants"
 on public.chat_participants
 for select
 using (
   auth.uid() is not null
   and (
-    public.is_thread_participant(auth.uid(), chat_participants.thread_id)
+    user_id = auth.uid()
+    or public.is_thread_participant(auth.uid(), thread_id)
     or public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_participants.thread_id
-        and t.created_by_user_id = auth.uid()
-    )
   )
 );
 
-drop policy if exists "Thread owner or agent can add participants" on public.chat_participants;
-create policy "Thread owner or agent can add participants"
+drop policy if exists "Can add thread participants" on public.chat_participants;
+create policy "Can add thread participants"
 on public.chat_participants
 for insert
 with check (
   auth.uid() is not null
   and (
-    public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_participants.thread_id
-        and t.created_by_user_id = auth.uid()
+    exists (
+      select 1
+      from public.chat_threads
+      where chat_threads.id = thread_id
+        and chat_threads.created_by_user_id = auth.uid()
     )
+    or public.is_support_agent(auth.uid())
   )
+);
+
+drop policy if exists "Can update own participant record" on public.chat_participants;
+create policy "Can update own participant record"
+on public.chat_participants
+for update
+using (
+  auth.uid() is not null
+  and user_id = auth.uid()
+)
+with check (
+  auth.uid() is not null
+  and user_id = auth.uid()
 );
 
 -- ====================
 -- CHAT_MESSAGES POLICIES
 -- ====================
 
-drop policy if exists "Users can view messages for accessible threads" on public.chat_messages;
-create policy "Users can view messages for accessible threads"
+drop policy if exists "Users can view thread messages" on public.chat_messages;
+create policy "Users can view thread messages"
 on public.chat_messages
 for select
 using (
   auth.uid() is not null
   and (
-    public.is_thread_participant(auth.uid(), chat_messages.thread_id)
+    public.is_thread_participant(auth.uid(), thread_id)
     or public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_messages.thread_id
-        and t.created_by_user_id = auth.uid()
-    )
   )
 );
 
-drop policy if exists "Users can insert messages for accessible threads" on public.chat_messages;
-create policy "Users can insert messages for accessible threads"
+drop policy if exists "Participants can send messages" on public.chat_messages;
+create policy "Participants can send messages"
 on public.chat_messages
 for insert
 with check (
   auth.uid() is not null
   and sender_user_id = auth.uid()
-  and (
-    public.is_thread_participant(auth.uid(), chat_messages.thread_id)
-    or public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_messages.thread_id
-        and t.created_by_user_id = auth.uid()
-    )
-  )
+  and public.is_thread_participant(auth.uid(), thread_id)
+);
+
+drop policy if exists "Users can edit own messages" on public.chat_messages;
+create policy "Users can edit own messages"
+on public.chat_messages
+for update
+using (
+  auth.uid() is not null
+  and sender_user_id = auth.uid()
+)
+with check (
+  auth.uid() is not null
+  and sender_user_id = auth.uid()
+);
+
+-- NOTE: Your schema uses "deleted_at" soft delete; DELETE policy optional.
+drop policy if exists "Users can delete own messages" on public.chat_messages;
+create policy "Users can delete own messages"
+on public.chat_messages
+for delete
+using (
+  auth.uid() is not null
+  and sender_user_id = auth.uid()
 );
 
 -- ====================
 -- CHAT_FILES POLICIES
 -- ====================
 
-drop policy if exists "Users can view files for accessible threads" on public.chat_files;
-create policy "Users can view files for accessible threads"
+drop policy if exists "Users can view thread files" on public.chat_files;
+create policy "Users can view thread files"
 on public.chat_files
 for select
 using (
   auth.uid() is not null
   and (
-    public.is_thread_participant(auth.uid(), chat_files.thread_id)
+    public.is_thread_participant(auth.uid(), thread_id)
     or public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_files.thread_id
-        and t.created_by_user_id = auth.uid()
-    )
   )
 );
 
-drop policy if exists "Users can insert files for accessible threads" on public.chat_files;
-create policy "Users can insert files for accessible threads"
+drop policy if exists "Participants can upload files" on public.chat_files;
+create policy "Participants can upload files"
 on public.chat_files
 for insert
 with check (
   auth.uid() is not null
   and uploaded_by_user_id = auth.uid()
-  and (
-    public.is_thread_participant(auth.uid(), chat_files.thread_id)
-    or public.is_support_agent(auth.uid())
-    or exists (
-      select 1 from public.chat_threads t
-      where t.id = chat_files.thread_id
-        and t.created_by_user_id = auth.uid()
-    )
-  )
+  and public.is_thread_participant(auth.uid(), thread_id)
+);
+
+drop policy if exists "Users can delete own files" on public.chat_files;
+create policy "Users can delete own files"
+on public.chat_files
+for delete
+using (
+  auth.uid() is not null
+  and uploaded_by_user_id = auth.uid()
 );
 
 -- ====================
@@ -215,13 +277,16 @@ using (
   )
 );
 
-drop policy if exists "Users can upsert own read receipts" on public.chat_read_receipts;
-create policy "Users can upsert own read receipts"
+-- Your schema supports an upsert pattern on (thread_id, user_id).
+-- Allow insert if belongs to self and user can access the thread.
+drop policy if exists "Users can create read receipts" on public.chat_read_receipts;
+create policy "Users can create read receipts"
 on public.chat_read_receipts
 for insert
 with check (
   auth.uid() is not null
   and user_id = auth.uid()
+  and public.is_thread_participant(auth.uid(), thread_id)
 );
 
 drop policy if exists "Users can update own read receipts" on public.chat_read_receipts;
@@ -236,3 +301,13 @@ with check (
   auth.uid() is not null
   and user_id = auth.uid()
 );
+
+-- Comments for documentation
+comment on function public.get_user_tenant_id(uuid) is 'Helper function to retrieve user tenant - REPLACE WITH YOUR LOGIC';
+comment on function public.is_support_agent(uuid) is 'Helper function to check if user is a support agent - REPLACE WITH YOUR LOGIC';
+comment on function public.is_thread_participant(uuid, uuid) is 'Helper function to check if user is a participant in a thread';
+
+-- Grant execute permissions on helper functions to authenticated users
+grant execute on function public.get_user_tenant_id(uuid) to authenticated;
+grant execute on function public.is_support_agent(uuid) to authenticated;
+grant execute on function public.is_thread_participant(uuid, uuid) to authenticated;
