@@ -209,7 +209,8 @@ function ProgressRing({ value }: { value: number }) {
     <div
       className="relative h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-950/50"
       style={{
-        background: `conic-gradient(from 225deg, rgba(34,211,238,0.95) ${v}%, rgba(226,232,240,1) 0)`,
+        // Orange-forward (matches page accents)
+        background: `conic-gradient(from 225deg, rgba(249,115,22,0.95) ${v}%, rgba(226,232,240,1) 0)`,
       }}
       aria-label={`Progress ${v}%`}
       title={`Progress ${v}%`}
@@ -261,7 +262,9 @@ export default function AuditPage() {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
       const json = await res.json();
       if (!res.ok)
-        throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
+        throw new Error(
+          json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`
+        );
       setJob(json?.data ?? json);
       return json?.data ?? json;
     } finally {
@@ -273,7 +276,9 @@ export default function AuditPage() {
     const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
     const json = await res.json().catch(() => null);
     if (!res.ok)
-      throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
+      throw new Error(
+        json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`
+      );
     return json as PipelineSnapshot;
   }, []);
 
@@ -424,7 +429,8 @@ export default function AuditPage() {
 
       await fetchIngestionData(id);
 
-      const steps = ingestionAuditMode === "audit_only" ? [...STEPS_AUDIT_ONLY] : [...STEPS_URL_FLOW];
+      const steps =
+        ingestionAuditMode === "audit_only" ? [...STEPS_AUDIT_ONLY] : [...STEPS_URL_FLOW];
 
       const runId = await startPipeline(id, steps);
       router.push(
@@ -578,7 +584,7 @@ export default function AuditPage() {
       setStatusMessage("Copied to clipboard");
       setTimeout(() => setStatusMessage(null), 1500);
     } catch {
-      // silent (no blocking)
+      // silent
     }
   };
 
@@ -598,11 +604,19 @@ export default function AuditPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Ambient background — SEO-style cyan/emerald */}
+      {/* Ambient background — match Audit (amber/orange/pink blobs) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/15" />
-        <div className="absolute -bottom-44 right-[-12rem] h-96 w-96 rounded-full bg-emerald-300/18 blur-3xl dark:bg-emerald-500/12" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_55%,_rgba(15,23,42,1)_100%)]" />
+        {/* top-left: amber */}
+        <div className="absolute -top-36 -left-28 h-[26rem] w-[26rem] rounded-full bg-amber-300/28 blur-3xl dark:bg-amber-500/16" />
+        {/* top-right: orange */}
+        <div className="absolute -top-28 right-[-10rem] h-[24rem] w-[24rem] rounded-full bg-orange-300/22 blur-3xl dark:bg-orange-500/12" />
+        {/* bottom-right: pink */}
+        <div className="absolute -bottom-48 right-[-12rem] h-[30rem] w-[30rem] rounded-full bg-pink-300/18 blur-3xl dark:bg-pink-500/10" />
+
+        {/* soft vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.88)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_55%,_rgba(15,23,42,1)_100%)]" />
+
+        {/* grid */}
         <div className="absolute inset-0 opacity-[0.035] mix-blend-soft-light dark:opacity-[0.07]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
@@ -613,8 +627,13 @@ export default function AuditPage() {
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-300">
-              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
-                <span className={cx("h-1.5 w-1.5 rounded-full", running ? "bg-amber-400 animate-pulse" : "bg-cyan-400")} />
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-amber-200 dark:bg-slate-900 dark:border-amber-400/30">
+                <span
+                  className={cx(
+                    "h-1.5 w-1.5 rounded-full",
+                    running ? "bg-amber-400 animate-pulse" : "bg-orange-400"
+                  )}
+                />
               </span>
               Data Intelligence · AvidiaAudit
               {ingestionId ? (
@@ -653,8 +672,8 @@ export default function AuditPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {statusMessage ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[11px] text-cyan-800 shadow-sm dark:border-cyan-500/30 dark:bg-slate-950/70 dark:text-cyan-100">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900 shadow-sm dark:border-amber-500/30 dark:bg-slate-950/70 dark:text-amber-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                 {statusMessage}
               </div>
             ) : null}
@@ -725,8 +744,8 @@ export default function AuditPage() {
                   <span className="font-mono text-slate-600 dark:text-slate-300">Ingestion flow</span>
                   <span className="text-slate-500 dark:text-slate-400">audit-only or full chain</span>
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                   auditResult JSON per run
                 </span>
               </div>
@@ -744,7 +763,7 @@ export default function AuditPage() {
                       className={cx(
                         "px-3 py-1 rounded-full transition",
                         mode === "url"
-                          ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500 text-white shadow-sm"
+                          ? "bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 text-slate-950 shadow-sm"
                           : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                       )}
                       onClick={() => setMode("url")}
@@ -756,7 +775,7 @@ export default function AuditPage() {
                       className={cx(
                         "px-3 py-1 rounded-full transition",
                         mode === "ingestion"
-                          ? "bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500 text-white shadow-sm"
+                          ? "bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500 text-slate-950 shadow-sm"
                           : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                       )}
                       onClick={() => setMode("ingestion")}
@@ -776,14 +795,14 @@ export default function AuditPage() {
                         value={urlInput}
                         onChange={(e) => setUrlInput(e.target.value)}
                         placeholder="https://manufacturer.com/product/..."
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                         type="url"
                       />
                       <button
                         type="button"
                         onClick={runAuditFromUrl}
                         disabled={running}
-                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-slate-950 shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500"
                       >
                         {running ? "Running…" : "Run Audit"}
                       </button>
@@ -795,7 +814,7 @@ export default function AuditPage() {
                       </p>
                       <button
                         type="button"
-                        className="text-[11px] text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
+                        className="text-[11px] text-orange-700 hover:text-orange-600 underline underline-offset-4 dark:text-orange-300 dark:hover:text-orange-200"
                         onClick={() => setUrlInput(demoUrl)}
                       >
                         Try demo URL
@@ -813,14 +832,14 @@ export default function AuditPage() {
                         value={ingestionIdInput}
                         onChange={(e) => setIngestionIdInput(e.target.value)}
                         placeholder="b0324634-1593-4fad-a9de-70215a2deb38"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/25 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
                         type="text"
                       />
                       <button
                         type="button"
                         onClick={runAuditOnIngestion}
                         disabled={running}
-                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
+                        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-slate-950 shadow-sm transition hover:opacity-95 disabled:opacity-60 sm:w-48 bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500"
                       >
                         {running ? "Running…" : "Run Audit"}
                       </button>
@@ -901,7 +920,8 @@ export default function AuditPage() {
                         className={cx(
                           "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px]",
                           statusChipClass(
-                            audit.status ?? (audit.ok === true ? "passed" : audit.ok === false ? "failed" : "unknown")
+                            audit.status ??
+                              (audit.ok === true ? "passed" : audit.ok === false ? "failed" : "unknown")
                           )
                         )}
                       >
@@ -952,7 +972,7 @@ export default function AuditPage() {
                   </div>
                   <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                     <div
-                      className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
+                      className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -982,7 +1002,7 @@ export default function AuditPage() {
                             </div>
                             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                               <div
-                                className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500"
+                                className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500"
                                 style={{ width: `${v}%` }}
                               />
                             </div>
@@ -1041,7 +1061,6 @@ export default function AuditPage() {
                   </pre>
                 ) : null}
 
-                {/* tiny live footer */}
                 <div className="mt-4 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                   <span>Checks: {checksCount || "—"}</span>
                   <span>{pollingState ? `Ingest: ${pollingState}` : runStatus ? `Run: ${runStatus}` : ""}</span>
@@ -1109,9 +1128,7 @@ export default function AuditPage() {
                       </div>
 
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="font-mono">
-                          {fmtMs(moduleRuntimeMs.get(m.module_name) ?? null)}
-                        </span>
+                        <span className="font-mono">{fmtMs(moduleRuntimeMs.get(m.module_name) ?? null)}</span>
                         <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
                         <span className="truncate">
                           output_ref:{" "}
@@ -1278,7 +1295,12 @@ export default function AuditPage() {
                           ) : null}
                         </div>
 
-                        <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]", badge)}>
+                        <span
+                          className={cx(
+                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                            badge
+                          )}
+                        >
                           {st}
                         </span>
                       </div>
@@ -1305,14 +1327,18 @@ export default function AuditPage() {
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">Ingestion</span>
               </div>
               <pre className="mt-3 whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
-                {jobData ? JSON.stringify(jobData.normalized_payload ?? jobData, null, 2) : "Run an audit to load ingestion data."}
+                {jobData
+                  ? JSON.stringify(jobData.normalized_payload ?? jobData, null, 2)
+                  : "Run an audit to load ingestion data."}
               </pre>
             </div>
 
             <div className="lg:col-span-6 rounded-3xl border border-slate-200 bg-white/92 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Raw /api/v1/ingest</h3>
-                {pollingState ? <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span> : null}
+                {pollingState ? (
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span>
+                ) : null}
               </div>
               <pre className="mt-3 whitespace-pre-wrap break-words rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
                 {rawIngestResponse ? JSON.stringify(rawIngestResponse, null, 2) : "Shown when you run from URL."}
@@ -1321,28 +1347,29 @@ export default function AuditPage() {
           </section>
         ) : null}
       </div>
+
       <style jsx>{`
-      .audit-title-gradient {
-        background-size: 220% 220%;
-        animation: auditGradientShift 7s ease-in-out infinite;
-        filter: drop-shadow(0 8px 22px rgba(249, 115, 22, 0.18));
-      }
-    
-      @keyframes auditGradientShift {
-        0% {
-          background-position: 0% 50%;
-          transform: translateZ(0) scale(1);
+        .audit-title-gradient {
+          background-size: 220% 220%;
+          animation: auditGradientShift 7s ease-in-out infinite;
+          filter: drop-shadow(0 10px 26px rgba(249, 115, 22, 0.18));
         }
-        50% {
-          background-position: 100% 50%;
-          transform: translateZ(0) scale(1.01);
+
+        @keyframes auditGradientShift {
+          0% {
+            background-position: 0% 50%;
+            transform: translateZ(0) scale(1);
+          }
+          50% {
+            background-position: 100% 50%;
+            transform: translateZ(0) scale(1.01);
+          }
+          100% {
+            background-position: 0% 50%;
+            transform: translateZ(0) scale(1);
+          }
         }
-        100% {
-          background-position: 0% 50%;
-          transform: translateZ(0) scale(1);
-        }
-      }
-    `}</style>     
+      `}</style>
     </main>
   );
 }
