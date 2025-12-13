@@ -1,166 +1,6 @@
-// src/app/api/v1/seo/route.ts
-
-import fs from "fs";
-import path from "path";
-import { pathToFileURL } from "url";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
-import { getServiceSupabaseClient } from "@/lib/supabase";
-import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
-
-const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
-const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
-
-async function callSeoModel(
-  normalizedPayload: any,
-  correlationId?: string | null,
-  sourceUrl?: string | null,
-  tenantId?: string | null
-): Promise<{
-  seo_payload: any;
-  description_html: string | null;
-  features: string[] | null;
-}> {
-  if (!CENTRAL_GPT_URL || !CENTRAL_GPT_KEY) {
-    throw new Error(
-      "central_gpt_not_configured: CENTRAL_GPT_URL / CENTRAL_GPT_KEY missing"
-    );
-  }
-
-  const { text: instructions, source: instructionsSource } =
-    await loadCustomGptInstructionsWithInfo(tenantId ?? null);
-
-  const defaultBuildSeoRequestBody = ({
-    module = "seo",
-    payload,
-    correlationId,
-    customInstructions,
-    instructionsSource,
-  }: {
-    module?: string;
-    payload: any;
-    correlationId?: string | null;
-    customInstructions?: string | null;
-    instructionsSource?: string | null;
-  }) => {
-    const trimmedInstructions =
-      typeof customInstructions === "string" ? customInstructions.trim() : "";
-
-    return {
-      module,
-      payload,
-      correlation_id: correlationId || undefined,
-      custom_gpt_instructions:
-        trimmedInstructions.length > 0 ? trimmedInstructions : undefined,
-      instruction_source: instructionsSource || undefined,
-      enforce_instructions: trimmedInstructions.length > 0,
-      audit: { format: "avidia_seo_v1" },
-    };
-  };
-
-  let buildSeoRequestBody: ((opts: any) => any) | null = defaultBuildSeoRequestBody;
-  try {
-    const enforcerPath = path.join(
-      process.cwd(),
-      "../medx-ingest-api/tools/render-engine/gptInstructionsEnforcer.mjs"
-    );
-    if (fs.existsSync(enforcerPath)) {
-      const enforcerModulePath = pathToFileURL(enforcerPath).toString();
-      const enforcerModule = await import(enforcerModulePath);
-      buildSeoRequestBody =
-        (enforcerModule as any).buildSeoRequestBody ||
-        (enforcerModule as any).default?.buildSeoRequestBody ||
-        buildSeoRequestBody;
-      console.log("[api/v1/seo] using shared gptInstructionsEnforcer module");
-    } else {
-      console.log(
-        "[api/v1/seo] shared gptInstructionsEnforcer not present; using built-in body builder"
-      );
-    }
-  } catch (err: any) {
-    console.warn(
-      "[api/v1/seo] unable to load shared gptInstructionsEnforcer",
-      err?.message || err
-    );
-  }
-
-  const body = buildSeoRequestBody
-    ? buildSeoRequestBody({
-        module: "seo",
-        payload: normalizedPayload,
-        correlationId: correlationId || undefined,
-        customInstructions: instructions,
-        instructionsSource,
-      })
-    : {
-        module: "seo",
-        payload: normalizedPayload,
-        correlation_id: correlationId || undefined,
-        custom_gpt_instructions: instructions || undefined,
-        instruction_source: instructionsSource || undefined,
-        enforce_instructions: Boolean(instructions),
-      };
-
-  const res = await fetch(CENTRAL_GPT_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${CENTRAL_GPT_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    console.error(
-      "[api/v1/seo] central GPT non-200",
-      res.status,
-      text?.slice(0, 500)
-    );
-    throw new Error(
-      `central_gpt_seo_error: ${res.status} ${text || "(empty body)"}`
-    );
-  }
-
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch (err: any) {
-    console.error(
-      "[api/v1/seo] central GPT returned non-JSON",
-      err?.message || err,
-      "raw=",
-      text?.slice(0, 500)
-    );
-    throw new Error("central_gpt_invalid_json");
-  }
-
-  const normalized = normalizedPayload || {};
-  const seoPayload = json?.seo || normalized?.seo || {};
-  const descriptionHtml =
-    json?.description_html ||
-    json?.description ||
-    normalized?.description_html ||
-    null;
-  const features = Array.isArray(json?.features)
-    ? json.features
-    : normalized?.features ?? null;
-
-  console.log("[api/v1/seo] central GPT SEO summary", {
-    hasSeo: !!seoPayload,
-    hasDescription: !!descriptionHtml,
-    featuresCount: Array.isArray(features) ? features.length : null,
-    sourceUrl: sourceUrl || null,
-    instructionsSource: instructionsSource || null,
-  });
-
-  return {
-    seo_payload: seoPayload,
-    description_html: descriptionHtml,
-    features,
-  };
-}
+import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
 
 export async function POST(req: NextRequest) {
   try {
@@ -178,137 +18,50 @@ export async function POST(req: NextRequest) {
     const ingestionId = body?.ingestionId?.toString() || "";
 
     if (!ingestionId) {
-      return NextResponse.json(
-        { error: "missing_ingestionId" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "missing_ingestionId" }, { status: 400 });
     }
 
-    const supabase = getServiceSupabaseClient();
+    // 3-7 moved to shared helper; output is identical shape
+    const result = await runSeoForIngestion(ingestionId);
 
-    // 3) Load ingestion row
-    const { data: ingestion, error: loadErr } = await supabase
-      .from("product_ingestions")
-      .select(
-        "id, tenant_id, user_id, source_url, normalized_payload, seo_payload, description_html, features, correlation_id, diagnostics, status"
-      )
-      .eq("id", ingestionId)
-      .maybeSingle();
-
-    if (loadErr) {
-      console.error("[api/v1/seo] failed to load ingestion", {
-        ingestionId,
-        error: loadErr,
-      });
-      return NextResponse.json(
-        { error: "ingestion_load_failed" },
-        { status: 500 }
-      );
-    }
-
-    if (!ingestion) {
-      return NextResponse.json(
-        { error: "ingestion_not_found" },
-        { status: 404 }
-      );
-    }
-
-    if (!ingestion.normalized_payload) {
-      return NextResponse.json(
-        { error: "ingestion_not_ready" },
-        { status: 409 }
-      );
-    }
-
-    const normalized = ingestion.normalized_payload as any;
-    const startedAt = new Date().toISOString();
-
-    // 4) Call central GPT
-    let seoResult;
-    try {
-      seoResult = await callSeoModel(
-        normalized,
-        ingestion.correlation_id || null,
-        ingestion.source_url || null,
-        ingestion.tenant_id || null
-      );
-    } catch (err: any) {
-      console.error("[api/v1/seo] seo model error:", err?.message || err);
-      return NextResponse.json(
-        {
-          error: "seo_model_failed",
-          detail: err?.message || String(err),
-        },
-        { status: 500 }
-      );
-    }
-
-    const finishedAt = new Date().toISOString();
-
-    // 5) Merge diagnostics
-    const diagnostics = ingestion.diagnostics || {};
-    const seoDiagnostics = {
-      ...(diagnostics.seo || {}),
-      last_run_at: finishedAt,
-      started_at: startedAt,
-      status: "completed",
-    };
-    const updatedDiagnostics = {
-      ...diagnostics,
-      seo: seoDiagnostics,
-    };
-
-    // 6) Persist SEO into product_ingestions
-    const { data: updatedRows, error: updErr } = await supabase
-      .from("product_ingestions")
-      .update({
-        seo_payload: seoResult.seo_payload,
-        description_html: seoResult.description_html,
-        features: seoResult.features,
-        seo_generated_at: finishedAt,
-        diagnostics: updatedDiagnostics,
-        updated_at: finishedAt,
-      })
-      .eq("id", ingestion.id)
-      .select("id, seo_payload, description_html, features")
-      .maybeSingle();
-
-    if (updErr) {
-      console.error("[api/v1/seo] failed to update ingestion with SEO", {
-        ingestionId: ingestion.id,
-        error: updErr,
-      });
-      return NextResponse.json(
-        { error: "seo_persist_failed", detail: updErr.message || updErr },
-        { status: 500 }
-      );
-    }
-
-    console.log("[api/v1/seo] SEO persisted", {
-      ingestionId: ingestion.id,
-      hasSeo: !!updatedRows?.seo_payload,
-      hasDescription: !!updatedRows?.description_html,
-      featuresCount: Array.isArray(updatedRows?.features)
-        ? updatedRows?.features.length
-        : null,
-    });
-
-    // 7) Return SEO to frontend
     return NextResponse.json(
       {
-        ingestionId: ingestion.id,
-        seo_payload: updatedRows?.seo_payload ?? seoResult.seo_payload,
-        description_html:
-          updatedRows?.description_html ?? seoResult.description_html,
-        features: updatedRows?.features ?? seoResult.features,
+        ingestionId: result.ingestionId,
+        seo_payload: result.seo_payload,
+        description_html: result.description_html,
+        features: result.features,
       },
       { status: 200 }
     );
   } catch (err: any) {
+    // Match prior behavior: if we throw, it was internal_error.
+    // Shared helper throws explicit messages that we map below.
+    const msg = err?.message || "internal_error";
+
+    if (msg === "ingestion_not_found") {
+      return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
+    }
+    if (msg === "ingestion_not_ready") {
+      return NextResponse.json({ error: "ingestion_not_ready" }, { status: 409 });
+    }
+    if (msg.startsWith("ingestion_load_failed:")) {
+      return NextResponse.json({ error: "ingestion_load_failed" }, { status: 500 });
+    }
+
+    // Central GPT failures previously returned `{ error: "seo_model_failed", detail }`
+    if (
+      msg === "central_gpt_invalid_json" ||
+      msg.startsWith("central_gpt_not_configured:") ||
+      msg.startsWith("central_gpt_seo_error:")
+    ) {
+      return NextResponse.json({ error: "seo_model_failed", detail: msg }, { status: 500 });
+    }
+
+    if (msg.startsWith("seo_persist_failed:")) {
+      return NextResponse.json({ error: "seo_persist_failed", detail: msg }, { status: 500 });
+    }
+
     console.error("POST /api/v1/seo error:", err);
-    return NextResponse.json(
-      { error: err?.message || "internal_error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
