@@ -6,6 +6,7 @@ on:
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_dummy"
 
 jobs:
   build:
