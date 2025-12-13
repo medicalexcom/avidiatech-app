@@ -1,167 +1,191 @@
--- Migration: Create chat support tables
--- This migration creates the core tables for the real-time support chat system
--- 
--- Tables created:
--- - chat_threads: Main conversation threads
--- - chat_participants: Links users to threads
--- - chat_messages: Individual messages in threads
--- - chat_files: File attachments linked to messages
--- - chat_read_receipts: Track which messages users have read
+-- Migration: Create chat tables for in-app support console
+-- Idempotent + compatible with older partial schemas.
 --
--- Prerequisites:
--- This migration assumes the following tables exist:
--- - profiles or users table with an id column (uuid)
--- - workspace_members or team_members table (optional, for tenant filtering)
--- - roles table (optional, for agent role checking)
+-- Canonical schema (this repo):
+-- - public.chat_threads: tenant-scoped support threads
+-- - public.chat_participants: users in threads
+-- - public.chat_messages: messages per thread
+-- - public.chat_files: file metadata per thread (messages reference via file_id)
+-- - public.chat_read_receipts: per (thread,user) last read message pointer
 --
--- Note: Adjust tenant_id references based on your schema. This uses TEXT for flexibility.
+-- Notes:
+-- - Uses pgcrypto + gen_random_uuid() (Supabase standard)
+-- - Uses tenant_id UUID (matches your app)
+-- - Guards legacy "created_by" index if an older schema used that column
 
--- Enable UUID extension if not already enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+create extension if not exists "pgcrypto";
 
--- Chat Threads Table
--- Represents a support conversation between a user and support agents
-CREATE TABLE IF NOT EXISTS chat_threads (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  tenant_id TEXT NOT NULL, -- The tenant/workspace this thread belongs to
-  subject TEXT NOT NULL DEFAULT 'Support Request',
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'archived')),
-  priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-  last_message_at TIMESTAMPTZ,
-  last_sender_role TEXT, -- 'user' or 'agent' - tracks who sent the last message
-  created_by UUID NOT NULL, -- User ID who created the thread (references profiles/users)
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- ===============================
+-- TABLES (create if missing)
+-- ===============================
+
+create table if not exists public.chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null,
+  created_by_user_id uuid not null,
+  assigned_agent_id uuid,
+  subject text,
+  status text not null default 'open', -- 'open' | 'pending' | 'closed'
+  priority text default 'normal',      -- 'low' | 'normal' | 'high'
+  last_message_at timestamptz default now(),
+  last_sender_role text,              -- 'end_user' | 'agent' | 'system'
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
 
--- Create indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_chat_threads_tenant_id ON chat_threads(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_chat_threads_status ON chat_threads(status);
-CREATE INDEX IF NOT EXISTS idx_chat_threads_created_by ON chat_threads(created_by);
-CREATE INDEX IF NOT EXISTS idx_chat_threads_last_message_at ON chat_threads(last_message_at DESC);
-
--- Chat Participants Table
--- Links users to threads (many-to-many relationship)
-CREATE TABLE IF NOT EXISTS chat_participants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL, -- References profiles/users table
-  role TEXT NOT NULL DEFAULT 'participant' CHECK (role IN ('participant', 'agent', 'observer')),
-  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_read_at TIMESTAMPTZ, -- When this participant last read messages in this thread
-  UNIQUE(thread_id, user_id) -- A user can only be a participant once per thread
+create table if not exists public.chat_participants (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  user_id uuid not null,
+  role text not null,                 -- 'end_user' | 'agent'
+  created_at timestamptz default now(),
+  unique (thread_id, user_id)
 );
 
--- Create indexes for participant queries
-CREATE INDEX IF NOT EXISTS idx_chat_participants_thread_id ON chat_participants(thread_id);
-CREATE INDEX IF NOT EXISTS idx_chat_participants_user_id ON chat_participants(user_id);
-
--- Chat Messages Table
--- Individual messages within a thread
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-  sender_id UUID NOT NULL, -- User ID who sent the message
-  sender_role TEXT NOT NULL CHECK (sender_role IN ('user', 'agent', 'system')),
-  content TEXT NOT NULL,
-  message_type TEXT NOT NULL DEFAULT 'text' CHECK (message_type IN ('text', 'file', 'system')),
-  metadata JSONB DEFAULT '{}', -- Additional message metadata (mentions, reactions, etc.)
-  edited_at TIMESTAMPTZ,
-  deleted_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists public.chat_files (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  uploaded_by_user_id uuid not null,
+  storage_path text not null,        -- e.g. 'tenant-123/thread-456/file-789.pdf'
+  file_name text not null,
+  mime_type text not null,
+  size_bytes bigint not null,
+  created_at timestamptz default now()
 );
 
--- Create indexes for message queries
-CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id ON chat_messages(thread_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_sender_id ON chat_messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON chat_messages(created_at);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_created ON chat_messages(thread_id, created_at);
-
--- Chat Files Table
--- File attachments linked to messages
-CREATE TABLE IF NOT EXISTS chat_files (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
-  thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-  uploaded_by UUID NOT NULL, -- User ID who uploaded the file
-  file_name TEXT NOT NULL,
-  file_size BIGINT NOT NULL, -- Size in bytes
-  file_type TEXT NOT NULL, -- MIME type
-  storage_path TEXT NOT NULL, -- Path in Supabase Storage (bucket: chat-uploads)
-  metadata JSONB DEFAULT '{}', -- Additional file metadata
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  sender_user_id uuid not null,
+  sender_role text not null,          -- 'end_user' | 'agent' | 'system'
+  message_type text not null default 'text', -- 'text' | 'file' | 'event'
+  content text,                       -- nullable if purely file/event
+  file_id uuid references public.chat_files(id),
+  created_at timestamptz default now(),
+  edited_at timestamptz,
+  deleted_at timestamptz
 );
 
--- Create indexes for file queries
-CREATE INDEX IF NOT EXISTS idx_chat_files_message_id ON chat_files(message_id);
-CREATE INDEX IF NOT EXISTS idx_chat_files_thread_id ON chat_files(thread_id);
-CREATE INDEX IF NOT EXISTS idx_chat_files_uploaded_by ON chat_files(uploaded_by);
-
--- Chat Read Receipts Table
--- Tracks which messages each user has read
-CREATE TABLE IF NOT EXISTS chat_read_receipts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
-  thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL, -- User who read the message
-  read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(message_id, user_id) -- Each user can only read a message once
+create table if not exists public.chat_read_receipts (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.chat_threads(id) on delete cascade,
+  user_id uuid not null,
+  last_read_message_id uuid not null references public.chat_messages(id),
+  last_read_at timestamptz default now(),
+  unique (thread_id, user_id)
 );
 
--- Create indexes for read receipt queries
-CREATE INDEX IF NOT EXISTS idx_chat_read_receipts_thread_user ON chat_read_receipts(thread_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_chat_read_receipts_message_id ON chat_read_receipts(message_id);
+-- ===============================
+-- COMPATIBILITY SHIMS (avoid failures on existing remote schemas)
+-- ===============================
 
--- Function to update thread's last_message_at and last_sender_role
--- This is called automatically via trigger when a new message is inserted
-CREATE OR REPLACE FUNCTION update_thread_last_message()
-RETURNS TRIGGER AS $$
-BEGIN
-  UPDATE chat_threads
-  SET 
-    last_message_at = NEW.created_at,
-    last_sender_role = NEW.sender_role,
-    updated_at = NOW()
-  WHERE id = NEW.thread_id;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- chat_threads
+alter table public.chat_threads add column if not exists tenant_id uuid;
+alter table public.chat_threads add column if not exists created_by_user_id uuid;
+alter table public.chat_threads add column if not exists assigned_agent_id uuid;
+alter table public.chat_threads add column if not exists subject text;
+alter table public.chat_threads add column if not exists status text;
+alter table public.chat_threads add column if not exists priority text;
+alter table public.chat_threads add column if not exists last_message_at timestamptz;
+alter table public.chat_threads add column if not exists last_sender_role text;
+alter table public.chat_threads add column if not exists created_at timestamptz;
+alter table public.chat_threads add column if not exists updated_at timestamptz;
 
--- Trigger to automatically update thread metadata when a message is created
-CREATE TRIGGER trigger_update_thread_last_message
-  AFTER INSERT ON chat_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION update_thread_last_message();
+alter table public.chat_threads alter column status set default 'open';
+alter table public.chat_threads alter column priority set default 'normal';
+alter table public.chat_threads alter column last_message_at set default now();
+alter table public.chat_threads alter column created_at set default now();
+alter table public.chat_threads alter column updated_at set default now();
 
--- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- chat_participants
+alter table public.chat_participants add column if not exists thread_id uuid;
+alter table public.chat_participants add column if not exists user_id uuid;
+alter table public.chat_participants add column if not exists role text;
+alter table public.chat_participants add column if not exists created_at timestamptz;
 
--- Triggers to automatically update updated_at timestamps
-CREATE TRIGGER trigger_chat_threads_updated_at
-  BEFORE UPDATE ON chat_threads
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+-- chat_files
+alter table public.chat_files add column if not exists thread_id uuid;
+alter table public.chat_files add column if not exists uploaded_by_user_id uuid;
+alter table public.chat_files add column if not exists storage_path text;
+alter table public.chat_files add column if not exists file_name text;
+alter table public.chat_files add column if not exists mime_type text;
+alter table public.chat_files add column if not exists size_bytes bigint;
+alter table public.chat_files add column if not exists created_at timestamptz;
 
-CREATE TRIGGER trigger_chat_messages_updated_at
-  BEFORE UPDATE ON chat_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
+-- chat_messages
+alter table public.chat_messages add column if not exists thread_id uuid;
+alter table public.chat_messages add column if not exists sender_user_id uuid;
+alter table public.chat_messages add column if not exists sender_role text;
+alter table public.chat_messages add column if not exists message_type text;
+alter table public.chat_messages add column if not exists content text;
+alter table public.chat_messages add column if not exists file_id uuid;
+alter table public.chat_messages add column if not exists created_at timestamptz;
+alter table public.chat_messages add column if not exists edited_at timestamptz;
+alter table public.chat_messages add column if not exists deleted_at timestamptz;
 
--- Comments for documentation
-COMMENT ON TABLE chat_threads IS 'Support conversation threads between users and agents';
-COMMENT ON TABLE chat_participants IS 'Links users to conversation threads';
-COMMENT ON TABLE chat_messages IS 'Individual messages within conversation threads';
-COMMENT ON TABLE chat_files IS 'File attachments linked to messages';
-COMMENT ON TABLE chat_read_receipts IS 'Tracks which messages users have read';
+alter table public.chat_messages alter column message_type set default 'text';
+alter table public.chat_messages alter column created_at set default now();
 
-COMMENT ON COLUMN chat_threads.tenant_id IS 'Tenant/workspace identifier - adjust based on your schema';
-COMMENT ON COLUMN chat_threads.created_by IS 'References profiles/users table - adjust based on your schema';
-COMMENT ON COLUMN chat_messages.sender_role IS 'Role of the sender: user, agent, or system';
-COMMENT ON COLUMN chat_files.storage_path IS 'Path in Supabase Storage bucket "chat-uploads"';
+-- chat_read_receipts
+alter table public.chat_read_receipts add column if not exists thread_id uuid;
+alter table public.chat_read_receipts add column if not exists user_id uuid;
+alter table public.chat_read_receipts add column if not exists last_read_message_id uuid;
+alter table public.chat_read_receipts add column if not exists last_read_at timestamptz;
+alter table public.chat_read_receipts alter column last_read_at set default now();
+
+-- ===============================
+-- INDEXES (safe + guarded)
+-- ===============================
+
+create index if not exists idx_chat_messages_thread_id_created_at
+  on public.chat_messages (thread_id, created_at desc);
+
+create index if not exists idx_chat_threads_tenant_id_last_message_at
+  on public.chat_threads (tenant_id, last_message_at desc);
+
+create index if not exists idx_chat_participants_thread_id
+  on public.chat_participants (thread_id);
+
+create index if not exists idx_chat_participants_user_id
+  on public.chat_participants (user_id);
+
+create index if not exists idx_chat_files_thread_id
+  on public.chat_files (thread_id);
+
+-- Legacy index for older schemas that used chat_threads.created_by
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chat_threads'
+      and column_name = 'created_by'
+  ) then
+    execute 'create index if not exists idx_chat_threads_created_by on public.chat_threads(created_by)';
+  end if;
+end $$;
+
+-- ===============================
+-- TRIGGERS (update thread metadata on new message)
+-- ===============================
+
+create or replace function public.chat_update_thread_last_message()
+returns trigger as $$
+begin
+  update public.chat_threads
+  set
+    last_message_at = new.created_at,
+    last_sender_role = new.sender_role,
+    updated_at = now()
+  where id = new.thread_id;
+
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_chat_update_thread_last_message on public.chat_messages;
+
+create trigger trg_chat_update_thread_last_message
+after insert on public.chat_messages
+for each row execute function public.chat_update_thread_last_message();
