@@ -15,13 +15,10 @@ function getSupabaseAdmin() {
   });
 }
 
-// NOTE: This is a placeholder. Replace with your repo's existing encryption util if you already have one.
-// The API previously returned {"error":"missing_tenant"} before inserting; we fix that here.
+// Replace with your real encryption util if it exists in-repo.
 async function encryptSecretsOrThrow(accessToken: string): Promise<string> {
   const key = process.env.INTEGRATIONS_ENCRYPTION_KEY;
   if (!key) throw new Error("missing_encryption_key");
-  // Minimal: store token base64 so you can verify end-to-end; replace with real encryption.
-  // eslint-disable-next-line no-undef
   return Buffer.from(JSON.stringify({ accessToken }), "utf8").toString("base64");
 }
 
@@ -42,13 +39,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Optional: pull org name for nicer tenants.name
+    // Optional org name lookup (safe for your Clerk version)
     let tenantName: string | null = null;
     try {
-      const org = await clerkClient.organizations.getOrganization({ organizationId: orgId });
+      const client = await clerkClient();
+      const org = await client.organizations.getOrganization({ organizationId: orgId });
       tenantName = org?.name ?? null;
     } catch {
-      // ignore
+      // ignore (name is optional)
     }
 
     const tenantId = await getOrCreateTenantIdFromClerkOrg({
@@ -58,7 +56,6 @@ export async function POST(req: Request) {
     });
 
     const supabase = getSupabaseAdmin();
-
     const secrets_enc = await encryptSecretsOrThrow(accessToken);
 
     const insert = await supabase
@@ -80,10 +77,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, connection: insert.data }, { status: 200 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    const status =
-      msg.includes("missing_encryption_key") ? 500 :
-      msg.includes("missing_org") ? 400 :
-      500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: msg }, { status: msg === "missing_encryption_key" ? 500 : 500 });
   }
 }
