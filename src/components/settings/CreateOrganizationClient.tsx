@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect } from "react";
-import { CreateOrganization } from "@clerk/nextjs";
+import React from "react";
+import { CreateOrganization, useUser } from "@clerk/nextjs";
 
 export default function CreateOrganizationClient() {
-  useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[CreateOrganizationClient] mounted");
-  }, []);
+  const { isLoaded, isSignedIn } = useUser();
+
+  // Don't render the Clerk create form until Clerk runtime is ready and user is signed in.
+  if (!isLoaded || !isSignedIn) return null;
 
   return (
     <div>
