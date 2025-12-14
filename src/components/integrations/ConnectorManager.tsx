@@ -3,12 +3,17 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * Minimal ConnectorManager UI
- * - Lists connectors for current org (requires orgId passed in or derived)
- * - Allows creating a simple API-key connection (example: BigCommerce)
+ * ConnectorManager (multi-provider)
+ * - Supports: bigcommerce (API token + store_hash), wooCommerce (consumer key/secret),
+ *   shopify (OAuth flow trigger), magento (API token), generic-api-key.
  *
- * NOTE: This component calls /api/v1/integrations (GET/POST) and /api/v1/integrations/:id/sync
- * Make sure server API route above is added.
+ * - Expects server endpoints:
+ *   GET  /api/v1/integrations?orgId=<org>
+ *   POST /api/v1/integrations
+ *   POST /api/v1/integrations/:id/sync
+ *   GET  /api/v1/integrations/oauth/shopify/start  (server will redirect to Shopify)
+ *
+ * Replace orgId usage with a session-derived orgId once you add server auth integration.
  */
 
 type Integration = {
@@ -23,12 +28,20 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
   const [list, setList] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [provider, setProvider] = useState<string>("bigcommerce");
   const [name, setName] = useState("");
+  // BigCommerce
   const [storeHash, setStoreHash] = useState("");
   const [accessToken, setAccessToken] = useState("");
+  // WooCommerce
+  const [wcKey, setWcKey] = useState("");
+  const [wcSecret, setWcSecret] = useState("");
+  // Magento / generic
+  const [apiToken, setApiToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function fetchList() {
+    if (!orgId) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
@@ -47,22 +60,50 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
 
   useEffect(() => {
     if (orgId) fetchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId]);
 
-  async function createBigCommerce() {
+  async function createConnector() {
     setCreating(true);
     setError(null);
     try {
+      let payload: any = { org_id: orgId, provider, name: name || provider, config: {}, secrets: {} };
+
+      if (provider === "bigcommerce") {
+        payload.config = { store_hash: storeHash };
+        payload.secrets = { access_token: accessToken };
+      } else if (provider === "woocommerce") {
+        payload.config = {};
+        payload.secrets = { consumer_key: wcKey, consumer_secret: wcSecret };
+      } else if (provider === "magento") {
+        payload.config = {};
+        payload.secrets = { api_token: apiToken };
+      } else if (provider === "generic-api-key") {
+        payload.config = {};
+        payload.secrets = { api_key: apiToken };
+      } else if (provider === "shopify") {
+        // start OAuth flow
+        const startUrl = `/api/v1/integrations/oauth/shopify/start?orgId=${encodeURIComponent(orgId)}`;
+        // Server may redirect; try fetching redirect url or navigate directly
+        try {
+          const res = await fetch(startUrl);
+          const json = await res.json().catch(() => null);
+          if (json?.redirectUrl) {
+            window.location.href = json.redirectUrl;
+          } else {
+            // fallback: navigate to route
+            window.location.href = startUrl;
+          }
+        } finally {
+          setCreating(false);
+        }
+        return;
+      }
+
       const res = await fetch("/api/v1/integrations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          org_id: orgId,
-          provider: "bigcommerce",
-          name: name || "BigCommerce",
-          config: { store_hash: storeHash },
-          secrets: { access_token: accessToken },
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
@@ -73,6 +114,9 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       setName("");
       setStoreHash("");
       setAccessToken("");
+      setWcKey("");
+      setWcSecret("");
+      setApiToken("");
     } catch (err: any) {
       setError(String(err?.message ?? err));
     } finally {
@@ -93,7 +137,6 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
         setError(json?.error ?? "Sync failed");
         return;
       }
-      // optionally notify / refresh
       alert(`Sync started: ${json.jobId}`);
     } catch (err: any) {
       setError(String(err?.message ?? err));
@@ -123,14 +166,43 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       </div>
 
       <div className="mt-4 rounded border p-3">
-        <div className="text-xs text-slate-500 mb-2">Add BigCommerce (example)</div>
+        <div className="text-xs text-slate-500 mb-2">Create connector</div>
         {error && <div className="text-xs text-rose-600 mb-2">{error}</div>}
-        <input placeholder="Connection name" value={name} onChange={(e)=>setName(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
-        <input placeholder="Store hash" value={storeHash} onChange={(e)=>setStoreHash(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
-        <input placeholder="Access token" value={accessToken} onChange={(e)=>setAccessToken(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+
+        <div className="mb-2">
+          <label className="text-xs">Provider</label>
+          <select value={provider} onChange={(e) => setProvider(e.target.value)} className="w-full rounded border px-2 py-1">
+            <option value="bigcommerce">BigCommerce (API token)</option>
+            <option value="shopify">Shopify (OAuth)</option>
+            <option value="woocommerce">WooCommerce (consumer key/secret)</option>
+            <option value="magento">Magento (API token)</option>
+            <option value="generic-api-key">Generic API Key</option>
+          </select>
+        </div>
+
+        <input placeholder="Connection name" value={name} onChange={(e) => setName(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+
+        {provider === "bigcommerce" && (
+          <>
+            <input placeholder="Store hash" value={storeHash} onChange={(e) => setStoreHash(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+            <input placeholder="Access token" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+          </>
+        )}
+
+        {provider === "woocommerce" && (
+          <>
+            <input placeholder="Consumer Key" value={wcKey} onChange={(e) => setWcKey(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+            <input placeholder="Consumer Secret" value={wcSecret} onChange={(e) => setWcSecret(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+          </>
+        )}
+
+        {(provider === "magento" || provider === "generic-api-key") && (
+          <input placeholder="API token / key" value={apiToken} onChange={(e) => setApiToken(e.target.value)} className="w-full mb-2 px-2 py-1 border rounded" />
+        )}
+
         <div className="flex gap-2">
-          <button onClick={createBigCommerce} disabled={creating} className="px-3 py-1 bg-emerald-500 text-white rounded text-sm">
-            {creating ? "Creating…" : "Create BigCommerce"}
+          <button onClick={createConnector} disabled={creating} className="px-3 py-1 bg-emerald-500 text-white rounded text-sm">
+            {creating ? "Creating…" : provider === "shopify" ? "Start Shopify auth" : "Create connector"}
           </button>
           <button onClick={fetchList} className="px-3 py-1 bg-slate-50 border rounded text-sm">Refresh</button>
         </div>
