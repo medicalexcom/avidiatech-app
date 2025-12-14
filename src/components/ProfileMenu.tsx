@@ -1,10 +1,10 @@
+// src/components/ProfileMenu.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useUser, SignOutButton, OrganizationSwitcher } from "@clerk/nextjs";
+import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
-import { usePathname } from "next/navigation";
 
 /**
  * ProfileMenu — premium account dropdown
@@ -15,8 +15,6 @@ import { usePathname } from "next/navigation";
 export default function ProfileMenu() {
   const { user, isLoaded } = useUser();
   const { theme, resolvedTheme, setTheme } = useTheme();
-  const pathname = usePathname();
-
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(false);
@@ -27,11 +25,6 @@ export default function ProfileMenu() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Close menu on route change to avoid portal overlay blocking page inputs (e.g. Clerk CreateOrganization)
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   // Sync local isDark with theme, localStorage, and <html> class
   useEffect(() => {
@@ -200,29 +193,7 @@ export default function ProfileMenu() {
 
         <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
 
-        {/* Organization switcher: navigation mode so creation definitely works */}
-        {mounted && (
-          <div className="px-3 py-2">
-            <OrganizationSwitcher
-              hidePersonal={false}
-              createOrganizationMode="navigation"
-              createOrganizationUrl="/settings/organization/new"
-              organizationProfileMode="navigation"
-              organizationProfileUrl="/settings/organization"
-              afterSelectOrganizationUrl="/dashboard/import"
-              afterCreateOrganizationUrl="/dashboard/import"
-              appearance={{
-                elements: {
-                  rootBox: "w-full",
-                  organizationSwitcherTrigger:
-                    "w-full h-9 justify-between rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900",
-                },
-              }}
-            />
-          </div>
-        )}
-
-        <Item href="/settings/organization/new">Organization</Item>
+        <Item href="/settings/organization">Organization</Item>
         <Item href="/settings/developer/api-keys">
           API keys &amp; developer tools
         </Item>
@@ -238,6 +209,7 @@ export default function ProfileMenu() {
             </div>
           </div>
 
+          {/* ⬇️ New pill from the snippet, wired to our isDark / toggleTheme */}
           {mounted && (
             <button
               type="button"
