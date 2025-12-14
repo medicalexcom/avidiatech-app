@@ -17,12 +17,10 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // Use NEXT_PUBLIC_* env vars (these are safe to expose to client)
-  const frontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
-    <ClerkProvider frontendApi={frontendApi} publishableKey={publishableKey}>
+    <ClerkProvider publishableKey={publishableKey}>
       <html lang="en" suppressHydrationWarning>
         {/* Light by default; dark mode comes from `html.dark` via next-themes */}
         <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
