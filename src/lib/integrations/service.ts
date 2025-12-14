@@ -1,19 +1,22 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase-types"; // optional if you have types
 import { encryptSecrets, decryptSecrets } from "./encryption";
 
 /**
  * Very small service layer for integrations.
  * - Uses SUPABASE_SERVICE_ROLE_KEY (server-only) to read/write integrations table.
  * - TODO: add Clerk session verification before any DB action.
+ *
+ * Note: removed a project-specific type import to avoid requiring a supabase-types file.
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  // Keep it lazy; throw only when used.
+  // Throw early if used without envs
+  // (keep lazy so purely static analysis doesn't fail)
+  // throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set");
 }
 
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
