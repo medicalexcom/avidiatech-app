@@ -5,10 +5,10 @@ import { OrganizationSwitcher, useUser } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 
 /**
- * A lightweight choose-organization page that:
- * - redirects signed-out users to /sign-in with redirect param
- * - shows an OrganizationSwitcher for signed-in users (navigation mode)
- * This avoids relying on Clerk embedding a special flow at /sign-in/tasks/choose-organization
+ * Client-side choose-organization page.
+ * - Must be a client component because it uses client hooks (useSearchParams, useUser, useRouter).
+ * - Redirects signed-out users to /sign-in (with redirect param).
+ * - Shows OrganizationSwitcher for signed-in users (navigation mode).
  */
 
 export default function ChooseOrganizationPage() {
@@ -16,18 +16,21 @@ export default function ChooseOrganizationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Respect Clerk query params commonly used in redirects
-  const afterSignIn = searchParams.get("after_sign_in_url") ?? searchParams.get("after_sign_up_url") ?? searchParams.get("redirect_url") ?? "/dashboard";
+  const afterSignIn =
+    searchParams.get("after_sign_in_url") ??
+    searchParams.get("after_sign_up_url") ??
+    searchParams.get("redirect_url") ??
+    "/dashboard";
 
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) {
-      // Not signed in => go to canonical sign-in (Clerk will return here after auth)
+      // preserve the afterSignIn so Clerk can return user here or to dashboard
       router.replace(`/sign-in?redirect=${encodeURIComponent(afterSignIn)}`);
     }
   }, [isLoaded, isSignedIn, router, afterSignIn]);
 
-  // While loading auth state or redirecting, show nothing (or a spinner)
+  // While auth state resolving or redirecting, show nothing (or a spinner)
   if (!isLoaded || !isSignedIn) return null;
 
   return (
