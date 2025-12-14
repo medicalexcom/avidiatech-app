@@ -1,59 +1,55 @@
-import React from "react";
-import OrganizationPanel from "@/components/settings/OrganizationPanel";
-import { getUserRole } from "@/lib/auth/getUserRole";
-import BackToDashboard from "@/components/BackToDashboard";
-import { auth } from "@clerk/nextjs/server";
+"use client";
 
-export default async function OrganizationPage() {
-  const role = getUserRole();
-  const { orgId } = await auth();
+import React, { useEffect } from "react";
+import { OrganizationProfile, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
-  if (!orgId) {
-    return (
-      <main className="p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-4">
-            <BackToDashboard />
-            <h1 className="text-2xl font-semibold mt-2">Organization</h1>
-          </div>
-          <p className="text-sm text-slate-500 mt-2">
-            No organization is selected. Use the organization switcher in the profile menu to create or select one.
-          </p>
-        </div>
-      </main>
-    );
-  }
+/**
+ * /settings/organization
+ *
+ * Single canonical organization management page: shows Clerk's OrganizationProfile
+ * for signed-in users. If Clerk Orgs are disabled, it shows an explanatory message
+ * (no inline CreateOrganization widget to avoid duplication).
+ */
 
-  if (!["owner", "admin"].includes(role)) {
-    return (
-      <main className="p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-4">
-            <BackToDashboard />
-            <h1 className="text-2xl font-semibold mt-2">Organization</h1>
-          </div>
-          <p className="text-sm text-slate-500 mt-2">
-            You do not have permission to manage the organization.
-          </p>
-        </div>
-      </main>
-    );
-  }
+export default function OrganizationSettingsPage() {
+  const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
+  const redirect = "/settings/organization";
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn) {
+      router.replace(`/sign-in?redirect=${encodeURIComponent(redirect)}`);
+    }
+  }, [isLoaded, isSignedIn, router, redirect]);
+
+  if (!isLoaded || !isSignedIn) return null;
 
   return (
     <main className="p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <BackToDashboard />
-            <h1 className="text-2xl font-semibold mt-2">Organization</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Manage organization details and members
-            </p>
-          </div>
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-4">
+          <a href="/dashboard" className="text-sm text-slate-600 inline-flex items-center gap-2">← Back to dashboard</a>
+          <h1 className="text-2xl font-semibold mt-2">Organization settings</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage your organization, members, and permissions.</p>
         </div>
 
-        <OrganizationPanel />
+        <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 shadow-sm">
+          <OrganizationProfile
+            organizationProfileMode="navigation"
+            organizationProfileUrl="/settings/organization"
+            appearance={{
+              elements: {
+                rootBox: "w-full",
+              },
+            }}
+          />
+
+          <div className="mt-4 text-sm text-slate-500">
+            Note: if Clerk Organizations are not enabled for this instance, organization management won't be available here. Contact support to enable Organizations for your account.
+          </div>
+        </div>
       </div>
     </main>
   );
