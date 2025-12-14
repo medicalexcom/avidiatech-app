@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import Providers from "./providers";
 import { ClerkProvider } from "@clerk/nextjs";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import ClerkDebug from "@/components/ClerkDebug";
 
 export const metadata = {
   title: "AvidiaTech | Product Data Automation",
@@ -26,8 +25,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
           <ErrorBoundary>
             <Providers>{children}</Providers>
-            {/* Temporary diagnostics — remove after debugging */}
-            <ClerkDebug />
           </ErrorBoundary>
         </body>
       </html>
