@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runImportForIngestion } from "@/lib/import/runImportForIngestion";
+import { runImportForIngestion } from "@/lib/imports/runImportForIngestion";
 
 export async function POST(req: Request) {
   const secret = req.headers.get("x-pipeline-secret") || "";
