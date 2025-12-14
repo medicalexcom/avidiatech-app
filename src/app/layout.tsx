@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Providers from "./providers";
 import { ClerkProvider } from "@clerk/nextjs";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import ClerkDebug from "@/components/ClerkDebug";
 
 export const metadata = {
   title: "AvidiaTech | Product Data Automation",
@@ -16,13 +17,19 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // Use NEXT_PUBLIC_* env vars (these are safe to expose to client)
+  const frontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API;
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
   return (
-    <ClerkProvider>
+    <ClerkProvider frontendApi={frontendApi} publishableKey={publishableKey}>
       <html lang="en" suppressHydrationWarning>
         {/* Light by default; dark mode comes from `html.dark` via next-themes */}
         <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
           <ErrorBoundary>
             <Providers>{children}</Providers>
+            {/* Temporary diagnostics — remove after debugging */}
+            <ClerkDebug />
           </ErrorBoundary>
         </body>
       </html>
