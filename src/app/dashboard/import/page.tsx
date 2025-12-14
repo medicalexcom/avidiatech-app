@@ -2,24 +2,17 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 
 /**
  * AvidiaImport workspace (client)
  *
- * Now that Import is a real pipeline module, this page is a real operations workspace:
+ * Now includes an inline Import Uploader: preview CSV/XLSX, upload to Supabase Storage,
+ * create import job via POST /api/imports, and populate ingestionId to run pipeline.
  *
- * - Connect BigCommerce securely (store hash + access token) via server route.
- *   Tokens are never persisted client-side after save.
- *
- * - Run pipeline import for an ingestionId:
- *   - Recommended: extract → seo → audit → import
- *   - Or import-only after an ingestion has already passed audit
- *
- * - Live pipeline telemetry (module_runs) + durable artifact viewer.
- * - Safe-gated upsert:
- *   - If SKU exists and allowOverwriteExisting=false → action=needs_review (no updates performed)
- *   - If allowOverwriteExisting=true → update allowed
- *   - If audit fails, runner skips import (soft gate); this page will show it in module status/output.
+ * Notes:
+ * - Uses dynamic imports for papaparse/xlsx in the preview flow to avoid bundling server-only libs.
+ * - Requires a Supabase bucket named "imports" and NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY env vars.
  */
 
 type AnyObj = Record<string, any>;
@@ -94,6 +87,11 @@ function downloadJson(filename: string, data: any) {
   URL.revokeObjectURL(url);
 }
 
+/* --- Supabase client for browser uploads (public anon key) --- */
+const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPA_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supa = SUPA_URL && SUPA_ANON ? createClient(SUPA_URL, SUPA_ANON) : null;
+
 export default function ImportPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -124,6 +122,14 @@ export default function ImportPage() {
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /* --- Uploader state --- */
+  const [file, setFile] = useState<File | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [previewRows, setPreviewRows] = useState<any[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   async function refreshConnections() {
     const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce");
@@ -274,6 +280,130 @@ export default function ImportPage() {
     }
   }
 
+  // Client-side preview reader using dynamic imports to avoid static bundling
+  async function readPreview(f: File) {
+    setPreviewError(null);
+    setLoadingPreview(true);
+    setHeaders([]);
+    setPreviewRows([]);
+
+    try {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (ext === "csv" || ext === "txt") {
+        const PapaMod = await import("papaparse");
+        const Papa = (PapaMod && (PapaMod.default ?? PapaMod)) as any;
+
+        await new Promise<void>((resolve, reject) => {
+          Papa.parse(f, {
+            header: true,
+            preview: 50,
+            skipEmptyLines: true,
+            complete: (res: any) => {
+              setHeaders(res.meta?.fields ?? []);
+              setPreviewRows(res.data ?? []);
+              resolve();
+            },
+            error: (err: any) => reject(err),
+          });
+        });
+      } else {
+        const XLSX = (await import("xlsx")) as any;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const ab = e.target?.result as ArrayBuffer;
+            const wb = XLSX.read(ab, { type: "array" });
+            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }) as any[];
+            setHeaders(rows.length ? Object.keys(rows[0]) : []);
+            setPreviewRows(rows.slice(0, 50));
+          } catch (err: any) {
+            setPreviewError(err?.message ?? String(err));
+          } finally {
+            setLoadingPreview(false);
+          }
+        };
+        reader.onerror = () => {
+          setPreviewError("Failed to read file for preview");
+          setLoadingPreview(false);
+        };
+        reader.readAsArrayBuffer(f);
+        return;
+      }
+    } catch (err: any) {
+      setPreviewError(err?.message ?? String(err));
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
+
+  // Upload file to Supabase Storage and create import job via POST /api/imports
+  async function handleUpload() {
+    setPreviewError(null);
+    setError(null);
+
+    if (!file) {
+      setPreviewError("No file selected");
+      return;
+    }
+    if (!supa) {
+      setPreviewError("Supabase client not configured (missing env vars)");
+      return;
+    }
+
+    // Client-side pre-check limits
+    if (headers.length > 50) {
+      setPreviewError("Too many columns (max 50). Please reduce columns.");
+      return;
+    }
+    // we only preview up to 50 rows; server enforces 5000 rows. A full row-count check would require server parsing.
+
+    setUploading(true);
+    try {
+      const storagePath = `${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supa.storage.from("imports").upload(storagePath, file, { upsert: false });
+      if (uploadError) {
+        setPreviewError(`Upload failed: ${uploadError.message}`);
+        return;
+      }
+
+      // Create import job on the server
+      const res = await fetch("/api/imports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          file_path: `imports/${storagePath}`,
+          file_name: file.name,
+          file_format: file.name.split(".").pop()?.toLowerCase(),
+        }),
+      });
+
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        setPreviewError(json?.error ?? `Create import job failed: ${res.status}`);
+        return;
+      }
+
+      // The API returns jobId (or ingestionId depending on your server). Populate ingestionIdInput so you can run the pipeline.
+      const jobId = json.jobId ?? json.id ?? null;
+      if (jobId) {
+        setIngestionIdInput(jobId);
+        setStatusMessage(`Import job created: ${jobId}. You can now run the pipeline.`);
+        // optionally fetch the ingestion to populate the inspector
+        try {
+          await fetchIngestion(jobId);
+        } catch {
+          // ignore fetch failure here
+        }
+      } else {
+        setStatusMessage("Import created (no id returned).");
+      }
+    } catch (err: any) {
+      setPreviewError(String(err?.message || err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   // Initial loads
   useEffect(() => {
     refreshConnections().catch(() => null);
@@ -354,7 +484,7 @@ export default function ImportPage() {
         <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/12" />
         <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(t[...]
         </div>
       </div>
 
@@ -362,7 +492,7 @@ export default function ImportPage() {
         {/* Top bar */}
         <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-sky-500/40 dark:bg-slate-950/70 dark:text-sky-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm da[...]
               <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-sky-300 dark:bg-slate-900 dark:border-sky-400/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
               </span>
@@ -387,7 +517,7 @@ export default function ImportPage() {
           </div>
 
           {statusMessage && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-sky-200 px-3 py-1.5 text-[11px] text-sky-700 shadow-sm dark:bg-slate-950/70 dark:border-sky-500/40 dark:text-sky-100">
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-sky-200 px-3 py-1.5 text-[11px] text-sky-700 shadow-sm dark:bg-slate-950/70 dark:border-sky-500/40 da[...]
               <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
               {statusMessage}
             </div>
@@ -408,7 +538,7 @@ export default function ImportPage() {
                     Store hash is saved as config. Token is encrypted server-side and never shown again.
                   </p>
                 </div>
-                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
+                <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-s[...]
                   v3 Catalog
                 </span>
               </div>
@@ -507,7 +637,7 @@ export default function ImportPage() {
             </div>
           </div>
 
-          {/* Run import */}
+          {/* Run import + Upload */}
           <div className="lg:col-span-7 rounded-2xl border border-slate-200 bg-white/95 shadow-sm dark:bg-slate-950/60 dark:border-slate-800">
             <div className="p-4 lg:p-5">
               <div className="flex items-start justify-between gap-3">
@@ -531,6 +661,64 @@ export default function ImportPage() {
                 </div>
               )}
 
+              {/* Upload & preview UI */}
+              <div className="mt-4 border border-slate-100 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">Upload import file</div>
+                    <div className="text-xs text-slate-500 mt-1">CSV or Excel (.xlsx, .xls). Max rows: 5000, Max columns: 50.</div>
+                  </div>
+                  <div className="text-xs text-slate-500">Bucket: imports</div>
+                </div>
+
+                <div className="mt-3">
+                  <input
+                    type="file"
+                    accept=".csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setFile(f);
+                      if (f) readPreview(f);
+                    }}
+                  />
+                </div>
+
+                {loadingPreview && <div className="mt-3 text-sm">Loading preview…</div>}
+                {previewError && <div className="mt-3 text-sm text-rose-700">{previewError}</div>}
+
+                {headers.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs text-slate-500">Preview headers</div>
+                    <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(headers)}</pre>
+
+                    <div className="mt-3 text-xs text-slate-500">Preview rows</div>
+                    <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(previewRows.slice(0, 5), null, 2)}</pre>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={handleUpload}
+                        disabled={uploading}
+                        className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60"
+                      >
+                        {uploading ? "Uploading…" : "Upload & Create Import"}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setFile(null);
+                          setHeaders([]);
+                          setPreviewRows([]);
+                        }}
+                        className="inline-flex items-center rounded px-3 py-2 bg-white border text-sm"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Run form */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-4">
                 <div className="md:col-span-7 space-y-2">
                   <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
@@ -540,7 +728,7 @@ export default function ImportPage() {
                     value={ingestionIdInput}
                     onChange={(e) => setIngestionIdInput(e.target.value)}
                     placeholder="b0324634-1593-4fad-a9de-70215a2deb38"
-                    className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                    className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 text-sm da[...]
                   />
 
                   <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-600 dark:text-slate-300">
@@ -701,7 +889,7 @@ export default function ImportPage() {
 
           {/* Results / artifact viewer */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark;border-slate-800">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Import result</h3>
                 <div className="flex gap-2">
