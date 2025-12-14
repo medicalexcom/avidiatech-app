@@ -1,16 +1,20 @@
 "use client";
 
-import { SignIn } from "@clerk/nextjs";
-import { useSearchParams } from "next/navigation";
+import { SignIn, useUser } from "@clerk/nextjs";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function SignInPage() {
   const params = useSearchParams();
   const redirect = params?.get("redirect") ?? params?.get("redirect_url") ?? "/dashboard";
 
+  const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
+
   const [clerkFailed, setClerkFailed] = useState(false);
   const [clerkErrorText, setClerkErrorText] = useState<string | null>(null);
 
+  // Helper to detect Clerk UI elements on the page (same as before)
   function hasClerkUI(): boolean {
     if (typeof document === "undefined") return false;
     const selectors = [
@@ -26,10 +30,39 @@ export default function SignInPage() {
     return selectors.some((sel) => !!document.querySelector(sel));
   }
 
+  // If signed in, redirect immediately
   useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn) {
+      router.replace(redirect);
+    }
+  }, [isLoaded, isSignedIn, router, redirect]);
+
+  // Fallback detection: wait longer and don't show fallback if Clerk is initializing or a session exists.
+  useEffect(() => {
+    const timeoutMs = 8000; // longer grace period for Clerk to initialize
     const t = setTimeout(async () => {
+      // If Clerk UI is already present, bail out (no failure)
       if (hasClerkUI()) return;
+
+      // If Clerk's runtime has a session present, bail out (do not show fallback)
+      // (window.Clerk may not exist during early initialization)
+      try {
+        // @ts-ignore - runtime check
+        const runtimeClerk = (window as any).Clerk;
+        const sess = runtimeClerk?.session;
+        // If a session exists and is not explicitly expired, we consider Clerk present
+        if (sess && typeof sess.status === "string" && sess.status !== "expired") {
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // If we've reached here, Clerk UI didn't appear and no client session present -> treat as failed
       setClerkFailed(true);
+
+      // Attempt to fetch Clerk client for diagnostics (same as before)
       try {
         const frontendApi = process.env.NEXT_PUBLIC_CLERK_FRONTEND_API || "";
         const url = `https://${frontendApi}/v1/client`;
@@ -39,7 +72,7 @@ export default function SignInPage() {
       } catch (e: any) {
         setClerkErrorText(String(e));
       }
-    }, 4000);
+    }, timeoutMs);
 
     return () => clearTimeout(t);
   }, []);
