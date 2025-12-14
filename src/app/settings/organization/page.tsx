@@ -30,20 +30,25 @@ export default function OrganizationSettingsPage() {
     <main className="p-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-4">
-          <a href="/dashboard" className="text-sm text-slate-600 inline-flex items-center gap-2">← Back to dashboard</a>
+          <a href="/dashboard" className="text-sm text-slate-600 inline-flex items-center gap-2">
+            ← Back to dashboard
+          </a>
           <h1 className="text-2xl font-semibold mt-2">Organization settings</h1>
           <p className="text-sm text-slate-500 mt-1">Manage your organization, members, and permissions.</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 shadow-sm">
+          {/* Render Clerk's OrganizationProfile. We avoid passing Clerk-specific props
+              that may not exist in the installed @clerk/nextjs types; appearance is passed
+              as `any` to keep TypeScript happy while still applying styling. */}
           <OrganizationProfile
-            organizationProfileMode="navigation"
-            organizationProfileUrl="/settings/organization"
-            appearance={{
-              elements: {
-                rootBox: "w-full",
+            {...({
+              appearance: {
+                elements: {
+                  rootBox: "w-full",
+                },
               },
-            }}
+            } as any)}
           />
 
           <div className="mt-4 text-sm text-slate-500">
