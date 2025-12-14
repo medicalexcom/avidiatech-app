@@ -8,8 +8,8 @@ import { useRouter } from "next/navigation";
  * /settings/organization
  *
  * Single canonical organization management page: shows Clerk's OrganizationProfile
- * for signed-in users. If Clerk Orgs are disabled, it shows an explanatory message
- * (no inline CreateOrganization widget to avoid duplication).
+ * for signed-in users. Removed the duplicate app-level header/wrapper so Clerk's
+ * own UI is the primary frame.
  */
 
 export default function OrganizationSettingsPage() {
@@ -29,18 +29,15 @@ export default function OrganizationSettingsPage() {
   return (
     <main className="p-6">
       <div className="max-w-4xl mx-auto">
+        {/* Keep only the back link (no page-level H1 or description — Clerk renders those). */}
         <div className="mb-4">
           <a href="/dashboard" className="text-sm text-slate-600 inline-flex items-center gap-2">
             ← Back to dashboard
           </a>
-          <h1 className="text-2xl font-semibold mt-2">Organization settings</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage your organization, members, and permissions.</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border rounded-lg p-6 shadow-sm">
-          {/* Render Clerk's OrganizationProfile. We avoid passing Clerk-specific props
-              that may not exist in the installed @clerk/nextjs types; appearance is passed
-              as `any` to keep TypeScript happy while still applying styling. */}
+        {/* Render Clerk's OrganizationProfile as the single canonical frame */}
+        <div>
           <OrganizationProfile
             {...({
               appearance: {
@@ -50,10 +47,6 @@ export default function OrganizationSettingsPage() {
               },
             } as any)}
           />
-
-          <div className="mt-4 text-sm text-slate-500">
-            Note: if Clerk Organizations are not enabled for this instance, organization management won't be available here. Contact support to enable Organizations for your account.
-          </div>
         </div>
       </div>
     </main>
