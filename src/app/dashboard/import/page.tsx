@@ -32,7 +32,13 @@ type PipelineModule = {
 };
 
 type PipelineSnapshot = {
-  run?: { id: string; status: PipelineRunStatus; created_at?: string; started_at?: string; finished_at?: string } & AnyObj;
+  run?: {
+    id: string;
+    status: PipelineRunStatus;
+    created_at?: string;
+    started_at?: string;
+    finished_at?: string;
+  } & AnyObj;
   modules?: PipelineModule[];
 };
 
@@ -168,7 +174,8 @@ export default function ImportPage() {
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
+      if (!res.ok)
+        throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
       const row = json?.data ?? json;
       setJob(row);
       return row;
@@ -180,7 +187,8 @@ export default function ImportPage() {
   async function fetchPipelineSnapshot(runId: string) {
     const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
     return json as PipelineSnapshot;
   }
 
@@ -200,9 +208,14 @@ export default function ImportPage() {
     const importMod = (modules ?? []).find((m) => m.module_name === "import");
     if (!importMod) return null;
 
-    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`);
+    const res = await fetch(
+      `/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`
+    );
     const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Import artifact fetch failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error(
+        json?.error?.message || json?.error || `Import artifact fetch failed: ${res.status}`
+      );
 
     setImportArtifact(json);
     return json;
@@ -226,8 +239,7 @@ export default function ImportPage() {
       setStatusMessage("Loading ingestion");
       await fetchIngestion(id);
 
-      const steps =
-        importMode === "import_only" ? ["import"] : ["extract", "seo", "audit", "import"];
+      const steps = importMode === "import_only" ? ["import"] : ["extract", "seo", "audit", "import"];
 
       setStatusMessage("Starting pipeline run");
       const res = await fetch("/api/v1/pipeline/run", {
@@ -247,14 +259,17 @@ export default function ImportPage() {
       });
 
       const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
+      if (!res.ok)
+        throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
 
       const runId = String(json?.pipelineRunId ?? "");
       if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
 
       setPipelineRunId(runId);
       router.push(
-        `/dashboard/import?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`
+        `/dashboard/import?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(
+          runId
+        )}`
       );
 
       setStatusMessage("Pipeline running");
@@ -354,8 +369,8 @@ export default function ImportPage() {
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* Background gradients + subtle grid */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl dark:bg-sky-500/15" />
-        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/12" />
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-emerald-300/22 blur-3xl dark:bg-emerald-500/12" />
+        <div className="absolute -bottom-40 right-[-10rem] h-80 w-80 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/10" />
         <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] dark:bg-[size:46px_46px]" />
         </div>
@@ -365,15 +380,17 @@ export default function ImportPage() {
         {/* Top bar */}
         <section className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:shadow-none">
-              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-sky-300 dark:bg-slate-900 dark:border-sky-400/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:shadow-none dark:bg-slate-950/40 dark:border-emerald-500/35">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-emerald-300 dark:bg-slate-900 dark:border-emerald-400/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               </span>
               AvidiaImport
               {(jobData?.id || ingestionIdInput) && (
                 <>
                   <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">{(jobData?.id || ingestionIdInput).slice(0, 8)}…</span>
+                  <span className="font-mono text-[10px]">
+                    {(jobData?.id || ingestionIdInput).slice(0, 8)}…
+                  </span>
                 </>
               )}
               {pipelineRunId && (
@@ -388,8 +405,8 @@ export default function ImportPage() {
           </div>
 
           {statusMessage && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-sky-200 px-3 py-1.5 text-[11px] text-sky-700 shadow-sm dark:bg-slate-950/70 dark:border-sky-500/40">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-emerald-200 px-3 py-1.5 text-[11px] text-emerald-700 shadow-sm dark:bg-slate-950/70 dark:border-emerald-500/35 dark:text-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {statusMessage}
             </div>
           )}
@@ -401,7 +418,9 @@ export default function ImportPage() {
             <div className="p-4 lg:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">BigCommerce connection</h1>
+                  <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+                    BigCommerce connection
+                  </h1>
                   <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                     Store hash is saved as config. Token is encrypted server-side and never shown again.
                   </p>
@@ -469,7 +488,7 @@ export default function ImportPage() {
                   <button
                     type="button"
                     onClick={() => refreshConnections()}
-                    className="text-[11px] text-sky-700 hover:text-sky-600 underline underline-offset-4 dark:text-sky-300 dark:hover:text-sky-200"
+                    className="text-[11px] text-emerald-700 hover:text-emerald-600 underline underline-offset-4 dark:text-emerald-300 dark:hover:text-emerald-200"
                   >
                     Refresh connections
                   </button>
@@ -477,9 +496,14 @@ export default function ImportPage() {
 
                 <div className="mt-2 space-y-2 text-xs">
                   {(connections ?? []).slice(0, 3).map((c) => (
-                    <div key={c.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40">
+                    <div
+                      key={c.id}
+                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                    >
                       <div className="flex items-center justify-between">
-                        <div className="font-semibold text-slate-900 dark:text-slate-50">{c.name || "BigCommerce"}</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-50">
+                          {c.name || "BigCommerce"}
+                        </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400">{c.status}</div>
                       </div>
                       <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">
@@ -491,7 +515,9 @@ export default function ImportPage() {
                     </div>
                   ))}
                   {(!connections || connections.length === 0) && (
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">No connections saved yet for this tenant.</div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                      No connections saved yet for this tenant.
+                    </div>
                   )}
                 </div>
               </div>
@@ -509,7 +535,11 @@ export default function ImportPage() {
                     If audit fails, import is skipped automatically.
                   </p>
                 </div>
-                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(runStatus ?? "idle")}`}>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(
+                    runStatus ?? "idle"
+                  )}`}
+                >
                   {runStatus ?? "idle"}
                 </span>
               </div>
@@ -525,7 +555,9 @@ export default function ImportPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium">Upload import file</div>
-                    <div className="text-xs text-slate-500 mt-1">CSV or Excel (.xlsx, .xls). Max rows: 5000, Max columns: 50.</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      CSV or Excel (.xlsx, .xls). Max rows: 5000, Max columns: 50.
+                    </div>
                   </div>
                   <div className="text-xs text-slate-500">Bucket: imports</div>
                 </div>
@@ -554,7 +586,7 @@ export default function ImportPage() {
                     value={ingestionIdInput}
                     onChange={(e) => setIngestionIdInput(e.target.value)}
                     placeholder="b0324634-1593-4fad-a9de-70215a2deb38"
-                    className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/30 text-sm"
+                    className="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/30 text-sm"
                   />
 
                   <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-600 dark:text-slate-300">
@@ -571,7 +603,11 @@ export default function ImportPage() {
                     </div>
 
                     <label className="inline-flex items-center gap-2">
-                      <input type="checkbox" checked={allowOverwriteExisting} onChange={(e) => setAllowOverwriteExisting(e.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={allowOverwriteExisting}
+                        onChange={(e) => setAllowOverwriteExisting(e.target.checked)}
+                      />
                       <span className="text-[11px]">Allow overwrite existing SKU (unsafe)</span>
                     </label>
                   </div>
@@ -582,7 +618,7 @@ export default function ImportPage() {
                     type="button"
                     onClick={runImport}
                     disabled={running}
-                    className="w-full px-4 py-3 rounded-xl bg-sky-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-sky-400 disabled:opacity-60"
+                    className="w-full px-4 py-3 rounded-xl bg-emerald-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-emerald-400 disabled:opacity-60"
                   >
                     {running ? "Running…" : "Run Import"}
                   </button>
@@ -607,13 +643,19 @@ export default function ImportPage() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] dark:border-slate-800 dark:bg-slate-950/40">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500 dark:text-slate-400">Audit</span>
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(auditStatus ?? "unknown")}`}>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(
+                          auditStatus ?? "unknown"
+                        )}`}
+                      >
                         {auditStatus ?? "unknown"}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
                       <span className="text-slate-500 dark:text-slate-400">Score</span>
-                      <span className="font-mono text-slate-700 dark:text-slate-200">{typeof auditScore === "number" ? `${auditScore}/100` : "—"}</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-200">
+                        {typeof auditScore === "number" ? `${auditScore}/100` : "—"}
+                      </span>
                     </div>
                   </div>
 
@@ -623,7 +665,9 @@ export default function ImportPage() {
                       <span className="font-semibold text-slate-900 dark:text-slate-50">{importAction ?? "—"}</span>
                     </div>
                     {importNeedsReview && (
-                      <div className="mt-1 text-amber-700 dark:text-amber-200">Needs review: SKU exists and overwrite is disabled.</div>
+                      <div className="mt-1 text-amber-700 dark:text-amber-200">
+                        Needs review: SKU exists and overwrite is disabled.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -637,7 +681,10 @@ export default function ImportPage() {
                     <span>{progress}%</span>
                   </div>
                   <div className="mt-1 h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-sky-400 via-cyan-300 to-emerald-300" style={{ width: `${progress}%` }} />
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-300"
+                      style={{ width: `${progress}%` }}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -651,7 +698,11 @@ export default function ImportPage() {
           <div className="lg:col-span-5 rounded-2xl bg-white border border-slate-200 shadow-sm p-4 dark:bg-slate-900/70 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Live pipeline</h3>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(runStatus ?? "idle")}`}>
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] ${statusChipClass(
+                  runStatus ?? "idle"
+                )}`}
+              >
                 {runStatus ?? "idle"}
               </span>
             </div>
@@ -661,20 +712,43 @@ export default function ImportPage() {
                 .slice()
                 .sort((a, b) => a.module_index - b.module_index)
                 .map((m) => (
-                  <div key={`${m.module_index}-${m.module_name}`} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40">
+                  <div
+                    key={`${m.module_index}-${m.module_name}`}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40"
+                  >
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">{m.module_index}. {moduleLabel(m.module_name)}</div>
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span></div>
-                      {m.error ? <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-200 truncate">error: {typeof m.error === "string" ? m.error : JSON.stringify(m.error)}</div> : null}
+                      <div className="font-semibold text-slate-900 dark:text-slate-50 truncate">
+                        {m.module_index}. {moduleLabel(m.module_name)}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span>
+                      </div>
+                      {m.error ? (
+                        <div className="mt-1 text-[11px] text-rose-700 dark:text-rose-200 truncate">
+                          error: {typeof m.error === "string" ? m.error : JSON.stringify(m.error)}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(m.status)}`}>{m.status}</span>
-                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusChipClass(
+                          m.status
+                        )}`}
+                      >
+                        {m.status}
+                      </span>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {fmtMs(moduleRuntime.get(m.module_name) ?? null)}
+                      </div>
                     </div>
                   </div>
                 ))}
-              {!(pipelineSnapshot?.modules ?? []).length && <div className="text-[11px] text-slate-500 dark:text-slate-400">No pipeline run selected yet. Run import to see module telemetry.</div>}
+              {!(pipelineSnapshot?.modules ?? []).length && (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  No pipeline run selected yet. Run import to see module telemetry.
+                </div>
+              )}
             </div>
           </div>
 
@@ -703,17 +777,25 @@ export default function ImportPage() {
 
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Status</div>
-                  <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{importDiag?.status ?? "—"}</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Status
+                  </div>
+                  <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">
+                    {importDiag?.status ?? "—"}
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Action</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Action
+                  </div>
                   <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{importAction ?? "—"}</div>
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Product ID</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Product ID
+                  </div>
                   <div className="mt-1 font-mono text-slate-900 dark:text-slate-50">
                     {importResult?.product_id ?? importArtifact?.output?.import?.result?.product_id ?? "—"}
                   </div>
@@ -722,12 +804,15 @@ export default function ImportPage() {
 
               {importNeedsReview && (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
-                  SKU already exists in BigCommerce. Import is in <strong>needs_review</strong> mode and did not update anything. If you intend to overwrite, check <strong>Allow overwrite existing SKU</strong> and re-run.
+                  SKU already exists in BigCommerce. Import is in <strong>needs_review</strong> mode and did not update
+                  anything. If you intend to overwrite, check <strong>Allow overwrite existing SKU</strong> and re-run.
                 </div>
               )}
 
               <div className="mt-3">
-                <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Raw artifact (durable output)</div>
+                <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  Raw artifact (durable output)
+                </div>
                 <pre className="mt-2 max-h-[380px] overflow-auto rounded-xl border border-slate-200 bg-slate-900 p-3 text-[11px] text-slate-100 dark:border-slate-800">
                   {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see output_ref JSON."}
                 </pre>
