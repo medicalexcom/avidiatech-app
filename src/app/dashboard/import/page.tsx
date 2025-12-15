@@ -95,7 +95,7 @@ const Spinner = () => (
 );
 
 function SkeletonRow() {
-  return <div className="h-12 rounded bg-slate-100 animate-pulse" />;
+  return <div className="h-12 rounded-xl bg-slate-900/40 border border-slate-800/60 animate-pulse" />;
 }
 
 /* Page component */
@@ -139,7 +139,10 @@ export default function ImportPage() {
   const [toDeleteIngestionId, setToDeleteIngestionId] = useState<string | null>(null);
 
   // derived
-  const selectedConnectorObj = useMemo(() => connectors.find((c) => c.id === selectedConnector) ?? null, [connectors, selectedConnector]);
+  const selectedConnectorObj = useMemo(
+    () => connectors.find((c) => c.id === selectedConnector) ?? null,
+    [connectors, selectedConnector]
+  );
 
   // fetch org id (calls /api/v1/me)
   async function fetchOrg() {
@@ -391,18 +394,64 @@ export default function ImportPage() {
   const importAction = importDiag?.result?.action ?? importArtifact?.output?.import?.result?.action ?? null;
   const importNeedsReview = Boolean(importDiag?.result?.needs_review ?? importArtifact?.output?.import?.result?.needs_review);
 
+  // Premium-ish shared classes (kept inline; no new deps)
+  const shellBg =
+    "min-h-screen text-slate-100 bg-slate-950 " +
+    "bg-[radial-gradient(1200px_600px_at_20%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(900px_500px_at_85%_25%,rgba(34,197,94,0.14),transparent_55%),radial-gradient(900px_500px_at_55%_95%,rgba(244,63,94,0.10),transparent_60%)]";
+  const container =
+    "mx-auto max-w-7xl px-4 py-6 space-y-6";
+  const card =
+    "rounded-2xl border border-slate-800/60 bg-slate-900/35 backdrop-blur supports-[backdrop-filter]:bg-slate-900/30 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_20px_60px_rgba(0,0,0,0.35)]";
+  const cardPad = "p-4";
+  const subtle = "text-slate-300/80";
+  const label =
+    "text-[11px] font-semibold uppercase tracking-wide text-slate-400";
+  const input =
+    "w-full rounded-xl border border-slate-800/70 bg-slate-950/35 px-3 py-2 text-slate-100 placeholder-slate-500 outline-none " +
+    "focus:border-sky-500/50 focus:ring-2 focus:ring-sky-500/20";
+  const selectCls =
+    "rounded-xl border border-slate-800/70 bg-slate-950/35 px-2 py-2 text-sm text-slate-100 outline-none " +
+    "focus:border-sky-500/50 focus:ring-2 focus:ring-sky-500/20";
+  const btn =
+    "inline-flex items-center justify-center rounded-xl border border-slate-800/70 bg-slate-950/20 px-3 py-2 text-sm text-slate-100 " +
+    "hover:bg-slate-900/35 hover:border-slate-700/70 transition";
+  const btnSm =
+    "inline-flex items-center justify-center rounded-lg border border-slate-800/70 bg-slate-950/20 px-2 py-1 text-xs text-slate-100 " +
+    "hover:bg-slate-900/35 hover:border-slate-700/70 transition";
+  const btnPrimary =
+    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-white " +
+    "bg-gradient-to-r from-emerald-500 to-sky-500 hover:from-emerald-400 hover:to-sky-400 " +
+    "shadow-[0_10px_30px_rgba(16,185,129,0.15)] transition disabled:opacity-60 disabled:cursor-not-allowed";
+  const btnSky =
+    "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white " +
+    "bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 transition";
+  const pill =
+    "inline-flex items-center gap-2 rounded-full border border-slate-800/70 bg-slate-950/30 px-3 py-1 text-xs font-semibold text-slate-200";
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+    <main className={shellBg}>
+      <div className={container}>
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-medium">AvidiaImport</div>
-            <div className="text-lg font-semibold">Import & Connector Workspace</div>
+            <div className={pill}>
+              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-400 to-emerald-400 shadow-[0_0_0_3px_rgba(56,189,248,0.12)]" />
+              <span>AvidiaImport</span>
+            </div>
+
+            <div>
+              <div className="text-lg font-semibold text-slate-100">Import & Connector Workspace</div>
+              <div className="text-xs text-slate-400">
+                Upload files, sync stores, and run the pipeline with full telemetry.
+              </div>
+            </div>
           </div>
 
-          <div className="text-xs text-slate-600">
-            Status: <span className={`ml-2 px-2 py-0.5 rounded ${statusChipClass(runStatus ?? "idle")}`}>{runStatus ?? "idle"}</span>
+          <div className="text-xs text-slate-300/80">
+            Status:
+            <span className={`ml-2 inline-flex items-center gap-2 px-2 py-0.5 rounded border ${statusChipClass(runStatus ?? "idle")}`}>
+              <span className="font-semibold">{runStatus ?? "idle"}</span>
+            </span>
           </div>
         </div>
 
@@ -410,10 +459,10 @@ export default function ImportPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* LEFT: connectors */}
           <aside className="lg:col-span-4 space-y-4">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className={`${card} ${cardPad}`}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Connectors</h3>
-                <div className="text-xs text-slate-500">Manage store connections</div>
+                <h3 className="text-sm font-semibold text-slate-100">Connectors</h3>
+                <div className="text-xs text-slate-400">Manage store connections</div>
               </div>
 
               <div className="mt-3 space-y-3">
@@ -421,69 +470,95 @@ export default function ImportPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h4 className="text-sm font-semibold">Selected store</h4>
+            <div className={`${card} ${cardPad}`}>
+              <h4 className="text-sm font-semibold text-slate-100">Selected store</h4>
               {selectedConnectorObj ? (
                 <div className="mt-3">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-medium">{selectedConnectorObj.name ?? selectedConnectorObj.provider}</div>
-                      <div className="text-xs text-slate-500">Provider: {selectedConnectorObj.provider}</div>
-                      <div className="text-xs text-slate-400 mt-1">Last synced: {selectedConnectorObj.last_synced_at ? new Date(selectedConnectorObj.last_synced_at).toLocaleString() : "—"}</div>
+                      <div className="font-medium text-slate-100">{selectedConnectorObj.name ?? selectedConnectorObj.provider}</div>
+                      <div className="text-xs text-slate-400">Provider: {selectedConnectorObj.provider}</div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        Last synced: {selectedConnectorObj.last_synced_at ? new Date(selectedConnectorObj.last_synced_at).toLocaleString() : "—"}
+                      </div>
                     </div>
+
                     <div className="flex flex-col items-end gap-2">
-                      <div className={`px-2 py-0.5 rounded text-xs ${selectedConnectorObj.status === "ready" ? "bg-emerald-100 text-emerald-800" : selectedConnectorObj.status === "failed" ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-700"}`}>
+                      <div
+                        className={`px-2 py-0.5 rounded-full text-xs border ${
+                          selectedConnectorObj.status === "ready"
+                            ? "bg-emerald-500/15 text-emerald-200 border-emerald-500/20"
+                            : selectedConnectorObj.status === "failed"
+                            ? "bg-rose-500/15 text-rose-200 border-rose-500/20"
+                            : "bg-slate-500/10 text-slate-200 border-slate-500/15"
+                        }`}
+                      >
                         {selectedConnectorObj.status ?? "unknown"}
                       </div>
+
                       <div className="flex gap-2">
-                        <button onClick={() => testConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 border rounded">Test</button>
-                        <button onClick={() => syncConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 bg-sky-600 text-white rounded">Sync</button>
-                        <button onClick={() => setSelectedConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 border rounded">Details</button>
+                        <button onClick={() => testConnector(selectedConnectorObj.id)} className={btnSm}>Test</button>
+                        <button onClick={() => syncConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 rounded-lg text-white bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 transition">
+                          Sync
+                        </button>
+                        <button onClick={() => setSelectedConnector(selectedConnectorObj.id)} className={btnSm}>Details</button>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3 text-xs text-slate-600">
+                  <div className="mt-3 text-xs text-slate-300/80">
                     Connection:{" "}
                     {selectedConnectorObj.status === "ready" ? (
-                      <span className="text-emerald-700">Connected</span>
+                      <span className="text-emerald-300">Connected</span>
                     ) : selectedConnectorObj.status === "failed" ? (
-                      <span className="text-rose-700">Failed — {selectedConnectorObj.last_error ?? "see details"}</span>
+                      <span className="text-rose-300">Failed — {selectedConnectorObj.last_error ?? "see details"}</span>
                     ) : (
                       <span>Unknown</span>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="mt-3 text-xs text-slate-500">No store selected. Click a connector from the manager to select it.</div>
+                <div className="mt-3 text-xs text-slate-400">No store selected. Click a connector from the manager to select it.</div>
               )}
             </div>
 
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h4 className="text-sm font-semibold">Import guidance</h4>
-              <ul className="mt-2 text-xs text-slate-600 space-y-2">
-                <li><strong>Limits:</strong> server enforces max 5,000 rows and 50 columns.</li>
-                <li><strong>Deduplication:</strong> SKU is recommended for matching existing products.</li>
-                <li><strong>Preview:</strong> you can preview up to 50 rows before upload.</li>
-                <li><strong>Security:</strong> tokens are stored encrypted server-side. Client never sees secret keys.</li>
+            <div className={`${card} ${cardPad}`}>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-slate-100">Import guidance</h4>
+                <span className="text-xs text-slate-400">Quick rules</span>
+              </div>
+              <ul className="mt-2 text-xs text-slate-300/80 space-y-2">
+                <li>
+                  <strong className="text-slate-200">Limits:</strong> server enforces max 5,000 rows and 50 columns.
+                </li>
+                <li>
+                  <strong className="text-slate-200">Deduplication:</strong> SKU is recommended for matching existing products.
+                </li>
+                <li>
+                  <strong className="text-slate-200">Preview:</strong> you can preview up to 50 rows before upload.
+                </li>
+                <li>
+                  <strong className="text-slate-200">Security:</strong> tokens are stored encrypted server-side. Client never sees secret keys.
+                </li>
               </ul>
             </div>
           </aside>
 
           {/* RIGHT: uploader, run, telemetry */}
           <section className="lg:col-span-8 space-y-4">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between">
+            <div className={`${card} ${cardPad}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold">Upload or Sync</h3>
-                  <p className="text-xs text-slate-500">Upload CSV/XLSX or sync from a connected store to create an import job.</p>
+                  <h3 className="text-lg font-semibold text-slate-100">Upload or Sync</h3>
+                  <p className="text-xs text-slate-400">Upload CSV/XLSX or sync from a connected store to create an import job.</p>
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <button
                     onClick={() => {
                       const headers = ["sku", "title", "description", "price", "inventory", "weight", "brand"];
-                      const rows = [["SKU-001","Sample product","Desc","19.99","10","0.5","Brand"]];
-                      const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","))].join("\n");
+                      const rows = [["SKU-001", "Sample product", "Desc", "19.99", "10", "0.5", "Brand"]];
+                      const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n");
                       const blob = new Blob([csv], { type: "text/csv" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a");
@@ -493,11 +568,13 @@ export default function ImportPage() {
                       URL.revokeObjectURL(url);
                       toast?.info?.("Sample CSV downloaded");
                     }}
-                    className="text-xs px-2 py-1 border rounded"
+                    className={btn}
                   >
                     Download sample CSV
                   </button>
-                  <a href="/imports" className="text-xs px-2 py-1 border rounded">View import history</a>
+                  <a href="/imports" className={btn}>
+                    View import history
+                  </a>
                 </div>
               </div>
 
@@ -525,16 +602,21 @@ export default function ImportPage() {
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div className="md:col-span-2">
-                  <label className="text-xs font-medium uppercase text-slate-500">Ingestion ID / Job</label>
+                  <label className={label}>Ingestion ID / Job</label>
                   <div className="flex gap-2 mt-1">
-                    <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className="w-full rounded border px-3 py-2" />
+                    <input
+                      value={ingestionIdInput}
+                      onChange={(e) => setIngestionIdInput(e.target.value)}
+                      className={input}
+                      placeholder="e.g. 3f2a... job id"
+                    />
                     <button
                       onClick={() => {
                         if (!ingestionIdInput) return toast.error("No ingestion id to delete");
                         setToDeleteIngestionId(ingestionIdInput);
                         setConfirmDeleteOpen(true);
                       }}
-                      className="px-3 py-2 border rounded text-sm"
+                      className={btn}
                       aria-label="Delete ingestion job"
                     >
                       Delete
@@ -543,29 +625,55 @@ export default function ImportPage() {
                 </div>
 
                 <div className="flex items-end gap-2">
-                  <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className="rounded border px-2 py-2 text-sm w-full">
+                  <select
+                    value={selectedConnector}
+                    onChange={(e) => setSelectedConnector(e.target.value)}
+                    className={`${selectCls} w-full`}
+                  >
                     <option value="">Select connector (optional)</option>
-                    {connectors.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>)}
+                    {connectors.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name ?? c.provider}
+                      </option>
+                    ))}
                   </select>
-                  <button onClick={() => { if (selectedConnector) syncConnector(selectedConnector); else toast.error("Select a connector"); }} className="px-3 py-2 rounded bg-sky-600 text-white">Sync</button>
+                  <button
+                    onClick={() => {
+                      if (selectedConnector) syncConnector(selectedConnector);
+                      else toast.error("Select a connector");
+                    }}
+                    className={btnSky}
+                  >
+                    Sync
+                  </button>
                 </div>
               </div>
 
               <div className="mt-4 flex items-center gap-4 flex-wrap">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:gap-6">
                   <label className="inline-flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={allowOverwriteExisting} onChange={(e) => setAllowOverwriteExisting(e.target.checked)} />
-                    <span className="text-xs">Allow overwrite existing SKU</span>
+                    <input
+                      type="checkbox"
+                      checked={allowOverwriteExisting}
+                      onChange={(e) => setAllowOverwriteExisting(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-950/30"
+                    />
+                    <span className="text-xs text-slate-300/80">Allow overwrite existing SKU</span>
                   </label>
 
                   <label className="inline-flex items-center gap-2 text-sm mt-2 sm:mt-0">
-                    <input type="checkbox" checked={autoRunAfterUpload} onChange={(e) => setAutoRunAfterUpload(e.target.checked)} />
-                    <span className="text-xs">Auto-run pipeline after upload</span>
+                    <input
+                      type="checkbox"
+                      checked={autoRunAfterUpload}
+                      onChange={(e) => setAutoRunAfterUpload(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-950/30"
+                    />
+                    <span className="text-xs text-slate-300/80">Auto-run pipeline after upload</span>
                   </label>
                 </div>
 
                 <div className="ml-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <MappingPresetSelector
                       provider={selectedConnectorObj?.provider}
                       onSelect={(preset: any) => {
@@ -574,56 +682,82 @@ export default function ImportPage() {
                       }}
                     />
                     {mappingPreset && (
-                      <div className="inline-flex items-center gap-2 px-2 py-1 rounded border text-xs">
-                        <span>{mappingPreset?.name ?? mappingPreset?.id ?? String(mappingPreset)}</span>
-                        <button onClick={() => { setMappingPreset(null); toast?.info?.("Mapping preset cleared"); }} className="text-xs px-2 py-1 border rounded">Clear</button>
+                      <div className="inline-flex items-center gap-2 px-2 py-1 rounded-xl border border-slate-800/70 bg-slate-950/25 text-xs text-slate-100">
+                        <span className="text-slate-200">
+                          {mappingPreset?.name ?? mappingPreset?.id ?? String(mappingPreset)}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setMappingPreset(null);
+                            toast?.info?.("Mapping preset cleared");
+                          }}
+                          className={btnSm}
+                        >
+                          Clear
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
 
                 <div className="ml-auto whitespace-nowrap">
-                  <button
-                    onClick={() => runImport()}
-                    disabled={running}
-                    className="px-4 py-2 rounded bg-emerald-500 text-white inline-flex items-center"
-                    aria-label="Run import"
-                  >
-                    {running ? <><Spinner />Running…</> : "Run Import"}
+                  <button onClick={() => runImport()} disabled={running} className={btnPrimary} aria-label="Run import">
+                    {running ? (
+                      <>
+                        <Spinner />
+                        Running…
+                      </>
+                    ) : (
+                      "Run Import"
+                    )}
                   </button>
                 </div>
               </div>
             </div>
 
             {/* Telemetry & artifact */}
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className={`${card} ${cardPad}`}>
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold">Live pipeline & artifact</h4>
-                <div className="text-xs text-slate-500">Progress: {progress}%</div>
+                <h4 className="text-sm font-semibold text-slate-100">Live pipeline & artifact</h4>
+                <div className="text-xs text-slate-400">Progress: {progress}%</div>
               </div>
 
               <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs text-slate-500 mb-2">Pipeline modules</div>
+                  <div className="text-xs text-slate-400 mb-2">Pipeline modules</div>
                   <div className="space-y-2">
-                    {(pipelineSnapshot?.modules ?? []).slice().sort((a, b) => a.module_index - b.module_index).map((m) => (
-                      <div key={`${m.module_index}-${m.module_name}`} className="flex items-center justify-between rounded border p-2">
-                        <div>
-                          <div className="font-medium">{m.module_index}. {String(m.module_name)}</div>
-                          <div className="text-xs text-slate-500">output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span></div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusChipClass(m.status)}`}>{m.status}</div>
-                          <div className="text-xs mt-1">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
-                          <div className="mt-2">
-                            <button onClick={() => openModuleLogs(m.module_index)} className="text-xs px-2 py-1 border rounded">View logs</button>
+                    {(pipelineSnapshot?.modules ?? [])
+                      .slice()
+                      .sort((a, b) => a.module_index - b.module_index)
+                      .map((m) => (
+                        <div
+                          key={`${m.module_index}-${m.module_name}`}
+                          className="flex items-center justify-between rounded-2xl border border-slate-800/60 bg-slate-950/20 p-2 hover:bg-slate-900/30 transition"
+                        >
+                          <div>
+                            <div className="font-medium text-slate-100">
+                              {m.module_index}. {String(m.module_name)}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              output_ref: <span className="font-mono text-slate-200">{m.output_ref ?? "—"}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusChipClass(m.status)}`}>
+                              {m.status}
+                            </div>
+                            <div className="text-xs mt-1 text-slate-300/80">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
+                            <div className="mt-2">
+                              <button onClick={() => openModuleLogs(m.module_index)} className={btnSm}>
+                                View logs
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                     {!(pipelineSnapshot?.modules ?? []).length && (
                       <>
-                        <div className="text-xs text-slate-500">No active run selected.</div>
+                        <div className="text-xs text-slate-400">No active run selected.</div>
                         <SkeletonRow />
                         <SkeletonRow />
                       </>
@@ -636,15 +770,33 @@ export default function ImportPage() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-slate-500 mb-2">Import artifact</div>
-                  <pre className="max-h-[300px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}</pre>
+                  <div className="text-xs text-slate-400 mb-2">Import artifact</div>
+                  <pre className="max-h-[300px] overflow-auto rounded-2xl border border-slate-800/60 bg-slate-950/60 p-3 text-[11px] text-slate-100">
+                    {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}
+                  </pre>
 
                   <div className="mt-2 flex justify-between items-center">
-                    <div className="text-xs text-slate-500">Download results</div>
-                    <div className="flex gap-2">
-                      <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="text-xs px-2 py-1 bg-slate-900 text-white rounded">Export JSON</button>
-                      <button onClick={() => downloadFailedRowsCsv(ingestionIdInput, toast)} className="text-xs px-2 py-1 border rounded">Download failed rows</button>
-                      <a href="/imports" className="text-xs px-2 py-1 border rounded">Import history</a>
+                    <div className="text-xs text-slate-400">Download results</div>
+                    <div className="flex gap-2 flex-wrap justify-end">
+                      <button
+                        onClick={() =>
+                          downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, {
+                            ingestionId: jobData?.id ?? ingestionIdInput ?? null,
+                            pipelineRunId: pipelineRunId || null,
+                            diagnostics_import: importDiag ?? null,
+                            import_artifact: importArtifact ?? null,
+                          })
+                        }
+                        className="text-xs px-2 py-1 rounded-lg text-white bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/60 hover:from-slate-800 hover:to-slate-700 transition"
+                      >
+                        Export JSON
+                      </button>
+                      <button onClick={() => downloadFailedRowsCsv(ingestionIdInput, toast)} className={btnSm}>
+                        Download failed rows
+                      </button>
+                      <a href="/imports" className={btnSm}>
+                        Import history
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -652,9 +804,9 @@ export default function ImportPage() {
             </div>
 
             {/* Ingestion viewer */}
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h4 className="text-sm font-semibold">Ingestion (context)</h4>
-              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
+            <div className={`${card} ${cardPad}`}>
+              <h4 className="text-sm font-semibold text-slate-100">Ingestion (context)</h4>
+              <pre className="mt-3 max-h-[340px] overflow-auto rounded-2xl border border-slate-800/60 bg-slate-950/60 p-3 text-[11px] text-slate-100">
                 {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
               </pre>
             </div>
@@ -673,7 +825,11 @@ export default function ImportPage() {
       )}
 
       {/* Connector details drawer */}
-      <ConnectorDetailsDrawer integrationId={selectedConnector} isOpen={Boolean(selectedConnector)} onClose={() => setSelectedConnector("")} />
+      <ConnectorDetailsDrawer
+        integrationId={selectedConnector}
+        isOpen={Boolean(selectedConnector)}
+        onClose={() => setSelectedConnector("")}
+      />
 
       {/* Confirm delete ingestion */}
       <ConfirmDialog
