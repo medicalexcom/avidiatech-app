@@ -31,7 +31,6 @@ export default function RecentRuns({ ingestionId, pipelineId, limit = 10 }: Prop
       else if (ingestionId) params.set("ingestionId", ingestionId);
       if (limit) params.set("limit", String(limit));
 
-      // Adjust this endpoint if your backend exposes a different route
       const url = `/api/v1/pipeline/runs?${params.toString()}`;
       const res = await fetch(url);
       const json = await res.json().catch(() => null);
