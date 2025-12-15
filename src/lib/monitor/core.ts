@@ -11,11 +11,10 @@
  * - SUPABASE_URL
  * - SUPABASE_SERVICE_ROLE_KEY
  *
- * NOTE: This is intentionally defensive and small — adapt parsing rules to your product pages.
+ * Note: uses global fetch (Node 18+ / Vercel). Keep cheerio as a dependency.
  */
 
 import { createClient } from "@supabase/supabase-js";
-import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -41,13 +40,11 @@ function parsePrice(text: string | undefined): number | null {
   if (!cleaned) return null;
   const n = Number(cleaned[0]);
   if (Number.isNaN(n)) return null;
-  // Heuristic: if price is in cents (>=1000 and no decimals) treat as cents
   return n;
 }
 
 function normalizeSpecs($: cheerio.Root): Record<string, string> {
   const specs: Record<string, string> = {};
-  // Common pattern: <table> of specs with two columns
   $("table").each((_, table) => {
     const rows = $(table).find("tr");
     rows.each((_, tr) => {
@@ -71,7 +68,6 @@ function computeDiff(oldSnap: Snapshot | null, newSnap: Snapshot) {
   }
   if ((oldSnap.title || "") !== (newSnap.title || "")) diffs.title = { from: oldSnap.title ?? null, to: newSnap.title ?? null };
   if ((oldSnap.price ?? null) !== (newSnap.price ?? null)) diffs.price = { from: oldSnap.price ?? null, to: newSnap.price ?? null };
-  // specs diff: shallow compare keys and changed values
   const oldSpecs = oldSnap.specs ?? {};
   const newSpecs = newSnap.specs ?? {};
   const added: Record<string,string> = {};
@@ -87,19 +83,15 @@ function computeDiff(oldSnap: Snapshot | null, newSnap: Snapshot) {
   if (Object.keys(added).length || Object.keys(removed).length || Object.keys(changed).length) {
     diffs.specs = { added, removed, changed };
   }
-
-  // images diff (add/remove)
   const oldImgs = new Set((oldSnap.images ?? []).map(String));
   const newImgs = new Set((newSnap.images ?? []).map(String));
   const imgsAdded = [...newImgs].filter((i) => !oldImgs.has(i));
   const imgsRemoved = [...oldImgs].filter((i) => !newImgs.has(i));
   if (imgsAdded.length || imgsRemoved.length) diffs.images = { added: imgsAdded, removed: imgsRemoved };
-
   return diffs;
 }
 
 export async function runWatchOnce(watchId: string) {
-  // 1) load watch
   const { data: watchRow, error: watchErr } = await supabaseAdmin.from("monitor_watches").select("*").eq("id", watchId).limit(1).maybeSingle();
   if (watchErr) throw new Error(`failed to load watch ${watchErr.message ?? String(watchErr)}`);
   if (!watchRow) throw new Error("watch not found");
@@ -108,22 +100,18 @@ export async function runWatchOnce(watchId: string) {
   let snapshot: Snapshot = { url, fetched_at: new Date().toISOString() };
 
   try {
-    const res = await fetch(url, { timeout: 15000 });
+    const res = await fetch(url, { method: "GET" });
     if (!res.ok) {
-      // record event: scrape_failed
       const payload = { status: res.status, statusText: res.statusText };
       await supabaseAdmin.from("monitor_events").insert([{ watch_id: watchId, tenant_id: watchRow.tenant_id ?? null, product_id: watchRow.product_id ?? null, event_type: "scrape_failed", severity: "warning", payload }]);
-      // update watch
       await supabaseAdmin.from("monitor_watches").update({ last_check_at: new Date().toISOString(), last_status: "scrape_failed" }).eq("id", watchId);
       return { ok: false, reason: "scrape_failed", payload };
     }
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // populate snapshot
     snapshot.title = ($("meta[property='og:title']").attr("content") || $("title").text() || $("h1").first().text() || "").trim() || null;
 
-    // price heuristics: look for common selectors
     const priceSelectors = ["[itemprop=price]", ".price", ".product-price", ".price__amount", "#price", ".sale-price"];
     let priceText: string | null = null;
     for (const sel of priceSelectors) {
@@ -133,7 +121,6 @@ export async function runWatchOnce(watchId: string) {
         break;
       }
     }
-    // fallback: look for $nnn in text
     if (!priceText) {
       const bodyText = $("body").text();
       const m = bodyText.match(/[$]\s*\d[\d,\.]*/);
@@ -141,7 +128,6 @@ export async function runWatchOnce(watchId: string) {
     }
     snapshot.price = priceText ? parsePrice(priceText) : null;
 
-    // images
     const imgs: string[] = [];
     $("img").each((_, el) => {
       const src = $(el).attr("src") || $(el).attr("data-src");
@@ -149,18 +135,12 @@ export async function runWatchOnce(watchId: string) {
     });
     snapshot.images = imgs;
 
-    // specs
     const specs = normalizeSpecs($);
     snapshot.specs = Object.keys(specs).length ? specs : null;
 
-    // rawHtml omitted by default to keep storage small (can be added if needed)
-    // compute diff vs last_snapshot
     const lastSnapshot: Snapshot | null = watchRow.last_snapshot ?? null;
     const diff = computeDiff(lastSnapshot, snapshot);
-
-    // Insert event only if there are meaningful diffs or always insert an observed event (opt-in)
     const hasChanges = Object.keys(diff).length > 0 && !(Object.keys(diff).length === 1 && diff._type === "initial_snapshot");
-
     const eventPayload = { diff, snapshot, url, fetched_at: snapshot.fetched_at };
 
     await supabaseAdmin.from("monitor_events").insert([{
@@ -172,7 +152,6 @@ export async function runWatchOnce(watchId: string) {
       payload: eventPayload,
     }]);
 
-    // update watch row with last_snapshot and last_check_at/status
     await supabaseAdmin.from("monitor_watches").update({
       last_snapshot: snapshot,
       last_check_at: new Date().toISOString(),
@@ -181,7 +160,6 @@ export async function runWatchOnce(watchId: string) {
 
     return { ok: true, changed: hasChanges, diff, snapshot };
   } catch (err: any) {
-    // insert error event
     const e = String(err?.message ?? err);
     await supabaseAdmin.from("monitor_events").insert([{
       watch_id: watchId,
