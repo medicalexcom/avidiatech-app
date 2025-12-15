@@ -1,15 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import MappingModal from "@/components/imports/MappingModal";
+import { useToast } from "@/components/ui/toast";
+
+/**
+ * ImportUploader
+ *
+ * - Uploads files to the server endpoint /api/upload-to-supabase (server will store to Supabase storage
+ *   with the service role and create a product_ingestions row when possible).
+ * - Sends optional mapping & platform metadata so the ingestion row can be updated/created with them.
+ * - If the upload endpoint returns a jobId, the uploader calls onCreated(jobId).
+ * - If the upload endpoint only returns a file path, the uploader POSTs to /api/imports to create the import job.
+ *
+ * Drop this file in place of your existing ImportUploader. It is defensive and reports helpful errors.
+ */
 
 type Props = {
-  bucket?: string;
+  bucket?: string; // informational - server controls actual bucket
   maxRows?: number;
   maxCols?: number;
   onCreated?: (jobId: string) => void;
   className?: string;
-  platform?: string;
+  platform?: string | null;
 };
 
 export default function ImportUploader({
@@ -18,8 +31,10 @@ export default function ImportUploader({
   maxCols = 50,
   onCreated,
   className,
-  platform,
+  platform = null,
 }: Props) {
+  const toast = useToast();
+
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<any[]>([]);
@@ -27,9 +42,17 @@ export default function ImportUploader({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // Mapping modal
   const [mappingOpen, setMappingOpen] = useState(false);
   const [mapping, setMapping] = useState<Record<string, string> | null>(null);
+
+  useEffect(() => {
+    // Reset preview error when file changes
+    if (!file) {
+      setHeaders([]);
+      setPreviewRows([]);
+      setPreviewError(null);
+    }
+  }, [file]);
 
   async function readPreview(f: File) {
     setPreviewError(null);
@@ -56,7 +79,7 @@ export default function ImportUploader({
             error: (err: any) => reject(err),
           });
         });
-      } else {
+      } else if (ext === "xlsx" || ext === "xls") {
         const XLSX = (await import("xlsx")) as any;
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -78,6 +101,9 @@ export default function ImportUploader({
         };
         reader.readAsArrayBuffer(f);
         return;
+      } else {
+        // Not a tabular format we can preview — bail gracefully
+        setPreviewError("Preview unavailable for this file type");
       }
     } catch (err: any) {
       setPreviewError(err?.message ?? String(err));
@@ -92,6 +118,7 @@ export default function ImportUploader({
       setPreviewError("No file selected");
       return;
     }
+
     if (headers.length > maxCols) {
       setPreviewError(`Too many columns (max ${maxCols}). Please reduce columns.`);
       return;
@@ -99,71 +126,112 @@ export default function ImportUploader({
 
     setUploading(true);
     try {
-      // Upload to server-side route which will upload to Supabase using the service role.
       const fd = new FormData();
       fd.append("file", file, file.name);
+
+      // Include mapping & platform as optional fields - server may use them to populate the ingestion row
+      if (mapping) {
+        try {
+          fd.append("mapping", JSON.stringify(mapping));
+        } catch (e) {
+          // ignore mapping serialization errors
+        }
+      }
+      if (platform) fd.append("platform", String(platform));
 
       const uploadResp = await fetch("/api/upload-to-supabase", {
         method: "POST",
         body: fd,
       });
 
-      if (uploadResp.status === 401) {
-        setPreviewError("You must be signed in to upload. Please sign in and try again.");
-        return;
-      }
-
       const uploadJson = await uploadResp.json().catch(() => null);
-      if (!uploadResp.ok) {
-        setPreviewError(uploadJson?.error ?? `Upload failed: ${uploadResp.status}`);
+
+      if (!uploadResp.ok || !uploadJson?.ok) {
+        const msg = uploadJson?.error ?? `Upload failed: ${uploadResp.status}`;
+        setPreviewError(msg);
+        toast?.error?.(msg);
         return;
       }
 
-      // The server returns the Supabase upload result in uploadJson.data.
-      // Try to derive an object path from common response shapes.
-      let uploadedPath: string | undefined = undefined;
-      if (uploadJson?.data?.path) uploadedPath = uploadJson.data.path;
-      else if (uploadJson?.data?.Key) uploadedPath = uploadJson.data.Key;
-      else if (uploadJson?.data?.key) uploadedPath = uploadJson.data.key;
-      else if (typeof uploadJson?.data === "string") uploadedPath = uploadJson.data; // fallback
+      // If server route created the ingestion row and returned jobId, use it
+      const jobIdFromUpload: string | null = uploadJson?.jobId ?? uploadJson?.data?.id ?? uploadJson?.inserted?.id ?? null;
 
-      if (!uploadedPath) {
-        // If server returned uploadedBy but not path, still try to proceed if caller expects server to create job.
-        // But in most cases we need the path to create the import job.
-        setPreviewError("Upload succeeded but server did not return the uploaded path.");
+      // The server should return canonical file_path (e.g. "imports/12345-name.xlsx") or relative path in uploadJson.data.path
+      const returnedPath: string | null = uploadJson?.file_path ?? uploadJson?.data?.path ?? uploadJson?.data?.raw?.fullPath ?? uploadJson?.data?.raw?.path ?? null;
+
+      // If jobId returned, optionally patch mapping to the ingestion record (best-effort) and finish
+      if (jobIdFromUpload) {
+        // Best-effort: update mapping via PATCH to PostgREST /api/v1/ingest/{id} if mapping exists
+        if (mapping) {
+          try {
+            await fetch(`/api/v1/ingest/${encodeURIComponent(jobIdFromUpload)}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ mapping }),
+            });
+          } catch {
+            // ignore patch failures — mapping is best-effort
+          }
+        }
+
+        toast?.success?.(`Upload succeeded — job ${jobIdFromUpload}`);
+        onCreated?.(jobIdFromUpload);
         return;
       }
 
-      // Normalize file_path so it includes the bucket prefix.
-      let filePath = uploadedPath;
-      if (!filePath.startsWith(`${bucket}/`) && !filePath.startsWith("/")) {
-        filePath = `${bucket}/${filePath}`;
+      // If no jobId returned but we have returnedPath, call /api/imports to create an import job (old behavior)
+      const effectivePath = returnedPath ? String(returnedPath) : null;
+      if (!jobIdFromUpload && effectivePath) {
+        // Normalize file_path to include bucket if server returned relative path
+        const filePath =
+          effectivePath.startsWith(`${bucket}/`) || effectivePath.startsWith("/") ? effectivePath.replace(/^\/+/, "") : `${bucket}/${effectivePath}`;
+
+        // Create import job by calling /api/imports (server route will create DB row and return jobId)
+        try {
+          const createResp = await fetch("/api/imports", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              file_path: filePath,
+              file_name: file.name,
+              file_format: file.name.split(".").pop()?.toLowerCase() ?? null,
+              mapping: mapping ?? null,
+              platform: platform ?? null,
+            }),
+          });
+          const createJson = await createResp.json().catch(() => null);
+          if (!createResp.ok || !createJson?.ok) {
+            const msg = createJson?.error ?? `Create import job failed: ${createResp.status}`;
+            setPreviewError(msg);
+            toast?.error?.(msg);
+            return;
+          }
+          const jobId = createJson.jobId ?? createJson.id ?? createJson.data?.id ?? null;
+          if (jobId) {
+            toast?.success?.(`Import job created: ${jobId}`);
+            onCreated?.(jobId);
+            return;
+          } else {
+            // create succeeded but no job id returned — fallback to telling user upload succeeded
+            toast?.info?.("Upload succeeded; import job created (no id returned).");
+            onCreated?.("");
+            return;
+          }
+        } catch (err: any) {
+          const msg = String(err?.message ?? err);
+          setPreviewError(msg);
+          toast?.error?.(msg);
+          return;
+        }
       }
 
-      const bodyObj: any = {
-        file_path: filePath,
-        file_name: file.name,
-        file_format: file.name.split(".").pop()?.toLowerCase(),
-        mapping: mapping ?? null,
-        platform: platform ?? null,
-      };
-
-      const res = await fetch("/api/imports", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(bodyObj),
-      });
-
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        setPreviewError(json?.error ?? `Create import job failed: ${res.status}`);
-        return;
-      }
-
-      const jobId = json.jobId ?? json.id ?? null;
-      onCreated?.(jobId ?? "");
+      // If we reach here, upload succeeded but we couldn't determine job id or path
+      toast?.info?.("Upload succeeded but no job id/path returned from server. Check server logs.");
+      onCreated?.("");
     } catch (err: any) {
-      setPreviewError(String(err?.message || err));
+      const msg = String(err?.message ?? err);
+      setPreviewError(msg);
+      toast?.error?.(msg);
     } finally {
       setUploading(false);
     }
@@ -174,7 +242,7 @@ export default function ImportUploader({
       <div>
         <input
           type="file"
-          accept=".csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          accept="*/*"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
             setFile(f);
@@ -220,6 +288,31 @@ export default function ImportUploader({
               className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60"
             >
               {uploading ? "Uploading…" : "Upload & Create Import"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* If headers not available (non-tabular file), still allow upload */}
+      {!headers.length && !loadingPreview && (
+        <div className="mt-3">
+          <div className="text-xs text-slate-500 mb-2">No preview available for this file type. You can still upload.</div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60"
+            >
+              {uploading ? "Uploading…" : "Upload & Create Import"}
+            </button>
+            <button
+              onClick={() => {
+                setFile(null);
+                setPreviewError(null);
+              }}
+              className="inline-flex items-center rounded px-3 py-2 border text-sm"
+            >
+              Clear
             </button>
           </div>
         </div>
