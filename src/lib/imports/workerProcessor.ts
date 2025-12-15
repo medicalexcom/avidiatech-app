@@ -1,12 +1,3 @@
-/**
- * Worker processors that the worker loads.
- * - connectorSyncProcessor: iterates provider adapter, inserts import_rows in batches, updates import_jobs.
- * - importProcessProcessor: reads file from Supabase storage, parses CSV/XLSX, applies mapping, inserts import_rows.
- * - pipelineRetryProcessor: enqueues a pipeline run (skeleton).
- *
- * These processors must be robustly extended for production connectors & parsing.
- */
-
 import { createClient } from "@supabase/supabase-js";
 import type { Redis } from "ioredis";
 import { createShopifyAdapter } from "../ecommerce/connectors/shopify";
@@ -108,11 +99,42 @@ export async function importProcessProcessor(data: { jobId: string }) {
   try {
     // Download file from Supabase storage to a local temp path (streaming approach recommended)
     const storage = supa.storage.from(jobRow.meta?.bucket ?? "imports");
-    const download = await storage.download(filePath);
-    if (!download) throw new Error("failed to download file");
-    const buffer = await download.arrayBuffer();
+
+    // Correct handling of Supabase download result: { data, error }
+    const downloadResult = await storage.download(filePath);
+    // downloadResult may be { data: Blob|null, error: StorageError|null }
+    // Use destructuring for clarity
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: downloadedData, error: downloadError }: any = downloadResult as any;
+    if (downloadError || !downloadedData) {
+      const msg = downloadError?.message ?? "failed to download file";
+      throw new Error(`download_failed:${msg}`);
+    }
+
+    // downloadedData is typically a Blob in Node runtime; ensure we can get an ArrayBuffer from it
+    let buffer: Buffer;
+    if (typeof downloadedData.arrayBuffer === "function") {
+      // Blob-like
+      const arrayBuffer = await downloadedData.arrayBuffer();
+      buffer = Buffer.from(arrayBuffer);
+    } else if (Buffer.isBuffer(downloadedData)) {
+      // Already a Buffer (safety)
+      buffer = downloadedData;
+    } else if (downloadedData instanceof Uint8Array) {
+      buffer = Buffer.from(downloadedData);
+    } else if (typeof downloadedData.text === "function") {
+      // Fallback: text() available (unlikely for binary, but safe)
+      const txt = await downloadedData.text();
+      buffer = Buffer.from(txt);
+    } else {
+      // Last resort: stringify
+      const asString = String(downloadedData);
+      buffer = Buffer.from(asString);
+    }
+
     const tmpPath = path.join("/tmp", `import-${jobId}.csv`);
-    fs.writeFileSync(tmpPath, Buffer.from(buffer));
+    fs.writeFileSync(tmpPath, buffer);
+
     // parse via papaparse in streaming mode
     const stream = fs.createReadStream(tmpPath);
     await new Promise<void>((resolve, reject) => {
