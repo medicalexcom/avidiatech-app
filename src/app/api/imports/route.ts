@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
-import { getQueue } from "@/lib/queue/bull";
+import { getOrgFromRequest } from "../../../lib/auth/getOrgFromRequest";
+import { getQueue } from "../../../lib/queue/bull";
 
 /**
  * POST /api/imports
