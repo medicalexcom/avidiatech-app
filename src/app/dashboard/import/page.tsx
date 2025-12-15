@@ -482,7 +482,8 @@ export default function ImportPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      <style jsx>{`
+      {/* plain <style> (no styled-jsx) */}
+      <style>{`
         .headline-grad {
           background-size: 220% 220%;
           animation: gshift 8s ease-in-out infinite;
@@ -547,7 +548,7 @@ export default function ImportPage() {
         {/* Primary workspace */}
         <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
-            {/* LEFT: Stores & Connectors (single card, flattened inside) */}
+            {/* LEFT: Stores & Connectors */}
             <aside className="lg:col-span-4">
               <div
                 ref={connectorShellRef}
@@ -557,9 +558,7 @@ export default function ImportPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Stores & Connectors</h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">
-                      Select a store, test, sync, or open details.
-                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">Select a store, test, sync, or open details.</p>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -574,93 +573,87 @@ export default function ImportPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
-                  <div className="lg:col-span-12">
-                    <div className="rounded-2xl border border-slate-200/60 bg-white/50 p-3 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/30">
-                      <ConnectorManager orgId={orgId} selectedId={selectedConnector} onSelect={selectConnectorId} />
-                    </div>
+                <div className="mt-4">
+                  <div className="rounded-2xl border border-slate-200/60 bg-white/50 p-3 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/30">
+                    <ConnectorManager orgId={orgId} selectedId={selectedConnector} onSelect={selectConnectorId} />
+                  </div>
 
-                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
-                        SKU recommended for matching
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
-                        Preview up to 50 rows
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
-                        Max 5,000 rows / 50 columns
-                      </span>
-                    </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      SKU recommended for matching
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      Preview up to 50 rows
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      Max 5,000 rows / 50 columns
+                    </span>
+                  </div>
 
-                    <div className="mt-4 rounded-2xl border border-slate-200/60 bg-gradient-to-b from-white/70 to-white/40 p-3 dark:border-slate-800/70 dark:from-slate-950/35 dark:to-slate-950/20">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                          Selected store
-                        </div>
-
-                        {selectedConnectorObj ? (
-                          <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]", statusChipClass(selectedConnectorObj.status))}>
-                            {selectedConnectorObj.status ?? "unknown"}
-                          </span>
-                        ) : null}
+                  <div className="mt-4 rounded-2xl border border-slate-200/60 bg-gradient-to-b from-white/70 to-white/40 p-3 dark:border-slate-800/70 dark:from-slate-950/35 dark:to-slate-950/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Selected store
                       </div>
 
                       {selectedConnectorObj ? (
-                        <div className="mt-2">
-                          <div className="min-w-0">
-                            <div className="truncate font-semibold text-slate-900 dark:text-slate-50">
-                              {selectedConnectorObj.name ?? selectedConnectorObj.provider}
-                            </div>
-                            <div className="text-xs text-slate-600 dark:text-slate-300">
-                              Provider: <span className="font-medium">{selectedConnectorObj.provider}</span>
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                              Last synced:{" "}
-                              {selectedConnectorObj.last_synced_at ? new Date(selectedConnectorObj.last_synced_at).toLocaleString() : "—"}
-                            </div>
-                          </div>
-
-                          <div className="mt-3 grid grid-cols-3 gap-2">
-                            <button onClick={() => testConnector(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
-                              Test
-                            </button>
-                            <button onClick={() => syncConnector(selectedConnectorObj.id)} className={cx(btnPrimary, "h-9 px-3 text-xs")}>
-                              Sync
-                            </button>
-                            <button onClick={() => setDetailsConnectorId(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
-                              Details
-                            </button>
-                          </div>
-
-                          <div className="mt-3 text-xs">
-                            {selectedConnectorObj.status === "ready" ? (
-                              <span className="text-emerald-700 dark:text-emerald-200">Connected</span>
-                            ) : selectedConnectorObj.status === "failed" ? (
-                              <span className="text-rose-700 dark:text-rose-200">
-                                Failed — {selectedConnectorObj.last_error ?? "see details"}
-                              </span>
-                            ) : (
-                              <span className="text-slate-600 dark:text-slate-300">Not ready</span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                          Select a store to enable actions.
-                        </div>
-                      )}
+                        <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]", statusChipClass(selectedConnectorObj.status))}>
+                          {selectedConnectorObj.status ?? "unknown"}
+                        </span>
+                      ) : null}
                     </div>
+
+                    {selectedConnectorObj ? (
+                      <div className="mt-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-slate-900 dark:text-slate-50">
+                            {selectedConnectorObj.name ?? selectedConnectorObj.provider}
+                          </div>
+                          <div className="text-xs text-slate-600 dark:text-slate-300">
+                            Provider: <span className="font-medium">{selectedConnectorObj.provider}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Last synced: {selectedConnectorObj.last_synced_at ? new Date(selectedConnectorObj.last_synced_at).toLocaleString() : "—"}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                          <button onClick={() => testConnector(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
+                            Test
+                          </button>
+                          <button onClick={() => syncConnector(selectedConnectorObj.id)} className={cx(btnPrimary, "h-9 px-3 text-xs")}>
+                            Sync
+                          </button>
+                          <button onClick={() => setDetailsConnectorId(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
+                            Details
+                          </button>
+                        </div>
+
+                        <div className="mt-3 text-xs">
+                          {selectedConnectorObj.status === "ready" ? (
+                            <span className="text-emerald-700 dark:text-emerald-200">Connected</span>
+                          ) : selectedConnectorObj.status === "failed" ? (
+                            <span className="text-rose-700 dark:text-rose-200">
+                              Failed — {selectedConnectorObj.last_error ?? "see details"}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 dark:text-slate-300">Not ready</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-slate-600 dark:text-slate-300">Select a store to enable actions.</div>
+                    )}
                   </div>
                 </div>
 
-                {/* scoped overrides inside this one shell */}
-                <style jsx global>{`
+                {/* plain <style> scoped via attribute (no styled-jsx) */}
+                <style>{`
                   [data-connector-shell] .shadow,
                   [data-connector-shell] .shadow-sm,
                   [data-connector-shell] .shadow-md,
-                  [data-connector-shell] .shadow-lg {
-                    box-shadow: none !important;
-                  }
+                  [data-connector-shell] .shadow-lg { box-shadow: none !important; }
+
                   [data-connector-shell] .bg-white:not(button):not(input):not(select):not(textarea) {
                     background: transparent !important;
                   }
@@ -887,7 +880,9 @@ export default function ImportPage() {
                         className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/35"
                       >
                         <div className="min-w-0">
-                          <div className="font-medium truncate">{m.module_index}. {String(m.module_name)}</div>
+                          <div className="font-medium truncate">
+                            {m.module_index}. {String(m.module_name)}
+                          </div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
                             output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span>
                           </div>
