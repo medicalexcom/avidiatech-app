@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
-import { getQueue } from "@/lib/queue/bull";
+// relative imports (no "@/..." alias)
+import { getOrgFromRequest } from "../../../../../../lib/auth/getOrgFromRequest";
+import { getQueue } from "../../../../../../lib/queue/bull";
 
 /**
  * POST /api/v1/integrations/:id/sync
@@ -19,7 +20,7 @@ const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: 
 
 export async function POST(req: Request, context: any) {
   try {
-    // normalize params if necessary
+    // normalize params (context.params may be a Promise in some next versions)
     let params = context?.params;
     if (params && typeof params.then === "function") params = await params;
     const integrationId = params?.id;
