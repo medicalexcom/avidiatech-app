@@ -24,9 +24,17 @@ export async function POST(req: Request) {
     // Server-side validation
     const validation = await validateImportFile({ bucket, filePath });
     if (!validation.ok) {
-      const status = validation.errorCode === "file_too_large" ? 413 : 400;
-      return NextResponse.json({ ok: false, error: validation.message, code: validation.errorCode, rows: validation.rows, cols: validation.cols }, { status });
+      // Narrow the union safely for TypeScript
+      const err = validation as { ok: false; errorCode: string; message: string; rows?: number; cols?: number };
+      const status = err.errorCode === "file_too_large" ? 413 : 400;
+      return NextResponse.json(
+        { ok: false, error: err.message, code: err.errorCode, rows: err.rows, cols: err.cols },
+        { status }
+      );
     }
+
+    // validation is ok here, narrow its type
+    const success = validation as { ok: true; rows: number; cols?: number; fileSizeBytes: number };
 
     const { data: jobRow, error } = await supaAdmin
       .from("import_jobs")
@@ -37,7 +45,7 @@ export async function POST(req: Request) {
         file_path: filePath,
         file_name: fileName,
         file_format: fileFormat,
-        meta: { mapping, platform, validation: { rows: validation.rows, cols: validation.cols, fileSizeBytes: (validation as any).fileSizeBytes } },
+        meta: { mapping, platform, validation: { rows: success.rows, cols: success.cols, fileSizeBytes: success.fileSizeBytes } },
       })
       .select("*")
       .single();
