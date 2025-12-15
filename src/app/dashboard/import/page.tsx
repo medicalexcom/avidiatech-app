@@ -4,18 +4,23 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ImportUploader from "@/components/imports/ImportUploader";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
+import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
+import RecentRuns from "@/components/pipeline/RecentRuns";
 
 /**
- * Dashboard Import page — refined UX
+ * Full, expanded Import dashboard page (ready to replace)
  *
- * - ConnectorManager panel is open by default (no duplicated "Connectors" heading).
- * - Prominent connected-store banner showing connection health for the selected connector.
- * - Combined single-column controls for "Allow overwrite existing SKU" and "Auto-run pipeline after upload".
- * - Run Import button placed on the same line with the checkboxes (no wrap at typical widths).
- * - Extra helpful actions: Download sample CSV, View import history, Export artifact JSON.
+ * - Fetches org via GET /api/v1/me (DEV_ORG_ID can be used for local testing).
+ * - Lists connectors, allows selection and sync, shows connection health.
+ * - Upload flow with mapping support (via ImportUploader).
+ * - Pipeline run controls, live telemetry, module logs modal, recent runs, artifact viewer, ingestion viewer.
  *
- * NOTE: getOrgIdForUI() is still a placeholder. Replace with your session/Clerk org-id logic
- * to enable connector listing and secure sync actions.
+ * Note: requires the companion components and server routes previously provided:
+ * - ImportUploader (with mapping support)
+ * - ConnectorManager
+ * - ModuleLogsModal
+ * - RecentRuns
+ * - API routes: /api/v1/me, /api/v1/integrations*, /api/imports, /api/v1/pipeline/run, /api/v1/ingest/:id, etc.
  */
 
 type AnyObj = Record<string, any>;
@@ -107,16 +112,20 @@ export default function ImportPage() {
   const ingestionIdParam = params?.get("ingestionId") || "";
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
 
-  // Connector manager OPEN by default
+  // Org + connectors
+  const [orgId, setOrgId] = useState<string>("");
   const [connectors, setConnectors] = useState<any[]>([]);
   const [selectedConnector, setSelectedConnector] = useState<string>("");
-  const [showConnectorManager] = useState<boolean>(true); // keep open as requested
 
-  // Pipeline & import state
+  // Module logs modal
+  const [moduleLogsOpen, setModuleLogsOpen] = useState(false);
+  const [moduleLogsParams, setModuleLogsParams] = useState<{ runId: string; index: number } | null>(null);
+
+  // Pipeline / import
   const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
   const [importMode, setImportMode] = useState<ImportMode>("full");
   const [allowOverwriteExisting, setAllowOverwriteExisting] = useState(false);
-  const [autoRunAfterUpload, setAutoRunAfterUpload] = useState<boolean>(false);
+  const [autoRunAfterUpload, setAutoRunAfterUpload] = useState(false);
 
   const [job, setJob] = useState<any | null>(null);
   const [pipelineRunId, setPipelineRunId] = useState<string>(pipelineRunIdParam || "");
@@ -127,14 +136,27 @@ export default function ImportPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Replace this with your session/Clerk-derived org id retrieval
-  function getOrgIdForUI() {
-    // TODO: implement session-based org lookup; return org id string
-    return "";
+  // compute selected connector object for quick details
+  const selectedConnectorObj = useMemo(() => connectors.find((c) => c.id === selectedConnector) ?? null, [connectors, selectedConnector]);
+
+  // ----- Org & connectors -----
+  async function fetchOrg() {
+    try {
+      const res = await fetch("/api/v1/me");
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok && json.org_id) {
+        setOrgId(json.org_id);
+        return json.org_id;
+      }
+      setOrgId("");
+      return "";
+    } catch {
+      setOrgId("");
+      return "";
+    }
   }
 
   async function loadConnectors() {
-    const orgId = getOrgIdForUI();
     if (!orgId) {
       setConnectors([]);
       return;
@@ -149,7 +171,7 @@ export default function ImportPage() {
     }
   }
 
-  // Connector quick actions
+  // ----- Connector actions -----
   async function testConnector(connectorId: string) {
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST" });
@@ -166,8 +188,7 @@ export default function ImportPage() {
   }
 
   async function syncConnector(connectorId: string) {
-    const orgId = getOrgIdForUI();
-    if (!orgId) return alert("Org ID missing — wire session lookup");
+    if (!orgId) return alert("Org ID missing — set DEV_ORG_ID or wire session.");
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
         method: "POST",
@@ -189,10 +210,7 @@ export default function ImportPage() {
     }
   }
 
-  // Quick helper: selected connector object
-  const selectedConnectorObj = useMemo(() => connectors.find((c) => c.id === selectedConnector) ?? null, [connectors, selectedConnector]);
-
-  // Fetch ingestion / pipeline helpers
+  // ----- Ingestion / pipeline helpers -----
   async function fetchIngestion(id: string) {
     try {
       setJob(null);
@@ -237,7 +255,7 @@ export default function ImportPage() {
     return json;
   }
 
-  // Run import pipeline for an ingestion id
+  // ----- Run pipeline -----
   async function runImport(forIngestionId?: string) {
     if (running) return;
     setError(null);
@@ -301,14 +319,25 @@ export default function ImportPage() {
     }
   }
 
-  // Initial load
+  // ----- Module logs modal -----
+  function openModuleLogs(index: number) {
+    if (!pipelineRunId) return alert("No pipeline run selected");
+    setModuleLogsParams({ runId: pipelineRunId, index });
+    setModuleLogsOpen(true);
+  }
+
+  // ----- Initial load -----
   useEffect(() => {
-    loadConnectors().catch(() => null);
-    if (ingestionIdParam) {
-      fetchIngestion(ingestionIdParam).catch((e) => setError(String((e as any)?.message || e)));
-    }
-    if (pipelineRunIdParam) {
-      (async () => {
+    (async () => {
+      const o = await fetchOrg();
+      if (o) {
+        await loadConnectors();
+      }
+      // load ingestion/pipeline if provided by query
+      if (ingestionIdParam) {
+        fetchIngestion(ingestionIdParam).catch((e) => setError(String((e as any)?.message || e)));
+      }
+      if (pipelineRunIdParam) {
         try {
           const snap = await fetchPipelineSnapshot(pipelineRunIdParam);
           setPipelineSnapshot(snap);
@@ -317,11 +346,12 @@ export default function ImportPage() {
         } catch (e: any) {
           setError(String(e?.message || e));
         }
-      })();
-    }
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Derived jobData / diagnostics
   const jobData = useMemo(() => {
     if (!job) return null;
     if ((job as any)?.data?.data) return (job as any).data.data;
@@ -369,18 +399,20 @@ export default function ImportPage() {
             <div className="text-lg font-semibold">Import & Connector Workspace</div>
           </div>
 
-          <div className="text-xs text-slate-600">Status: <span className={`ml-2 px-2 py-0.5 rounded ${statusChipClass(runStatus ?? "idle")}`}>{runStatus ?? "idle"}</span></div>
+          <div className="text-xs text-slate-600">
+            Status:
+            <span className={`ml-2 px-2 py-0.5 rounded ${statusChipClass(runStatus ?? "idle")}`}>{runStatus ?? "idle"}</span>
+          </div>
         </div>
 
-        {/* Main grid */}
+        {/* Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT: Connectors (open by default). No duplicate heading here; ConnectorManager includes labels. */}
+          {/* Left: Connector manager + selected connector summary */}
           <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <ConnectorManager orgId={getOrgIdForUI()} />
+              <ConnectorManager orgId={orgId} />
             </div>
 
-            {/* Connection summary for currently selected connector */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold">Selected store</h4>
               {selectedConnectorObj ? (
@@ -403,15 +435,15 @@ export default function ImportPage() {
                   </div>
 
                   <div className="mt-3 text-xs text-slate-600">
-                    Connection status: {selectedConnectorObj.status === "ready" ? <span className="text-emerald-700">Connected</span> : selectedConnectorObj.status === "failed" ? <span className="text-rose-700">Failed</span> : <span>Unknown</span>}
+                    Connection status:&nbsp;
+                    {selectedConnectorObj.status === "ready" ? <span className="text-emerald-700">Connected</span> : selectedConnectorObj.status === "failed" ? <span className="text-rose-700">Failed</span> : <span>Unknown</span>}
                   </div>
                 </div>
               ) : (
-                <div className="mt-3 text-xs text-slate-500">No store selected. Use the Manager above to connect your store.</div>
+                <div className="mt-3 text-xs text-slate-500">No store selected. Use the manager above to connect your store.</div>
               )}
             </div>
 
-            {/* Mapping / Import guidance */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold">Import guidance</h4>
               <ul className="mt-2 text-xs text-slate-600 space-y-2">
@@ -423,7 +455,7 @@ export default function ImportPage() {
             </div>
           </aside>
 
-          {/* RIGHT: Upload, Sync, Run, Telemetry */}
+          {/* Right: Upload, Run, Telemetry */}
           <section className="lg:col-span-8 space-y-4">
             {/* Upload / Sync */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -465,7 +497,7 @@ export default function ImportPage() {
                 </div>
 
                 <div className="flex items-end gap-2">
-                  <select value={selectedConnector} onChange={(e) => { setSelectedConnector(e.target.value); }} className="rounded border px-2 py-2 text-sm w-full">
+                  <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className="rounded border px-2 py-2 text-sm w-full">
                     <option value="">Select connector (optional)</option>
                     {connectors.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>)}
                   </select>
@@ -473,7 +505,6 @@ export default function ImportPage() {
                 </div>
               </div>
 
-              {/* Combined options column + Run button in one non-wrapping line (on typical widths) */}
               <div className="mt-4 flex items-center gap-4 flex-wrap">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:gap-6">
                   <label className="inline-flex items-center gap-2 text-sm">
@@ -515,10 +546,18 @@ export default function ImportPage() {
                         <div className="text-right">
                           <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusChipClass(m.status)}`}>{m.status}</div>
                           <div className="text-xs mt-1">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
+                          <div className="mt-2">
+                            <button onClick={() => openModuleLogs(m.module_index)} className="text-xs px-2 py-1 border rounded">View logs</button>
+                          </div>
                         </div>
                       </div>
                     ))}
                     {!(pipelineSnapshot?.modules ?? []).length && <div className="text-xs text-slate-500">No active run selected.</div>}
+                  </div>
+
+                  {/* Recent runs for current ingestion */}
+                  <div className="mt-4">
+                    <RecentRuns ingestionId={ingestionIdInput} />
                   </div>
                 </div>
 
@@ -541,11 +580,23 @@ export default function ImportPage() {
             {/* Ingestion viewer */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold">Ingestion (context)</h4>
-              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}</pre>
+              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
+                {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
+              </pre>
             </div>
           </section>
         </div>
       </div>
+
+      {/* Module logs modal */}
+      {moduleLogsParams && (
+        <ModuleLogsModal
+          open={moduleLogsOpen}
+          runId={moduleLogsParams.runId}
+          moduleIndex={moduleLogsParams.index}
+          onClose={() => setModuleLogsOpen(false)}
+        />
+      )}
     </main>
   );
 }
