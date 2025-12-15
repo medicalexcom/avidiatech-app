@@ -9,6 +9,7 @@ type Props = {
   maxCols?: number;
   onCreated?: (jobId: string) => void;
   className?: string;
+  platform?: string; // new: optional platform to include with import
 };
 
 const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -26,6 +27,7 @@ export default function ImportUploader({
   maxCols = 50,
   onCreated,
   className,
+  platform,
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -122,6 +124,7 @@ export default function ImportUploader({
           file_path: `${bucket}/${storagePath}`,
           file_name: file.name,
           file_format: file.name.split(".").pop()?.toLowerCase(),
+          platform, // include platform selection for server-side mapping
         }),
       });
 
@@ -132,12 +135,7 @@ export default function ImportUploader({
       }
 
       const jobId = json.jobId ?? json.id ?? null;
-      if (jobId) {
-        onCreated?.(jobId);
-      } else {
-        // still notify caller if provided
-        onCreated?.("");
-      }
+      onCreated?.(jobId ?? "");
     } catch (err: any) {
       setPreviewError(String(err?.message || err));
     } finally {
@@ -171,11 +169,7 @@ export default function ImportUploader({
           <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(previewRows.slice(0, 5), null, 2)}</pre>
 
           <div className="mt-4 flex gap-2">
-            <button
-              onClick={handleUpload}
-              disabled={uploading}
-              className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60"
-            >
+            <button onClick={handleUpload} disabled={uploading} className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60">
               {uploading ? "Uploading…" : "Upload & Create Import"}
             </button>
 
