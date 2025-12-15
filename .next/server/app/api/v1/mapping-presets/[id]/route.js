@@ -1,0 +1,13 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/v1/mapping-presets/[id]/route.js")
+R.c("server/chunks/node_modules_2b327645._.js")
+R.c("server/chunks/node_modules_@clerk_nextjs_dist_esm_app-router_server_auth_99915407.js")
+R.c("server/chunks/node_modules_next_dist_bfd7b269._.js")
+R.c("server/chunks/[root-of-the-server]__ba1007a3._.js")
+R.c("server/chunks/node_modules_@clerk_a5556264._.js")
+R.c("server/chunks/node_modules_e884240b._.js")
+R.c("server/chunks/node_modules_03467186._.js")
+R.c("server/chunks/[root-of-the-server]__09c3bdaf._.js")
+R.c("server/chunks/node_modules_next_f2da0d3e._.js")
+R.c("server/chunks/_next-internal_server_app_api_v1_mapping-presets_[id]_route_actions_b8a3ba4a.js")
+R.m(89658)
+module.exports=R.m(89658).exports
