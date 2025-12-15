@@ -43,7 +43,11 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
 <<<<<<< HEAD
+<<<<<<< HEAD
     "xlsx": "^0.18.5"
+=======
+    "@types/papaparse": "^5.2.6"
+>>>>>>> 0dc51d3cee25d1a7c97dcf483d9f7163c07122f7
 =======
     "@types/papaparse": "^5.2.6"
 >>>>>>> 0dc51d3cee25d1a7c97dcf483d9f7163c07122f7
