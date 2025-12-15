@@ -1,34 +1,36 @@
 /**
- * Minimal BullMQ helper to create caches for queues.
- *
- * Requires:
- * - process.env.REDIS_URL to be set (e.g. redis://localhost:6379)
+ * BullMQ helper: creates shared Redis connection and returns queues.
+ * Requires REDIS_URL in env.
  *
  * Usage:
- *   import { getQueue } from "@/lib/queue/bull";
- *   const q = getQueue("connector-sync");
- *   await q.add("connector-sync", {...});
- *
- * Install dependencies before using:
- *   npm install bullmq ioredis
+ *  const q = getQueue('connector-sync');
+ *  await q.add('connector-sync', { integrationId, jobId });
  */
 
-let _queues: Record<string, any> = {};
+import Redis from "ioredis";
+
+let _redis: Redis | null = null;
+const queues: Record<string, any> = {};
+
+function getRedis() {
+  if (_redis) return _redis;
+  const url = process.env.REDIS_URL;
+  if (!url) throw new Error("REDIS_URL not set for BullMQ queue helper");
+  _redis = new Redis(url);
+  return _redis;
+}
 
 export function getQueue(name: string) {
-  if (_queues[name]) return _queues[name];
-
-  // Dynamic require so builds that don't include bullmq until you install it won't fail at import-time in some tools.
-  // The user must install bullmq and ioredis before attempting to actually run queue operations.
+  if (queues[name]) return queues[name];
+  // import here to avoid bundler/build-time issues if not installed in some contexts
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Queue } = require("bullmq");
-
-  const connection = process.env.REDIS_URL
-    ? { connection: process.env.REDIS_URL }
-    : { connection: { host: "127.0.0.1", port: 6379 } };
-
-  // Depending on bullmq version the constructor accepts either connection or options, adapt if needed.
-  const q = new Queue(name, connection.connection ? connection : { connection });
-  _queues[name] = q;
+  const connection = getRedis();
+  const q = new Queue(name, { connection });
+  queues[name] = q;
   return q;
+}
+
+export function getRedisConnection() {
+  return getRedis();
 }
