@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * ConnectorManager (multi-provider)
@@ -22,9 +23,17 @@ type Integration = {
   name?: string;
   config?: any;
   status?: string;
+  last_synced_at?: string | null;
+  last_error?: string | null;
 };
 
-export default function ConnectorManager({ orgId }: { orgId: string }) {
+type Props = {
+  orgId: string;
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+};
+
+export default function ConnectorManager({ orgId, selectedId, onSelect }: Props) {
   const [list, setList] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -40,9 +49,12 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
   const [apiToken, setApiToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const toast = useToast();
+
   async function fetchList() {
     if (!orgId) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
       const json = await res.json().catch(() => null);
@@ -50,9 +62,11 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
         setList(json.integrations ?? []);
       } else {
         setError(json?.error ?? "Failed to load");
+        toast.error(json?.error ?? "Failed to load connectors");
       }
     } catch (err: any) {
       setError(String(err?.message ?? err));
+      toast.error(String(err?.message ?? err));
     } finally {
       setLoading(false);
     }
@@ -84,14 +98,12 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       } else if (provider === "shopify") {
         // start OAuth flow
         const startUrl = `/api/v1/integrations/oauth/shopify/start?orgId=${encodeURIComponent(orgId)}`;
-        // Server may redirect; try fetching redirect url or navigate directly
         try {
           const res = await fetch(startUrl);
           const json = await res.json().catch(() => null);
           if (json?.redirectUrl) {
             window.location.href = json.redirectUrl;
           } else {
-            // fallback: navigate to route
             window.location.href = startUrl;
           }
         } finally {
@@ -108,8 +120,10 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         setError(json?.error ?? "Create failed");
+        toast.error(json?.error ?? "Create failed");
         return;
       }
+      toast.success("Connector created");
       await fetchList();
       setName("");
       setStoreHash("");
@@ -119,6 +133,7 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       setApiToken("");
     } catch (err: any) {
       setError(String(err?.message ?? err));
+      toast.error(String(err?.message ?? err));
     } finally {
       setCreating(false);
     }
@@ -135,11 +150,15 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         setError(json?.error ?? "Sync failed");
+        toast.error(json?.error ?? "Sync failed");
         return;
       }
-      alert(`Sync started: ${json.jobId}`);
+      toast.success(`Sync started: ${json.jobId ?? json.id ?? "queued"}`);
+      // Optionally refresh list to reflect new sync timestamps
+      await fetchList();
     } catch (err: any) {
       setError(String(err?.message ?? err));
+      toast.error(String(err?.message ?? err));
     }
   }
 
@@ -151,17 +170,46 @@ export default function ConnectorManager({ orgId }: { orgId: string }) {
         {loading ? (
           <div>Loading…</div>
         ) : (
-          list.map((i) => (
-            <div key={i.id} className="rounded border p-2 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{i.name ?? i.provider}</div>
-                <div className="text-xs text-slate-500">{i.provider} • {i.status ?? "ready"}</div>
+          list.map((i) => {
+            const isSelected = selectedId && selectedId === i.id;
+            return (
+              <div
+                key={i.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelect?.(i.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelect?.(i.id);
+                  }
+                }}
+                className={`rounded border p-2 flex items-center justify-between cursor-pointer ${
+                  isSelected ? "ring-2 ring-sky-300 bg-sky-50" : "hover:bg-slate-50"
+                }`}
+              >
+                <div>
+                  <div className="font-medium">{i.name ?? i.provider}</div>
+                  <div className="text-xs text-slate-500">
+                    {i.provider} • {i.status ?? "ready"}
+                    {i.last_synced_at ? ` • last: ${new Date(i.last_synced_at).toLocaleString()}` : ""}
+                  </div>
+                  {i.last_error && <div className="text-xs text-rose-600 mt-1">Last error: {String(i.last_error)}</div>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      triggerSync(i.id);
+                    }}
+                    className="px-2 py-1 rounded bg-sky-500 text-white text-xs"
+                  >
+                    Sync now
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => triggerSync(i.id)} className="px-2 py-1 rounded bg-sky-500 text-white text-xs">Sync now</button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
