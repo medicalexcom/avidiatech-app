@@ -1,30 +1,43 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
+import { throwIfNotAdmin } from "@/lib/auth/isOrgAdmin";
+import { getQueue } from "@/lib/queue/bull";
+
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE env required");
+const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 /**
- * Retry a pipeline run - MVP stub.
- * - Normalizes context.params because Next's context.params can be a Promise in some Next versions.
- * - In a full implementation, this would enqueue a job that re-runs the pipeline or a subset.
- * - For now, returns that the retry was queued (TODO: hook into a real background worker).
+ * POST /api/v1/pipeline/run/:id/retry
+ * Admin only. Enqueues a pipeline-retry job with the pipeline run id.
+ * Returns the new queued job id for tracking.
  */
-
 export async function POST(req: Request, context: any) {
   try {
-    // Normalize params (context.params may be a Promise)
-    let params = context?.params;
-    if (params && typeof params?.then === "function") {
-      params = await params;
-    }
-    const runId = params?.id;
-    if (!runId) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
+    const orgId = await getOrgFromRequest(req);
+    if (!orgId) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 });
 
-    // TODO: enqueue actual retry job in a worker/queue (BullMQ, Supabase task, etc).
-    // For now return a helpful response indicating the retry request was received.
-    return NextResponse.json({
-      ok: true,
-      message: "Retry requested (MVP). Implement background retry worker to perform actual retry.",
-      retryRequestedFor: runId,
-    });
+    await throwIfNotAdmin(req, orgId);
+
+    const { id: pipelineRunId } = context?.params ?? {};
+    if (!pipelineRunId) return NextResponse.json({ ok: false, error: "pipelineRunId required" }, { status: 400 });
+
+    // verify pipeline run belongs to org
+    const { data: runRow, error: runErr } = await supaAdmin.from("pipeline_runs").select("*").eq("id", pipelineRunId).single();
+    if (runErr) throw runErr;
+    if (!runRow || runRow.org_id !== orgId) return NextResponse.json({ ok: false, error: "Not found or access denied" }, { status: 404 });
+
+    const queue = getQueue("pipeline-retry");
+    const job = await queue.add("pipeline-retry", { pipelineRunId }, { attempts: 3 });
+
+    // optionally record audit / retry request in DB (simple insert)
+    await supaAdmin.from("pipeline_runs").update({ status: "retry_requested", updated_at: new Date().toISOString() }).eq("id", pipelineRunId);
+
+    return NextResponse.json({ ok: true, queuedJobId: job.id });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
+    const status = err?.status ?? 500;
+    return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status });
   }
 }
