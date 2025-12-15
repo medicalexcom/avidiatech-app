@@ -6,24 +6,11 @@ import ImportUploader from "@/components/imports/ImportUploader";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 import RecentRuns from "@/components/pipeline/RecentRuns";
+import MappingPresetSelector from "@/components/imports/MappingPresetSelector";
+import { useToast } from "@/components/ui/toast";
 
-/**
- * Improved Import dashboard page — full replacement
- *
- * What I changed / improved:
- * - Connector manager is open by default and connector cards are selectable (click a connector to select it).
- * - Selected connector shows a clear connection banner with health (Connected / Failed) and last error details.
- * - "Allow overwrite existing SKU" and "Auto-run pipeline after upload" appear in a single controls area.
- * - Run Import button sits on the same line and avoids wrapping at typical widths (whitespace-nowrap).
- * - Added "Download failed rows" action that calls GET /api/v1/imports/:id/errors?format=csv.
- * - Mapping modal, module logs modal, recent runs, import artifact export are integrated (requires companion components and routes you've added).
- * - Org is derived from GET /api/v1/me (DEV_ORG_ID can be used in dev). Connectors listing uses that org id.
- *
- * Requirements:
- * - Companion components and server routes must be present:
- *   - /api/v1/me, /api/v1/integrations*, /api/imports, /api/v1/imports/:id/errors, /api/v1/pipeline/run, /api/v1/ingest/:id, /api/v1/pipeline/run/:id, /api/v1/pipeline/run/:id/output/:moduleIndex, etc.
- * - If you want real auth, wire Clerk in /api/v1/me and other server routes.
- */
+/* ...types and helper functions (sleep, fmtMs, statusChipClass, downloadJson, downloadFailedRowsCsv) remain the same... */
+/* Copy the same helper functions you currently have (sleep, fmtMs, statusChipClass, downloadJson, downloadFailedRowsCsv) */
 
 type AnyObj = Record<string, any>;
 type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
@@ -47,6 +34,7 @@ type PipelineSnapshot = {
 
 type ImportMode = "full" | "import_only";
 
+/* copy helper functions from your original file */
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -73,16 +61,16 @@ function downloadJson(filename: string, data: any) {
   a.click();
   URL.revokeObjectURL(url);
 }
-async function downloadFailedRowsCsv(jobId: string) {
+async function downloadFailedRowsCsv(jobId: string, toast: any) {
   if (!jobId) {
-    alert("No job id");
+    toast?.error?.("No job id");
     return;
   }
   try {
     const res = await fetch(`/api/v1/imports/${encodeURIComponent(jobId)}/errors?format=csv`);
     if (!res.ok) {
       const j = await res.json().catch(() => null);
-      alert(j?.error ?? "Failed to download failed rows");
+      toast?.error?.(j?.error ?? "Failed to download failed rows");
       return;
     }
     const blob = await res.blob();
@@ -92,14 +80,16 @@ async function downloadFailedRowsCsv(jobId: string) {
     a.download = `failed-rows-${jobId}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    toast?.success?.("Downloaded failed rows");
   } catch (err: any) {
-    alert(String(err?.message ?? err));
+    toast?.error?.(String(err?.message ?? err));
   }
 }
 
 export default function ImportPage() {
   const params = useSearchParams();
   const router = useRouter();
+  const toast = useToast();
 
   const ingestionIdParam = params?.get("ingestionId") || "";
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
@@ -108,6 +98,9 @@ export default function ImportPage() {
   const [orgId, setOrgId] = useState<string>("");
   const [connectors, setConnectors] = useState<any[]>([]);
   const [selectedConnector, setSelectedConnector] = useState<string>("");
+
+  // mapping preset
+  const [mappingPreset, setMappingPreset] = useState<string | null>(null);
 
   // modals
   const [moduleLogsOpen, setModuleLogsOpen] = useState(false);
@@ -163,9 +156,10 @@ export default function ImportPage() {
     }
   }
 
-  // select connector by clicking its card
+  // select connector by clicking its card (ConnectorManager should call onSelect)
   function selectConnectorId(id: string) {
     setSelectedConnector(id);
+    toast?.info?.("Connector selected");
   }
 
   // connector actions
@@ -174,18 +168,21 @@ export default function ImportPage() {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST" });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
-        alert(`Test failed: ${json?.error ?? "unknown"}`);
+        toast.error(`Test failed: ${json?.error ?? "unknown"}`);
         return;
       }
-      alert("Connection test succeeded");
+      toast.success("Connection test succeeded");
       await loadConnectors();
     } catch (err: any) {
-      alert(String(err?.message ?? err));
+      toast.error(String(err?.message ?? err));
     }
   }
 
   async function syncConnector(connectorId: string) {
-    if (!orgId) return alert("Org ID missing — set DEV_ORG_ID or wire session.");
+    if (!orgId) {
+      toast.error("Org ID missing — set DEV_ORG_ID or wire session.");
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
         method: "POST",
@@ -194,16 +191,16 @@ export default function ImportPage() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
-        alert(json?.error ?? "Sync failed");
+        toast.error(json?.error ?? "Sync failed");
         return;
       }
       const jobId = json.jobId ?? json.id ?? "";
       setIngestionIdInput(jobId);
-      setStatusMessage(`Connector sync started: ${jobId}`);
+      toast.success(`Connector sync started: ${jobId}`);
       if (jobId) await fetchIngestion(jobId);
       await loadConnectors();
     } catch (err: any) {
-      alert(String(err?.message ?? err));
+      toast.error(String(err?.message ?? err));
     }
   }
 
@@ -262,18 +259,18 @@ export default function ImportPage() {
 
     const id = (forIngestionId ?? ingestionIdInput).trim();
     if (!id) {
-      setError("Enter an ingestionId first.");
+      toast.error("Enter an ingestionId first.");
       return;
     }
 
     setRunning(true);
     try {
-      setStatusMessage("Loading ingestion");
+      toast.info("Loading ingestion");
       await fetchIngestion(id);
 
       const steps = importMode === "import_only" ? ["import"] : ["extract", "seo", "audit", "import"];
 
-      setStatusMessage("Starting pipeline run");
+      toast.info("Starting pipeline run");
       const res = await fetch("/api/v1/pipeline/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -284,6 +281,7 @@ export default function ImportPage() {
           options: {
             import: {
               allowOverwriteExisting,
+              mappingPreset: mappingPreset ?? undefined,
             },
           },
         }),
@@ -298,19 +296,19 @@ export default function ImportPage() {
       setPipelineRunId(runId);
       router.push(`/dashboard/import?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`);
 
-      setStatusMessage("Pipeline running");
+      toast.info("Pipeline running");
       const snap = await pollPipeline(runId, 300_000, 2000);
 
-      setStatusMessage("Refreshing ingestion");
+      toast.info("Refreshing ingestion");
       await fetchIngestion(id);
 
-      setStatusMessage("Loading import artifact");
+      toast.info("Loading import artifact");
       await fetchImportArtifact(runId, snap?.modules ?? []);
 
-      setStatusMessage("Import run completed");
+      toast.success("Import run completed");
     } catch (e: any) {
       setError(String(e?.message || e));
-      setStatusMessage(null);
+      toast.error(String(e?.message || e));
     } finally {
       setRunning(false);
     }
@@ -318,7 +316,10 @@ export default function ImportPage() {
 
   // module logs modal
   function openModuleLogs(index: number) {
-    if (!pipelineRunId) return alert("No pipeline run selected");
+    if (!pipelineRunId) {
+      toast.error("No pipeline run selected");
+      return;
+    }
     setModuleLogsParams({ runId: pipelineRunId, index });
     setModuleLogsOpen(true);
   }
@@ -409,8 +410,8 @@ export default function ImportPage() {
               </div>
 
               <div className="mt-3 space-y-3">
-                {/* Instead of a "No connectors" message, show ConnectorManager (create/list) */}
-                <ConnectorManager orgId={orgId} />
+                {/* ConnectorManager is expected to accept props: orgId, selectedId?, onSelect */}
+                <ConnectorManager orgId={orgId} selectedId={selectedConnector} onSelect={selectConnectorId} />
               </div>
             </div>
 
@@ -473,11 +474,11 @@ export default function ImportPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => {
-                    // open sample CSV download
                     const headers = ["sku", "title", "description", "price", "inventory", "weight", "brand"];
                     const rows = [["SKU-001","Sample product","Desc","19.99","10","0.5","Brand"]];
                     const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","))].join("\n");
                     const blob = new Blob([csv], { type: "text/csv" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "import-sample.csv"; a.click(); URL.revokeObjectURL(url);
+                    toast?.info?.("Sample CSV downloaded");
                   }} className="text-xs px-2 py-1 border rounded">Download sample CSV</button>
                   <a href="/imports" className="text-xs px-2 py-1 border rounded">View import history</a>
                 </div>
@@ -489,7 +490,7 @@ export default function ImportPage() {
                   onCreated={async (jobId) => {
                     if (jobId) {
                       setIngestionIdInput(jobId);
-                      setStatusMessage(`Import job created: ${jobId}.`);
+                      toast.success(`Import job created: ${jobId}.`);
                       if (autoRunAfterUpload) {
                         await runImport(jobId);
                       } else {
@@ -498,7 +499,7 @@ export default function ImportPage() {
                       await fetchOrg();
                       await loadConnectors();
                     } else {
-                      setStatusMessage("Import created.");
+                      toast.info("Import created.");
                     }
                   }}
                 />
@@ -515,7 +516,7 @@ export default function ImportPage() {
                     <option value="">Select connector (optional)</option>
                     {connectors.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>)}
                   </select>
-                  <button onClick={() => { if (selectedConnector) syncConnector(selectedConnector); else alert("Select a connector"); }} className="px-3 py-2 rounded bg-sky-600 text-white">Sync</button>
+                  <button onClick={() => { if (selectedConnector) syncConnector(selectedConnector); else toast.error("Select a connector"); }} className="px-3 py-2 rounded bg-sky-600 text-white">Sync</button>
                 </div>
               </div>
 
@@ -530,6 +531,10 @@ export default function ImportPage() {
                     <input type="checkbox" checked={autoRunAfterUpload} onChange={(e) => setAutoRunAfterUpload(e.target.checked)} />
                     <span className="text-xs">Auto-run pipeline after upload</span>
                   </label>
+                </div>
+
+                <div className="ml-2">
+                  <MappingPresetSelector value={mappingPreset} onChange={setMappingPreset} />
                 </div>
 
                 <div className="ml-auto whitespace-nowrap">
@@ -582,7 +587,7 @@ export default function ImportPage() {
                     <div className="text-xs text-slate-500">Download results</div>
                     <div className="flex gap-2">
                       <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="text-xs px-2 py-1 bg-slate-900 text-white rounded">Export JSON</button>
-                      <button onClick={() => downloadFailedRowsCsv(ingestionIdInput)} className="text-xs px-2 py-1 border rounded">Download failed rows</button>
+                      <button onClick={() => downloadFailedRowsCsv(ingestionIdInput, toast)} className="text-xs px-2 py-1 border rounded">Download failed rows</button>
                       <a href="/imports" className="text-xs px-2 py-1 border rounded">Import history</a>
                     </div>
                   </div>
