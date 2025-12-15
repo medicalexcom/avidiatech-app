@@ -1,4 +1,3 @@
-// path: src/components/pipeline/RecentRuns.tsx
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -15,7 +14,6 @@ type RunItem = {
 type Props = {
   ingestionId?: string;
   pipelineId?: string;
-  // optional limit or other UI props could be added later
   limit?: number;
 };
 
@@ -28,13 +26,13 @@ export default function RecentRuns({ ingestionId, pipelineId, limit = 10 }: Prop
     setLoading(true);
     setError(null);
     try {
-      // prefer pipelineId if provided, otherwise ingestionId
       const params = new URLSearchParams();
       if (pipelineId) params.set("pipelineId", pipelineId);
       else if (ingestionId) params.set("ingestionId", ingestionId);
       if (limit) params.set("limit", String(limit));
 
-      const url = `/api/v1/pipeline/runs?${params.toString()}`; // ensure your backend accepts these query params
+      // Adjust this endpoint if your backend exposes a different route
+      const url = `/api/v1/pipeline/runs?${params.toString()}`;
       const res = await fetch(url);
       const json = await res.json().catch(() => null);
 
@@ -42,7 +40,6 @@ export default function RecentRuns({ ingestionId, pipelineId, limit = 10 }: Prop
         setError(json?.error ?? `Failed to load runs (${res.status})`);
         setRuns([]);
       } else {
-        // support both shapes: { ok: true, runs: [...] } or direct array
         const list = (json?.runs ?? json) as RunItem[] | any;
         if (Array.isArray(list)) setRuns(list.slice(0, limit));
         else setRuns([]);
@@ -56,10 +53,9 @@ export default function RecentRuns({ ingestionId, pipelineId, limit = 10 }: Prop
   }
 
   useEffect(() => {
-    // reload whenever ingestionId or pipelineId changes
-    if (ingestionId || pipelineId) loadRuns();
+    if (pipelineId || ingestionId) loadRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ingestionId, pipelineId]);
+  }, [pipelineId, ingestionId]);
 
   return (
     <div>
@@ -94,7 +90,10 @@ export default function RecentRuns({ ingestionId, pipelineId, limit = 10 }: Prop
               <div className="text-right">
                 <div className="text-xs px-2 py-0.5 rounded-full bg-slate-100 inline-block">{r.status ?? "unknown"}</div>
                 <div className="mt-2">
-                  <a href={`/dashboard/import?pipelineRunId=${encodeURIComponent(r.id)}${ingestionId ? `&ingestionId=${encodeURIComponent(ingestionId)}` : ""}`} className="text-xs text-sky-600">
+                  <a
+                    href={`/dashboard/import?pipelineRunId=${encodeURIComponent(r.id)}${ingestionId ? `&ingestionId=${encodeURIComponent(ingestionId)}` : ""}`}
+                    className="text-xs text-sky-600"
+                  >
                     View
                   </a>
                 </div>
