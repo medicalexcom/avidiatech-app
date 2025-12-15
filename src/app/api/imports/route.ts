@@ -5,11 +5,8 @@ import { getQueue } from "../../../lib/queue/bull";
 
 /**
  * POST /api/imports
- * - Creates an import_jobs row with status 'queued'.
- * - Enqueues an 'import-process' job for background worker.
- * - Validates presence of file_path and file_name.
- *
- * Server derives org from session via getOrgFromRequest.
+ * Creates an import_jobs queued job and enqueues background processing.
+ * Server derives org from Clerk session; client-provided org_id ignored.
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -19,14 +16,13 @@ const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: 
 export async function POST(req: Request) {
   try {
     const orgId = await getOrgFromRequest(req);
-    if (!orgId) return NextResponse.json({ ok: false, error: "Not authenticated / org not found" }, { status: 401 });
+    if (!orgId) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     const { file_path, file_name, file_format, mapping = null, platform = null } = body;
 
     if (!file_path || !file_name) return NextResponse.json({ ok: false, error: "file_path and file_name required" }, { status: 400 });
 
-    // insert import_jobs row with status queued
     const { data: jobRow, error } = await supaAdmin
       .from("import_jobs")
       .insert({
@@ -43,9 +39,8 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
-    // enqueue import-process job
     const queue = getQueue("import-process");
-    await queue.add("import-process", { jobId: jobRow.id }, { attempts: 3, backoff: { type: "exponential", delay: 5000 } });
+    await queue.add("import-process", { jobId: jobRow.id }, { attempts: 3 });
 
     return NextResponse.json({ ok: true, jobId: jobRow.id });
   } catch (err: any) {
