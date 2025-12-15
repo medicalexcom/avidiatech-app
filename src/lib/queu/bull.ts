@@ -9,8 +9,8 @@
  *   const q = getQueue("connector-sync");
  *   await q.add("connector-sync", {...});
  *
- * Note: This file uses dynamic import to avoid build-time errors if bullmq is not installed.
- * Install dependencies: npm install bullmq ioredis
+ * Install dependencies before using:
+ *   npm install bullmq ioredis
  */
 
 let _queues: Record<string, any> = {};
@@ -18,13 +18,17 @@ let _queues: Record<string, any> = {};
 export function getQueue(name: string) {
   if (_queues[name]) return _queues[name];
 
-  // dynamic import to avoid static type error if not installed in some setups
-  // — the user must install bullmq and ioredis before running queue code
+  // Dynamic require so builds that don't include bullmq until you install it won't fail at import-time in some tools.
+  // The user must install bullmq and ioredis before attempting to actually run queue operations.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Queue } = require("bullmq");
 
-  const connection = { connection: process.env.REDIS_URL || { host: "127.0.0.1", port: 6379 } };
-  const q = new Queue(name, connection);
+  const connection = process.env.REDIS_URL
+    ? { connection: process.env.REDIS_URL }
+    : { connection: { host: "127.0.0.1", port: 6379 } };
+
+  // Depending on bullmq version the constructor accepts either connection or options, adapt if needed.
+  const q = new Queue(name, connection.connection ? connection : { connection });
   _queues[name] = q;
   return q;
 }
