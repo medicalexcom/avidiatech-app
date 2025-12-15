@@ -1,0 +1,11 @@
+var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/v1/integrations/ecommerce/bigcommerce/route.js")
+R.c("server/chunks/node_modules_2b327645._.js")
+R.c("server/chunks/node_modules_@clerk_nextjs_dist_esm_app-router_server_auth_99915407.js")
+R.c("server/chunks/[root-of-the-server]__e608551f._.js")
+R.c("server/chunks/node_modules_@clerk_a5556264._.js")
+R.c("server/chunks/node_modules_e884240b._.js")
+R.c("server/chunks/[root-of-the-server]__d7355d04._.js")
+R.c("server/chunks/node_modules_next_dist_23bfe24c._.js")
+R.c("server/chunks/ce889_server_app_api_v1_integrations_ecommerce_bigcommerce_route_actions_e23a29d5.js")
+R.m(47616)
+module.exports=R.m(47616).exports

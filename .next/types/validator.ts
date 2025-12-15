@@ -47,6 +47,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 }
 
 
+// Validate ../../src/app/account/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/account">> = Specific
+  const handler = {} as typeof import("../../src/app/account/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/dashboard/account/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/dashboard/account">> = Specific
+  const handler = {} as typeof import("../../src/app/dashboard/account/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/dashboard/agency/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/dashboard/agency">> = Specific
@@ -434,6 +452,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/settings/organization/new/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/settings/organization/new">> = Specific
+  const handler = {} as typeof import("../../src/app/settings/organization/new/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/settings/organization/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/settings/organization">> = Specific
@@ -465,6 +492,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends AppPageConfig<"/sign-in/[[...index]]">> = Specific
   const handler = {} as typeof import("../../src/app/sign-in/[[...index]]/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/sign-in/tasks/choose-organization/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/sign-in/tasks/choose-organization">> = Specific
+  const handler = {} as typeof import("../../src/app/sign-in/tasks/choose-organization/page.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
@@ -546,6 +582,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/debug/supabase/profile">> = Specific
   const handler = {} as typeof import("../../src/app/api/debug/supabase/profile/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/imports/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/imports">> = Specific
+  const handler = {} as typeof import("../../src/app/api/imports/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
@@ -704,6 +749,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/v1/integrations/ecommerce/bigcommerce/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/integrations/ecommerce/bigcommerce">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/integrations/ecommerce/bigcommerce/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/v1/match/[id]/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/match/[id]">> = Specific
@@ -744,6 +798,60 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/match">> = Specific
   const handler = {} as typeof import("../../src/app/api/v1/match/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/internal/audit/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/internal/audit">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/internal/audit/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/internal/import/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/internal/import">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/internal/import/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/internal/seo/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/internal/seo">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/internal/seo/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/run/[id]/output/[moduleIndex]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/run/[id]/output/[moduleIndex]">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/run/[id]/output/[moduleIndex]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/run/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/run/[id]">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/run/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/v1/pipeline/run/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/pipeline/run">> = Specific
+  const handler = {} as typeof import("../../src/app/api/v1/pipeline/run/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check
