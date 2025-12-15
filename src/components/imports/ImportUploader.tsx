@@ -1,189 +1,205 @@
 "use client";
 
-import React, { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import MappingModal from "@/components/imports/MappingModal";
+import React, { useEffect, useRef, useState } from "react";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { useToast } from "@/components/ui/toast";
+
+/**
+ * A self-contained ImportUploader that:
+ * - requires an authenticated session before allowing uploads
+ * - uploads files to the specified Supabase storage bucket
+ * - calls the backend to create an import job and invokes onCreated(jobId)
+ *
+ * Usage:
+ * <ImportUploader bucket="imports" onCreated={(jobId) => { ... }} />
+ *
+ * Notes:
+ * - Make sure NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set.
+ * - The backend endpoint used to create the import job is POST /api/v1/imports
+ *   and expects JSON like { bucket, path, filename }. Adjust the endpoint/body
+ *   if your backend differs.
+ */
 
 type Props = {
   bucket?: string;
-  maxRows?: number;
-  maxCols?: number;
-  onCreated?: (jobId: string) => void;
-  className?: string;
-  platform?: string;
+  onCreated?: (jobId: string | null) => void;
 };
 
-const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPA_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supa = SUPA_URL && SUPA_ANON ? createClient(SUPA_URL, SUPA_ANON) : null;
+export default function ImportUploader({ bucket = "imports", onCreated }: Props) {
+  const toast = useToast();
+  const [supabase] = useState<SupabaseClient>(() =>
+    createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
+    )
+  );
 
-export default function ImportUploader({ bucket = "imports", maxRows = 5000, maxCols = 50, onCreated, className, platform }: Props) {
-  const [file, setFile] = useState<File | null>(null);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [previewRows, setPreviewRows] = useState<any[]>([]);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [session, setSession] = useState<any | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Mapping modal
-  const [mappingOpen, setMappingOpen] = useState(false);
-  const [mapping, setMapping] = useState<Record<string, string> | null>(null);
-
-  async function readPreview(f: File) {
-    setPreviewError(null);
-    setLoadingPreview(true);
-    setHeaders([]);
-    setPreviewRows([]);
-    setMapping(null);
-
-    try {
-      const ext = f.name.split(".").pop()?.toLowerCase();
-      if (ext === "csv" || ext === "txt") {
-        const PapaMod = await import("papaparse");
-        const Papa = (PapaMod && (PapaMod.default ?? PapaMod)) as any;
-        await new Promise<void>((resolve, reject) => {
-          Papa.parse(f, {
-            header: true,
-            preview: 50,
-            skipEmptyLines: true,
-            complete: (res: any) => {
-              setHeaders(res.meta?.fields ?? []);
-              setPreviewRows(res.data ?? []);
-              resolve();
-            },
-            error: (err: any) => reject(err),
-          });
-        });
-      } else {
-        const XLSX = (await import("xlsx")) as any;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const ab = e.target?.result as ArrayBuffer;
-            const wb = XLSX.read(ab, { type: "array" });
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }) as any[];
-            setHeaders(rows.length ? Object.keys(rows[0]) : []);
-            setPreviewRows(rows.slice(0, 50));
-          } catch (err: any) {
-            setPreviewError(err?.message ?? String(err));
-          } finally {
-            setLoadingPreview(false);
-          }
-        };
-        reader.onerror = () => {
-          setPreviewError("Failed to read file for preview");
-          setLoadingPreview(false);
-        };
-        reader.readAsArrayBuffer(f);
-        return;
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        setSession(data?.session ?? null);
+      } catch (e) {
+        // ignore
+      } finally {
+        if (mounted) setChecking(false);
       }
-    } catch (err: any) {
-      setPreviewError(err?.message ?? String(err));
-    } finally {
-      setLoadingPreview(false);
-    }
-  }
+    })();
 
-  async function handleUpload() {
-    setPreviewError(null);
-    if (!file) {
-      setPreviewError("No file selected");
-      return;
-    }
-    if (!supa) {
-      setPreviewError("Supabase client not configured (missing env vars)");
-      return;
-    }
-    if (headers.length > maxCols) {
-      setPreviewError(`Too many columns (max ${maxCols}). Please reduce columns.`);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session ?? null);
+    });
+
+    return () => subscription?.unsubscribe?.() ?? undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleFile(file: File) {
+    if (!file) return;
+    if (!session) {
+      toast?.error?.("You must be signed in to upload.");
       return;
     }
 
     setUploading(true);
+    setProgress(0);
+
     try {
-      const storagePath = `${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supa.storage.from(bucket).upload(storagePath, file, { upsert: false });
-      if (uploadError) {
-        setPreviewError(`Upload failed: ${uploadError.message}`);
-        return;
+      // chosen path: timestamp + sanitized filename
+      const ts = Date.now();
+      const safeName = file.name.replace(/\s+/g, "_");
+      const path = `${ts}-${safeName}`;
+
+      // upload to Supabase Storage
+      const uploadRes = await supabase.storage
+        .from(bucket)
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadRes.error) {
+        throw uploadRes.error;
       }
 
-      const bodyObj: any = {
-        file_path: `${bucket}/${storagePath}`,
-        file_name: file.name,
-        file_format: file.name.split(".").pop()?.toLowerCase(),
-        mapping: mapping ?? null,
-        platform: platform ?? null,
-      };
+      // Optionally you can track progress with fetch + xhr or presigned urls;
+      // supabase-js storage upload does not expose progress in v2 currently.
 
-      const res = await fetch("/api/imports", {
+      // Call backend to create an import job referencing the stored file
+      // Adjust this route/body if your API expects different fields.
+      const resp = await fetch("/api/v1/imports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(bodyObj),
+        body: JSON.stringify({
+          bucket,
+          path: uploadRes.data.path,
+          filename: file.name,
+        }),
       });
 
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        setPreviewError(json?.error ?? `Create import job failed: ${res.status}`);
-        return;
-      }
+      const j = await resp.json().catch(() => null);
 
-      const jobId = json.jobId ?? json.id ?? null;
-      onCreated?.(jobId ?? "");
+      if (!resp.ok) {
+        // backend failed to create import job
+        toast?.error?.(j?.error ?? j?.message ?? "Failed to create import job");
+        onCreated?.(null);
+      } else {
+        // try common keys for job id
+        const jobId = j?.jobId ?? j?.id ?? j?.data?.id ?? null;
+        if (jobId) {
+          toast?.success?.(`Import job created: ${jobId}`);
+        } else {
+          toast?.info?.("Upload succeeded; import job created.");
+        }
+        onCreated?.(jobId);
+      }
     } catch (err: any) {
-      setPreviewError(String(err?.message || err));
+      toast?.error?.(String(err?.message ?? err));
+      onCreated?.(null);
     } finally {
       setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
-  return (
-    <div className={className}>
-      <div>
-        <input
-          type="file"
-          accept=".csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => {
-            const f = e.target.files?.[0] ?? null;
-            setFile(f);
-            if (f) readPreview(f);
-          }}
-        />
-      </div>
+  function onChangeFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    if (!f) return;
+    handleFile(f);
+  }
 
-      {loadingPreview && <div className="mt-3 text-sm">Loading preview…</div>}
-      {previewError && <div className="mt-3 text-sm text-rose-700">{previewError}</div>}
+  // UI: If still checking session show loader
+  if (checking) return <div className="p-3 text-xs text-slate-500">Checking authentication…</div>;
 
-      {headers.length > 0 && (
-        <div className="mt-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-500">Preview headers</div>
-            <div>
-              <button onClick={() => setMappingOpen(true)} className="text-xs px-2 py-1 border rounded mr-2">Open mapping</button>
-              <button onClick={() => { setHeaders([]); setPreviewRows([]); setFile(null); setMapping(null); }} className="text-xs px-2 py-1 border rounded">Clear</button>
-            </div>
-          </div>
-
-          <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(headers)}</pre>
-
-          <div className="mt-3 text-xs text-slate-500">Preview rows</div>
-          <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(previewRows.slice(0, 5), null, 2)}</pre>
-
-          <div className="mt-4 flex gap-2">
-            <button onClick={handleUpload} disabled={uploading} className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60">
-              {uploading ? "Uploading…" : "Upload & Create Import"}
-            </button>
-          </div>
+  // If not authenticated, show CTA to sign in
+  if (!session) {
+    return (
+      <div className="rounded border p-4 bg-yellow-50 text-sm">
+        <div className="font-medium mb-2">Sign in required to upload</div>
+        <div className="text-xs text-slate-700 mb-3">
+          You must sign in to upload files. This ensures uploads are associated with your account.
         </div>
-      )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              // recommend redirecting to your sign-in page
+              window.location.href = "/signin";
+            }}
+            className="px-3 py-2 bg-sky-600 text-white rounded"
+          >
+            Sign in
+          </button>
+          <button
+            onClick={() => {
+              toast?.info?.("If you don't have an account, create one to upload files.");
+            }}
+            className="px-3 py-2 border rounded"
+          >
+            Learn more
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-      <MappingModal
-        open={mappingOpen}
-        headers={headers}
-        initialMapping={mapping ?? {}}
-        onSave={(m) => { setMapping(m); setMappingOpen(false); }}
-        onClose={() => setMappingOpen(false)}
-      />
+  // Authenticated UI: file input and basic status
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-slate-600">Upload file (CSV / XLSX)</label>
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv, .xlsx, .xls"
+          onChange={onChangeFile}
+          disabled={uploading}
+          className="text-sm"
+        />
+        <button
+          onClick={() => {
+            if (inputRef.current) inputRef.current.click();
+          }}
+          disabled={uploading}
+          className="px-3 py-2 bg-slate-800 text-white rounded text-sm"
+        >
+          {uploading ? "Uploading…" : "Choose file"}
+        </button>
+        {uploading && <div className="text-xs text-slate-500">Uploading…</div>}
+      </div>
+      <div className="text-xs text-slate-500">
+        Tip: max 5,000 rows. After upload the import job will be created automatically.
+      </div>
     </div>
   );
 }
