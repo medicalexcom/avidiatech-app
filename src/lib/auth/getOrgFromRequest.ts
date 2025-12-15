@@ -1,37 +1,24 @@
 /**
- * Lightweight org extraction helper for server routes.
+ * Prefer Clerk session -> map to org.
+ * Only fall back to DEV_ORG_ID in non-production for local testing convenience.
  *
- * Behavior:
- * - If DEV_ORG_ID is set in env, return it (developer convenience).
- * - Otherwise looks for:
- *   - Authorization header starting with "Org " (e.g. "Org <org_id>") OR
- *   - cookie "org_id=<org>"
- *
- * TODO (production):
- * - Replace the fallback logic with Clerk (or your auth provider).
- * - Example: use `@clerk/nextjs/server` getAuth(req) and derive org membership server-side.
- *
- * Usage: const orgId = await getOrgFromRequest(req); if (!orgId) return 401
+ * IMPORTANT: In production this must NOT use DEV_ORG_ID.
  */
 
+import { getOrgFromClerkSession } from "./clerkServer";
+
 export async function getOrgFromRequest(req: Request): Promise<string | null> {
-  // 1) DEV override
+  // Try Clerk session first
+  try {
+    const org = await getOrgFromClerkSession(req);
+    if (org) return org;
+  } catch (err) {
+    // ignore and fall through to dev fallback if allowed
+  }
+
+  // Development fallback (only enable explicitly in non-production)
   const dev = process.env.DEV_ORG_ID;
-  if (dev) return dev;
+  if (process.env.NODE_ENV !== "production" && dev) return dev;
 
-  // 2) Authorization header "Org <orgId>" (temporary convenience)
-  const auth = req.headers.get("authorization") ?? "";
-  if (auth.startsWith("Org ")) {
-    return auth.slice(4).trim() || null;
-  }
-
-  // 3) cookie org_id=...
-  const cookie = req.headers.get("cookie") ?? "";
-  if (cookie) {
-    const m = cookie.match(/(?:^|;\s*)org_id=([^;]+)/);
-    if (m) return decodeURIComponent(m[1]);
-  }
-
-  // No org found
   return null;
 }
