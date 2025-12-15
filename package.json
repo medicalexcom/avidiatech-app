@@ -34,22 +34,10 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/node-fetch": "^2.6.13",
-    "@types/papaparse": "^5.5.2",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "install": "^0.13.0",
-    "npm": "^11.7.0",
-    "papaparse": "^5.5.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
-<<<<<<< HEAD
-<<<<<<< HEAD
-    "xlsx": "^0.18.5"
-=======
     "@types/papaparse": "^5.2.6"
->>>>>>> 0dc51d3cee25d1a7c97dcf483d9f7163c07122f7
-=======
-    "@types/papaparse": "^5.2.6"
->>>>>>> 0dc51d3cee25d1a7c97dcf483d9f7163c07122f7
   }
 }
