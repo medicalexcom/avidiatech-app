@@ -154,7 +154,7 @@ export default function ImportUploader({ bucket = "imports", onCreated }: Props)
           <button
             onClick={() => {
               // recommend redirecting to your sign-in page
-              window.location.href = "/signin";
+              window.location.href = "/sign-in";
             }}
             className="px-3 py-2 bg-sky-600 text-white rounded"
           >
