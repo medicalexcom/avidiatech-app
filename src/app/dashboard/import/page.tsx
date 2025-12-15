@@ -7,9 +7,11 @@ import ConnectorManager from "@/components/integrations/ConnectorManager";
 import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 import RecentRuns from "@/components/pipeline/RecentRuns";
 import { MappingPresetSelector } from "@/components/imports/MappingPresetSelector";
+import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
 import { useToast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
-/* Helper types & functions (same as before) */
+/* Helper types & functions (same as before but mappingPreset typed as any to accept both id/name/object) */
 type AnyObj = Record<string, any>;
 type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
 type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
@@ -58,6 +60,7 @@ function downloadJson(filename: string, data: any) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
 async function downloadFailedRowsCsv(jobId: string, toast: any) {
   if (!jobId) {
     toast?.error?.("No job id");
@@ -83,6 +86,19 @@ async function downloadFailedRowsCsv(jobId: string, toast: any) {
   }
 }
 
+/* Small UI helpers */
+const Spinner = () => (
+  <svg className="animate-spin h-4 w-4 inline-block mr-2 align-middle" viewBox="0 0 24 24" aria-hidden>
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  </svg>
+);
+
+function SkeletonRow() {
+  return <div className="h-12 rounded bg-slate-100 animate-pulse" />;
+}
+
+/* Page component */
 export default function ImportPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -96,8 +112,8 @@ export default function ImportPage() {
   const [connectors, setConnectors] = useState<any[]>([]);
   const [selectedConnector, setSelectedConnector] = useState<string>("");
 
-  // mapping preset
-  const [mappingPreset, setMappingPreset] = useState<string | null>(null);
+  // mapping preset — accept object or string
+  const [mappingPreset, setMappingPreset] = useState<any | null>(null);
 
   // modals
   const [moduleLogsOpen, setModuleLogsOpen] = useState(false);
@@ -117,6 +133,10 @@ export default function ImportPage() {
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // confirm delete import job
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [toDeleteIngestionId, setToDeleteIngestionId] = useState<string | null>(null);
 
   // derived
   const selectedConnectorObj = useMemo(() => connectors.find((c) => c.id === selectedConnector) ?? null, [connectors, selectedConnector]);
@@ -274,7 +294,8 @@ export default function ImportPage() {
           options: {
             import: {
               allowOverwriteExisting,
-              mappingPreset: mappingPreset ?? undefined,
+              // include mappingPreset id if available, or the preset itself
+              mappingPreset: mappingPreset?.id ?? mappingPreset ?? undefined,
             },
           },
         }),
@@ -417,6 +438,7 @@ export default function ImportPage() {
                       <div className="flex gap-2">
                         <button onClick={() => testConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 border rounded">Test</button>
                         <button onClick={() => syncConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 bg-sky-600 text-white rounded">Sync</button>
+                        <button onClick={() => setSelectedConnector(selectedConnectorObj.id)} className="text-xs px-2 py-1 border rounded">Details</button>
                       </div>
                     </div>
                   </div>
@@ -457,13 +479,24 @@ export default function ImportPage() {
                   <p className="text-xs text-slate-500">Upload CSV/XLSX or sync from a connected store to create an import job.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => {
-                    const headers = ["sku", "title", "description", "price", "inventory", "weight", "brand"];
-                    const rows = [["SKU-001","Sample product","Desc","19.99","10","0.5","Brand"]];
-                    const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","))].join("\n");
-                    const blob = new Blob([csv], { type: "text/csv" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "import-sample.csv"; a.click(); URL.revokeObjectURL(url);
-                    toast?.info?.("Sample CSV downloaded");
-                  }} className="text-xs px-2 py-1 border rounded">Download sample CSV</button>
+                  <button
+                    onClick={() => {
+                      const headers = ["sku", "title", "description", "price", "inventory", "weight", "brand"];
+                      const rows = [["SKU-001","Sample product","Desc","19.99","10","0.5","Brand"]];
+                      const csv = [headers.join(","), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(","))].join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "import-sample.csv";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast?.info?.("Sample CSV downloaded");
+                    }}
+                    className="text-xs px-2 py-1 border rounded"
+                  >
+                    Download sample CSV
+                  </button>
                   <a href="/imports" className="text-xs px-2 py-1 border rounded">View import history</a>
                 </div>
               </div>
@@ -471,7 +504,7 @@ export default function ImportPage() {
               <div className="mt-4">
                 <ImportUploader
                   bucket="imports"
-                  onCreated={async (jobId) => {
+                  onCreated={async (jobId: string) => {
                     if (jobId) {
                       setIngestionIdInput(jobId);
                       toast.success(`Import job created: ${jobId}.`);
@@ -489,10 +522,23 @@ export default function ImportPage() {
                 />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div className="md:col-span-2">
                   <label className="text-xs font-medium uppercase text-slate-500">Ingestion ID / Job</label>
-                  <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className="w-full mt-1 rounded border px-3 py-2" />
+                  <div className="flex gap-2 mt-1">
+                    <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className="w-full rounded border px-3 py-2" />
+                    <button
+                      onClick={() => {
+                        if (!ingestionIdInput) return toast.error("No ingestion id to delete");
+                        setToDeleteIngestionId(ingestionIdInput);
+                        setConfirmDeleteOpen(true);
+                      }}
+                      className="px-3 py-2 border rounded text-sm"
+                      aria-label="Delete ingestion job"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-end gap-2">
@@ -518,19 +564,31 @@ export default function ImportPage() {
                 </div>
 
                 <div className="ml-2">
-                  <MappingPresetSelector
-                    provider={selectedConnectorObj?.provider}
-                    onSelect={(preset) => {
-                      // adapt to your desired saved shape — here we store a simple string id/name
-                      const val = preset?.name ?? (preset?.id ? String(preset.id) : null);
-                      setMappingPreset(val);
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <MappingPresetSelector
+                      provider={selectedConnectorObj?.provider}
+                      onSelect={(preset: any) => {
+                        setMappingPreset(preset ?? null);
+                        toast?.info?.("Mapping preset selected");
+                      }}
+                    />
+                    {mappingPreset && (
+                      <div className="inline-flex items-center gap-2 px-2 py-1 rounded border text-xs">
+                        <span>{mappingPreset?.name ?? mappingPreset?.id ?? String(mappingPreset)}</span>
+                        <button onClick={() => { setMappingPreset(null); toast?.info?.("Mapping preset cleared"); }} className="text-xs px-2 py-1 border rounded">Clear</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="ml-auto whitespace-nowrap">
-                  <button onClick={() => runImport()} disabled={running} className="px-4 py-2 rounded bg-emerald-500 text-white">
-                    {running ? "Running…" : "Run Import"}
+                  <button
+                    onClick={() => runImport()}
+                    disabled={running}
+                    className="px-4 py-2 rounded bg-emerald-500 text-white inline-flex items-center"
+                    aria-label="Run import"
+                  >
+                    {running ? <><Spinner />Running…</> : "Run Import"}
                   </button>
                 </div>
               </div>
@@ -562,11 +620,17 @@ export default function ImportPage() {
                         </div>
                       </div>
                     ))}
-                    {!(pipelineSnapshot?.modules ?? []).length && <div className="text-xs text-slate-500">No active run selected.</div>}
+                    {!(pipelineSnapshot?.modules ?? []).length && (
+                      <>
+                        <div className="text-xs text-slate-500">No active run selected.</div>
+                        <SkeletonRow />
+                        <SkeletonRow />
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-4">
-                    <RecentRuns ingestionId={ingestionIdInput} />
+                    <RecentRuns ingestionId={ingestionIdInput} pipelineId={pipelineRunId} />
                   </div>
                 </div>
 
@@ -606,6 +670,35 @@ export default function ImportPage() {
           onClose={() => setModuleLogsOpen(false)}
         />
       )}
+
+      {/* Connector details drawer */}
+      <ConnectorDetailsDrawer integrationId={selectedConnector} isOpen={Boolean(selectedConnector)} onClose={() => setSelectedConnector("")} />
+
+      {/* Confirm delete ingestion */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        title="Delete import job"
+        description={`Delete import job ${toDeleteIngestionId}? This cannot be undone.`}
+        onConfirm={async () => {
+          setConfirmDeleteOpen(false);
+          if (!toDeleteIngestionId) return;
+          try {
+            const res = await fetch(`/api/v1/imports/${encodeURIComponent(toDeleteIngestionId)}`, { method: "DELETE" });
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.ok) {
+              toast.error(json?.error ?? "Delete failed");
+              return;
+            }
+            toast.success("Import deleted");
+            setIngestionIdInput("");
+            setJob(null);
+            setToDeleteIngestionId(null);
+          } catch (err: any) {
+            toast.error(String(err?.message ?? err));
+          }
+        }}
+      />
     </main>
   );
 }
