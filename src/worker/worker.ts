@@ -1,24 +1,24 @@
 /**
  * Worker process to run background jobs for connector syncs and import processing.
  *
- * Run with ts-node (recommended for dev):
+ * Run with ts-node (dev):
  *   npx ts-node --transpile-only src/worker/worker.ts
  *
  * Production: compile this TS to JS and run with node or use PM2/systemd.
  *
  * Required env:
- * - REDIS_URL (e.g. redis://localhost:6379)
+ * - REDIS_URL (e.g. redis://127.0.0.1:6379 or rediss://...)
  * - SUPABASE_URL
  * - SUPABASE_SERVICE_ROLE_KEY
  *
- * Notes:
- * - This worker is MVP: it demonstrates job lifecycle and DB updates.
- * - Replace placeholder processing with your own connector adapters and mapping logic.
+ * This worker is an MVP: replace placeholder processing with your actual connector adapters and import logic.
  */
 
 import { Worker } from "bullmq";
+import Redis from "ioredis";
 import { createClient } from "@supabase/supabase-js";
 
+// Ensure required envs
 const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -28,12 +28,19 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
+// Supabase admin client
 const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+
+// Create a single ioredis client instance and reuse for BullMQ workers
+const redisConnection = new Redis(REDIS_URL);
 
 // Helper: mark job status and optionally insert simple import_rows
 async function processImportJob(jobId: any) {
   // set processing
-  await supaAdmin.from("import_jobs").update({ status: "processing", updated_at: new Date().toISOString() }).eq("id", jobId);
+  await supaAdmin
+    .from("import_jobs")
+    .update({ status: "processing", updated_at: new Date().toISOString() })
+    .eq("id", jobId);
 
   // Placeholder: simulate processing time and create a small import_rows sample
   await new Promise((r) => setTimeout(r, 3000));
@@ -47,16 +54,22 @@ async function processImportJob(jobId: any) {
       data: { sku: "SAMPLE-001", title: "Sample product", price: "19.99" },
     });
   } catch (e) {
-    // ignore
+    console.warn("Failed to insert sample import_rows:", e);
   }
 
   // mark succeeded
-  await supaAdmin.from("import_jobs").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", jobId);
+  await supaAdmin
+    .from("import_jobs")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("id", jobId);
 }
 
 async function processConnectorSync(integrationId: string, jobId: any) {
   // set the import_job status processing
-  await supaAdmin.from("import_jobs").update({ status: "processing", updated_at: new Date().toISOString() }).eq("id", jobId);
+  await supaAdmin
+    .from("import_jobs")
+    .update({ status: "processing", updated_at: new Date().toISOString() })
+    .eq("id", jobId);
 
   // Placeholder: fetch integration and pretend to sync a few products
   const { data: integration } = await supaAdmin.from("integrations").select("*").eq("id", integrationId).single();
@@ -65,20 +78,27 @@ async function processConnectorSync(integrationId: string, jobId: any) {
   await new Promise((r) => setTimeout(r, 4000));
 
   // For demo insert a few rows referencing jobId (replace with real provider fetch and mapping)
-  await supaAdmin.from("import_rows").insert([
-    { job_id: jobId, row_number: 1, status: "success", data: { sku: "SYNC-001", title: `${integration?.provider} product 1` } },
-    { job_id: jobId, row_number: 2, status: "success", data: { sku: "SYNC-002", title: `${integration?.provider} product 2` } },
-  ]);
+  try {
+    await supaAdmin.from("import_rows").insert([
+      { job_id: jobId, row_number: 1, status: "success", data: { sku: "SYNC-001", title: `${integration?.provider} product 1` } },
+      { job_id: jobId, row_number: 2, status: "success", data: { sku: "SYNC-002", title: `${integration?.provider} product 2` } },
+    ]);
+  } catch (e) {
+    console.warn("Failed to insert sync import_rows:", e);
+  }
 
   // mark import job completed
-  await supaAdmin.from("import_jobs").update({ status: "completed", updated_at: new Date().toISOString() }).eq("id", jobId);
+  await supaAdmin
+    .from("import_jobs")
+    .update({ status: "completed", updated_at: new Date().toISOString() })
+    .eq("id", jobId);
 
   // update integration last_synced_at
   await supaAdmin.from("integrations").update({ last_synced_at: new Date().toISOString(), status: "ready" }).eq("id", integrationId);
 }
 
 async function startWorkers() {
-  console.log("Starting workers (REDIS_URL=", REDIS_URL, ")");
+  console.log("Starting workers using REDIS_URL=", REDIS_URL);
 
   const connectorWorker = new Worker(
     "connector-sync",
@@ -88,7 +108,7 @@ async function startWorkers() {
       await processConnectorSync(integrationId, jobId);
       return { ok: true };
     },
-    { connection: REDIS_URL }
+    { connection: redisConnection }
   );
 
   const importWorker = new Worker(
@@ -99,7 +119,7 @@ async function startWorkers() {
       await processImportJob(jobId);
       return { ok: true };
     },
-    { connection: REDIS_URL }
+    { connection: redisConnection }
   );
 
   connectorWorker.on("completed", (job) => console.log("connector-sync completed", job.id));
