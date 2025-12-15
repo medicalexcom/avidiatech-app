@@ -29,3 +29,28 @@ Testing
 If you’d like I can now:
 - Create the PR with these files (I need repository push permissions), or
 - Provide the patch as a single diff you can apply via CLI.
+
+Add these to your README or run locally:
+
+1) Install queue dependencies:
+   npm install bullmq ioredis
+
+2) Ensure Redis is running:
+   - Local: docker run -p 6379:6379 -d redis
+   - Set REDIS_URL env if not default (e.g. redis://localhost:6379)
+
+3) For development auth shortcut:
+   - Set DEV_ORG_ID in .env.local to your org uuid so the UI and routes derive org_id.
+
+4) Start the worker (dev):
+   npx ts-node --transpile-only src/worker/worker.ts
+   (or compile to JS and run with node in production)
+
+5) Test flow:
+   - Create a connector in UI or call POST /api/v1/integrations with a valid session / DEV_ORG_ID.
+   - Trigger sync: POST /api/v1/integrations/:id/sync — endpoint will create import_jobs row and enqueue connector-sync job. Worker will process and update import_jobs/import_rows.
+   - Upload a CSV via ImportUploader => POST /api/imports — creates import_jobs row and enqueues import-process job.
+
+Notes:
+- Replace the placeholder worker logic with your real connector sync & import processing code.
+- Implement Clerk (or another auth provider) in getOrgFromRequest to derive org securely and reject unauthorized calls.
