@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import ImportUploader from "@/components/imports/ImportUploader";
+import ImportUploaderWithPreset from "@/components/imports/ImportUploaderWithPreset";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 import RecentRuns from "@/components/pipeline/RecentRuns";
@@ -502,8 +502,9 @@ export default function ImportPage() {
               </div>
 
               <div className="mt-4">
-                <ImportUploader
+                <ImportUploaderWithPreset
                   bucket="imports"
+                  mappingPreset={mappingPreset}
                   onCreated={async (jobId: string) => {
                     if (jobId) {
                       setIngestionIdInput(jobId);
