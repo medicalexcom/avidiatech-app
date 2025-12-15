@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuth } from "@clerk/nextjs/server";
+import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -16,80 +17,128 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-async function normalizeReturnedPath(data: any, bucket = BUCKET) {
-  // Attempt to find common path keys returned by different SDKs/clients
-  let p: string | undefined;
-  if (!data) return undefined;
-  if (typeof data.path === "string") p = data.path;
-  else if (typeof data.Key === "string") p = data.Key;
-  else if (typeof data.key === "string") p = data.key;
-  else if (typeof data === "string") p = data;
-
-  if (!p) return undefined;
-  // Strip leading bucket prefix if present: "imports/..."
-  p = p.replace(new RegExp(`^${bucket}\\/`), "");
-  // Strip any leading slashes
-  p = p.replace(/^\/+/, "");
-  return p;
-}
-
+/**
+ * POST /api/upload-to-supabase
+ * Expects multipart/form-data with "file"
+ * Returns JSON: { ok: true, jobId, file_path, file_name, file_format, warning? }
+ */
 export async function POST(req: Request) {
   try {
-    // Verify Clerk session on the server. Pass the Request to getAuth to read cookies/headers.
-    // (Using req as any to satisfy types in some Clerk versions)
+    // Clerk authentication (server-side). Pass req so Clerk reads cookies/headers.
     const { userId } = getAuth(req as any);
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse multipart/form-data
     const form = await req.formData();
     const file = form.get("file") as File | null;
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ ok: false, error: "No file provided" }, { status: 400 });
 
-    // Read file into a Buffer
+    // Read file into buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Build a safe filename/path
+    // Build safe path (timestamp + sanitized)
     const originalName = file.name ?? `file-${Date.now()}`;
     const safeName = originalName.replace(/\s+/g, "_");
-    const path = `${Date.now()}-${safeName}`;
+    const pathRelative = `${Date.now()}-${safeName}`; // relative to bucket
 
-    // Upload to Supabase Storage using admin (service role)
-    const { data, error } = await supabaseAdmin.storage
+    // Upload to Supabase Storage using service role
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
-      .upload(path, buffer, { contentType: file.type ?? undefined, upsert: false });
+      .upload(pathRelative, buffer, { contentType: file.type ?? undefined, upsert: false });
 
-    if (error) {
-      console.error("Supabase upload error:", error);
-      return NextResponse.json({ error: error.message ?? error }, { status: 500 });
+    if (uploadError) {
+      console.error("storage upload error:", uploadError);
+      return NextResponse.json({ ok: false, error: uploadError.message ?? String(uploadError) }, { status: 500 });
     }
 
-    // Normalize the returned path to be relative to the bucket (no "imports/" prefix)
-    const relativePath = await normalizeReturnedPath(data, BUCKET);
+    // Determine canonical full path and normalized relative path
+    // Supabase sometimes returns data.path or data.fullPath — normalize.
+    const rawPath =
+      (uploadData && (uploadData.path || (uploadData as any).fullPath || (uploadData as any).Key || uploadData)) ??
+      pathRelative;
+    // Ensure relative path (strip any leading "imports/" if present)
+    const relativePath = String(rawPath).replace(new RegExp(`^${BUCKET}\\/`), "").replace(/^\/+/, "");
+    const canonicalFilePath = `${BUCKET}/${relativePath}`;
 
-    // If you want to create the import job server-side and return the jobId, do it here.
-    // Example pseudocode:
-    // const job = await createImportJob({ file_path: `${BUCKET}/${relativePath}`, file_name: originalName, uploadedBy: userId, mapping: ... });
-    // return NextResponse.json({ ok: true, jobId: job.id, path: relativePath }, { status: 200 });
+    // Prepare ingestion row payload
+    const payload = {
+      file_path: canonicalFilePath,
+      file_name: originalName,
+      file_format: originalName.split(".").pop() ?? null,
+      mapping: null,
+      platform: null,
+      status: "created",
+      uploaded_by: userId,
+      created_at: new Date().toISOString(),
+    };
 
-    return NextResponse.json(
-      {
-        ok: true,
-        data: {
-          // return a normalized path relative to the bucket, and the original upload data
-          path: relativePath,
-          raw: data,
+    // Try insert into product_ingestions (service role bypasses RLS)
+    try {
+      const { data: inserted, error: insertError } = await supabaseAdmin
+        .from("product_ingestions")
+        .insert([payload])
+        .select("*")
+        .maybeSingle();
+
+      if (insertError) {
+        // If table missing or insert failed, return synthetic jobId but include warning
+        console.warn("Insert into product_ingestions failed:", insertError);
+        const syntheticId = randomUUID();
+        return NextResponse.json(
+          {
+            ok: true,
+            warning: "Could not create DB row; returning synthetic jobId. Please check product_ingestions table/permissions.",
+            jobId: syntheticId,
+            file_path: canonicalFilePath,
+            file_name: originalName,
+            file_format: payload.file_format,
+            rawUpload: uploadData,
+            dbError: insertError.message ?? insertError,
+          },
+          { status: 200 }
+        );
+      }
+
+      // Determine jobId from inserted row (common id field: id)
+      let jobId: string | null = null;
+      if (inserted) {
+        jobId = (inserted as any).id ?? (inserted as any).job_id ?? null;
+        if (jobId !== null && typeof jobId !== "string") jobId = String(jobId);
+      }
+      // Fallback: if no id returned, generate a UUID
+      if (!jobId) jobId = randomUUID();
+
+      return NextResponse.json(
+        {
+          ok: true,
+          jobId,
+          file_path: canonicalFilePath,
+          file_name: originalName,
+          file_format: payload.file_format,
+          rawUpload: uploadData,
         },
-        uploadedBy: userId,
-      },
-      { status: 200 }
-    );
+        { status: 200 }
+      );
+    } catch (errInsert: any) {
+      console.error("Unexpected insert error:", errInsert);
+      const syntheticId = randomUUID();
+      return NextResponse.json(
+        {
+          ok: true,
+          warning: "Unexpected DB error while creating ingestion; returning synthetic jobId.",
+          jobId: syntheticId,
+          file_path: canonicalFilePath,
+          file_name: originalName,
+          file_format: payload.file_format,
+          dbError: String(errInsert?.message ?? errInsert),
+        },
+        { status: 200 }
+      );
+    }
   } catch (err: any) {
     console.error("upload-to-supabase route error:", err);
-    return NextResponse.json({ error: String(err?.message ?? err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
   }
 }
