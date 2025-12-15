@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import MappingModal from "@/components/imports/MappingModal";
 
 type Props = {
@@ -13,11 +12,14 @@ type Props = {
   platform?: string;
 };
 
-const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const SUPA_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supa = SUPA_URL && SUPA_ANON ? createClient(SUPA_URL, SUPA_ANON) : null;
-
-export default function ImportUploader({ bucket = "imports", maxRows = 5000, maxCols = 50, onCreated, className, platform }: Props) {
+export default function ImportUploader({
+  bucket = "imports",
+  maxRows = 5000,
+  maxCols = 50,
+  onCreated,
+  className,
+  platform,
+}: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<any[]>([]);
@@ -90,10 +92,6 @@ export default function ImportUploader({ bucket = "imports", maxRows = 5000, max
       setPreviewError("No file selected");
       return;
     }
-    if (!supa) {
-      setPreviewError("Supabase client not configured (missing env vars)");
-      return;
-    }
     if (headers.length > maxCols) {
       setPreviewError(`Too many columns (max ${maxCols}). Please reduce columns.`);
       return;
@@ -101,15 +99,49 @@ export default function ImportUploader({ bucket = "imports", maxRows = 5000, max
 
     setUploading(true);
     try {
-      const storagePath = `${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supa.storage.from(bucket).upload(storagePath, file, { upsert: false });
-      if (uploadError) {
-        setPreviewError(`Upload failed: ${uploadError.message}`);
+      // Upload to server-side route which will upload to Supabase using the service role.
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+
+      const uploadResp = await fetch("/api/upload-to-supabase", {
+        method: "POST",
+        body: fd,
+      });
+
+      if (uploadResp.status === 401) {
+        setPreviewError("You must be signed in to upload. Please sign in and try again.");
         return;
       }
 
+      const uploadJson = await uploadResp.json().catch(() => null);
+      if (!uploadResp.ok) {
+        setPreviewError(uploadJson?.error ?? `Upload failed: ${uploadResp.status}`);
+        return;
+      }
+
+      // The server returns the Supabase upload result in uploadJson.data.
+      // Try to derive an object path from common response shapes.
+      let uploadedPath: string | undefined = undefined;
+      if (uploadJson?.data?.path) uploadedPath = uploadJson.data.path;
+      else if (uploadJson?.data?.Key) uploadedPath = uploadJson.data.Key;
+      else if (uploadJson?.data?.key) uploadedPath = uploadJson.data.key;
+      else if (typeof uploadJson?.data === "string") uploadedPath = uploadJson.data; // fallback
+
+      if (!uploadedPath) {
+        // If server returned uploadedBy but not path, still try to proceed if caller expects server to create job.
+        // But in most cases we need the path to create the import job.
+        setPreviewError("Upload succeeded but server did not return the uploaded path.");
+        return;
+      }
+
+      // Normalize file_path so it includes the bucket prefix.
+      let filePath = uploadedPath;
+      if (!filePath.startsWith(`${bucket}/`) && !filePath.startsWith("/")) {
+        filePath = `${bucket}/${filePath}`;
+      }
+
       const bodyObj: any = {
-        file_path: `${bucket}/${storagePath}`,
+        file_path: filePath,
         file_name: file.name,
         file_format: file.name.split(".").pop()?.toLowerCase(),
         mapping: mapping ?? null,
@@ -159,8 +191,20 @@ export default function ImportUploader({ bucket = "imports", maxRows = 5000, max
           <div className="flex items-center justify-between">
             <div className="text-xs text-slate-500">Preview headers</div>
             <div>
-              <button onClick={() => setMappingOpen(true)} className="text-xs px-2 py-1 border rounded mr-2">Open mapping</button>
-              <button onClick={() => { setHeaders([]); setPreviewRows([]); setFile(null); setMapping(null); }} className="text-xs px-2 py-1 border rounded">Clear</button>
+              <button onClick={() => setMappingOpen(true)} className="text-xs px-2 py-1 border rounded mr-2">
+                Open mapping
+              </button>
+              <button
+                onClick={() => {
+                  setHeaders([]);
+                  setPreviewRows([]);
+                  setFile(null);
+                  setMapping(null);
+                }}
+                className="text-xs px-2 py-1 border rounded"
+              >
+                Clear
+              </button>
             </div>
           </div>
 
@@ -170,7 +214,11 @@ export default function ImportUploader({ bucket = "imports", maxRows = 5000, max
           <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(previewRows.slice(0, 5), null, 2)}</pre>
 
           <div className="mt-4 flex gap-2">
-            <button onClick={handleUpload} disabled={uploading} className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60">
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60"
+            >
               {uploading ? "Uploading…" : "Upload & Create Import"}
             </button>
           </div>
@@ -181,7 +229,10 @@ export default function ImportUploader({ bucket = "imports", maxRows = 5000, max
         open={mappingOpen}
         headers={headers}
         initialMapping={mapping ?? {}}
-        onSave={(m) => { setMapping(m); setMappingOpen(false); }}
+        onSave={(m) => {
+          setMapping(m);
+          setMappingOpen(false);
+        }}
         onClose={() => setMappingOpen(false)}
       />
     </div>
