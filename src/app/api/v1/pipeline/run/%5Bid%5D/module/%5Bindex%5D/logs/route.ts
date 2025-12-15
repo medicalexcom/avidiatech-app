@@ -27,8 +27,12 @@ export async function GET(req: Request, context: any) {
     const pageSize = Math.min(1000, Math.max(10, Number(url.searchParams.get("pageSize") ?? "200")));
     const offset = (page - 1) * pageSize;
 
-    // verify run belongs to org
-    const { data: runRow, error: runErr } = await supaAdmin.from("pipeline_runs").select("id,org_id,modules").eq("id", pipelineRunId).single();
+    // verify run belongs to org - include updated_at (and created_at) so we can use them if needed
+    const { data: runRow, error: runErr } = await supaAdmin
+      .from("pipeline_runs")
+      .select("id,org_id,modules,updated_at,created_at")
+      .eq("id", pipelineRunId)
+      .single();
     if (runErr) throw runErr;
     if (!runRow || runRow.org_id !== orgId) return NextResponse.json({ ok: false, error: "Not found or access denied" }, { status: 404 });
 
@@ -50,9 +54,10 @@ export async function GET(req: Request, context: any) {
     const modules = runRow.modules ?? [];
     const moduleSnapshot = Array.isArray(modules) && modules[moduleIndex] ? modules[moduleIndex] : null;
     if (moduleSnapshot && moduleSnapshot.error) {
+      const fallbackCreatedAt = runRow.updated_at ?? runRow.created_at ?? new Date().toISOString();
       return NextResponse.json({
         ok: true,
-        logs: [{ level: "error", message: moduleSnapshot.error, created_at: runRow.updated_at ?? new Date().toISOString() }],
+        logs: [{ level: "error", message: moduleSnapshot.error, created_at: fallbackCreatedAt }],
         page: 1,
         pageSize: 1,
       });
