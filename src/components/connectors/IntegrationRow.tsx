@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import toast from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 
 type Props = {
   integration: {
@@ -17,6 +17,7 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
   const [isDrawerOpen, setDrawerOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
   return (
     <div className="flex items-center justify-between py-2 border-b">
@@ -69,10 +70,13 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
 
       <ConfirmDialog
         open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
+        // onCancel closes the dialog (ConfirmDialog expects this)
+        onCancel={() => setConfirmOpen(false)}
         title="Delete integration"
         description={`Delete integration ${integration.name ?? integration.id}? This cannot be undone.`}
         onConfirm={async () => {
+          // Close the dialog immediately
+          setConfirmOpen(false);
           try {
             const res = await fetch(`/api/v1/integrations/${integration.id}`, { method: "DELETE" });
             const data = await res.json();
@@ -81,8 +85,6 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
             onDeleted?.(integration.id);
           } catch (err: any) {
             toast.error(String(err?.message ?? err));
-          } finally {
-            setConfirmOpen(false);
           }
         }}
       />
