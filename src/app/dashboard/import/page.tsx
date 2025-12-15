@@ -6,12 +6,10 @@ import ImportUploader from "@/components/imports/ImportUploader";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 import RecentRuns from "@/components/pipeline/RecentRuns";
-import MappingPresetSelector from "@/components/imports/MappingPresetSelector";
+import { MappingPresetSelector } from "@/components/imports/MappingPresetSelector";
 import { useToast } from "@/components/ui/toast";
 
-/* ...types and helper functions (sleep, fmtMs, statusChipClass, downloadJson, downloadFailedRowsCsv) remain the same... */
-/* Copy the same helper functions you currently have (sleep, fmtMs, statusChipClass, downloadJson, downloadFailedRowsCsv) */
-
+/* Helper types & functions (same as before) */
 type AnyObj = Record<string, any>;
 type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
 type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
@@ -34,7 +32,6 @@ type PipelineSnapshot = {
 
 type ImportMode = "full" | "import_only";
 
-/* copy helper functions from your original file */
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -124,7 +121,7 @@ export default function ImportPage() {
   // derived
   const selectedConnectorObj = useMemo(() => connectors.find((c) => c.id === selectedConnector) ?? null, [connectors, selectedConnector]);
 
-  // fetch org id (calls /api/v1/me). In dev set DEV_ORG_ID env var or implement Clerk on server.
+  // fetch org id (calls /api/v1/me)
   async function fetchOrg() {
     try {
       const res = await fetch("/api/v1/me");
@@ -156,13 +153,11 @@ export default function ImportPage() {
     }
   }
 
-  // select connector by clicking its card (ConnectorManager should call onSelect)
   function selectConnectorId(id: string) {
     setSelectedConnector(id);
     toast?.info?.("Connector selected");
   }
 
-  // connector actions
   async function testConnector(connectorId: string) {
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST" });
@@ -204,7 +199,6 @@ export default function ImportPage() {
     }
   }
 
-  // ingestion & pipeline helpers
   async function fetchIngestion(id: string) {
     try {
       setJob(null);
@@ -249,7 +243,6 @@ export default function ImportPage() {
     return json;
   }
 
-  // run pipeline
   async function runImport(forIngestionId?: string) {
     if (running) return;
     setError(null);
@@ -314,7 +307,6 @@ export default function ImportPage() {
     }
   }
 
-  // module logs modal
   function openModuleLogs(index: number) {
     if (!pipelineRunId) {
       toast.error("No pipeline run selected");
@@ -324,7 +316,6 @@ export default function ImportPage() {
     setModuleLogsOpen(true);
   }
 
-  // initial load
   useEffect(() => {
     (async () => {
       const o = await fetchOrg();
@@ -346,7 +337,6 @@ export default function ImportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // job data / diagnostics
   const jobData = useMemo(() => {
     if (!job) return null;
     if ((job as any)?.data?.data) return (job as any).data.data;
@@ -355,11 +345,7 @@ export default function ImportPage() {
   }, [job]);
 
   const auditDiag = jobData?.diagnostics?.audit ?? null;
-  const auditStatus = typeof auditDiag?.status === "string" ? auditDiag.status : null;
-  const auditScore = typeof auditDiag?.score === "number" ? auditDiag.score : null;
-
   const importDiag = jobData?.diagnostics?.import ?? null;
-  const importResult = importDiag?.result ?? null;
 
   const runStatus = pipelineSnapshot?.run?.status ?? null;
 
@@ -381,8 +367,8 @@ export default function ImportPage() {
     return Math.round((done / mods.length) * 100);
   }, [pipelineSnapshot]);
 
-  const importAction = importResult?.action ?? importArtifact?.output?.import?.result?.action ?? null;
-  const importNeedsReview = Boolean(importResult?.needs_review ?? importArtifact?.output?.import?.result?.needs_review);
+  const importAction = importDiag?.result?.action ?? importArtifact?.output?.import?.result?.action ?? null;
+  const importNeedsReview = Boolean(importDiag?.result?.needs_review ?? importArtifact?.output?.import?.result?.needs_review);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -410,12 +396,10 @@ export default function ImportPage() {
               </div>
 
               <div className="mt-3 space-y-3">
-                {/* ConnectorManager is expected to accept props: orgId, selectedId?, onSelect */}
                 <ConnectorManager orgId={orgId} selectedId={selectedConnector} onSelect={selectConnectorId} />
               </div>
             </div>
 
-            {/* Selected connector summary */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold">Selected store</h4>
               {selectedConnectorObj ? (
