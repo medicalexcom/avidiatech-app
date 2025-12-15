@@ -17,8 +17,8 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 export async function POST(req: Request) {
   try {
-    // Clerk server-side auth check
-    const { userId } = getAuth();
+    // Clerk server-side auth check — pass the incoming Request to getAuth
+    const { userId } = getAuth(req as any);
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -45,9 +45,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message ?? error }, { status: 500 });
     }
 
-    // OPTIONAL: create your import job in DB here (server-side) and return job id
-    // Example (pseudo):
-    // const job = await createImportJob({ bucket: 'imports', path, uploadedBy: userId });
+    // Optionally: create import job server-side here and return job id
+    // e.g. const job = await createImportJob({ bucket: 'imports', path, uploadedBy: userId });
 
     return NextResponse.json({ data, uploadedBy: userId }, { status: 200 });
   } catch (err: any) {
