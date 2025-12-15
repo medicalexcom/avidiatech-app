@@ -6,15 +6,26 @@ import ImportUploader from "@/components/imports/ImportUploader";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 
 /**
- * Dashboard Import page — improved UI
+ * Dashboard Import page — UX-focused Import workspace
  *
- * - Single "Providers" area (no duplicate Connections/Connectors panels).
- * - Platform selector (Kept).
- * - Provider cards show connection status, last synced, actions (Test, Sync, Manage).
- * - Manage opens ConnectorManager (create/edit connectors).
- * - Uploader passes selected platform to server for mapping hints.
+ * Changes from prior:
+ * - Removed platform selector and Providers dropdown.
+ * - Connector manager panel is OPEN by default so users can immediately connect/select a store.
+ * - Cleaner single "Connectors" column and a prominent Upload + Run area.
+ * - Added "Auto-run pipeline after upload" option and "Sync connector" quick action.
+ * - Guidance, limits, and useful actions surfaced prominently.
  *
- * NOTE: getOrgIdForUI() is a placeholder. Replace with your session/Clerk-derived org ID.
+ * Important:
+ * - Replace getOrgIdForUI() with your session/Clerk-derived org ID retrieval so connectors and syncs are scoped securely.
+ * - This page expects the server APIs already present:
+ *   - GET /api/v1/integrations?orgId=<org>
+ *   - POST /api/v1/integrations
+ *   - POST /api/v1/integrations/:id/sync
+ *   - POST /api/imports
+ *   - POST /api/v1/pipeline/run
+ *   - GET /api/v1/ingest/:id
+ *   - GET /api/v1/pipeline/run/:id
+ *   - GET /api/v1/pipeline/run/:id/output/:moduleIndex
  */
 
 type AnyObj = Record<string, any>;
@@ -91,68 +102,102 @@ export default function ImportPage() {
   const ingestionIdParam = params?.get("ingestionId") || "";
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
 
-  // Platform selection (affects uploader mapping presets)
-  const [platform, setPlatform] = useState<string>("bigcommerce");
-
-  // connectors list + management UX
+  // Connector manager OPEN by default
   const [connectors, setConnectors] = useState<any[]>([]);
-  const [showConnectorManager, setShowConnectorManager] = useState(false);
   const [selectedConnector, setSelectedConnector] = useState<string>("");
+  const [showConnectorManager] = useState<boolean>(true); // intentionally true, per request
 
   // Pipeline & import state
   const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
   const [importMode, setImportMode] = useState<ImportMode>("full");
   const [allowOverwriteExisting, setAllowOverwriteExisting] = useState(false);
+  const [autoRunAfterUpload, setAutoRunAfterUpload] = useState<boolean>(false);
 
   const [job, setJob] = useState<any | null>(null);
   const [pipelineRunId, setPipelineRunId] = useState<string>(pipelineRunIdParam || "");
   const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
   const [importArtifact, setImportArtifact] = useState<any | null>(null);
 
-  const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Replace this with your server-side session/org lookup (Clerk)
+  // Replace this with your session/Clerk-derived org id retrieval
   function getOrgIdForUI() {
-    // TODO: Derive and return org id from authenticated session on client or fetch from backend
-    return ""; // placeholder
+    // TODO: return current org id from auth/session
+    return ""; // placeholder — necessary to enable connector listing and sync
   }
 
-  // Load connectors for current org (used for cards and dropdown)
+  // Load connectors for the org (for cards & dropdown)
   async function loadConnectors() {
     const orgId = getOrgIdForUI();
     if (!orgId) {
-      // nothing to load yet; show CTA to manage connectors
       setConnectors([]);
       return;
     }
     try {
       const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
       const json = await res.json().catch(() => null);
-      if (res.ok && json?.ok) {
-        setConnectors(json.integrations ?? []);
-      } else {
-        setConnectors([]);
-      }
+      if (res.ok && json?.ok) setConnectors(json.integrations ?? []);
+      else setConnectors([]);
     } catch {
       setConnectors([]);
     }
   }
 
-  // fetch ingestion and pipeline helpers
-  async function fetchIngestion(id: string) {
-    setLoading(true);
+  // Connector quick actions
+  async function testConnector(connectorId: string) {
     try {
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        alert(`Test failed: ${json?.error ?? "unknown"}`);
+        return;
+      }
+      alert("Connection test succeeded");
+      await loadConnectors();
+    } catch (err: any) {
+      alert(String(err?.message ?? err));
+    }
+  }
+
+  async function syncConnector(connectorId: string) {
+    const orgId = getOrgIdForUI();
+    if (!orgId) return alert("Org ID missing — wire session lookup");
+    try {
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ org_id: orgId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        alert(json?.error ?? "Sync failed");
+        return;
+      }
+      const jobId = json.jobId ?? json.id ?? "";
+      setIngestionIdInput(jobId);
+      setStatusMessage(`Connector sync started: ${jobId}`);
+      if (jobId) await fetchIngestion(jobId);
+      await loadConnectors();
+    } catch (err: any) {
+      alert(String(err?.message ?? err));
+    }
+  }
+
+  // Fetch ingestion/pipeline
+  async function fetchIngestion(id: string) {
+    try {
+      setJob(null);
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
       const row = json?.data ?? json;
       setJob(row);
       return row;
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      setJob(null);
+      throw err;
     }
   }
 
@@ -185,14 +230,15 @@ export default function ImportPage() {
     return json;
   }
 
-  async function runImport() {
+  // Run pipeline for given ingestion id (optional)
+  async function runImport(forIngestionId?: string) {
     if (running) return;
     setError(null);
     setStatusMessage(null);
     setPipelineSnapshot(null);
     setImportArtifact(null);
 
-    const id = ingestionIdInput.trim();
+    const id = (forIngestionId ?? ingestionIdInput).trim();
     if (!id) {
       setError("Enter an ingestionId first.");
       return;
@@ -215,7 +261,6 @@ export default function ImportPage() {
           steps,
           options: {
             import: {
-              platform,
               allowOverwriteExisting,
             },
           },
@@ -249,50 +294,7 @@ export default function ImportPage() {
     }
   }
 
-  // connector actions
-  async function testConnector(connectorId: string) {
-    try {
-      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        alert(`Test failed: ${json?.error ?? "unknown"}`);
-        return;
-      }
-      alert("Connection test succeeded");
-      await loadConnectors();
-    } catch (err: any) {
-      alert(String(err?.message ?? err));
-    }
-  }
-
-  async function syncConnector(connectorId: string) {
-    const orgId = getOrgIdForUI();
-    if (!orgId) return alert("Org ID missing — wire session lookup");
-    try {
-      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ org_id: orgId }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        alert(json?.error ?? "Sync failed");
-        return;
-      }
-      const jobId = json.jobId ?? json.id ?? "";
-      setIngestionIdInput(jobId);
-      setStatusMessage(`Sync started: ${jobId}`);
-      if (jobId) await fetchIngestion(jobId);
-      await loadConnectors();
-    } catch (err: any) {
-      alert(String(err?.message ?? err));
-    }
-  }
-
-  // initial load
+  // Initial load
   useEffect(() => {
     loadConnectors().catch(() => null);
     if (ingestionIdParam) {
@@ -353,95 +355,56 @@ export default function ImportPage() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
-        {/* Top row */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-medium">
-              AvidiaImport
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-600">Platform</label>
-              <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="rounded border px-2 py-1 text-sm">
-                <option value="bigcommerce">BigCommerce</option>
-                <option value="shopify">Shopify</option>
-                <option value="woocommerce">WooCommerce</option>
-                <option value="magento">Magento</option>
-                <option value="squarespace">Squarespace</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-medium">AvidiaImport</div>
+            <div className="text-sm font-semibold">Import & Connector Workspace</div>
           </div>
 
-          <div className="text-xs text-slate-600">{runStatus ?? "idle"}</div>
+          <div className="text-xs text-slate-600">Status: <span className={`ml-2 px-2 py-0.5 rounded ${statusChipClass(runStatus ?? "idle")}`}>{runStatus ?? "idle"}</span></div>
         </div>
 
-        {/* Providers + Uploader / Run */}
+        {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Providers column */}
-          <div className="lg:col-span-4 space-y-4">
+          {/* LEFT: Connectors (open by default) */}
+          <aside className="lg:col-span-4 space-y-4">
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Providers</h3>
-                <button onClick={() => setShowConnectorManager((s) => !s)} className="text-xs px-2 py-1 border rounded">
-                  {showConnectorManager ? "Close manager" : "Manage"}
-                </button>
+                <h3 className="text-sm font-semibold">Connectors</h3>
+                <div className="text-xs text-slate-500">Connect stores to import from</div>
               </div>
 
               <div className="mt-3 space-y-3">
-                {connectors.length === 0 ? (
-                  <div className="text-xs text-slate-500">No connectors configured. Click Manage to add one.</div>
-                ) : (
-                  connectors.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between rounded border p-3">
-                      <div>
-                        <div className="font-medium">{c.name ?? c.provider}</div>
-                        <div className="text-xs text-slate-500">
-                          Provider: {c.provider} • {c.status ?? "unknown"}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-1">Last synced: {c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : "—"}</div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 items-end">
-                        <span className={`px-2 py-0.5 rounded text-xs ${c.status === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
-                          {c.status ?? "unknown"}
-                        </span>
-                        <div className="flex gap-2">
-                          <button onClick={() => testConnector(c.id)} className="text-xs px-2 py-1 border rounded">Test</button>
-                          <button onClick={() => syncConnector(c.id)} className="text-xs px-2 py-1 bg-sky-600 text-white rounded">Sync</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                {/* If connectors empty, ConnectorManager provides create UI */}
+                <ConnectorManager orgId={getOrgIdForUI()} />
               </div>
 
-              {showConnectorManager && (
-                <div className="mt-4">
-                  <ConnectorManager orgId={getOrgIdForUI()} />
-                </div>
-              )}
+              <div className="mt-4 text-xs text-slate-500">
+                Tip: Connectors let you pull product data directly from your store (recommended for large catalogs).
+              </div>
             </div>
 
-            {/* Quick tips / mapping suggestions */}
+            {/* Mapping / Import guidance */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <h4 className="text-sm font-semibold">Tips</h4>
+              <h4 className="text-sm font-semibold">Import guidance</h4>
               <ul className="mt-2 text-xs text-slate-600 space-y-2">
-                <li>BigCommerce / Shopify: prefer SKU for dedupe mapping.</li>
-                <li>WooCommerce: ensure REST API keys have read access.</li>
-                <li>For OAuth providers, use Manage → Start auth flow.</li>
-                <li>Client-side preview limited to 50 rows; server enforces full limits.</li>
+                <li><strong>Limits:</strong> server enforces max 5,000 rows and 50 columns.</li>
+                <li><strong>Deduplication:</strong> SKU is recommended for matching existing products.</li>
+                <li><strong>Preview:</strong> you can preview up to 50 rows before upload.</li>
+                <li><strong>Security:</strong> service role keys are required server-side — the UI never exposes them.</li>
               </ul>
             </div>
-          </div>
+          </aside>
 
-          {/* Uploader + run + telemetry column */}
-          <div className="lg:col-span-8 space-y-4">
+          {/* RIGHT: Upload, Sync, Run, Telemetry */}
+          <section className="lg:col-span-8 space-y-4">
+            {/* Upload / Sync */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">Upload or Sync</h3>
-                  <p className="text-xs text-slate-500">Upload CSV/XLSX or start a connector sync to create an import.</p>
+                  <p className="text-xs text-slate-500">Upload CSV/XLSX or sync from a connected store to create an import job.</p>
                 </div>
                 <div className="text-xs text-slate-500">Bucket: imports</div>
               </div>
@@ -449,16 +412,22 @@ export default function ImportPage() {
               <div className="mt-4">
                 <ImportUploader
                   bucket="imports"
-                  platform={platform}
-                  onCreated={(jobId) => {
+                  onCreated={async (jobId) => {
                     if (jobId) {
                       setIngestionIdInput(jobId);
-                      setStatusMessage(`Import job created: ${jobId}. You can run the pipeline now.`);
-                      fetchIngestion(jobId).catch(() => null);
+                      setStatusMessage(`Import job created: ${jobId}.`);
+                      // auto-run if user opted-in
+                      if (autoRunAfterUpload) {
+                        await runImport(jobId);
+                      } else {
+                        // fetch ingestion for preview in panel
+                        fetchIngestion(jobId).catch(() => null);
+                      }
+                      // refresh connectors listing (maybe connector syncs updated last_synced_at)
+                      loadConnectors().catch(() => null);
                     } else {
                       setStatusMessage("Import created.");
                     }
-                    loadConnectors().catch(() => null);
                   }}
                 />
               </div>
@@ -472,9 +441,7 @@ export default function ImportPage() {
                 <div className="flex items-end gap-2">
                   <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className="rounded border px-2 py-2 text-sm w-full">
                     <option value="">Select connector (optional)</option>
-                    {connectors.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>
-                    ))}
+                    {connectors.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>)}
                   </select>
                   <button onClick={() => { if (selectedConnector) syncConnector(selectedConnector); else alert("Select a connector"); }} className="px-3 py-2 rounded bg-sky-600 text-white">Sync</button>
                 </div>
@@ -486,23 +453,28 @@ export default function ImportPage() {
                   <option value="import_only">import only</option>
                 </select>
 
-                <label className="inline-flex items-center gap-2 ml-4">
+                <label className="inline-flex items-center gap-2 ml-4 text-sm">
                   <input type="checkbox" checked={allowOverwriteExisting} onChange={(e) => setAllowOverwriteExisting(e.target.checked)} />
                   <span className="text-xs">Allow overwrite existing SKU</span>
                 </label>
 
+                <label className="inline-flex items-center gap-2 ml-4 text-sm">
+                  <input type="checkbox" checked={autoRunAfterUpload} onChange={(e) => setAutoRunAfterUpload(e.target.checked)} />
+                  <span className="text-xs">Auto-run pipeline after upload</span>
+                </label>
+
                 <div className="ml-auto">
-                  <button onClick={runImport} disabled={running} className="px-3 py-2 rounded bg-emerald-500 text-white">
+                  <button onClick={() => runImport()} disabled={running} className="px-3 py-2 rounded bg-emerald-500 text-white">
                     {running ? "Running…" : "Run Import"}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Telemetry & artifact */}
+            {/* Telemetry & Artifact */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold">Live pipeline & result</h4>
+                <h4 className="text-sm font-semibold">Live pipeline & artifact</h4>
                 <div className="text-xs text-slate-500">Progress: {progress}%</div>
               </div>
 
@@ -528,13 +500,9 @@ export default function ImportPage() {
 
                 <div>
                   <div className="text-xs text-slate-500 mb-2">Import artifact</div>
-                  <pre className="max-h-[300px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
-                    {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}
-                  </pre>
+                  <pre className="max-h-[300px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}</pre>
                   <div className="mt-2 text-right">
-                    <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="text-xs px-2 py-1 bg-slate-900 text-white rounded">
-                      Export JSON
-                    </button>
+                    <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="text-xs px-2 py-1 bg-slate-900 text-white rounded">Export JSON</button>
                   </div>
                 </div>
               </div>
@@ -543,11 +511,9 @@ export default function ImportPage() {
             {/* Ingestion viewer */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <h4 className="text-sm font-semibold">Ingestion (context)</h4>
-              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
-                {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
-              </pre>
+              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}</pre>
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </main>
