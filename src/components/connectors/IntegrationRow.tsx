@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import toast from "@/components/ui/toast";
 
 type Props = {
