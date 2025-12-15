@@ -518,7 +518,14 @@ export default function ImportPage() {
                 </div>
 
                 <div className="ml-2">
-                  <MappingPresetSelector value={mappingPreset} onChange={setMappingPreset} />
+                  <MappingPresetSelector
+                    provider={selectedConnectorObj?.provider}
+                    onSelect={(preset) => {
+                      // adapt to your desired saved shape — here we store a simple string id/name
+                      const val = preset?.name ?? (preset?.id ? String(preset.id) : null);
+                      setMappingPreset(val);
+                    }}
+                  />
                 </div>
 
                 <div className="ml-auto whitespace-nowrap">
