@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useToast } from "@/components/ui/toast";
 
 type Integration = {
   id: string;
@@ -9,6 +10,7 @@ type Integration = {
   created_at?: string;
   config?: Record<string, any>;
   schedule?: any;
+  last_error?: string | null;
 };
 
 interface Props {
@@ -17,20 +19,15 @@ interface Props {
   onClose: () => void;
 }
 
-/**
- * Minimal drawer to show integration/connector details.
- * - Client component — fetches /api/v1/integrations/:id when opened.
- * - Lightweight UI using Tailwind utility classes commonly present in the project.
- * - You can expand actions (Sync now, Edit) to call your existing endpoints.
- */
 const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [integration, setIntegration] = useState<Integration | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (!isOpen || !integrationId) return;
-
     let mounted = true;
     setLoading(true);
     setError(null);
@@ -43,7 +40,7 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
           setError(data.error ?? "Failed to load integration");
           setIntegration(null);
         } else {
-          setIntegration(data.integration ?? data); // support both shapes
+          setIntegration(data.integration ?? data);
         }
       })
       .catch((e) => {
@@ -59,30 +56,36 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
     };
   }, [isOpen, integrationId]);
 
+  // focus container when open
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => containerRef.current?.focus(), 0);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex">
       <div className="fixed inset-0 bg-black/40" onClick={onClose} />
-      <aside className="ml-auto w-full max-w-lg bg-white dark:bg-slate-900 shadow-xl p-6 overflow-auto">
+      <aside
+        ref={containerRef}
+        tabIndex={-1}
+        className="ml-auto w-full max-w-lg bg-white dark:bg-slate-900 shadow-xl p-6 overflow-auto"
+        aria-label="Connector details"
+      >
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold">Connector details</h2>
             <p className="text-sm text-gray-500">Inspect and run actions for this connector.</p>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="ml-4 rounded p-1 text-gray-600 hover:text-gray-900"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} aria-label="Close" className="ml-4 rounded p-1 text-gray-600 hover:text-gray-900">✕</button>
         </div>
 
         {loading ? (
           <p className="text-sm text-gray-600">Loading…</p>
         ) : error ? (
-          <div className="text-sm text-red-600">Error: {error}</div>
+          <div className="text-sm text-rose-600">Error: {error}</div>
         ) : integration ? (
           <>
             <div className="space-y-2">
@@ -115,22 +118,29 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
               )}
             </section>
 
+            {integration.last_error && (
+              <div className="mt-4 text-sm text-rose-600">
+                Last error: {integration.last_error}
+              </div>
+            )}
+
             <div className="mt-6 flex gap-2">
               <button
                 onClick={async () => {
                   try {
-                    // Trigger sync via API — adapt endpoint if different
                     if (!integration?.id) return;
-                    await fetch(`/api/v1/integrations/${integration.id}/sync`, {
-                      method: "POST",
-                    });
-                    // simple toast or UI feedback could be added
-                  } catch (e) {
-                    console.error("Sync failed", e);
-                    // show user feedback in your real app
+                    const res = await fetch(`/api/v1/integrations/${integration.id}/sync`, { method: "POST" });
+                    const json = await res.json().catch(() => null);
+                    if (!res.ok || !json?.ok) {
+                      toast.error(json?.error ?? "Failed to start sync");
+                      return;
+                    }
+                    toast.success("Sync queued");
+                  } catch (e: any) {
+                    toast.error(String(e?.message ?? e));
                   }
                 }}
-                className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-60"
+                className="px-4 py-2 rounded bg-blue-600 text-white"
               >
                 Sync now
               </button>
