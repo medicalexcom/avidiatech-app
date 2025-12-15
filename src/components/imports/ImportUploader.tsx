@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import MappingModal from "@/components/imports/MappingModal";
 
 type Props = {
   bucket?: string;
@@ -9,45 +10,37 @@ type Props = {
   maxCols?: number;
   onCreated?: (jobId: string) => void;
   className?: string;
-  platform?: string; // new: optional platform to include with import
+  platform?: string;
 };
 
 const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPA_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supa = SUPA_URL && SUPA_ANON ? createClient(SUPA_URL, SUPA_ANON) : null;
 
-/**
- * Reusable ImportUploader
- * - Preview CSV/XLSX using dynamic imports (papaparse/xlsx).
- * - Upload to Supabase Storage and call POST /api/imports to create a server-side job.
- */
-export default function ImportUploader({
-  bucket = "imports",
-  maxRows = 5000,
-  maxCols = 50,
-  onCreated,
-  className,
-  platform,
-}: Props) {
+export default function ImportUploader({ bucket = "imports", maxRows = 5000, maxCols = 50, onCreated, className, platform }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<any[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Mapping modal
+  const [mappingOpen, setMappingOpen] = useState(false);
+  const [mapping, setMapping] = useState<Record<string, string> | null>(null);
 
   async function readPreview(f: File) {
     setPreviewError(null);
     setLoadingPreview(true);
     setHeaders([]);
     setPreviewRows([]);
+    setMapping(null);
 
     try {
       const ext = f.name.split(".").pop()?.toLowerCase();
       if (ext === "csv" || ext === "txt") {
         const PapaMod = await import("papaparse");
         const Papa = (PapaMod && (PapaMod.default ?? PapaMod)) as any;
-
         await new Promise<void>((resolve, reject) => {
           Papa.parse(f, {
             header: true,
@@ -93,7 +86,6 @@ export default function ImportUploader({
 
   async function handleUpload() {
     setPreviewError(null);
-
     if (!file) {
       setPreviewError("No file selected");
       return;
@@ -102,7 +94,6 @@ export default function ImportUploader({
       setPreviewError("Supabase client not configured (missing env vars)");
       return;
     }
-
     if (headers.length > maxCols) {
       setPreviewError(`Too many columns (max ${maxCols}). Please reduce columns.`);
       return;
@@ -117,15 +108,18 @@ export default function ImportUploader({
         return;
       }
 
+      const bodyObj: any = {
+        file_path: `${bucket}/${storagePath}`,
+        file_name: file.name,
+        file_format: file.name.split(".").pop()?.toLowerCase(),
+        mapping: mapping ?? null,
+        platform: platform ?? null,
+      };
+
       const res = await fetch("/api/imports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          file_path: `${bucket}/${storagePath}`,
-          file_name: file.name,
-          file_format: file.name.split(".").pop()?.toLowerCase(),
-          platform, // include platform selection for server-side mapping
-        }),
+        body: JSON.stringify(bodyObj),
       });
 
       const json = await res.json().catch(() => null);
@@ -145,7 +139,7 @@ export default function ImportUploader({
 
   return (
     <div className={className}>
-      <div className="mt-3">
+      <div>
         <input
           type="file"
           accept=".csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -162,7 +156,14 @@ export default function ImportUploader({
 
       {headers.length > 0 && (
         <div className="mt-3">
-          <div className="text-xs text-slate-500">Preview headers</div>
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-slate-500">Preview headers</div>
+            <div>
+              <button onClick={() => setMappingOpen(true)} className="text-xs px-2 py-1 border rounded mr-2">Open mapping</button>
+              <button onClick={() => { setHeaders([]); setPreviewRows([]); setFile(null); setMapping(null); }} className="text-xs px-2 py-1 border rounded">Clear</button>
+            </div>
+          </div>
+
           <pre className="mt-2 text-xs overflow-auto bg-slate-50 p-2 rounded">{JSON.stringify(headers)}</pre>
 
           <div className="mt-3 text-xs text-slate-500">Preview rows</div>
@@ -172,21 +173,17 @@ export default function ImportUploader({
             <button onClick={handleUpload} disabled={uploading} className="inline-flex items-center rounded px-3 py-2 bg-slate-900 text-white text-sm disabled:opacity-60">
               {uploading ? "Uploading…" : "Upload & Create Import"}
             </button>
-
-            <button
-              onClick={() => {
-                setFile(null);
-                setHeaders([]);
-                setPreviewRows([]);
-                setPreviewError(null);
-              }}
-              className="inline-flex items-center rounded px-3 py-2 bg-white border text-sm"
-            >
-              Clear
-            </button>
           </div>
         </div>
       )}
+
+      <MappingModal
+        open={mappingOpen}
+        headers={headers}
+        initialMapping={mapping ?? {}}
+        onSave={(m) => { setMapping(m); setMappingOpen(false); }}
+        onClose={() => setMappingOpen(false)}
+      />
     </div>
   );
 }
