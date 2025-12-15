@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
+import { getClerkSession, getOrgFromClerkSession } from "@/lib/auth/clerkServer";
 
 /**
- * Return current user's org context.
- * - In dev you can set DEV_ORG_ID env var to simulate a logged-in org.
- * - TODO: integrate Clerk or your auth provider server-side to derive org_id from session.
+ * GET /api/v1/me
+ * Returns basic user/org info derived from server session (Clerk).
  */
-
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const devOrg = process.env.DEV_ORG_ID;
-    if (devOrg) {
-      return NextResponse.json({ ok: true, org_id: devOrg });
-    }
+    const sess = await getClerkSession(req);
+    if (!sess) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 });
 
-    // TODO: Integrate Clerk / session verification here.
-    // Example (Clerk): const session = await getAuth(req); derive org_id from session
-    return NextResponse.json({ ok: false, error: "Not authenticated (DEV_ORG_ID not set). Integrate Clerk or session." }, { status: 401 });
+    const org = await getOrgFromClerkSession(req);
+    const user = { id: sess.userId };
+
+    return NextResponse.json({ ok: true, org_id: org ?? null, user });
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
   }
