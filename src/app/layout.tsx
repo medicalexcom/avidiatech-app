@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Providers from "./providers";
 import { ClerkProvider } from "@clerk/nextjs";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata = {
   title: "AvidiaTech | Product Data Automation",
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* Light by default; dark mode comes from `html.dark` via next-themes */}
         <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
           <ErrorBoundary>
-            <Providers>{children}</Providers>
+            <Providers>
+              <ToastProvider>{children}</ToastProvider>
+            </Providers>
           </ErrorBoundary>
         </body>
       </html>
