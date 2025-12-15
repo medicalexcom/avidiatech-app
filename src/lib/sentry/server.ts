@@ -18,7 +18,6 @@ export function initSentry() {
   if (!Sentry) return;
   if (!dsn) return;
   // avoid double-init
-  // @ts-expect-error internal flag
   if ((Sentry as any).__initialized) return;
 
   Sentry.init({
@@ -26,7 +25,6 @@ export function initSentry() {
     environment: env,
     tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? "0.0"),
   });
-  // @ts-expect-error internal flag
   (Sentry as any).__initialized = true;
 }
 
