@@ -6,12 +6,15 @@ import ImportUploader from "@/components/imports/ImportUploader";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 
 /**
- * Dashboard Import page — updated to include:
- * - Platform selector
- * - Connectors dropdown + "Sync connector" quick action
- * - Reuses ImportUploader and ConnectorManager
+ * Dashboard Import page — improved UI
  *
- * TODO: replace getOrgIdForUI() with your server/session-derived org ID logic (Clerk or other)
+ * - Single "Providers" area (no duplicate Connections/Connectors panels).
+ * - Platform selector (Kept).
+ * - Provider cards show connection status, last synced, actions (Test, Sync, Manage).
+ * - Manage opens ConnectorManager (create/edit connectors).
+ * - Uploader passes selected platform to server for mapping hints.
+ *
+ * NOTE: getOrgIdForUI() is a placeholder. Replace with your session/Clerk-derived org ID.
  */
 
 type AnyObj = Record<string, any>;
@@ -47,11 +50,11 @@ function fmtMs(ms: number | null) {
 }
 function statusChipClass(status?: string | null) {
   const s = (status || "").toLowerCase();
-  if (s === "running") return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/40";
-  if (s === "failed") return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-100 dark:border-rose-500/40";
-  if (s === "succeeded" || s === "completed") return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-100 dark:border-emerald-500/40";
-  if (s === "skipped") return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
-  return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-950/40 dark:text-slate-300 dark:border-slate-800";
+  if (s === "running") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (s === "failed") return "bg-rose-100 text-rose-800 border-rose-200";
+  if (s === "succeeded" || s === "completed") return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (s === "skipped") return "bg-slate-100 text-slate-700 border-slate-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
 }
 function moduleLabel(name: string) {
   switch (name) {
@@ -88,27 +91,19 @@ export default function ImportPage() {
   const ingestionIdParam = params?.get("ingestionId") || "";
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
 
-  // Platform selection (affects mapping/presets)
+  // Platform selection (affects uploader mapping presets)
   const [platform, setPlatform] = useState<string>("bigcommerce");
 
-  // Connector list + selection for quick sync
+  // connectors list + management UX
   const [connectors, setConnectors] = useState<any[]>([]);
+  const [showConnectorManager, setShowConnectorManager] = useState(false);
   const [selectedConnector, setSelectedConnector] = useState<string>("");
 
-  // BigCommerce connection UI state
-  const [connName, setConnName] = useState("BigCommerce Store");
-  const [storeHash, setStoreHash] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [connections, setConnections] = useState<any[]>([]);
-  const [connSaving, setConnSaving] = useState(false);
-  const [connStatus, setConnStatus] = useState<string | null>(null);
-
-  // Pipeline controls
+  // Pipeline & import state
   const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
   const [importMode, setImportMode] = useState<ImportMode>("full");
   const [allowOverwriteExisting, setAllowOverwriteExisting] = useState(false);
 
-  // Runtime states
   const [job, setJob] = useState<any | null>(null);
   const [pipelineRunId, setPipelineRunId] = useState<string>(pipelineRunIdParam || "");
   const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
@@ -119,70 +114,34 @@ export default function ImportPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper: replace with your session/Clerk org lookup
+  // Replace this with your server-side session/org lookup (Clerk)
   function getOrgIdForUI() {
-    // TODO: implement session-based org lookup. Return string org id when available.
-    return ""; // placeholder — replace to enable connectors listing/sync
+    // TODO: Derive and return org id from authenticated session on client or fetch from backend
+    return ""; // placeholder
   }
 
-  // Load connectors for current org (for selector)
+  // Load connectors for current org (used for cards and dropdown)
   async function loadConnectors() {
     const orgId = getOrgIdForUI();
-    if (!orgId) return;
+    if (!orgId) {
+      // nothing to load yet; show CTA to manage connectors
+      setConnectors([]);
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
       const json = await res.json().catch(() => null);
-      if (res.ok && json?.ok) setConnectors(json.integrations ?? []);
-    } catch {
-      // ignore
-    }
-  }
-
-  async function refreshConnections() {
-    try {
-      const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce");
-      const json = await res.json().catch(() => null);
-      if (res.ok) {
-        setConnections(json?.connections ?? []);
-        const latest = (json?.connections ?? [])[0];
-        if (latest?.config?.store_hash) setStoreHash(String(latest.config.store_hash));
+      if (res.ok && json?.ok) {
+        setConnectors(json.integrations ?? []);
       } else {
-        setConnStatus(json?.error ?? `Failed to load connections: ${res.status}`);
+        setConnectors([]);
       }
-    } catch (err: any) {
-      setConnStatus(String(err?.message ?? err));
+    } catch {
+      setConnectors([]);
     }
   }
 
-  async function saveConnection() {
-    setConnSaving(true);
-    setConnStatus(null);
-    try {
-      const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: connName,
-          store_hash: storeHash,
-          access_token: accessToken,
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) {
-        setConnStatus(json?.error || `Save failed: ${res.status}`);
-        return;
-      }
-      setConnStatus("Saved BigCommerce connection.");
-      setAccessToken(""); // never keep token in UI after save
-      await refreshConnections();
-      await loadConnectors();
-    } catch (err: any) {
-      setConnStatus(String(err?.message ?? err));
-    } finally {
-      setConnSaving(false);
-    }
-  }
-
+  // fetch ingestion and pipeline helpers
   async function fetchIngestion(id: string) {
     setLoading(true);
     try {
@@ -244,10 +203,7 @@ export default function ImportPage() {
       setStatusMessage("Loading ingestion");
       await fetchIngestion(id);
 
-      const steps =
-        importMode === "import_only"
-          ? ["import"]
-          : ["extract", "seo", "audit", "import"];
+      const steps = importMode === "import_only" ? ["import"] : ["extract", "seo", "audit", "import"];
 
       setStatusMessage("Starting pipeline run");
       const res = await fetch("/api/v1/pipeline/run", {
@@ -293,12 +249,28 @@ export default function ImportPage() {
     }
   }
 
-  // Quick connector sync: call our server endpoint to create an import job by connector
-  async function syncSelectedConnector() {
-    const connectorId = selectedConnector;
-    if (!connectorId) return alert("Select a connector to sync");
+  // connector actions
+  async function testConnector(connectorId: string) {
+    try {
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        alert(`Test failed: ${json?.error ?? "unknown"}`);
+        return;
+      }
+      alert("Connection test succeeded");
+      await loadConnectors();
+    } catch (err: any) {
+      alert(String(err?.message ?? err));
+    }
+  }
+
+  async function syncConnector(connectorId: string) {
     const orgId = getOrgIdForUI();
-    if (!orgId) return alert("Org ID not available — wire session lookup to enable connectors");
+    if (!orgId) return alert("Org ID missing — wire session lookup");
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
         method: "POST",
@@ -311,21 +283,17 @@ export default function ImportPage() {
         return;
       }
       const jobId = json.jobId ?? json.id ?? "";
-      if (jobId) {
-        setIngestionIdInput(jobId);
-        setStatusMessage(`Connector sync started: ${jobId}`);
-        await fetchIngestion(jobId);
-      } else {
-        setStatusMessage("Connector sync started");
-      }
+      setIngestionIdInput(jobId);
+      setStatusMessage(`Sync started: ${jobId}`);
+      if (jobId) await fetchIngestion(jobId);
+      await loadConnectors();
     } catch (err: any) {
       alert(String(err?.message ?? err));
     }
   }
 
-  // Initial loads
+  // initial load
   useEffect(() => {
-    refreshConnections().catch(() => null);
     loadConnectors().catch(() => null);
     if (ingestionIdParam) {
       fetchIngestion(ingestionIdParam).catch((e) => setError(String((e as any)?.message || e)));
@@ -382,25 +350,19 @@ export default function ImportPage() {
   const importAction = importResult?.action ?? importArtifact?.output?.import?.result?.action ?? null;
   const importNeedsReview = Boolean(importResult?.needs_review ?? importArtifact?.output?.import?.result?.needs_review);
 
-  const topInfo = (() => {
-    if (!pipelineRunId) return "Idle";
-    if (running || runStatus === "running") return "Running…";
-    return `Run ${pipelineRunId.slice(0, 8)}…`;
-  })();
-
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-5 lg:px-8 lg:py-6 space-y-4">
-        {/* Top bar: platform selector + status */}
-        <section className="flex items-center justify-between">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+        {/* Top row */}
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/60 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600">
+            <div className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-medium">
               AvidiaImport
             </div>
 
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">Platform</label>
-              <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="rounded px-2 py-1 border text-sm" aria-label="Platform">
+              <label className="text-xs text-slate-600">Platform</label>
+              <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="rounded border px-2 py-1 text-sm">
                 <option value="bigcommerce">BigCommerce</option>
                 <option value="shopify">Shopify</option>
                 <option value="woocommerce">WooCommerce</option>
@@ -411,66 +373,115 @@ export default function ImportPage() {
             </div>
           </div>
 
-          <div className="text-xs text-slate-500">{topInfo}</div>
-        </section>
+          <div className="text-xs text-slate-600">{runStatus ?? "idle"}</div>
+        </div>
 
-        {/* Main grid: left connection + right uploader/run */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* connections */}
-          <div className="lg:col-span-5 rounded-2xl border bg-white p-4">
-            <div className="font-semibold mb-2">Connections</div>
-            <ConnectorManager orgId={getOrgIdForUI()} />
+        {/* Providers + Uploader / Run */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Providers column */}
+          <div className="lg:col-span-4 space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Providers</h3>
+                <button onClick={() => setShowConnectorManager((s) => !s)} className="text-xs px-2 py-1 border rounded">
+                  {showConnectorManager ? "Close manager" : "Manage"}
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {connectors.length === 0 ? (
+                  <div className="text-xs text-slate-500">No connectors configured. Click Manage to add one.</div>
+                ) : (
+                  connectors.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between rounded border p-3">
+                      <div>
+                        <div className="font-medium">{c.name ?? c.provider}</div>
+                        <div className="text-xs text-slate-500">
+                          Provider: {c.provider} • {c.status ?? "unknown"}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">Last synced: {c.last_synced_at ? new Date(c.last_synced_at).toLocaleString() : "—"}</div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 items-end">
+                        <span className={`px-2 py-0.5 rounded text-xs ${c.status === "ready" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
+                          {c.status ?? "unknown"}
+                        </span>
+                        <div className="flex gap-2">
+                          <button onClick={() => testConnector(c.id)} className="text-xs px-2 py-1 border rounded">Test</button>
+                          <button onClick={() => syncConnector(c.id)} className="text-xs px-2 py-1 bg-sky-600 text-white rounded">Sync</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {showConnectorManager && (
+                <div className="mt-4">
+                  <ConnectorManager orgId={getOrgIdForUI()} />
+                </div>
+              )}
+            </div>
+
+            {/* Quick tips / mapping suggestions */}
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h4 className="text-sm font-semibold">Tips</h4>
+              <ul className="mt-2 text-xs text-slate-600 space-y-2">
+                <li>BigCommerce / Shopify: prefer SKU for dedupe mapping.</li>
+                <li>WooCommerce: ensure REST API keys have read access.</li>
+                <li>For OAuth providers, use Manage → Start auth flow.</li>
+                <li>Client-side preview limited to 50 rows; server enforces full limits.</li>
+              </ul>
+            </div>
           </div>
 
-          {/* uploader + run */}
-          <div className="lg:col-span-7 rounded-2xl border bg-white p-4">
-            <div className="mb-4">
+          {/* Uploader + run + telemetry column */}
+          <div className="lg:col-span-8 space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold">Upload or Sync</h2>
-                  <p className="text-xs text-slate-500">Upload a CSV/XLSX or choose a connector to sync.</p>
+                  <h3 className="text-lg font-semibold">Upload or Sync</h3>
+                  <p className="text-xs text-slate-500">Upload CSV/XLSX or start a connector sync to create an import.</p>
                 </div>
                 <div className="text-xs text-slate-500">Bucket: imports</div>
               </div>
-            </div>
 
-            <div className="mb-4">
-              <ImportUploader
-                bucket="imports"
-                platform={platform}
-                onCreated={(jobId) => {
-                  if (jobId) {
-                    setIngestionIdInput(jobId);
-                    setStatusMessage(`Import job created: ${jobId}. You can now run the pipeline.`);
-                    fetchIngestion(jobId).catch(() => null);
-                  } else {
-                    setStatusMessage("Import created.");
-                  }
-                }}
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="text-xs font-medium">ingestionId</label>
-              <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className="w-full mt-1 rounded border px-3 py-2" />
-
-              {/* connector quick selector + sync button */}
-              <div className="flex gap-2 items-center mt-2">
-                <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className="flex-1 rounded border px-2 py-1">
-                  <option value="">-- use upload or choose connector --</option>
-                  {connectors.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name ?? c.provider}
-                    </option>
-                  ))}
-                </select>
-                <button onClick={syncSelectedConnector} className="px-3 py-2 rounded bg-sky-600 text-white">Sync connector</button>
+              <div className="mt-4">
+                <ImportUploader
+                  bucket="imports"
+                  platform={platform}
+                  onCreated={(jobId) => {
+                    if (jobId) {
+                      setIngestionIdInput(jobId);
+                      setStatusMessage(`Import job created: ${jobId}. You can run the pipeline now.`);
+                      fetchIngestion(jobId).catch(() => null);
+                    } else {
+                      setStatusMessage("Import created.");
+                    }
+                    loadConnectors().catch(() => null);
+                  }}
+                />
               </div>
-            </div>
 
-            <div className="mb-4">
-              <div className="flex items-center gap-2">
-                <select value={importMode} onChange={(e) => setImportMode(e.target.value as ImportMode)} className="rounded border px-2 py-1">
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium uppercase text-slate-500">Ingestion ID / Job</label>
+                  <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className="w-full mt-1 rounded border px-3 py-2" />
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className="rounded border px-2 py-2 text-sm w-full">
+                    <option value="">Select connector (optional)</option>
+                    {connectors.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name ?? c.provider}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => { if (selectedConnector) syncConnector(selectedConnector); else alert("Select a connector"); }} className="px-3 py-2 rounded bg-sky-600 text-white">Sync</button>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3">
+                <select value={importMode} onChange={(e) => setImportMode(e.target.value as ImportMode)} className="rounded border px-2 py-1 text-sm">
                   <option value="full">extract + seo + audit + import</option>
                   <option value="import_only">import only</option>
                 </select>
@@ -488,71 +499,56 @@ export default function ImportPage() {
               </div>
             </div>
 
-            <div>
-              <div className="text-xs text-slate-500">Pipeline progress</div>
-              <div className="mt-2 h-2 w-full rounded bg-slate-200"><div className="h-full bg-gradient-to-r from-sky-400 to-emerald-300" style={{ width: `${progress}%` }} /></div>
-            </div>
-          </div>
-        </section>
-
-        {/* Telemetry & results (kept intact) */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-5 rounded-2xl border bg-white p-4">
-            <h3 className="text-sm font-semibold">Live pipeline</h3>
-            <div className="mt-3 space-y-2">
-              {(pipelineSnapshot?.modules ?? []).slice().sort((a, b) => a.module_index - b.module_index).map((m) => (
-                <div key={`${m.module_index}-${m.module_name}`} className="flex items-center justify-between rounded p-2 border">
-                  <div>
-                    <div className="font-medium">{m.module_index}. {moduleLabel(m.module_name)}</div>
-                    <div className="text-xs text-slate-500">output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span></div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusChipClass(m.status)}`}>{m.status}</div>
-                    <div className="text-xs mt-1">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
-                  </div>
-                </div>
-              ))}
-
-              {!(pipelineSnapshot?.modules ?? []).length && <div className="text-xs text-slate-500">No pipeline run selected yet.</div>}
-            </div>
-          </div>
-
-          <div className="lg:col-span-7 space-y-4">
-            <div className="rounded border bg-white p-4">
+            {/* Telemetry & artifact */}
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Import result</h3>
+                <h4 className="text-sm font-semibold">Live pipeline & result</h4>
+                <div className="text-xs text-slate-500">Progress: {progress}%</div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
-                  <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="px-3 py-2 rounded bg-slate-900 text-white text-xs">Export JSON</button>
+                  <div className="text-xs text-slate-500 mb-2">Pipeline modules</div>
+                  <div className="space-y-2">
+                    {(pipelineSnapshot?.modules ?? []).slice().sort((a, b) => a.module_index - b.module_index).map((m) => (
+                      <div key={`${m.module_index}-${m.module_name}`} className="flex items-center justify-between rounded border p-2">
+                        <div>
+                          <div className="font-medium">{m.module_index}. {moduleLabel(m.module_name)}</div>
+                          <div className="text-xs text-slate-500">output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span></div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${statusChipClass(m.status)}`}>{m.status}</div>
+                          <div className="text-xs mt-1">{fmtMs(moduleRuntime.get(m.module_name) ?? null)}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {!(pipelineSnapshot?.modules ?? []).length && <div className="text-xs text-slate-500">No active run selected.</div>}
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div className="rounded border p-3">
-                  <div className="text-xs text-slate-500">Status</div>
-                  <div className="font-semibold mt-1">{importDiag?.status ?? "—"}</div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-2">Import artifact</div>
+                  <pre className="max-h-[300px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
+                    {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}
+                  </pre>
+                  <div className="mt-2 text-right">
+                    <button onClick={() => downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, { ingestionId: jobData?.id ?? ingestionIdInput ?? null, pipelineRunId: pipelineRunId || null, diagnostics_import: importDiag ?? null, import_artifact: importArtifact ?? null })} className="text-xs px-2 py-1 bg-slate-900 text-white rounded">
+                      Export JSON
+                    </button>
+                  </div>
                 </div>
-                <div className="rounded border p-3">
-                  <div className="text-xs text-slate-500">Action</div>
-                  <div className="font-semibold mt-1">{importAction ?? "—"}</div>
-                </div>
-                <div className="rounded border p-3">
-                  <div className="text-xs text-slate-500">Product ID</div>
-                  <div className="font-mono mt-1">{importResult?.product_id ?? importArtifact?.output?.import?.result?.product_id ?? "—"}</div>
-                </div>
-              </div>
-
-              <div className="mt-3">
-                <div className="text-xs text-slate-500">Raw artifact</div>
-                <pre className="mt-2 max-h-[260px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see output JSON."}</pre>
               </div>
             </div>
 
-            <div className="rounded border bg-white p-4">
-              <h3 className="text-sm font-semibold">Ingestion (context)</h3>
-              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">{jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}</pre>
+            {/* Ingestion viewer */}
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <h4 className="text-sm font-semibold">Ingestion (context)</h4>
+              <pre className="mt-3 max-h-[340px] overflow-auto rounded border bg-slate-900 p-3 text-[11px] text-white">
+                {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
+              </pre>
             </div>
           </div>
-        </section>
+        </div>
       </div>
     </main>
   );
