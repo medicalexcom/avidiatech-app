@@ -47,9 +47,11 @@ export async function indexFromIngestion(payload: {
       created_at: now,
     };
 
+    // Supabase client's upsert onConflict expects a string (a column name or comma-separated column list).
+    // Pass the conflict columns as a comma-separated string.
     await supabaseAdmin
       .from("product_source_index")
-      .upsert(upsertPayload, { onConflict: ["tenant_id", "supplier_key", "sku_norm"] });
+      .upsert(upsertPayload, { onConflict: "tenant_id,supplier_key,sku_norm" });
 
     return { ok: true };
   } catch (err: any) {
