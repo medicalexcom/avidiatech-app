@@ -7,13 +7,31 @@ const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+/**
+ * Note: Next's route handler context.params may be a Promise in some typings.
+ * For compatibility with the build-time types we accept a generic `context` and
+ * await context.params if necessary.
+ */
+function resolveParams(context: any) {
+  if (!context) return undefined;
+  const p = context.params;
+  if (!p) return undefined;
+  // If params is a Promise (some Next types), await it at call site
+  return p;
+}
+
+export async function PATCH(req: Request, context: any) {
   try {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    const body = await req.json().catch(() => ({}));
+
+    // Resolve params (await if promise)
+    let params = resolveParams(context);
+    if (params && typeof params.then === "function") params = await params;
     const id = params?.id;
     if (!id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
+
+    const body = await req.json().catch(() => ({}));
 
     const allowed: any = {};
     for (const f of ["name", "enabled", "event_type", "condition", "action"]) {
@@ -30,10 +48,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, context: any) {
   try {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+
+    let params = resolveParams(context);
+    if (params && typeof params.then === "function") params = await params;
     const id = params?.id;
     if (!id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
 
