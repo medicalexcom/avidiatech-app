@@ -1,12 +1,6 @@
 /**
- * Monitor worker (updated)
- *
- * - Queries monitor_watches via the PostgREST client (no raw RPC).
- * - Filters watches client-side to find those due for checking (avoids using `.rpc("sql", ...)`).
- * - Calls runWatchOnce for each due watch with a small delay to avoid bursts.
- *
- * Replace the previous worker file with this version to fix the TypeScript build error
- * caused by calling `.catch()` on the RPC builder.
+ * Worker: select watches and consider next_check_at before running.
+ * Replace previous getDueWatches logic with this version.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -20,10 +14,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-/**
- * Fetch candidate watches and return those that are due for a check.
- * We fetch a page of watches ordered by last_check_at and then compute due status client-side.
- */
 async function getDueWatches(limit = 200) {
   const { data, error } = await supabaseAdmin
     .from("monitor_watches")
@@ -39,6 +29,11 @@ async function getDueWatches(limit = 200) {
   const list = Array.isArray(data) ? data : [];
   const due = list.filter((w: any) => {
     const freq = Number(w.frequency_seconds ?? 86400);
+    // if next_check_at present, require it to be <= now
+    if (w.next_check_at) {
+      const next = new Date(w.next_check_at).getTime();
+      if (next > now) return false;
+    }
     if (!w.last_check_at) return true;
     const last = new Date(w.last_check_at).getTime();
     return last + freq * 1000 <= now;
@@ -46,24 +41,19 @@ async function getDueWatches(limit = 200) {
   return due;
 }
 
+// the rest of worker unchanged
 export async function pollOnce() {
   try {
     const dueWatches = await getDueWatches(200);
-    if (!dueWatches.length) {
-      // nothing due right now
-      return;
-    }
-
+    if (!dueWatches.length) return;
     for (const w of dueWatches) {
       try {
-        // run the watch (updates events and watch row)
         console.log(`Monitor worker: checking watch ${w.id} ${w.source_url}`);
         const r = await runWatchOnce(String(w.id));
         console.log("Monitor worker result:", r);
       } catch (err: any) {
         console.error(`Error running watch ${w?.id}:`, err);
       }
-      // polite delay between checks
       await new Promise((res) => setTimeout(res, 300));
     }
   } catch (err: any) {
@@ -83,7 +73,6 @@ export async function startWorker(loopIntervalMs = 60_000) {
   }
 }
 
-// If run directly (node ./dist/lib/monitor/worker.js), start worker
 if (require.main === module) {
   (async () => {
     try {
