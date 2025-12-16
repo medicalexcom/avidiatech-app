@@ -8,19 +8,14 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage (upgraded)
+ * MatchPage (upgraded - fixed JSX usage)
  *
  * - Parses uploaded sheets (xlsx/csv) client-side (dynamic import of xlsx).
  * - Shows preview, creates a match job, starts the job and polls status.
  * - Fetches and pages job rows; wires results into ResultsTable and BulkActions.
  *
- * API endpoints used:
- * - POST /api/v1/match/url-jobs            -> create job
- * - POST /api/v1/match/url-jobs/[jobId]/start -> start processing
- * - GET  /api/v1/match/url-jobs/[jobId]     -> job status
- * - GET  /api/v1/match/url-jobs/[jobId]/rows -> fetch rows (status, limit, offset)
- *
- * Note: ResultsTable and other child components are used as-is and receive props from this container.
+ * NOTE: child components are referenced and passed props; ensure their prop
+ * signatures match. If not, paste their code and I will adapt the props.
  */
 
 type PreviewRow = {
@@ -68,17 +63,16 @@ export default function MatchPage() {
       const rawJson = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[];
       const mapped: PreviewRow[] = rawJson.slice(0, 200).map((r, i) => ({
         row_id: String(i + 1),
-        supplier_name: (r["Supplier Name"] ?? r["supplier"] ?? r["Supplier"] ?? r.supplier_name ?? r.supplier_name ?? "").toString(),
-        sku: (r["SKU"] ?? r["sku"] ?? r["Item SKU"] ?? r.sku ?? "").toString(),
-        ndc_item_code: (r["NDC Item Code"] ?? r["NDC"] ?? r["ndc"] ?? r.ndc ?? "").toString(),
-        product_name: (r["Product Name"] ?? r["Item Name"] ?? r["Name"] ?? r.name ?? "").toString(),
+        supplier_name: (r["Supplier Name"] ?? r["supplier"] ?? r.supplier_name ?? "").toString(),
+        sku: (r["SKU"] ?? r["sku"] ?? r["Item SKU"] ?? "").toString(),
+        ndc_item_code: (r["NDC Item Code"] ?? r["NDC"] ?? r.ndc ?? "").toString(),
+        product_name: (r["Product Name"] ?? r["Item Name"] ?? r.name ?? "").toString(),
         brand_name: (r["Brand Name"] ?? r["Brand"] ?? r.brand ?? "").toString(),
         raw: r
       }));
       setFilePreviewRows(mapped);
     } catch (err) {
       console.error("Failed parsing uploaded file:", err);
-      // Fallback: try CSV text parsing if needed or show error message.
       alert("Failed to parse file in the browser. Please ensure it's an XLSX/CSV file and try again.");
     }
   }, []);
@@ -111,10 +105,8 @@ export default function MatchPage() {
         return;
       }
       setJobId(j.job_id);
-      // reset pagination for results
       setResultsOffset(0);
       setResultsRows([]);
-      // fetch status immediately
       fetchJobStatus(j.job_id);
     } catch (err) {
       console.error("createJob error:", err);
@@ -134,7 +126,6 @@ export default function MatchPage() {
         alert("Start job failed: " + (j?.error ?? res.statusText));
         return;
       }
-      // begin polling
       pollJobStatus(jid);
     } catch (err) {
       console.error("startJob error:", err);
@@ -166,8 +157,6 @@ export default function MatchPage() {
     while (keep) {
       // eslint-disable-next-line no-await-in-loop
       const job = await fetchJobStatus(id);
-      // update results if job progressed
-      // If job running or completed, fetch rows for display
       if (job) {
         if (["running","partial","succeeded","failed","canceled"].includes(job.status)) {
           // eslint-disable-next-line no-await-in-loop
@@ -200,12 +189,9 @@ export default function MatchPage() {
         return;
       }
       setResultsRows(j.rows ?? []);
-      // We don't get total from this endpoint in current spec; estimate via job header
-      // Fetch job header to update counts
       if (jobId) {
         const header = await fetchJobStatus(jobId);
         if (header) {
-          // set resultsTotal from job counts (rough)
           const totalEstimate = header.input_count ?? null;
           setResultsTotal(totalEstimate);
         }
@@ -224,7 +210,6 @@ export default function MatchPage() {
       setResultsRows([]);
       return;
     }
-    // initial fetch
     fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
@@ -237,9 +222,7 @@ export default function MatchPage() {
 
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
 
-  // Approve a candidate (UI-side). This will call a server API to mark that row as approved
-  // and to upsert into product_source_index. The endpoint is not included in the initial
-  // server list above; implement /api/v1/match/rows/[rowId]/approve server-side when ready.
+  // Approve a candidate (UI-side). Expects approve endpoint to be implemented server-side.
   const approveCandidate = useCallback(async (rowId: string, candidateUrl: string) => {
     if (!jobId) return alert("No job context");
     if (!confirm("Approve this candidate URL and mark row resolved?")) return;
@@ -254,7 +237,6 @@ export default function MatchPage() {
         alert("Approve failed: " + (j?.error ?? res.statusText));
         return;
       }
-      // refresh rows / job header
       await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
       await fetchJobStatus(jobId);
     } catch (err) {
@@ -270,7 +252,6 @@ export default function MatchPage() {
     if (!ids.length) return alert("No rows selected");
     if (!confirm(`Approve ${ids.length} selected rows using their top candidate?`)) return;
     for (const id of ids) {
-      // find row
       const row = resultsRows.find((r) => r.id === id || r.row_id === id);
       const candidates = row?.candidates ?? [];
       const top = candidates[0]?.url ?? null;
@@ -283,11 +264,10 @@ export default function MatchPage() {
     await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, clearSelection, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
 
-  // expose child-component props (some components accept props; cast to any to avoid TS mismatch)
+  // uploadProps for UploadPastePanel (if it supports onFile/onPasteRows)
   const uploadProps = useMemo(() => ({
     onFile: handleFile,
     onPasteRows: (rows: any[]) => {
-      // Accept rows pasted as JSON/array-of-objects; convert to preview rows
       const mapped = (rows || []).slice(0, 200).map((r:any, i:number) => ({
         row_id: String(i+1),
         supplier_name: r["Supplier Name"] ?? r.supplier_name ?? r.supplier ?? "",
@@ -318,13 +298,18 @@ export default function MatchPage() {
     onClearSelection: clearSelection
   }), [selectedRowIds, bulkApproveSelected, clearSelection]);
 
+  // Cast child components to any to render safely
+  const UploadComp: any = UploadPastePanel as any;
+  const FiltersComp: any = MatchFilters as any;
+  const BulkComp: any = BulkActions as any;
+  const ResultsComp: any = ResultsTable as any;
+  const JobProgressComp: any = JobProgress as any;
+
   if (!featureEnabled) {
-    // (previous disabled UI) - keep original block for feature gating
     return (
       <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-        {/* ... (disabled state UI) ... */}
         <div className="relative flex min-h-[60vh] items-center justify-center px-4">
-          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white/95 px-6 py-7 shadow-[0_22px_70px_rgba(148,163,184,0.4)] dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-[0_22px_80px_rgba(15,23,42,0.95)]">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white/95 px-6 py-7 shadow-md dark:border-slate-800 dark:bg-slate-900/90">
             <h1 className="mt-3 text-xl font-semibold text-slate-900 dark:text-slate-50">AvidiaMatch is disabled</h1>
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Enable FEATURE_MATCH to use this module.</p>
           </div>
@@ -386,20 +371,8 @@ export default function MatchPage() {
                 </div>
               </div>
 
-              {/* Provide a fallback file input and wire UploadPastePanel */}
               <div className="mt-3">
-                {/* If UploadPastePanel supports props, it will receive onFile / onPasteRows */}
-                {/* Cast to any to avoid prop type mismatches */}
-                {(UploadPastePanel as any) ? (
-                  <div>
-                    <(UploadPastePanel as any) {...uploadProps} />
-                    <div className="mt-3 text-xs text-slate-500">Preview shows up to 200 rows.</div>
-                  </div>
-                ) : (
-                  <div>
-                    <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => handleFile(e.target.files?.[0] ?? null)} />
-                  </div>
-                )}
+                <UploadComp {...uploadProps} />
               </div>
 
               <div className="mt-4 flex gap-2">
@@ -424,10 +397,10 @@ export default function MatchPage() {
 
               <div className="flex flex-col gap-4 md:flex-row">
                 <div className="flex-1">
-                  {(MatchFilters as any) ? <(MatchFilters as any) onChangeStatus={(s:string)=> { setResultsStatusFilter(s || undefined); if (jobId) fetchResultsRows(jobId, s || undefined, resultsLimit, 0); }} /> : null}
+                  <FiltersComp onChangeStatus={(s: string) => { setResultsStatusFilter(s || undefined); if (jobId) fetchResultsRows(jobId, s || undefined, resultsLimit, 0); }} />
                 </div>
                 <div className="w-full md:w-[260px]">
-                  {(BulkActions as any) ? <(BulkActions as any) {...bulkActionsProps} /> : null}
+                  <BulkComp {...bulkActionsProps} />
                 </div>
               </div>
             </div>
@@ -454,9 +427,7 @@ export default function MatchPage() {
               </p>
 
               <div className="mt-1">
-                {(ResultsTable as any) ? <(ResultsTable as any) {...resultsTableProps} /> : (
-                  <div className="text-sm text-slate-500">Results table not available.</div>
-                )}
+                <ResultsComp {...resultsTableProps} />
               </div>
             </div>
           </div>
@@ -471,19 +442,14 @@ export default function MatchPage() {
                 </div>
               </div>
 
-              {/* JobProgress component receives jobId + status + control callbacks */}
               <div>
-                {(JobProgress as any) ? (
-                  <(JobProgress as any)
-                    jobId={jobId}
-                    jobStatus={jobStatus}
-                    startJob={() => startJob(jobId)}
-                    refresh={() => jobId && fetchJobStatus(jobId)}
-                    polling={polling}
-                  />
-                ) : (
-                  <div className="text-xs text-slate-500">Job progress panel not available.</div>
-                )}
+                <JobProgressComp
+                  jobId={jobId}
+                  jobStatus={jobStatus}
+                  startJob={() => startJob(jobId)}
+                  refresh={() => jobId && fetchJobStatus(jobId)}
+                  polling={polling}
+                />
               </div>
             </div>
 
