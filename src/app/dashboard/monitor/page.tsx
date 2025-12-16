@@ -4,11 +4,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 
 /**
- * Monitor dashboard page (refreshed)
+ * Monitor dashboard page (updated)
  *
- * - Shows summary metrics, interactive workspace, recent events.
- * - Replaces developer file list with an "Admin / Developer reference" card that
- *   points to docs and admin pages. Normal users will see succinct guidance instead of raw file paths.
+ * - Replaces developer file list with a compact Admin Metrics card (no files or env shown)
+ * - Keeps the UI premium-looking and provides clearer guidance for non-admin users
+ * - Uses existing API endpoints; no new files required
  */
 
 function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
@@ -28,13 +28,6 @@ export default function MonitorPage() {
   const [notifications, setNotifications] = useState<any[] | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [lastCheckSample, setLastCheckSample] = useState<any | null>(null);
-
-  const addedFiles = useMemo(
-    () => [
-      "Infrastructure & Developer reference available — contact your admin for access to the developer docs and repo paths.",
-    ],
-    []
-  );
 
   async function loadSummary() {
     setLoadingSummary(true);
@@ -85,7 +78,31 @@ export default function MonitorPage() {
       }).length
     : "—";
 
-  const unprocessedEventsCount = events ? events.filter((ev) => ev.processed === false).length : "—";
+  // Admin metrics (avoid exposing files/env)
+  const avgFrequencyDays = useMemo(() => {
+    if (!watches || watches.length === 0) return "—";
+    const totalDays = watches.reduce((acc, w) => {
+      const secs = Number(w.frequency_seconds ?? 86400);
+      return acc + secs / (24 * 60 * 60);
+    }, 0);
+    return Math.round((totalDays / watches.length) * 10) / 10;
+  }, [watches]);
+
+  const failingWatchesCount = useMemo(() => {
+    if (!watches) return "—";
+    return watches.filter((w) => (w.last_status && String(w.last_status) !== "ok") || Number(w.retry_count ?? 0) > 0).length;
+  }, [watches]);
+
+  const eventsPerDayEstimate = useMemo(() => {
+    if (!events) return "—";
+    // estimate over last 7 days
+    const last7 = events.filter((ev) => {
+      const t = new Date(ev.created_at).getTime();
+      return Date.now() - t < 7 * 24 * 60 * 60 * 1000;
+    }).length;
+    return Math.round((last7 / 7) * 10) / 10;
+  }, [events]);
+
   const unreadNotificationsCount = notifications ? notifications.filter((n) => !n.read).length : "—";
   const rulesCount = rules?.length ?? "—";
 
@@ -113,8 +130,8 @@ export default function MonitorPage() {
             <div className="grid grid-cols-4 gap-4">
               <StatCard title="Watches" value={loadingSummary ? "…" : watchesCount} caption="Configured watches" />
               <StatCard title="Events (24h)" value={loadingSummary ? "…" : eventsCount24h} caption="Events in last 24 hours" />
-              <StatCard title="Unprocessed" value={loadingSummary ? "…" : unprocessedEventsCount} caption="Events awaiting processing" />
-              <StatCard title="Unread" value={loadingSummary ? "…" : unreadNotificationsCount} caption="App notifications" />
+              <StatCard title="Avg frequency (days)" value={loadingSummary ? "…" : avgFrequencyDays} caption="Average check frequency" />
+              <StatCard title="Failing watches" value={loadingSummary ? "…" : failingWatchesCount} caption="Watches with errors/retries" />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
@@ -197,11 +214,33 @@ export default function MonitorPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3 text-xs">
-              <div className="font-semibold">Admin / Developer reference</div>
-              <div className="mt-2 text-xs text-slate-600">Developer and infra references (migrations, worker, notifier, rules) are available in the project repository or internal docs. Contact an administrator to get developer access or view the repo.</div>
+              <div className="font-semibold">Admin metrics (no secrets exposed)</div>
+              <div className="mt-2 text-xs text-slate-600">
+                Key operational metrics — shown here for admins and operators. Files, migrations and environment variables are not displayed in-app for security.
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{watchesCount}</div>
+                  <div className="text-slate-500">Watches</div>
+                </div>
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{avgFrequencyDays}</div>
+                  <div className="text-slate-500">Avg frequency (days)</div>
+                </div>
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{failingWatchesCount}</div>
+                  <div className="text-slate-500">Failing watches</div>
+                </div>
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{eventsPerDayEstimate}</div>
+                  <div className="text-slate-500">Events/day (est.)</div>
+                </div>
+              </div>
+
               <div className="mt-3">
-                <a href="https://github.com/medicalexcom/avidiatech-app" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">View repo (admin)</a>
-                <a href="/docs/monitor" className="ml-2 inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">View docs</a>
+                <a href="/dashboard/monitor/rules" className="inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">Manage rules</a>
+                <a href="/dashboard/monitor/notifications" className="ml-2 inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">View notifications</a>
               </div>
             </div>
 
