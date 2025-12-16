@@ -8,14 +8,11 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage (upgraded - fixed JSX usage)
+ * MatchPage (upgrade: explicit file upload)
  *
- * - Parses uploaded sheets (xlsx/csv) client-side (dynamic import of xlsx).
- * - Shows preview, creates a match job, starts the job and polls status.
- * - Fetches and pages job rows; wires results into ResultsTable and BulkActions.
- *
- * NOTE: child components are referenced and passed props; ensure their prop
- * signatures match. If not, paste their code and I will adapt the props.
+ * - Adds a visible XLSX/CSV file input to the Upload panel so users can upload product sheets.
+ * - Keeps existing UploadPastePanel (if present) and also provides a fallback file input.
+ * - Uses dynamic xlsx import to parse files client-side and populate preview rows.
  */
 
 type PreviewRow = {
@@ -371,8 +368,23 @@ export default function MatchPage() {
                 </div>
               </div>
 
-              <div className="mt-3">
+              <div className="mt-3 space-y-3">
+                {/* If UploadPastePanel exists, render it (it can support paste or drag/drop). */}
                 <UploadComp {...uploadProps} />
+
+                {/* Explicit visible file input to upload XLSX / CSV files */}
+                <div className="flex items-center gap-3">
+                  <input
+                    id="match-upload-file"
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+                    className="block rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
+                  />
+                  <label htmlFor="match-upload-file" className="text-xs text-slate-500">Upload XLSX/CSV</label>
+                </div>
+
+                <div className="text-xs text-slate-500">Preview shows up to 200 rows. If parsing fails, try uploading a CSV.</div>
               </div>
 
               <div className="mt-4 flex gap-2">
