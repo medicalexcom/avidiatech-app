@@ -3,17 +3,10 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard (enhanced)
- * - Lists watches with settings: frequency, price sensitivity, mute/unmute, force recheck
- * - Shows recent events
- * - Calls API routes under /api/monitor/*
+ * MonitorDashboard
  *
- * Note: this component assumes server API routes exist:
- * - GET /api/monitor/watches
- * - POST /api/monitor/watches
- * - PATCH /api/monitor/watches/:id
- * - POST /api/monitor/check (body: { watchId })
- * - GET /api/monitor/events?watchId=...
+ * Lightweight client UI for listing watches, creating a new watch, triggering checks,
+ * and viewing recent events. Matches the API routes under src/app/api/monitor/*.
  */
 
 export default function MonitorDashboard() {
@@ -50,6 +43,7 @@ export default function MonitorDashboard() {
   useEffect(() => {
     loadWatches();
     loadEvents();
+    // refresh every 30s while component mounted
     const t = setInterval(() => {
       loadWatches();
       loadEvents();
