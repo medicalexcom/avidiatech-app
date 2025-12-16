@@ -6,10 +6,9 @@ import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 /**
  * Monitor dashboard page (metrics update + scroll behavior)
  *
- * - Updated to reflect the scrollable Watch/Event panel behavior.
- * - Renamed metrics card to "Monitor Metrics".
- * - Additional non-duplicative metrics kept.
- * - Removed Manage rules / View notifications buttons from Metrics card (they remain in Quick Actions).
+ * - Recent monitor events card now has a bounded vertical scroll area
+ *   (prevents the page from growing indefinitely).
+ * - No other layout changes.
  */
 
 function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
@@ -171,6 +170,7 @@ export default function MonitorPage() {
               <MonitorDashboard />
             </div>
 
+            {/* Recent events: bounded scroll area to avoid infinite page growth */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Recent monitor events</h3>
@@ -178,30 +178,41 @@ export default function MonitorPage() {
               </div>
               <p className="text-xs text-slate-500 mt-1">Quick view of recent events. Use Rules to automate alerts and Notifier to deliver webhooks / emails.</p>
 
-              <div className="mt-3 space-y-2">
-                {events === null ? (
-                  <div className="text-sm text-slate-500">Loading…</div>
-                ) : events.length === 0 ? (
-                  <div className="text-sm text-slate-500">No events yet — add a watch or upload/import a product to get started.</div>
-                ) : (
-                  events.slice(0, 8).map((ev) => (
-                    <div key={ev.id} className="rounded-lg border p-3 bg-slate-50 flex items-start justify-between">
-                      <div className="min-w-0">
-                        <div className="text-xs text-slate-500">{ev.event_type} · {ev.severity}</div>
-                        <div className="font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? "Event"}</div>
-                        <div className="text-xs text-slate-400 truncate mt-1">{ev.payload?.snapshot?.url}</div>
-                      </div>
+              <div className="mt-3">
+                <div className="space-y-2" style={{ maxHeight: "36vh", overflowY: "auto", paddingRight: 8 }}>
+                  {events === null ? (
+                    <div className="text-sm text-slate-500">Loading…</div>
+                  ) : events.length === 0 ? (
+                    <div className="text-sm text-slate-500">No events yet — add a watch or upload/import a product to get started.</div>
+                  ) : (
+                    events.slice(0, 50).map((ev) => (
+                      <div key={ev.id} className="rounded-lg border p-3 bg-slate-50 flex items-start justify-between">
+                        <div className="min-w-0">
+                          <div className="text-xs text-slate-500">{ev.event_type} · {ev.severity}</div>
+                          <div className="font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? "Event"}</div>
+                          <div className="text-xs text-slate-400 truncate mt-1">{ev.payload?.snapshot?.url}</div>
+                        </div>
 
-                      <div className="text-right">
-                        <div className="text-xs text-slate-500">{new Date(ev.created_at).toLocaleString()}</div>
-                        <div className="mt-2 flex gap-2">
-                          <button onClick={() => { navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2)); alert("Event payload copied"); }} className="rounded px-2 py-1 text-xs border">Copy</button>
-                          <a href="/dashboard/monitor/notifications" className="rounded px-2 py-1 text-xs border">Notifications</a>
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500">{new Date(ev.created_at).toLocaleString()}</div>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              onClick={() => { navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2)); alert("Event payload copied"); }}
+                              className="rounded px-2 py-1 text-xs border"
+                            >
+                              Copy
+                            </button>
+                            <a href="/dashboard/monitor/notifications" className="rounded px-2 py-1 text-xs border">Notifications</a>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
+
+                {events && events.length > 50 ? (
+                  <div className="mt-3 text-xs text-slate-500">Showing latest 50 events. <a className="underline" href="/dashboard/monitor/events">View all events</a></div>
+                ) : null}
               </div>
             </div>
           </div>
