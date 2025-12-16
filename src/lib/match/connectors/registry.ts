@@ -1,6 +1,6 @@
 import { SupplierConnector, ResolveInput, ConnectorResult, CandidateUrl } from "./types";
 import { SUPPLIER_CONFIG } from "./config";
-import { domainOf } from "../match/netSafety";
+import { domainOf } from "../netSafety";
 
 const registry: Record<string, SupplierConnector> = {};
 
