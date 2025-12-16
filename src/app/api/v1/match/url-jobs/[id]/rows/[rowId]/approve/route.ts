@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
-import { indexFromIngestion } from "@/lib/match/indexFromIngestion";
+// Relative import to avoid alias resolution issues in some build configurations.
+// Adjust the number of ../ segments if your file location differs.
+import { indexFromIngestion } from "../../../../../../../../lib/match/indexFromIngestion";
 
 export const runtime = "nodejs";
 
@@ -28,10 +30,15 @@ export async function POST(req: Request, context: any) {
     if (!approvedUrl) return NextResponse.json({ ok: false, error: "approved_url required" }, { status: 400 });
 
     // fetch row
-    const { data: row } = await supabaseAdmin.from("match_url_job_rows").select("*").eq("job_id", jobId).eq("row_id", rowId).maybeSingle();
+    const { data: row } = await supabaseAdmin
+      .from("match_url_job_rows")
+      .select("*")
+      .eq("job_id", jobId)
+      .eq("row_id", rowId)
+      .maybeSingle();
+
     if (!row) return NextResponse.json({ ok: false, error: "row not found" }, { status: 404 });
 
-    // optional: ensure tenant scoping (row.tenant_id) and user / workspace membership checks if applicable
     const tenantId = row.tenant_id;
 
     // Upsert into product_source_index using indexFromIngestion helper
@@ -53,7 +60,7 @@ export async function POST(req: Request, context: any) {
       });
     } catch (err) {
       console.warn("index upsert failed:", err);
-      // continue — we still update the job row
+      // continue — still update the job row
     }
 
     // update the job row to resolved_confident
@@ -72,15 +79,24 @@ export async function POST(req: Request, context: any) {
       error_message: null,
       updated_at: now
     };
-    const { error: updateErr } = await supabaseAdmin.from("match_url_job_rows").update(updatePayload).eq("job_id", jobId).eq("row_id", rowId);
+    const { error: updateErr } = await supabaseAdmin
+      .from("match_url_job_rows")
+      .update(updatePayload)
+      .eq("job_id", jobId)
+      .eq("row_id", rowId);
+
     if (updateErr) {
       console.error("failed to update job row:", updateErr);
       return NextResponse.json({ ok: false, error: updateErr.message ?? String(updateErr) }, { status: 500 });
     }
 
-    // Optionally, bump job resolved_count for UI convenience — read/modify counts safely
+    // Optionally increment job resolved_count
     try {
-      const { data: job } = await supabaseAdmin.from("match_url_jobs").select("id,resolved_count,input_count").eq("id", jobId).maybeSingle();
+      const { data: job } = await supabaseAdmin
+        .from("match_url_jobs")
+        .select("id,resolved_count,input_count")
+        .eq("id", jobId)
+        .maybeSingle();
       if (job) {
         const newResolved = (Number(job.resolved_count ?? 0) + 1);
         await supabaseAdmin.from("match_url_jobs").update({ resolved_count: newResolved, updated_at: now }).eq("id", jobId);
