@@ -6,7 +6,6 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    // Require Clerk auth — adjust or remove if you have other server auth
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
