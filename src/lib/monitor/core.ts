@@ -47,13 +47,13 @@ function parsePrice(text: string | undefined): number | null {
 function normalizeSpecs($: CheerioAPI): Record<string, string> {
   const specs: Record<string, string> = {};
   // Common pattern: <table> of specs with two columns
-  $<any>("table").each((_, table) => {
-    const rows = $<any>(table).find("tr");
+  $("table").each((_, table) => {
+    const rows = $(table).find("tr");
     rows.each((_, tr) => {
-      const tds = $<any>(tr).find("td, th");
+      const tds = $(tr).find("td, th");
       if (tds.length >= 2) {
-        const k = $<any>(tds[0]).text().trim();
-        const v = $<any>(tds[1]).text().trim();
+        const k = $(tds[0]).text().trim();
+        const v = $(tds[1]).text().trim();
         if (k) specs[k] = v;
       }
     });
