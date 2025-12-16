@@ -3,11 +3,17 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard
+ * MonitorDashboard (enhanced)
+ * - Lists watches with settings: frequency, price sensitivity, mute/unmute, force recheck
+ * - Shows recent events
+ * - Calls API routes under /api/monitor/*
  *
- * Lightweight client UI for listing watches, creating a new watch, triggering checks,
- * and viewing recent events. Matches the page UI and the API routes added under
- * src/app/api/monitor/*.
+ * Note: this component assumes server API routes exist:
+ * - GET /api/monitor/watches
+ * - POST /api/monitor/watches
+ * - PATCH /api/monitor/watches/:id
+ * - POST /api/monitor/check (body: { watchId })
+ * - GET /api/monitor/events?watchId=...
  */
 
 export default function MonitorDashboard() {
@@ -44,7 +50,6 @@ export default function MonitorDashboard() {
   useEffect(() => {
     loadWatches();
     loadEvents();
-    // refresh every 30s while component mounted
     const t = setInterval(() => {
       loadWatches();
       loadEvents();
@@ -76,6 +81,24 @@ export default function MonitorDashboard() {
     }
   }
 
+  async function updateWatch(id: string, patch: any) {
+    try {
+      const res = await fetch(`/api/monitor/watches/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        alert("Update failed: " + (j?.error ?? res.statusText));
+      } else {
+        await loadWatches();
+      }
+    } catch (err:any) {
+      alert(String(err?.message ?? err));
+    }
+  }
+
   async function triggerCheck(watchId: string) {
     setLoading(true);
     try {
@@ -88,7 +111,7 @@ export default function MonitorDashboard() {
       if (!res.ok || !j?.ok) {
         alert("Check failed: " + (j?.error ?? res.statusText));
       } else {
-        alert("Check complete: " + (j?.result?.changed ? "changed" : "no_change"));
+        alert("Check result: " + (j?.result?.changed ? "changed" : "no_change"));
         await loadWatches();
         await loadEvents(watchId);
       }
@@ -125,14 +148,43 @@ export default function MonitorDashboard() {
             ) : (
               watches.map((w) => (
                 <div key={w.id} className="p-3 border rounded bg-white/50">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-medium">{w.source_url}</div>
-                      <div className="text-xs text-slate-500">Last: {w.last_check_at ? new Date(w.last_check_at).toLocaleString() : "never"}</div>
+                      <div className="text-xs text-slate-500">
+                        last: {w.last_check_at ? new Date(w.last_check_at).toLocaleString() : "never"}
+                        {" · "}
+                        {w.last_status ?? "unknown"}
+                        {w.muted_until ? ` · muted until ${new Date(w.muted_until).toLocaleString()}` : ""}
+                      </div>
+                      <div className="mt-2 text-xs">
+                        <label className="mr-2">Freq (s)</label>
+                        <input
+                          type="number"
+                          defaultValue={w.frequency_seconds ?? 86400}
+                          onBlur={(e) => updateWatch(w.id, { frequency_seconds: Number(e.currentTarget.value) })}
+                          className="w-28 rounded border px-2 py-1 text-xs"
+                        />
+                        <label className="ml-4 mr-2">Price Δ %</label>
+                        <input
+                          type="number"
+                          defaultValue={w.price_threshold_percent ?? ""}
+                          onBlur={(e) => updateWatch(w.id, { price_threshold_percent: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
+                          className="w-20 rounded border px-2 py-1 text-xs"
+                        />
+                      </div>
                     </div>
+
                     <div className="flex flex-col items-end gap-2">
-                      <button onClick={() => triggerCheck(w.id)} className="px-2 py-1 text-xs border rounded">Check</button>
-                      <button onClick={() => { setNewUrl(w.source_url); }} className="px-2 py-1 text-xs border rounded">Edit</button>
+                      <div className="flex gap-2">
+                        <button onClick={() => triggerCheck(w.id)} className="px-2 py-1 text-xs border rounded">Check</button>
+                        <button onClick={() => updateWatch(w.id, { muted_until: w.muted_until ? null : new Date(Date.now() + 24*60*60*1000).toISOString() })} className="px-2 py-1 text-xs border rounded">
+                          {w.muted_until ? "Unmute" : "Mute 24h"}
+                        </button>
+                      </div>
+                      <div className="text-xs">
+                        <button onClick={() => { navigator.clipboard?.writeText(w.source_url); alert("Copied URL"); }} className="px-2 py-1 text-xs border rounded">Copy URL</button>
+                      </div>
                     </div>
                   </div>
                 </div>
