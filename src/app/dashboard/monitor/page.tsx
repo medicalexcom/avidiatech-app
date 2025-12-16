@@ -4,11 +4,18 @@ import React, { useEffect, useMemo, useState } from "react";
 import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 
 /**
- * Monitor dashboard page (updated)
+ * Monitor dashboard page (metrics update)
  *
- * - Replaces developer file list with a compact Admin Metrics card (no files or env shown)
- * - Keeps the UI premium-looking and provides clearer guidance for non-admin users
- * - Uses existing API endpoints; no new files required
+ * - Replaces "Admin metrics (no secrets exposed)" title with "Monitor Metrics"
+ * - Removes Manage rules & View notifications buttons from the metrics card (those are accessible elsewhere)
+ * - Adds non-duplicative additional metrics:
+ *   - processed events count
+ *   - total notifications count
+ *   - percent of watches with auto_watch enabled
+ *   - percent of currently-muted watches
+ *   - avg retry_count
+ *
+ * No new files created; uses the existing APIs.
  */
 
 function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
@@ -78,7 +85,11 @@ export default function MonitorPage() {
       }).length
     : "—";
 
-  // Admin metrics (avoid exposing files/env)
+  const processedEventsCount = events ? events.filter((ev) => ev.processed === true).length : "—";
+  const totalNotificationsCount = notifications ? notifications.length : "—";
+  const unreadNotificationsCount = notifications ? notifications.filter((n) => !n.read).length : "—";
+  const rulesCount = rules?.length ?? "—";
+
   const avgFrequencyDays = useMemo(() => {
     if (!watches || watches.length === 0) return "—";
     const totalDays = watches.reduce((acc, w) => {
@@ -95,7 +106,6 @@ export default function MonitorPage() {
 
   const eventsPerDayEstimate = useMemo(() => {
     if (!events) return "—";
-    // estimate over last 7 days
     const last7 = events.filter((ev) => {
       const t = new Date(ev.created_at).getTime();
       return Date.now() - t < 7 * 24 * 60 * 60 * 1000;
@@ -103,8 +113,26 @@ export default function MonitorPage() {
     return Math.round((last7 / 7) * 10) / 10;
   }, [events]);
 
-  const unreadNotificationsCount = notifications ? notifications.filter((n) => !n.read).length : "—";
-  const rulesCount = rules?.length ?? "—";
+  const percentAutoWatch = useMemo(() => {
+    if (!watches || watches.length === 0) return "—";
+    const n = watches.filter((w) => !!w.auto_watch).length;
+    return Math.round((n / watches.length) * 100);
+  }, [watches]);
+
+  const percentMuted = useMemo(() => {
+    if (!watches || watches.length === 0) return "—";
+    const now = Date.now();
+    const n = watches.filter((w) => w.muted_until && new Date(w.muted_until).getTime() > now).length;
+    return Math.round((n / watches.length) * 100);
+  }, [watches]);
+
+  const avgRetryCount = useMemo(() => {
+    if (!watches || watches.length === 0) return "—";
+    const sum = watches.reduce((acc, w) => acc + (Number(w.retry_count ?? 0) || 0), 0);
+    return Math.round((sum / watches.length) * 10) / 10;
+  }, [watches]);
+
+  const unreadNotifications = unreadNotificationsCount;
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-50">
@@ -121,7 +149,7 @@ export default function MonitorPage() {
           <div className="flex gap-3">
             <a href="#add-watch" className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow">Add watch</a>
             <a href="/dashboard/monitor/rules" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">Rules ({rulesCount})</a>
-            <a href="/dashboard/monitor/notifications" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">Notifications ({unreadNotificationsCount})</a>
+            <a href="/dashboard/monitor/notifications" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">Notifications ({unreadNotifications})</a>
           </div>
         </header>
 
@@ -194,53 +222,40 @@ export default function MonitorPage() {
                   </div>
                   <button onClick={() => alert("Dev command:\n\nNODE_ENV=production node -r dotenv/config ./dist/lib/monitor/notifierWorker.js")} className="rounded px-3 py-1 text-xs border">Show command</button>
                 </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">Manage rules</div>
-                    <div className="text-sm font-medium">Create automation for events</div>
-                  </div>
-                  <a href="/dashboard/monitor/rules" className="rounded px-3 py-1 text-xs border">Open</a>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">View notifications</div>
-                    <div className="text-sm font-medium">App notifications & history</div>
-                  </div>
-                  <a href="/dashboard/monitor/notifications" className="rounded px-3 py-1 text-xs border">Open</a>
-                </div>
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3 text-xs">
-              <div className="font-semibold">Admin metrics (no secrets exposed)</div>
+              <div className="font-semibold">Monitor Metrics</div>
               <div className="mt-2 text-xs text-slate-600">
-                Key operational metrics — shown here for admins and operators. Files, migrations and environment variables are not displayed in-app for security.
+                Operational snapshot — this view intentionally does not expose repository files or environment values.
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{watchesCount}</div>
-                  <div className="text-slate-500">Watches</div>
+                  <div className="text-2xl font-semibold">{totalNotificationsCount}</div>
+                  <div className="text-slate-500">Notifications</div>
                 </div>
                 <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{avgFrequencyDays}</div>
-                  <div className="text-slate-500">Avg frequency (days)</div>
+                  <div className="text-2xl font-semibold">{processedEventsCount}</div>
+                  <div className="text-slate-500">Processed events</div>
                 </div>
                 <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{failingWatchesCount}</div>
-                  <div className="text-slate-500">Failing watches</div>
+                  <div className="text-2xl font-semibold">{percentAutoWatch === "—" ? "—" : `${percentAutoWatch}%`}</div>
+                  <div className="text-slate-500">Auto-watch enabled</div>
+                </div>
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{percentMuted === "—" ? "—" : `${percentMuted}%`}</div>
+                  <div className="text-slate-500">Currently muted</div>
+                </div>
+                <div className="p-2 bg-white rounded shadow-sm text-center">
+                  <div className="text-2xl font-semibold">{avgRetryCount}</div>
+                  <div className="text-slate-500">Avg retry count</div>
                 </div>
                 <div className="p-2 bg-white rounded shadow-sm text-center">
                   <div className="text-2xl font-semibold">{eventsPerDayEstimate}</div>
                   <div className="text-slate-500">Events/day (est.)</div>
                 </div>
-              </div>
-
-              <div className="mt-3">
-                <a href="/dashboard/monitor/rules" className="inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">Manage rules</a>
-                <a href="/dashboard/monitor/notifications" className="ml-2 inline-flex items-center gap-2 rounded px-3 py-1 text-xs border">View notifications</a>
               </div>
             </div>
 
