@@ -11,13 +11,121 @@ import MonitorDashboard from "@/components/monitor/MonitorDashboard";
  * - No other layout changes.
  */
 
-function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+function StatCard({
+  title,
+  value,
+  caption,
+}: {
+  title: string;
+  value: React.ReactNode;
+  caption?: string;
+}) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg dark:border-slate-800 dark:bg-slate-950/55">
-      <div className="text-xs text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
-      {caption ? <div className="mt-1 text-xs text-slate-400">{caption}</div> : null}
+    <div
+      className={cx(
+        "group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)]",
+        "backdrop-blur-xl",
+        "dark:border-slate-800/60 dark:bg-slate-950/45"
+      )}
+    >
+      {/* subtle top accent */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-sky-400/40 via-emerald-400/30 to-amber-400/40 dark:from-sky-300/30 dark:via-emerald-300/25 dark:to-amber-300/30" />
+      <div className="pointer-events-none absolute -right-12 -top-14 h-28 w-28 rounded-full bg-sky-300/15 blur-2xl dark:bg-sky-500/10" />
+      <div className="pointer-events-none absolute -left-10 -bottom-14 h-28 w-28 rounded-full bg-amber-300/15 blur-2xl dark:bg-amber-500/10" />
+
+      <div className="relative">
+        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
+          {title}
+        </div>
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <div className="text-2xl font-semibold leading-none text-slate-900 dark:text-slate-50">
+            {value}
+          </div>
+        </div>
+        {caption ? (
+          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            {caption}
+          </div>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function SoftButton({
+  href,
+  children,
+  variant = "secondary",
+  className,
+}: {
+  href: string;
+  children: React.ReactNode;
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950";
+  if (variant === "primary") {
+    return (
+      <a
+        href={href}
+        className={cx(
+          base,
+          "text-slate-950 shadow-[0_16px_34px_-22px_rgba(2,6,23,0.55)]",
+          "bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500",
+          "hover:from-amber-300 hover:via-amber-500 hover:to-orange-400",
+          "focus-visible:ring-amber-400/70",
+          className
+        )}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className={cx(
+        base,
+        "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+        "hover:bg-white hover:text-slate-900",
+        "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
+        "focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70",
+        className
+      )}
+    >
+      {children}
+    </a>
+  );
+}
+
+function TinyChip({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "success" | "signal";
+}) {
+  const tones =
+    tone === "signal"
+      ? "border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100"
+      : tone === "success"
+      ? "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
+
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur",
+        tones
+      )}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -89,7 +197,11 @@ export default function MonitorPage() {
 
   const failingWatchesCount = useMemo(() => {
     if (!watches) return "—";
-    return watches.filter((w) => (w.last_status && String(w.last_status) !== "ok") || Number(w.retry_count ?? 0) > 0).length;
+    return watches.filter(
+      (w) =>
+        (w.last_status && String(w.last_status) !== "ok") ||
+        Number(w.retry_count ?? 0) > 0
+    ).length;
   }, [watches]);
 
   const eventsPerDayEstimate = useMemo(() => {
@@ -131,78 +243,199 @@ export default function MonitorPage() {
 
   const avgRetryCount = useMemo(() => {
     if (!watches || watches.length === 0) return "—";
-    const total = watches.reduce((acc, w) => acc + Number(w.retry_count ?? 0), 0);
+    const total = watches.reduce(
+      (acc, w) => acc + Number(w.retry_count ?? 0),
+      0
+    );
     return Math.round((total / watches.length) * 10) / 10;
   }, [watches]);
 
-  const unreadNotificationsCount = notifications ? notifications.filter((n) => !n.read).length : "—";
+  const unreadNotificationsCount = notifications
+    ? notifications.filter((n) => !n.read).length
+    : "—";
   const rulesCount = rules?.length ?? "—";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-50">
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium uppercase tracking-wider text-slate-600 shadow-sm">
-              Commerce · AvidiaMonitor
+    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* BACKGROUND: layered blobs + radial wash + subtle grid */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
+        <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
+        <div className="absolute top-24 right-12 h-56 w-56 rounded-full bg-emerald-300/12 blur-3xl dark:bg-emerald-500/10" />
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
+
+        <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+        </div>
+      </div>
+
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10">
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            {/* Identity row (aligned with other modules) */}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-amber-300" />
+                </span>
+                Commerce • AvidiaMonitor
+              </span>
+
+              <TinyChip tone="success">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Workers • Rules • Notifier
+              </TinyChip>
+
+              <TinyChip tone="signal">
+                ✨ Change detection → alerts → automation
+              </TinyChip>
             </div>
-            <h1 className="mt-3 text-2xl font-bold">Monitor — change detection, notifications & automation</h1>
-            <p className="mt-1 text-sm text-slate-600">Watch product sources, detect deltas, and trigger pipelines or alerts. Manage watches, rules, and notifications here.</p>
+
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+                Monitor{" "}
+                <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 bg-clip-text text-transparent dark:from-amber-300 dark:via-orange-300 dark:to-sky-300">
+                  changes, notifications &amp; automation
+                </span>
+              </h1>
+              <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+                Watch product sources, detect deltas, and trigger pipelines or
+                alerts. Manage watches, rules, and notifications here.
+              </p>
+            </div>
           </div>
 
-          <div className="flex gap-3">
-            <a href="#add-watch" className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow">Add watch</a>
-            <a href="/dashboard/monitor/rules" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">Rules ({rulesCount})</a>
-            <a href="/dashboard/monitor/notifications" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">Notifications ({unreadNotificationsCount})</a>
+          <div className="flex flex-wrap gap-3 lg:justify-end">
+            <SoftButton href="#add-watch" variant="primary">
+              Add watch
+            </SoftButton>
+            <SoftButton href="/dashboard/monitor/rules" variant="secondary">
+              Rules ({rulesCount})
+            </SoftButton>
+            <SoftButton href="/dashboard/monitor/notifications" variant="secondary">
+              Notifications ({unreadNotificationsCount})
+            </SoftButton>
           </div>
         </header>
 
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-          <div className="lg:col-span-8 space-y-4">
-            <div className="grid grid-cols-4 gap-4">
-              <StatCard title="Watches" value={loadingSummary ? "…" : watchesCount} caption="Configured watches" />
-              <StatCard title="Events (24h)" value={loadingSummary ? "…" : eventsCount24h} caption="Events in last 24 hours" />
-              <StatCard title="Avg frequency (days)" value={loadingSummary ? "…" : avgFrequencyDays} caption="Average check frequency" />
-              <StatCard title="Failing watches" value={loadingSummary ? "…" : failingWatchesCount} caption="Watches with errors/retries" />
+          <div className="space-y-4 lg:col-span-8">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                title="Watches"
+                value={loadingSummary ? "…" : watchesCount}
+                caption="Configured watches"
+              />
+              <StatCard
+                title="Events (24h)"
+                value={loadingSummary ? "…" : eventsCount24h}
+                caption="Events in last 24 hours"
+              />
+              <StatCard
+                title="Avg frequency (days)"
+                value={loadingSummary ? "…" : avgFrequencyDays}
+                caption="Average check frequency"
+              />
+              <StatCard
+                title="Failing watches"
+                value={loadingSummary ? "…" : failingWatchesCount}
+                caption="Watches with errors/retries"
+              />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <MonitorDashboard />
             </div>
 
             {/* Recent events: bounded scroll area to avoid infinite page growth */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Recent monitor events</h3>
-                <div className="text-xs text-slate-500">Most recent</div>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                    Recent monitor events
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Quick view of recent events. Use Rules to automate alerts and
+                    Notifier to deliver webhooks / emails.
+                  </p>
+                </div>
+                <div className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                  Most recent
+                </div>
               </div>
-              <p className="text-xs text-slate-500 mt-1">Quick view of recent events. Use Rules to automate alerts and Notifier to deliver webhooks / emails.</p>
 
               <div className="mt-3">
-                <div className="space-y-2" style={{ maxHeight: "36vh", overflowY: "auto", paddingRight: 8 }}>
+                <div
+                  className="space-y-2 pr-2"
+                  style={{ maxHeight: "36vh", overflowY: "auto" }}
+                >
                   {events === null ? (
-                    <div className="text-sm text-slate-500">Loading…</div>
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                      Loading…
+                    </div>
                   ) : events.length === 0 ? (
-                    <div className="text-sm text-slate-500">No events yet — add a watch or upload/import a product to get started.</div>
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                      No events yet — add a watch or upload/import a product to
+                      get started.
+                    </div>
                   ) : (
                     events.slice(0, 50).map((ev) => (
-                      <div key={ev.id} className="rounded-lg border p-3 bg-slate-50 flex items-start justify-between">
+                      <div
+                        key={ev.id}
+                        className={cx(
+                          "rounded-xl border border-slate-200/70 bg-slate-50/70 p-3",
+                          "shadow-sm",
+                          "flex items-start justify-between gap-3",
+                          "dark:border-slate-800/60 dark:bg-slate-900/30"
+                        )}
+                      >
                         <div className="min-w-0">
-                          <div className="text-xs text-slate-500">{ev.event_type} · {ev.severity}</div>
-                          <div className="font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? "Event"}</div>
-                          <div className="text-xs text-slate-400 truncate mt-1">{ev.payload?.snapshot?.url}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {ev.event_type} · {ev.severity}
+                          </div>
+                          <div className="mt-0.5 truncate font-medium text-slate-900 dark:text-slate-50">
+                            {ev.payload?.snapshot?.title ??
+                              ev.payload?.snapshot?.url ??
+                              "Event"}
+                          </div>
+                          <div className="mt-1 truncate text-xs text-slate-400 dark:text-slate-500">
+                            {ev.payload?.snapshot?.url}
+                          </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className="text-xs text-slate-500">{new Date(ev.created_at).toLocaleString()}</div>
-                          <div className="mt-2 flex gap-2">
+                        <div className="shrink-0 text-right">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {new Date(ev.created_at).toLocaleString()}
+                          </div>
+                          <div className="mt-2 flex justify-end gap-2">
                             <button
-                              onClick={() => { navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2)); alert("Event payload copied"); }}
-                              className="rounded px-2 py-1 text-xs border"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(
+                                  JSON.stringify(ev.payload ?? ev, null, 2)
+                                );
+                                alert("Event payload copied");
+                              }}
+                              className={cx(
+                                "rounded-full px-3 py-1 text-xs font-medium",
+                                "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                                "hover:bg-white hover:text-slate-900",
+                                "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                              )}
                             >
                               Copy
                             </button>
-                            <a href="/dashboard/monitor/notifications" className="rounded px-2 py-1 text-xs border">Notifications</a>
+                            <a
+                              href="/dashboard/monitor/notifications"
+                              className={cx(
+                                "rounded-full px-3 py-1 text-xs font-medium",
+                                "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                                "hover:bg-white hover:text-slate-900",
+                                "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                              )}
+                            >
+                              Notifications
+                            </a>
                           </div>
                         </div>
                       </div>
@@ -211,110 +444,244 @@ export default function MonitorPage() {
                 </div>
 
                 {events && events.length > 50 ? (
-                  <div className="mt-3 text-xs text-slate-500">Showing latest 50 events. <a className="underline" href="/dashboard/monitor/events">View all events</a></div>
+                  <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                    Showing latest 50 events.{" "}
+                    <a
+                      className="underline underline-offset-2"
+                      href="/dashboard/monitor/events"
+                    >
+                      View all events
+                    </a>
+                  </div>
                 ) : null}
               </div>
             </div>
           </div>
 
-          <aside className="lg:col-span-4 space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow">
-              <h3 className="text-sm font-semibold">Quick actions</h3>
-              <p className="text-xs text-slate-500 mt-1">Admin utilities for Monitor</p>
-
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">Run all due checks</div>
-                    <div className="text-sm font-medium">Worker (manual)</div>
-                  </div>
-                  <button onClick={() => { loadSummary(); alert("Summary refreshed. To run checks start the worker process."); }} className="rounded px-3 py-1 text-xs border">Refresh</button>
+          <aside className="space-y-4 lg:col-span-4">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                    Quick actions
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Admin utilities for Monitor
+                  </p>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">Notifier worker</div>
-                    <div className="text-sm font-medium">Deliver webhooks & emails</div>
+                <TinyChip>
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  Ops
+                </TinyChip>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Run all due checks
+                    </div>
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-50">
+                      Worker (manual)
+                    </div>
                   </div>
-                  <button onClick={() => alert("Dev command:\n\nNODE_ENV=production node -r dotenv/config ./dist/lib/monitor/notifierWorker.js")} className="rounded px-3 py-1 text-xs border">Show command</button>
+                  <button
+                    onClick={() => {
+                      loadSummary();
+                      alert(
+                        "Summary refreshed. To run checks start the worker process."
+                      );
+                    }}
+                    className={cx(
+                      "shrink-0 rounded-full px-3 py-1 text-xs font-medium",
+                      "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                      "hover:bg-white hover:text-slate-900",
+                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                    )}
+                  >
+                    Refresh
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">Manage rules</div>
-                    <div className="text-sm font-medium">Create automation for events</div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Notifier worker
+                    </div>
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-50">
+                      Deliver webhooks &amp; emails
+                    </div>
                   </div>
-                  <a href="/dashboard/monitor/rules" className="rounded px-3 py-1 text-xs border">Open</a>
+                  <button
+                    onClick={() =>
+                      alert(
+                        "Dev command:\n\nNODE_ENV=production node -r dotenv/config ./dist/lib/monitor/notifierWorker.js"
+                      )
+                    }
+                    className={cx(
+                      "shrink-0 rounded-full px-3 py-1 text-xs font-medium",
+                      "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                      "hover:bg-white hover:text-slate-900",
+                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                    )}
+                  >
+                    Show command
+                  </button>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-slate-500">View notifications</div>
-                    <div className="text-sm font-medium">App notifications & history</div>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      Manage rules
+                    </div>
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-50">
+                      Create automation for events
+                    </div>
                   </div>
-                  <a href="/dashboard/monitor/notifications" className="rounded px-3 py-1 text-xs border">Open</a>
+                  <a
+                    href="/dashboard/monitor/rules"
+                    className={cx(
+                      "shrink-0 rounded-full px-3 py-1 text-xs font-medium",
+                      "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                      "hover:bg-white hover:text-slate-900",
+                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                    )}
+                  >
+                    Open
+                  </a>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      View notifications
+                    </div>
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-50">
+                      App notifications &amp; history
+                    </div>
+                  </div>
+                  <a
+                    href="/dashboard/monitor/notifications"
+                    className={cx(
+                      "shrink-0 rounded-full px-3 py-1 text-xs font-medium",
+                      "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                      "hover:bg-white hover:text-slate-900",
+                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                    )}
+                  >
+                    Open
+                  </a>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-3 text-xs">
-              <div className="font-semibold">Monitor Metrics</div>
-              <div className="mt-2 text-xs text-slate-600">
-                Operational metrics and high-level signals — no repository paths or environment values are shown here.
+            <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 text-xs shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/35">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-slate-900 dark:text-slate-50">
+                  Monitor Metrics
+                </div>
+                <TinyChip>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Summary
+                </TinyChip>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{watchesCount}</div>
-                  <div className="text-slate-500">Watches</div>
-                </div>
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{avgFrequencyDays}</div>
-                  <div className="text-slate-500">Avg frequency (days)</div>
-                </div>
+              <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                Operational metrics and high-level signals — no repository paths
+                or environment values are shown here.
+              </div>
 
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{failingWatchesCount}</div>
-                  <div className="text-slate-500">Failing watches</div>
-                </div>
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{eventsPerDayEstimate}</div>
-                  <div className="text-slate-500">Events/day (est.)</div>
-                </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                {[
+                  { v: watchesCount, l: "Watches" },
+                  { v: avgFrequencyDays, l: "Avg frequency (days)" },
+                  { v: failingWatchesCount, l: "Failing watches" },
+                  { v: eventsPerDayEstimate, l: "Events/day (est.)" },
+                  { v: notificationsLast7Days, l: "Notifications (7d)" },
+                  {
+                    v:
+                      processedEventRatePercent === "—"
+                        ? "—"
+                        : `${processedEventRatePercent}%`,
+                    l: "Processed rate",
+                  },
+                  {
+                    v: autoWatchPercent === "—" ? "—" : `${autoWatchPercent}%`,
+                    l: "Auto watches",
+                  },
+                  {
+                    v:
+                      productLinkedPercent === "—"
+                        ? "—"
+                        : `${productLinkedPercent}%`,
+                    l: "Linked to product",
+                  },
+                ].map((m) => (
+                  <div
+                    key={m.l}
+                    className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-center shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35"
+                  >
+                    <div className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                      {m.v as any}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      {m.l}
+                    </div>
+                  </div>
+                ))}
 
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{notificationsLast7Days}</div>
-                  <div className="text-slate-500">Notifications (7d)</div>
-                </div>
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{processedEventRatePercent === "—" ? "—" : `${processedEventRatePercent}%`}</div>
-                  <div className="text-slate-500">Processed rate</div>
-                </div>
-
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{autoWatchPercent === "—" ? "—" : `${autoWatchPercent}%`}</div>
-                  <div className="text-slate-500">Auto watches</div>
-                </div>
-                <div className="p-2 bg-white rounded shadow-sm text-center">
-                  <div className="text-2xl font-semibold">{productLinkedPercent === "—" ? "—" : `${productLinkedPercent}%`}</div>
-                  <div className="text-slate-500">Linked to product</div>
-                </div>
-
-                <div className="p-2 bg-white rounded shadow-sm text-center col-span-2">
-                  <div className="text-2xl font-semibold">{avgRetryCount}</div>
-                  <div className="text-slate-500">Avg retry count</div>
+                <div className="col-span-2 rounded-xl border border-slate-200/70 bg-white/75 p-3 text-center shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="text-2xl font-semibold text-slate-900 dark:text-slate-50">
+                    {avgRetryCount}
+                  </div>
+                  <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Avg retry count
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs">
-              <div className="font-semibold">Operational tips</div>
-              <ul className="mt-2 space-y-1 text-slate-600">
-                <li>Start small: monitor a seed of important SKUs first.</li>
-                <li>Set frequency per vendor to avoid rate-limits and CAPTCHAs.</li>
-                <li>Use rules to limit noise — e.g., alert only on price changes &gt; X%.</li>
-                <li>Use a headless-renderer fallback for JS-heavy pages (separate Playwright worker).</li>
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 text-xs shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+              <div className="font-semibold text-slate-900 dark:text-slate-50">
+                Operational tips
+              </div>
+              <ul className="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                  <span>Start small: monitor a seed of important SKUs first.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" />
+                  <span>Set frequency per vendor to avoid rate-limits and CAPTCHAs.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                  <span>
+                    Use rules to limit noise — e.g., alert only on price changes &gt; X%.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                  <span>
+                    Use a headless-renderer fallback for JS-heavy pages (separate Playwright worker).
+                  </span>
+                </li>
               </ul>
+
+              {/* keep lastCheckSample state “alive” without exposing sensitive details */}
+              {lastCheckSample ? (
+                <div className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-[11px] text-slate-600 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-300">
+                  <div className="font-semibold text-slate-700 dark:text-slate-200">
+                    Latest signal (sample)
+                  </div>
+                  <div className="mt-1 truncate">
+                    {lastCheckSample?.payload?.snapshot?.url ??
+                      lastCheckSample?.payload?.snapshot?.title ??
+                      "—"}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </aside>
         </section>
