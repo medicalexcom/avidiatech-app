@@ -9,13 +9,27 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 // Step 1: phase 1 index lookup
-async function lookupIndex(tenantId: string, supplierKey: string, skuNorm?: string|null, ndcNorm?: string|null) {
+async function lookupIndex(tenantId: string, supplierKey: string, skuNorm?: string | null, ndcNorm?: string | null) {
   if (ndcNorm) {
-    const { data } = await supabaseAdmin.from("product_source_index").select("*").eq("tenant_id", tenantId).eq("supplier_key", supplierKey).eq("ndc_item_code_norm", ndcNorm).limit(1).maybeSingle();
+    const { data } = await supabaseAdmin
+      .from("product_source_index")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("supplier_key", supplierKey)
+      .eq("ndc_item_code_norm", ndcNorm)
+      .limit(1)
+      .maybeSingle();
     if (data) return { row: data, matchedBy: "index:supplier+ndc" };
   }
   if (skuNorm) {
-    const { data } = await supabaseAdmin.from("product_source_index").select("*").eq("tenant_id", tenantId).eq("supplier_key", supplierKey).eq("sku_norm", skuNorm).limit(1).maybeSingle();
+    const { data } = await supabaseAdmin
+      .from("product_source_index")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("supplier_key", supplierKey)
+      .eq("sku_norm", skuNorm)
+      .limit(1)
+      .maybeSingle();
     if (data) return { row: data, matchedBy: "index:supplier+sku" };
   }
   return null;
@@ -23,12 +37,12 @@ async function lookupIndex(tenantId: string, supplierKey: string, skuNorm?: stri
 
 export async function resolveSkuToUrl(params: {
   tenantId: string;
-  supplierName?: string|null;
+  supplierName?: string | null;
   supplierKey: string;
-  sku?: string|null;
-  ndcItemCode?: string|null;
-  productName?: string|null;
-  brandName?: string|null;
+  sku?: string | null;
+  ndcItemCode?: string | null;
+  productName?: string | null;
+  brandName?: string | null;
 }) {
   const tenantId = params.tenantId;
   const supplierKey = (params.supplierKey || "").toString().toLowerCase();
@@ -63,38 +77,38 @@ export async function resolveSkuToUrl(params: {
     brandName: params.brandName
   };
   const cRes = await connector.resolveCandidates(input);
-  let candidates = (cRes?.candidates ?? []).filter((c:any)=> isSafePublicUrl(c.url));
+  let candidates = (cRes?.candidates ?? []).filter((c: any) => isSafePublicUrl(c.url));
   // dedupe
   const seen = new Set<string>();
-  candidates = candidates.filter((c:any)=> {
+  candidates = candidates.filter((c: any) => {
     if (seen.has(c.url)) return false;
     seen.add(c.url);
     return true;
   }).slice(0, 10);
 
-  // verify top candidates (concurrency limited)
+  // verify top candidates (sequential/concurrency simple)
   const verified: any[] = [];
   for (const c of candidates) {
     try {
       const v = await verifyCandidateUrl(input, c.url);
       verified.push({ candidate: c, verify: v });
     } catch (err) {
-      verified.push({ candidate: c, verify: { ok: false, score: 0, signals: ["verify_failed"], error: String(err?.message ?? err) }});
+      verified.push({ candidate: c, verify: { ok: false, score: 0, signals: ["verify_failed"], error: String((err as any)?.message ?? err) }});
     }
   }
 
-  verified.sort((a,b)=> (b.verify.score||0)-(a.verify.score||0));
+  verified.sort((a, b) => (b.verify.score || 0) - (a.verify.score || 0));
   const best = verified[0];
   if (!best) {
-    return { status: "unresolved", candidates: candidates.slice(0,3) };
+    return { status: "unresolved", candidates: candidates.slice(0, 3) };
   }
   const score = Number(best.verify.score ?? 0);
 
   if (best.verify.ok && score >= 0.75) {
-    // upsert into index
+    // upsert into index (use comma-separated onConflict to satisfy supabase-js typing)
     try {
       const now = new Date().toISOString();
-      const upsertPayload:any = {
+      const upsertPayload: any = {
         tenant_id: tenantId,
         supplier_key: supplierKey,
         supplier_name: params.supplierName ?? null,
@@ -112,7 +126,7 @@ export async function resolveSkuToUrl(params: {
         updated_at: now,
         created_at: now
       };
-      await supabaseAdmin.from("product_source_index").upsert(upsertPayload, { onConflict: ["tenant_id", "supplier_key", "sku_norm"] });
+      await supabaseAdmin.from("product_source_index").upsert(upsertPayload, { onConflict: "tenant_id,supplier_key,sku_norm" });
     } catch (err) {
       // swallow upsert errors but log
       console.warn("product_source_index upsert failed:", err);
@@ -122,14 +136,14 @@ export async function resolveSkuToUrl(params: {
       status: "resolved_confident",
       resolved_url: best.candidate.url,
       confidence: score,
-      matched_by: `connector:${best.candidate.method || 'unknown'}`,
+      matched_by: `connector:${best.candidate.method || "unknown"}`,
       signals: best.verify.signals
     };
   }
 
   if (score >= 0.55) {
-    return { status: "resolved_needs_review", candidates: verified.map((v)=>({ url: v.candidate.url, score: v.verify.score, signals: v.verify.signals })).slice(0, 5) };
+    return { status: "resolved_needs_review", candidates: verified.map((v) => ({ url: v.candidate.url, score: v.verify.score, signals: v.verify.signals })).slice(0, 5) };
   }
 
-  return { status: "unresolved", candidates: verified.map((v)=>({ url: v.candidate.url, score: v.verify.score, signals: v.verify.signals })).slice(0, 5) };
+  return { status: "unresolved", candidates: verified.map((v) => ({ url: v.candidate.url, score: v.verify.score, signals: v.verify.signals })).slice(0, 5) };
 }
