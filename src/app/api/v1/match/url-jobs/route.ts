@@ -6,11 +6,63 @@ export const runtime = "nodejs";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
+}
+
+const TENANT_MAPPING_TABLE = process.env.TENANT_MAPPING_TABLE ?? "tenants";
+const TENANT_MAPPING_ORG_COLUMN = process.env.TENANT_MAPPING_ORG_COLUMN ?? "clerk_org_id";
+const TENANT_MAPPING_ID_COLUMN = process.env.TENANT_MAPPING_ID_COLUMN ?? "id";
+
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 function isUuid(s?: string | null) {
   if (!s) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+/**
+ * Resolve tenant UUID:
+ * - if explicitTenant provided and valid UUID -> use it
+ * - else, if orgId (from Clerk) present -> lookup mapping table for tenant UUID
+ * - else return null
+ */
+async function resolveTenantUuid(explicitTenant?: string | null, orgId?: string | null) {
+  if (explicitTenant) {
+    if (isUuid(explicitTenant)) return explicitTenant;
+    // invalid explicit tenant supplied
+    throw new Error(`Invalid tenant_id: expected UUID but got "${explicitTenant}"`);
+  }
+
+  if (!orgId) return null;
+
+  // Lookup mapping table for orgId -> tenant id
+  try {
+    // Use dynamic column selection in a safe way: select the id column only
+    const sel = `${TENANT_MAPPING_ID_COLUMN}`;
+    const { data, error } = await supabaseAdmin
+      .from(TENANT_MAPPING_TABLE)
+      .select(sel)
+      .eq(TENANT_MAPPING_ORG_COLUMN, orgId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("tenant mapping lookup error:", error);
+      return null;
+    }
+    if (!data || !data[TENANT_MAPPING_ID_COLUMN]) return null;
+
+    const candidate = String(data[TENANT_MAPPING_ID_COLUMN]);
+    if (!isUuid(candidate)) {
+      console.warn(`mapped tenant id is not a uuid: ${candidate}`);
+      return null;
+    }
+    return candidate;
+  } catch (err) {
+    console.error("resolveTenantUuid error:", err);
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -19,25 +71,22 @@ export async function POST(req: Request) {
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
-    // Accept explicit tenant_id if provided — but it must be a UUID.
+
+    // Allow explicit tenant_id (must be a UUID)
     const suppliedTenant = body?.tenant_id ?? body?.tenantId ?? null;
 
     let tenantId: string | null = null;
+    try {
+      tenantId = await resolveTenantUuid(suppliedTenant, orgId ?? null);
+    } catch (err: any) {
+      return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 400 });
+    }
 
-    if (suppliedTenant) {
-      if (!isUuid(suppliedTenant)) {
-        // Helpful error: caller supplied a non-UUID tenant_id (e.g., Clerk org id).
-        return NextResponse.json({
-          ok: false,
-          error: `Invalid tenant_id: expected a UUID but got "${String(suppliedTenant)}". Provide the tenant UUID (not a Clerk org id). If you intended to use the current workspace, please supply the tenant UUID or configure a mapping from your auth org to a tenant UUID on the server.`
-        }, { status: 400 });
-      }
-      tenantId = suppliedTenant;
-    } else {
-      // No explicit tenant provided. We cannot safely use Clerk orgId (it is not a tenant UUID).
+    if (!tenantId) {
+      // Helpful error for operators: explain mapping configuration
       return NextResponse.json({
         ok: false,
-        error: `tenant_id missing. Please provide the tenant UUID in the request body (tenant_id). Clerk org id (${String(orgId)}) cannot be used directly as tenant_id.`
+        error: `tenant_id missing and automatic mapping failed. Provide tenant_id (UUID) in the request body, or configure tenant mapping environment variables. Expected mapping table "${TENANT_MAPPING_TABLE}" with org column "${TENANT_MAPPING_ORG_COLUMN}" and id column "${TENANT_MAPPING_ID_COLUMN}". Clerk org id: "${String(orgId)}".`
       }, { status: 400 });
     }
 
