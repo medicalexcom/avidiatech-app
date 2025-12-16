@@ -3,7 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * All Events - audit & tracking console (upgraded UI + no horizontal overflow)
+ * All Events - audit & tracking console (viewport-safe)
+ *
+ * - No horizontal overflow on any screen size
+ * - Responsive, grid-based filters (never exceeds 100vw)
+ * - Event rows are min-w-0 safe; long tokens cannot push layout
  *
  * Uses:
  * - GET /api/monitor/events
@@ -38,7 +42,7 @@ function TinyChip({
     <span
       className={cx(
         "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur",
-        "max-w-full",
+        "min-w-0 max-w-full truncate",
         tones
       )}
     >
@@ -147,7 +151,7 @@ function MetricCard({
         "group relative overflow-hidden rounded-2xl border bg-white/88 p-4",
         "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
         "dark:bg-slate-950/45",
-        "max-w-full",
+        "min-w-0 max-w-full",
         t.border
       )}
     >
@@ -164,8 +168,10 @@ function MetricCard({
           {value}
         </div>
         {sub ? (
-          <div className="mt-2 text-[11px] leading-none text-slate-500 dark:text-slate-400">
-            <span className="block truncate whitespace-nowrap">{sub}</span>
+          <div className="mt-2">
+            <span className="block truncate whitespace-nowrap text-[11px] leading-none text-slate-500 dark:text-slate-400">
+              {sub}
+            </span>
           </div>
         ) : null}
       </div>
@@ -274,7 +280,11 @@ export default function AllEventsPage() {
     for (const e of list) if (e?.severity) set.add(String(e.severity));
     const arr = Array.from(set);
     const order = ["info", "warning", "critical"];
-    arr.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
+    arr.sort(
+      (a, b) =>
+        (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) -
+        (order.indexOf(b) === -1 ? 99 : order.indexOf(b))
+    );
     return arr;
   }, [events]);
 
@@ -360,9 +370,9 @@ export default function AllEventsPage() {
   }, [events]);
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden overflow-y-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Background */}
-      <div className="pointer-events-none absolute inset-0">
+    <main className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Background (clipped so it never causes horizontal overflow) */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
         <div className="absolute top-24 right-12 h-56 w-56 rounded-full bg-emerald-300/12 blur-3xl dark:bg-emerald-500/10" />
@@ -374,12 +384,12 @@ export default function AllEventsPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6 overflow-x-hidden">
+      <div className="relative mx-auto w-full max-w-7xl overflow-x-hidden px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6 space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0">
           <div className="space-y-3 min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100 max-w-full">
+            <div className="flex flex-wrap items-center gap-3 min-w-0">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100 truncate">
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-amber-300" />
                 </span>
@@ -406,7 +416,7 @@ export default function AllEventsPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 lg:justify-end">
+          <div className="flex flex-wrap gap-3">
             <SoftButton href="/dashboard/monitor" variant="primary">
               Open Monitor
             </SoftButton>
@@ -417,7 +427,7 @@ export default function AllEventsPage() {
         </header>
 
         {/* Metrics */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
           <MetricCard tone="purple" label="Events/day (7d)" value={metrics.eventsPerDay} sub="Rolling 7-day average" />
           <MetricCard tone="teal" label="Unique watches" value={metrics.uniqueWatches} sub="Distinct watch_id in dataset" />
           <MetricCard
@@ -447,93 +457,94 @@ export default function AllEventsPage() {
           />
         </section>
 
-        {/* Filters */}
+        {/* Filters (GRID-BASED so it can never exceed viewport width) */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-              <div className="min-w-0 w-full sm:w-[420px] max-w-full">
-                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Search</div>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search title / URL / watch_id / payload…"
-                  className={cx(
-                    "mt-1 w-full max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm text-slate-900 shadow-sm",
-                    "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60",
-                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:ring-sky-500/40"
-                  )}
-                />
-              </div>
-
-              <div className="flex flex-wrap items-end gap-2 min-w-0 max-w-full">
-                <div className="w-full sm:w-auto">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Type</div>
-                  <select
-                    value={eventTypeFilter}
-                    onChange={(e) => setEventTypeFilter(e.target.value)}
-                    className={cx(
-                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
-                      "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
-                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
-                    )}
-                  >
-                    <option value="any">Any</option>
-                    {(allTypes.length ? allTypes : ["change_detected", "no_change", "scrape_failed", "error"]).map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Severity</div>
-                  <select
-                    value={severityFilter}
-                    onChange={(e) => setSeverityFilter(e.target.value)}
-                    className={cx(
-                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
-                      "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
-                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
-                    )}
-                  >
-                    <option value="any">Any</option>
-                    {(allSeverities.length ? allSeverities : ["info", "warning", "critical"]).map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="w-full sm:w-auto">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Processed</div>
-                  <select
-                    value={processedFilter}
-                    onChange={(e) => setProcessedFilter(e.target.value)}
-                    className={cx(
-                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
-                      "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
-                      "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
-                    )}
-                  >
-                    <option value="any">Any</option>
-                    <option value="yes">Processed</option>
-                    <option value="no">Unprocessed</option>
-                  </select>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 min-w-0">
+            {/* Search */}
+            <div className="lg:col-span-6 min-w-0">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Search</div>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search title / URL / watch_id / payload…"
+                className={cx(
+                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm text-slate-900 shadow-sm",
+                  "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60",
+                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:ring-sky-500/40"
+                )}
+              />
             </div>
 
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-full sm:w-auto">
-                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Sort</div>
-                <div className="mt-1 flex flex-wrap gap-2">
+            {/* Type */}
+            <div className="lg:col-span-2 min-w-0">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Type</div>
+              <select
+                value={eventTypeFilter}
+                onChange={(e) => setEventTypeFilter(e.target.value)}
+                className={cx(
+                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                  "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
+                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
+                )}
+              >
+                <option value="any">Any</option>
+                {(allTypes.length ? allTypes : ["change_detected", "no_change", "scrape_failed", "error"]).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Severity */}
+            <div className="lg:col-span-2 min-w-0">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Severity</div>
+              <select
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value)}
+                className={cx(
+                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                  "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
+                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
+                )}
+              >
+                <option value="any">Any</option>
+                {(allSeverities.length ? allSeverities : ["info", "warning", "critical"]).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Processed */}
+            <div className="lg:col-span-2 min-w-0">
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Processed</div>
+              <select
+                value={processedFilter}
+                onChange={(e) => setProcessedFilter(e.target.value)}
+                className={cx(
+                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                  "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
+                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
+                )}
+              >
+                <option value="any">Any</option>
+                <option value="yes">Processed</option>
+                <option value="no">Unprocessed</option>
+              </select>
+            </div>
+
+            {/* Sort + Reload row */}
+            <div className="lg:col-span-12 min-w-0">
+              <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-6 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Sort by</div>
                   <select
                     value={sortKey}
                     onChange={(e) => setSortKey(e.target.value as SortKey)}
                     className={cx(
-                      "w-full sm:w-auto rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -542,11 +553,15 @@ export default function AllEventsPage() {
                     <option value="event_type">Event type</option>
                     <option value="severity">Severity</option>
                   </select>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Direction</div>
                   <select
                     value={sortDir}
                     onChange={(e) => setSortDir(e.target.value as SortDir)}
                     className={cx(
-                      "w-full sm:w-auto rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -555,30 +570,32 @@ export default function AllEventsPage() {
                     <option value="asc">asc</option>
                   </select>
                 </div>
-              </div>
 
-              <button
-                onClick={() => {
-                  setPage(1);
-                  load();
-                }}
-                className={cx(
-                  "h-[42px] w-full sm:w-auto rounded-full px-4 text-sm font-semibold whitespace-nowrap",
-                  "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
-                  "hover:bg-white hover:text-slate-900",
-                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70"
-                )}
-              >
-                Reload
-              </button>
+                <div className="sm:col-span-1 lg:col-span-2 min-w-0" />
+
+                <button
+                  onClick={() => {
+                    setPage(1);
+                    load();
+                  }}
+                  className={cx(
+                    "h-[42px] w-full rounded-full px-4 text-sm font-semibold whitespace-nowrap",
+                    "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
+                    "hover:bg-white hover:text-slate-900",
+                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70"
+                  )}
+                >
+                  Reload
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
         {/* List */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between min-w-0">
             <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Events</div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
               Showing{" "}
@@ -594,7 +611,7 @@ export default function AllEventsPage() {
             </div>
           </div>
 
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-2 min-w-0">
             {loading && events === null ? (
               <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>
             ) : pageItems.length === 0 ? (
@@ -612,11 +629,13 @@ export default function AllEventsPage() {
                     key={id}
                     className={cx(
                       "rounded-xl border border-slate-200/70 bg-white/70 p-3 shadow-sm",
-                      "dark:border-slate-800/60 dark:bg-slate-950/35"
+                      "dark:border-slate-800/60 dark:bg-slate-950/35",
+                      "min-w-0 max-w-full"
                     )}
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 min-w-0">
+                      {/* Left content */}
+                      <div className="sm:col-span-9 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <TypePill t={ev.event_type} />
                           <SeverityBadge sev={ev.severity} />
@@ -635,173 +654,4 @@ export default function AllEventsPage() {
                         </div>
 
                         <div className="mt-2 min-w-0">
-                          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
-                            {title}
-                          </div>
-
-                          {/* These lines are the most common cause of horizontal overflow */}
-                          <div className="mt-1 min-w-0 space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                            {watchId ? (
-                              <div className="min-w-0 truncate">
-                                <span className="text-slate-400 dark:text-slate-500">watch:</span>{" "}
-                                <span className="truncate">{watchId}</span>
-                              </div>
-                            ) : null}
-                            {url ? (
-                              <div className="min-w-0 truncate">
-                                <span className="text-slate-400 dark:text-slate-500">url:</span>{" "}
-                                <span className="truncate">{url}</span>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Actions: wrap instead of overflowing */}
-                      <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
-                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                          <button
-                            onClick={() => {
-                              navigator.clipboard?.writeText(safeStringify(ev.payload ?? ev));
-                              alert("Copied payload");
-                            }}
-                            className={cx(
-                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
-                              "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
-                              "hover:bg-white hover:text-slate-900",
-                              "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                            )}
-                          >
-                            Copy
-                          </button>
-
-                          <button
-                            onClick={() => setExpanded((s) => ({ ...s, [id]: !s[id] }))}
-                            className={cx(
-                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
-                              "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
-                              "hover:bg-white hover:text-slate-900",
-                              "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                            )}
-                          >
-                            {isExpanded ? "Hide" : "Details"}
-                          </button>
-                        </div>
-
-                        <a
-                          href={watchId ? `/dashboard/monitor/watches?filter=${encodeURIComponent(watchId)}` : "/dashboard/monitor"}
-                          className={cx(
-                            "inline-flex w-full sm:w-auto items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
-                            "bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 text-slate-950",
-                            "hover:from-sky-300 hover:via-sky-500 hover:to-indigo-400",
-                            "shadow-[0_12px_26px_-18px_rgba(2,6,23,0.55)]"
-                          )}
-                        >
-                          Open watch
-                        </a>
-                      </div>
-                    </div>
-
-                    {isExpanded ? (
-                      <div className="mt-3">
-                        <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-700 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-200 max-w-full overflow-hidden">
-                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                              Payload JSON
-                            </div>
-                            {url ? (
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard?.writeText(String(url));
-                                  alert("Copied URL");
-                                }}
-                                className={cx(
-                                  "rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap",
-                                  "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
-                                  "hover:bg-white hover:text-slate-900",
-                                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                                )}
-                              >
-                                Copy URL
-                              </button>
-                            ) : null}
-                          </div>
-
-                          {/* IMPORTANT: avoid horizontal overflow */}
-                          <pre className="max-h-56 max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words">
-                            {safeStringify(ev.payload ?? {})}
-                          </pre>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Pagination */}
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Page{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">{page}</span>{" "}
-              of{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">{pages}</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
-                  "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
-                  "hover:bg-white hover:text-slate-900 disabled:opacity-50",
-                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                )}
-              >
-                First
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
-                  "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
-                  "hover:bg-white hover:text-slate-900 disabled:opacity-50",
-                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                )}
-              >
-                Prev
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                disabled={page === pages}
-                className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
-                  "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
-                  "hover:bg-white hover:text-slate-900 disabled:opacity-50",
-                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                )}
-              >
-                Next
-              </button>
-              <button
-                onClick={() => setPage(pages)}
-                disabled={page === pages}
-                className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
-                  "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
-                  "hover:bg-white hover:text-slate-900 disabled:opacity-50",
-                  "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                )}
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
+                          <div className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
