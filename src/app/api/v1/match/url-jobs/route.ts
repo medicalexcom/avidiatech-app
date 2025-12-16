@@ -22,23 +22,24 @@ function isUuid(s?: string | null) {
 }
 
 /**
- * Resolve tenant UUID:
- * - if explicitTenant provided and valid UUID -> use it
- * - else, if orgId (from Clerk) present -> lookup mapping table for tenant UUID
- * - else return null
+ * Try to resolve tenant uuid using several heuristics:
+ * 1) If explicitTenant provided and valid UUID -> use it
+ * 2) If configured TENANT_MAPPING_TABLE is present -> lookup there using TENANT_MAPPING_ORG_COLUMN
+ * 3) Try common table/column names (workspaces, tenants, organizations, accounts, customers)
+ *    and common org id column names (clerk_org_id, org_id, external_org_id, external_id).
+ *
+ * Each DB lookup is attempted safely (caught). Returns the first valid UUID or null.
  */
 async function resolveTenantUuid(explicitTenant?: string | null, orgId?: string | null) {
   if (explicitTenant) {
     if (isUuid(explicitTenant)) return explicitTenant;
-    // invalid explicit tenant supplied
     throw new Error(`Invalid tenant_id: expected UUID but got "${explicitTenant}"`);
   }
 
   if (!orgId) return null;
 
-  // Lookup mapping table for orgId -> tenant id
+  // 1) Try configured mapping table first (if present)
   try {
-    // Use dynamic column selection in a safe way: select the id column only
     const sel = `${TENANT_MAPPING_ID_COLUMN}`;
     const { data, error } = await supabaseAdmin
       .from(TENANT_MAPPING_TABLE)
@@ -47,22 +48,62 @@ async function resolveTenantUuid(explicitTenant?: string | null, orgId?: string 
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.warn("tenant mapping lookup error:", error);
-      return null;
+    if (!error && data && data[TENANT_MAPPING_ID_COLUMN]) {
+      const candidate = String(data[TENANT_MAPPING_ID_COLUMN]);
+      if (isUuid(candidate)) return candidate;
     }
-    if (!data || !data[TENANT_MAPPING_ID_COLUMN]) return null;
-
-    const candidate = String(data[TENANT_MAPPING_ID_COLUMN]);
-    if (!isUuid(candidate)) {
-      console.warn(`mapped tenant id is not a uuid: ${candidate}`);
-      return null;
-    }
-    return candidate;
   } catch (err) {
-    console.error("resolveTenantUuid error:", err);
-    return null;
+    // Ignore and continue to fallback heuristics
+    console.warn("tenant mapping lookup failed for configured mapping table:", err);
   }
+
+  // 2) Try common table/column combinations
+  const candidateTables = ["workspaces", "tenants", "organizations", "accounts", "customers", "teams"];
+  const candidateCols = ["clerk_org_id", "org_id", "orgId", "external_org_id", "external_id", "clerkId"];
+
+  for (const tbl of candidateTables) {
+    for (const col of candidateCols) {
+      try {
+        const { data, error } = await supabaseAdmin
+          .from(tbl)
+          .select("*") // we only need to read the id column below, keep generic
+          .eq(col, orgId)
+          .limit(1)
+          .maybeSingle();
+        if (!error && data) {
+          // Try to deduce an id field
+          const possibleId = data.id ?? data[`${tbl.slice(0, -1)}_id`] ?? data.tenant_id ?? data.uuid ?? null;
+          if (possibleId && isUuid(String(possibleId))) return String(possibleId);
+          // also check common key by name
+          if (data[TENANT_MAPPING_ID_COLUMN] && isUuid(String(data[TENANT_MAPPING_ID_COLUMN]))) return String(data[TENANT_MAPPING_ID_COLUMN]);
+          // fallback: any uuid-looking property
+          for (const key of Object.keys(data)) {
+            if (isUuid(String(data[key]))) return String(data[key]);
+          }
+        }
+      } catch (err) {
+        // Column or table may not exist — ignore and continue
+        // console.warn(`lookup ${tbl}.${col} failed:`, err?.message ?? err);
+      }
+    }
+  }
+
+  // 3) As a last-ditch attempt, try to find a tenant by searching product_source_index.signals JSON
+  //    for the orgId (useful if you injected orgId into signals previously).
+  try {
+    // PostgREST contains operator: use .contains for JSON matching
+    const { data, error } = await supabaseAdmin
+      .from("product_source_index")
+      .select("tenant_id")
+      .contains("signals", { clerk_org_id: orgId })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data && data.tenant_id && isUuid(String(data.tenant_id))) return String(data.tenant_id);
+  } catch (err) {
+    // ignore
+  }
+
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -83,7 +124,6 @@ export async function POST(req: Request) {
     }
 
     if (!tenantId) {
-      // Helpful error for operators: explain mapping configuration
       return NextResponse.json({
         ok: false,
         error: `tenant_id missing and automatic mapping failed. Provide tenant_id (UUID) in the request body, or configure tenant mapping environment variables. Expected mapping table "${TENANT_MAPPING_TABLE}" with org column "${TENANT_MAPPING_ORG_COLUMN}" and id column "${TENANT_MAPPING_ID_COLUMN}". Clerk org id: "${String(orgId)}".`
@@ -129,7 +169,6 @@ export async function POST(req: Request) {
     if (inserts.length) {
       const { error: insErr } = await supabaseAdmin.from("match_url_job_rows").insert(inserts);
       if (insErr) {
-        // Log but don't fail the job creation
         console.warn("insert rows error:", insErr);
       }
     }
