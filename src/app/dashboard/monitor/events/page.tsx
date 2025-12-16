@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * All Events - viewport-safe, responsive
+ * All Events - viewport-safe, responsive, colorful top cards
  * Path: src/app/dashboard/monitor/events/page.tsx
  */
 
@@ -84,39 +84,72 @@ function SeverityPill({ sev }: { sev?: string | null }) {
   return <Pill className={tone}>{s}</Pill>;
 }
 
+/** Colorful metric cards (like earlier dashboard) + Title Case labels */
 function MetricCard({
   label,
   value,
   sub,
-  tone = "blue",
+  tone = "sky",
 }: {
   label: string;
   value: React.ReactNode;
   sub?: string;
-  tone?: "blue" | "purple" | "teal" | "amber";
+  tone?: "sky" | "violet" | "emerald" | "amber";
 }) {
-  const toneMap: Record<string, string> = {
-    blue: "border-sky-200/70 dark:border-sky-500/20",
-    purple: "border-violet-200/70 dark:border-violet-500/20",
-    teal: "border-emerald-200/70 dark:border-emerald-500/20",
-    amber: "border-amber-200/70 dark:border-amber-500/20",
+  const toneTop: Record<string, string> = {
+    sky: "from-sky-400/55 via-sky-300/30 to-transparent dark:from-sky-300/35 dark:via-sky-400/15",
+    violet:
+      "from-violet-400/55 via-violet-300/30 to-transparent dark:from-violet-300/35 dark:via-violet-400/15",
+    emerald:
+      "from-emerald-400/55 via-emerald-300/30 to-transparent dark:from-emerald-300/35 dark:via-emerald-400/15",
+    amber:
+      "from-amber-400/60 via-amber-300/30 to-transparent dark:from-amber-300/40 dark:via-amber-400/15",
+  };
+
+  const orb: Record<string, string> = {
+    sky: "bg-sky-300/18 dark:bg-sky-500/10",
+    violet: "bg-violet-300/18 dark:bg-violet-500/10",
+    emerald: "bg-emerald-300/16 dark:bg-emerald-500/10",
+    amber: "bg-amber-300/18 dark:bg-amber-500/10",
   };
 
   return (
     <div
       className={cx(
-        "min-w-0 max-w-full overflow-hidden rounded-2xl border bg-white/88 p-4",
+        "group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 p-4",
         "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
-        "dark:bg-slate-950/45",
-        toneMap[tone]
+        "dark:border-slate-800/60 dark:bg-slate-950/45"
       )}
     >
-      <div className="min-w-0">
-        <div className="truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
+      {/* top gradient line */}
+      <div
+        className={cx(
+          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
+          toneTop[tone]
+        )}
+      />
+      {/* soft orbs */}
+      <div
+        className={cx(
+          "pointer-events-none absolute -right-12 -top-14 h-28 w-28 rounded-full blur-2xl",
+          orb[tone]
+        )}
+      />
+      <div
+        className={cx(
+          "pointer-events-none absolute -left-10 -bottom-14 h-28 w-28 rounded-full blur-2xl",
+          orb[tone]
+        )}
+      />
+
+      <div className="relative min-w-0">
+        <div className="truncate text-[11px] font-medium tracking-[0.02em] text-slate-600 dark:text-slate-300">
           {label}
         </div>
-        <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
-          {value}
+        <div className="mt-2 flex items-end justify-between gap-3 min-w-0">
+          <div className="text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
+            {value}
+          </div>
         </div>
         {sub ? (
           <div className="mt-2">
@@ -248,6 +281,7 @@ export default function AllEventsPage() {
         topTypes: [] as [string, number][],
       };
     }
+
     const now = Date.now();
     const last7 = list.filter(
       (ev) => now - new Date(ev.created_at).getTime() < 7 * 24 * 60 * 60 * 1000
@@ -289,7 +323,7 @@ export default function AllEventsPage() {
             <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
               All{" "}
               <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 bg-clip-text text-transparent dark:from-amber-300 dark:via-orange-300 dark:to-sky-300">
-                Monitor events
+                Monitor Events
               </span>
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
@@ -313,29 +347,29 @@ export default function AllEventsPage() {
           </div>
         </header>
 
-        {/* Metrics */}
+        {/* Metrics (colorful + Title Case labels) */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
           <MetricCard
-            tone="purple"
-            label="Events/day (7d)"
+            tone="violet"
+            label="Events per Day (7d)"
             value={metrics.eventsPerDay}
             sub="Rolling 7-day average"
           />
           <MetricCard
-            tone="teal"
-            label="Unique watches"
+            tone="emerald"
+            label="Unique Watches"
             value={metrics.uniqueWatches}
-            sub="Distinct watch_id in dataset"
+            sub="Distinct watch_id values"
           />
           <MetricCard
-            tone="blue"
-            label="Processed rate"
+            tone="sky"
+            label="Processed Rate"
             value={metrics.processedPct === "—" ? "—" : `${metrics.processedPct}%`}
             sub="processed=true share"
           />
           <MetricCard
             tone="amber"
-            label="Top event types"
+            label="Top Event Types"
             value={metrics.topTypes.length ? metrics.topTypes[0][0] : "—"}
             sub={
               metrics.topTypes.length
@@ -439,7 +473,7 @@ export default function AllEventsPage() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Sort by
+                    Sort By
                   </div>
                   <select
                     value={sortKey}
@@ -451,7 +485,7 @@ export default function AllEventsPage() {
                     )}
                   >
                     <option value="created_at">Created</option>
-                    <option value="event_type">Event type</option>
+                    <option value="event_type">Event Type</option>
                     <option value="severity">Severity</option>
                   </select>
                 </div>
@@ -578,26 +612,23 @@ export default function AllEventsPage() {
                             {title}
                           </div>
 
-                          <div className="mt-1 min-w-0 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                          {/* Watch and URL each on one line with label + value on same line */}
+                          <div className="mt-1 space-y-1 text-xs text-slate-500 dark:text-slate-400 min-w-0">
                             {watchId ? (
-                              <div className="min-w-0">
-                                <span className="text-slate-400 dark:text-slate-500">
+                              <div className="flex items-baseline gap-2 min-w-0">
+                                <span className="shrink-0 text-slate-400 dark:text-slate-500">
                                   watch:
-                                </span>{" "}
-                                <span className="block min-w-0 truncate">
-                                  {watchId}
                                 </span>
+                                <span className="min-w-0 truncate">{watchId}</span>
                               </div>
                             ) : null}
 
                             {url ? (
-                              <div className="min-w-0">
-                                <span className="text-slate-400 dark:text-slate-500">
+                              <div className="flex items-baseline gap-2 min-w-0">
+                                <span className="shrink-0 text-slate-400 dark:text-slate-500">
                                   url:
-                                </span>{" "}
-                                <span className="block min-w-0 truncate">
-                                  {url}
                                 </span>
+                                <span className="min-w-0 truncate">{url}</span>
                               </div>
                             ) : null}
                           </div>
