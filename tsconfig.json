@@ -23,6 +23,16 @@
     "paths": {
       "@/*": [
         "src/*"
+      ],
+      // Add a few explicit helpful aliases to make some server-side imports more robust
+      "@/lib/*": [
+        "src/lib/*"
+      ],
+      "@/app/*": [
+        "src/app/*"
+      ],
+      "@/components/*": [
+        "src/components/*"
       ]
     },
     "types": [
