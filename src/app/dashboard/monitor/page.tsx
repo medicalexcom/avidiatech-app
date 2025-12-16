@@ -4,22 +4,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 
 /**
- * Enhanced Monitor page
+ * Enhanced Monitor page (updated)
  *
- * - Renders the marketing/overview UI + interactive MonitorDashboard.
- * - Adds a lightweight summary panel that fetches watches & events counts,
- *   shows most-recent events, and exposes quick actions (Add watch anchor, Run check).
- * - Displays a reference list of the server-side files added for Monitor so
- *   operators/developers know where to look (migrations, core, worker, api routes).
+ * - Reflects newly added server-side pieces (notifier, rules, notifications, upload integration)
+ * - Shows quick links to the Rules admin and Notifications pages
+ * - Surfaces unread notifications and unprocessed events counts
+ * - Lists all relevant files we added/updated so operators and developers can find them quickly
  *
  * Drop this file at: src/app/dashboard/monitor/page.tsx
- *
- * Notes:
- * - The page calls:
- *   - GET /api/monitor/watches
- *   - GET /api/monitor/events
- *   - POST /api/monitor/check (via MonitorDashboard)
- * - Ensure the API routes and env vars described in docs are present.
  */
 
 function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
@@ -35,19 +27,34 @@ function StatCard({ title, value, caption }: { title: string; value: React.React
 export default function MonitorPage() {
   const [watches, setWatches] = useState<any[] | null>(null);
   const [events, setEvents] = useState<any[] | null>(null);
+  const [rules, setRules] = useState<any[] | null>(null);
+  const [notifications, setNotifications] = useState<any[] | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [lastCheckSample, setLastCheckSample] = useState<any | null>(null);
 
-  // list of files we added for Monitor (helpful reference)
+  // list of files we added/updated for Monitor (helpful reference)
   const addedFiles = useMemo(
     () => [
       "supabase/migrations/0001_create_monitor_tables.sql",
+      "supabase/migrations/0004_monitor_notifications.sql",
       "src/lib/monitor/core.ts",
+      "src/lib/monitor/hooks.ts",
       "src/lib/monitor/worker.ts",
+      "src/lib/monitor/notifier.ts",
+      "src/lib/monitor/notifierWorker.ts",
+      "src/components/monitor/MonitorDashboard.tsx",
+      "src/components/monitor/RulesAdmin.tsx",
+      "src/components/monitor/NotificationsList.tsx",
+      "src/app/dashboard/monitor/rules/page.tsx",
+      "src/app/dashboard/monitor/notifications/page.tsx",
       "src/app/api/monitor/watches/route.ts",
+      "src/app/api/monitor/watches/[id]/route.ts",
       "src/app/api/monitor/events/route.ts",
       "src/app/api/monitor/check/route.ts",
-      "src/components/monitor/MonitorDashboard.tsx",
+      "src/app/api/monitor/rules/route.ts",
+      "src/app/api/monitor/rules/[id]/route.ts",
+      "src/app/api/monitor/notifications/route.ts",
+      "src/app/api/upload-to-supabase/route.ts (updated to createWatchForIngestion)",
     ],
     []
   );
@@ -55,17 +62,32 @@ export default function MonitorPage() {
   async function loadSummary() {
     setLoadingSummary(true);
     try {
-      const [wRes, eRes] = await Promise.all([fetch("/api/monitor/watches"), fetch("/api/monitor/events")]);
+      const [wRes, eRes, rRes, nRes] = await Promise.all([
+        fetch("/api/monitor/watches"),
+        fetch("/api/monitor/events"),
+        fetch("/api/monitor/rules"),
+        fetch("/api/monitor/notifications"),
+      ]);
       const wJson = await wRes.json().catch(() => null);
       const eJson = await eRes.json().catch(() => null);
+      const rJson = await rRes.json().catch(() => null);
+      const nJson = await nRes.json().catch(() => null);
+
       const wList = wRes.ok && wJson?.ok ? wJson.watches ?? [] : [];
       const eList = eRes.ok && eJson?.ok ? eJson.events ?? [] : [];
+      const rList = rRes.ok && rJson?.ok ? rJson.rules ?? [] : [];
+      const nList = nRes.ok && nJson?.ok ? nJson.notifications ?? [] : [];
+
       setWatches(wList);
       setEvents(eList);
+      setRules(rList);
+      setNotifications(nList);
       setLastCheckSample(eList?.[0] ?? null);
     } catch (err) {
       setWatches([]);
       setEvents([]);
+      setRules([]);
+      setNotifications([]);
       setLastCheckSample(null);
     } finally {
       setLoadingSummary(false);
@@ -86,6 +108,10 @@ export default function MonitorPage() {
       }).length
     : "—";
 
+  const unprocessedEventsCount = events ? events.filter((ev) => ev.processed === false).length : "—";
+  const unreadNotificationsCount = notifications ? notifications.filter((n) => !n.read).length : "—";
+  const rulesCount = rules?.length ?? "—";
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       <div className="pointer-events-none absolute inset-0">
@@ -102,34 +128,23 @@ export default function MonitorPage() {
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
               Commerce · AvidiaMonitor
             </div>
-            <h1 className="mt-3 text-2xl font-semibold">Monitor — change detection & automation</h1>
+            <h1 className="mt-3 text-2xl font-semibold">Monitor — change detection, notifications & automation</h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
               Watch product sources, detect deltas, and trigger pipelines or alerts. Use the workspace below to manage watches,
-              inspect events, and run checks on-demand.
+              inspect events, create rules, and see app notifications.
             </p>
           </div>
 
           <div className="flex gap-3">
-            <button
-              onClick={() => {
-                const url = "#add-watch";
-                const el = document.querySelector(url);
-                if (el) (el as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
-              }}
-              className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow hover:opacity-95"
-            >
+            <a href="#add-watch" className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow hover:opacity-95">
               Add watch
-            </button>
-            <button
-              onClick={() => {
-                const el = document.querySelector("div[data-monitor-dashboard]");
-                if (el) (el as HTMLElement).scrollIntoView({ behavior: "smooth", block: "center" });
-                else window.scrollTo({ top: 400, behavior: "smooth" });
-              }}
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm"
-            >
-              Open workspace
-            </button>
+            </a>
+            <a href="/dashboard/monitor/rules" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">
+              Rules ({rulesCount})
+            </a>
+            <a href="/dashboard/monitor/notifications" className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm">
+              Notifications ({unreadNotificationsCount})
+            </a>
           </div>
         </header>
 
@@ -137,14 +152,11 @@ export default function MonitorPage() {
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
           <div className="lg:col-span-8 space-y-4">
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <StatCard title="Watches" value={loadingSummary ? "…" : watchesCount} caption="Configured watches" />
               <StatCard title="Events (24h)" value={loadingSummary ? "…" : eventsCount24h} caption="Events detected in last 24 hours" />
-              <StatCard
-                title="Last event"
-                value={lastCheckSample ? new Date(lastCheckSample.created_at).toLocaleString() : "—"}
-                caption={lastCheckSample ? `${lastCheckSample.event_type} · ${lastCheckSample?.payload?.diff ? "diff present" : "no diff"}` : "No recent events"}
-              />
+              <StatCard title="Unprocessed events" value={loadingSummary ? "…" : unprocessedEventsCount} caption="Events awaiting processing" />
+              <StatCard title="Unread notifications" value={loadingSummary ? "…" : unreadNotificationsCount} caption="App notifications" />
             </div>
 
             {/* Interactive dashboard */}
@@ -156,33 +168,55 @@ export default function MonitorPage() {
 
             {/* Recent events inline preview */}
             <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow dark:border-slate-800 dark:bg-slate-950/55">
-              <h3 className="text-sm font-semibold">Recent monitor events</h3>
-              <p className="text-xs text-slate-500 mt-1">A quick view of the most recent events captured by Monitor.</p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Recent monitor events</h3>
+                <div className="text-xs text-slate-500">Showing most recent</div>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-1">A quick view of recent events captured by Monitor. Click the notifications link to see app notifications or open Rules to manage automation.</p>
+
               <div className="mt-3 space-y-2">
                 {events === null ? (
                   <div className="text-sm text-slate-500">Loading…</div>
                 ) : events.length === 0 ? (
                   <div className="text-sm text-slate-500">No events yet. Add a watch and run a check.</div>
                 ) : (
-                  events.slice(0, 6).map((ev) => (
+                  events.slice(0, 8).map((ev) => (
                     <div key={ev.id} className="rounded-lg border p-3 bg-slate-50 dark:bg-slate-900/40">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="text-xs text-slate-500">{ev.event_type}</div>
-                          <div className="font-medium">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? "Event"}</div>
-                          <div className="text-xs text-slate-400 truncate">{ev.payload?.snapshot?.url}</div>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="text-xs text-slate-500">{ev.event_type} · {ev.severity}</div>
+                          <div className="font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? "Event"}</div>
+                          <div className="text-xs text-slate-400 truncate mt-1">{ev.payload?.snapshot?.url}</div>
                         </div>
-                        <div className="text-right">
+
+                        <div className="text-right flex flex-col items-end gap-2">
                           <div className="text-xs text-slate-500">{new Date(ev.created_at).toLocaleString()}</div>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2));
-                              alert("Event payload copied");
-                            }}
-                            className="mt-2 rounded px-2 py-1 text-xs border"
-                          >
-                            Copy payload
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2));
+                                alert("Event payload copied");
+                              }}
+                              className="mt-2 rounded px-2 py-1 text-xs border"
+                            >
+                              Copy payload
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/monitor/events?watchId=" + encodeURIComponent(ev.watch_id));
+                                  const j = await res.json();
+                                  alert("Open Events API in network tab / Notifications page to inspect.");
+                                } catch {
+                                  alert("Unable to open details");
+                                }
+                              }}
+                              className="mt-2 rounded px-2 py-1 text-xs border"
+                            >
+                              Details
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -207,8 +241,6 @@ export default function MonitorPage() {
                   <button
                     onClick={async () => {
                       try {
-                        // best-effort: call the worker RPC if you expose one (not implemented by default).
-                        // For now we just reload summary which will show new events after worker runs.
                         await fetch("/api/monitor/watches");
                         alert("Triggered summary refresh — run worker separately (see README).");
                         loadLocalSummary();
@@ -224,13 +256,13 @@ export default function MonitorPage() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-slate-500">Start worker (dev)</div>
-                    <div className="text-sm font-medium">Run locally</div>
+                    <div className="text-xs text-slate-500">Start notifier worker (dev)</div>
+                    <div className="text-sm font-medium">Deliver webhooks / emails</div>
                   </div>
                   <button
                     onClick={() =>
                       alert(
-                        "Dev command:\n\nNODE_ENV=production node -r dotenv/config ./dist/lib/monitor/worker.js\n\nRun this in a server process (PM2, systemd, or Docker)."
+                        "Dev command:\n\nNODE_ENV=production node -r dotenv/config ./dist/lib/monitor/notifierWorker.js\n\nRun this in a server process (PM2, systemd, or Docker)."
                       )
                     }
                     className="rounded px-3 py-1 text-xs border"
@@ -241,12 +273,18 @@ export default function MonitorPage() {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs text-slate-500">Trigger single check</div>
-                    <div className="text-sm font-medium">From Monitor workspace</div>
+                    <div className="text-xs text-slate-500">Manage rules</div>
+                    <div className="text-sm font-medium">Create automation for events</div>
                   </div>
-                  <a href="#add-watch" className="rounded px-3 py-1 text-xs border">
-                    Add / Check
-                  </a>
+                  <a href="/dashboard/monitor/rules" className="rounded px-3 py-1 text-xs border">Open</a>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-slate-500">View notifications</div>
+                    <div className="text-sm font-medium">App notifications & history</div>
+                  </div>
+                  <a href="/dashboard/monitor/notifications" className="rounded px-3 py-1 text-xs border">Open</a>
                 </div>
               </div>
             </div>
@@ -272,7 +310,7 @@ export default function MonitorPage() {
                 ))}
               </ul>
               <div className="mt-3 text-xs text-slate-500">
-                Note: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your environment and run the worker process to enable scheduled checks.
+                Note: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your environment, run DB migrations, and start both Monitor & Notifier workers to enable scheduled checks & notifications.
               </div>
             </div>
 
@@ -280,8 +318,9 @@ export default function MonitorPage() {
               <div className="font-semibold">Operational tips</div>
               <ul className="mt-2 space-y-1 text-slate-600 dark:text-slate-300">
                 <li>Start small: monitor a seed of important SKUs first.</li>
-                <li>Set frequency per vendor to avoid rate-limits.</li>
-                <li>Use Monitor events to trigger Price or Import modules selectively.</li>
+                <li>Set frequency per vendor to avoid rate-limits and CAPTCHAs.</li>
+                <li>Use rules to limit noise — e.g., only alert on price changes &gt; X%.</li>
+                <li>Use Playwright fallback (separate worker) for JS-heavy pages or use a scraping proxy.</li>
               </ul>
             </div>
           </aside>
@@ -293,11 +332,20 @@ export default function MonitorPage() {
   // local helper used in quick action — defined here to avoid moving hooks
   async function loadLocalSummary() {
     try {
-      const [wRes, eRes] = await Promise.all([fetch("/api/monitor/watches"), fetch("/api/monitor/events")]);
+      const [wRes, eRes, rRes, nRes] = await Promise.all([
+        fetch("/api/monitor/watches"),
+        fetch("/api/monitor/events"),
+        fetch("/api/monitor/rules"),
+        fetch("/api/monitor/notifications"),
+      ]);
       const wJson = await wRes.json().catch(() => null);
       const eJson = await eRes.json().catch(() => null);
+      const rJson = await rRes.json().catch(() => null);
+      const nJson = await nRes.json().catch(() => null);
       setWatches(wRes.ok && wJson?.ok ? wJson.watches ?? [] : []);
       setEvents(eRes.ok && eJson?.ok ? eJson.events ?? [] : []);
+      setRules(rRes.ok && rJson?.ok ? rJson.rules ?? [] : []);
+      setNotifications(nRes.ok && nJson?.ok ? nJson.notifications ?? [] : []);
       setLastCheckSample(eJson?.events?.[0] ?? null);
     } catch {
       // noop
