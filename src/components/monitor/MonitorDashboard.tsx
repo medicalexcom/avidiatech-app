@@ -3,16 +3,16 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard (fixed)
+ * MonitorDashboard (compact redesign)
  *
- * - Fixes client runtime error by removing Hook calls inside map/loops.
- * - Extracts per-watch row into a WatchRow child component so each row may use hooks safely.
- * - Keeps FrequencyControl inline (no new files).
+ * - Removes the hint text from each watch card.
+ * - Reworks the watch card layout to be more compact and make better use of space.
+ * - Keeps FrequencyControl and WatchRow (hooks-safe) — no additional files required.
  *
  * Replace the existing src/components/monitor/MonitorDashboard.tsx with this file.
  */
 
-/** FrequencyControl: presets + custom input combo (stateless-ish) */
+/** FrequencyControl: presets + custom input combo (compact) */
 type FrequencyControlProps = {
   days: number;
   onChange: (days: number) => void;
@@ -24,15 +24,12 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
   const presets = [1, 7, 14, 30];
   const [value, setValue] = useState<number>(Math.max(1, Math.round(days || 14)));
 
-  // keep local value synced when parent days change
   useEffect(() => {
     setValue(Math.max(1, Math.round(days || 14)));
   }, [days]);
 
   return (
     <div className={className ?? "flex items-center gap-2"}>
-      <label className="text-xs text-slate-500">Every</label>
-
       <input
         aria-label={ariaLabel ?? "frequency-days"}
         type="number"
@@ -40,11 +37,9 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
         step={1}
         value={value}
         onChange={(e) => setValue(Number(e.target.value))}
-        className="w-20 rounded border px-2 py-1 text-sm"
+        className="w-16 rounded border px-2 py-1 text-sm"
         title="Number of days between checks (custom)"
       />
-
-      <span className="text-xs text-slate-500">days</span>
 
       <select
         value={value}
@@ -80,8 +75,27 @@ function secondsToDays(sec: number | null | undefined) {
   return Math.max(1, Math.round(sec / (24 * 60 * 60)));
 }
 
-/** Child component for a single watch row (safe to use hooks inside) */
-function WatchRow({ watch, onSaveFreq, onTriggerCheck, onUpdate }: {
+/** Compact status badge */
+function StatusBadge({ status }: { status?: string | null }) {
+  const s = (status ?? "unknown").toLowerCase();
+  const map: Record<string, string> = {
+    ok: "bg-emerald-100 text-emerald-800",
+    changed: "bg-amber-100 text-amber-800",
+    scrape_failed: "bg-red-100 text-red-800",
+    error: "bg-red-100 text-red-800",
+    unknown: "bg-slate-100 text-slate-700",
+  };
+  const cls = map[s] ?? map.unknown;
+  return <span className={`inline-flex items-center gap-2 rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{s.replace("_", " ")}</span>;
+}
+
+/** Child component for a single watch row (hooks allowed here) */
+function WatchRow({
+  watch,
+  onSaveFreq,
+  onTriggerCheck,
+  onUpdate,
+}: {
   watch: any;
   onSaveFreq: (id: string, days: number) => Promise<void>;
   onTriggerCheck: (id: string) => Promise<void>;
@@ -96,62 +110,77 @@ function WatchRow({ watch, onSaveFreq, onTriggerCheck, onUpdate }: {
   }, [freqDays]);
 
   return (
-    <div className="p-3 border rounded bg-white/50 flex items-start justify-between">
-      <div className="min-w-0">
-        <div className="truncate font-medium">{watch.source_url}</div>
-        <div className="text-xs text-slate-500">
-          last: {watch.last_check_at ? new Date(watch.last_check_at).toLocaleString() : "never"} · {watch.last_status ?? "unknown"}
-          {watch.muted_until ? ` · muted until ${new Date(watch.muted_until).toLocaleString()}` : ""}
-        </div>
-
-        <div className="mt-2 text-xs flex items-center gap-3">
-          <FrequencyControl
-            days={localDays}
-            onChange={(d) => setLocalDays(d)}
-            ariaLabel={`Frequency for ${watch.source_url}`}
-            className="items-center"
-          />
-          <div className="flex gap-2 ml-2">
-            <button
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  await onSaveFreq(watch.id, localDays);
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              className="px-2 py-1 text-xs border rounded"
-              disabled={saving}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-            <button onClick={() => setLocalDays(freqDays)} className="px-2 py-1 text-xs border rounded">Reset</button>
+    <div className="p-3 border rounded-lg bg-white/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate font-medium text-sm">{watch.source_url}</div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+              <span>{watch.last_check_at ? new Date(watch.last_check_at).toLocaleString() : "never"}</span>
+              <span>·</span>
+              <StatusBadge status={watch.last_status} />
+              {watch.muted_until ? <span className="text-xs text-slate-400">· muted</span> : null}
+            </div>
           </div>
-          <div className="ml-2 text-xs text-slate-500">Hint: frequency controls how often the worker will consider this watch for checking.</div>
         </div>
 
-        <div className="mt-2 text-xs">
-          <label className="text-xs text-slate-500 mr-1">Price Δ %</label>
-          <input
-            type="number"
-            defaultValue={watch.price_threshold_percent ?? ""}
-            onBlur={(e) => onUpdate(watch.id, { price_threshold_percent: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
-            className="w-28 rounded border px-2 py-1 text-xs"
-          />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-500">Frequency</div>
+            <div className="ml-1">
+              <FrequencyControl
+                days={localDays}
+                onChange={(d) => setLocalDays(d)}
+                ariaLabel={`Frequency for ${watch.source_url}`}
+                className="items-center"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-slate-500">Price Δ %</div>
+            <input
+              type="number"
+              defaultValue={watch.price_threshold_percent ?? ""}
+              onBlur={(e) => onUpdate(watch.id, { price_threshold_percent: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
+              className="w-24 rounded border px-2 py-1 text-xs"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-2">
-        <div className="flex gap-2">
-          <button onClick={() => onTriggerCheck(watch.id)} className="px-2 py-1 text-xs border rounded">Check</button>
-          <button onClick={() => onUpdate(watch.id, { muted_until: watch.muted_until ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })} className="px-2 py-1 text-xs border rounded">
-            {watch.muted_until ? "Unmute" : "Mute 24h"}
-          </button>
-        </div>
-        <div className="text-xs">
-          <button onClick={() => { navigator.clipboard?.writeText(watch.source_url); alert("Copied URL"); }} className="px-2 py-1 text-xs border rounded">Copy URL</button>
-        </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onTriggerCheck(watch.id)}
+          className="px-3 py-1 rounded border text-xs bg-white hover:bg-slate-50"
+          title="Run a check now"
+        >
+          Check
+        </button>
+
+        <button
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await onSaveFreq(watch.id, localDays);
+            } finally {
+              setSaving(false);
+            }
+          }}
+          disabled={saving}
+          className="px-3 py-1 rounded bg-amber-500 text-white text-xs"
+          title="Save frequency"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+
+        <button
+          onClick={() => onUpdate(watch.id, { muted_until: watch.muted_until ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })}
+          className="px-3 py-1 rounded border text-xs"
+          title={watch.muted_until ? "Unmute" : "Mute 24h"}
+        >
+          {watch.muted_until ? "Unmute" : "Mute"}
+        </button>
       </div>
     </div>
   );
@@ -315,7 +344,7 @@ export default function MonitorDashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="col-span-2">
           <h4 className="text-sm font-semibold">Watches</h4>
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-3">
             {loading && !watches.length ? (
               <div className="text-sm text-slate-500">Loading…</div>
             ) : watches.length === 0 ? (
