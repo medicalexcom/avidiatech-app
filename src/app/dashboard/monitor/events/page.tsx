@@ -3,14 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * All Events - audit & tracking console (upgraded UI)
- *
- * - Premium Monitor styling (blobs + grid + glass cards)
- * - Compact, readable event rows (no giant <pre> unless expanded)
- * - Filters: event_type, severity, processed
- * - Search (payload/url/title/watch_id)
- * - Sort + paging
- * - Metrics: events/day, unique watches, processed rate, top types
+ * All Events - audit & tracking console (upgraded UI + no horizontal overflow)
  *
  * Uses:
  * - GET /api/monitor/events
@@ -45,6 +38,7 @@ function TinyChip({
     <span
       className={cx(
         "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur",
+        "max-w-full",
         tones
       )}
     >
@@ -65,7 +59,7 @@ function SoftButton({
   className?: string;
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950";
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950 whitespace-nowrap";
   if (variant === "primary") {
     return (
       <a
@@ -111,37 +105,39 @@ function MetricCard({
   sub?: string;
   tone?: "blue" | "purple" | "teal" | "amber";
 }) {
-  const toneMap: Record<string, { top: string; glowA: string; glowB: string; border: string; wash: string }> =
-    {
-      blue: {
-        border: "border-sky-200/70 dark:border-sky-500/20",
-        wash: "from-sky-500/10 via-sky-500/0 to-transparent dark:from-sky-400/10 dark:via-sky-400/0",
-        glowA: "bg-sky-400/16 dark:bg-sky-500/12",
-        glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
-        top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
-      },
-      purple: {
-        border: "border-violet-200/70 dark:border-violet-500/20",
-        wash: "from-violet-500/10 via-violet-500/0 to-transparent dark:from-violet-400/10 dark:via-violet-400/0",
-        glowA: "bg-violet-400/16 dark:bg-violet-500/12",
-        glowB: "bg-fuchsia-400/10 dark:bg-fuchsia-500/10",
-        top: "from-violet-400/55 via-violet-300/20 to-transparent dark:from-violet-300/35 dark:via-violet-300/15",
-      },
-      teal: {
-        border: "border-emerald-200/70 dark:border-emerald-500/20",
-        wash: "from-emerald-500/10 via-emerald-500/0 to-transparent dark:from-emerald-400/10 dark:via-emerald-400/0",
-        glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
-        glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
-        top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
-      },
-      amber: {
-        border: "border-amber-200/70 dark:border-amber-500/20",
-        wash: "from-amber-500/12 via-amber-500/0 to-transparent dark:from-amber-400/10 dark:via-amber-400/0",
-        glowA: "bg-amber-400/16 dark:bg-amber-500/12",
-        glowB: "bg-orange-400/10 dark:bg-orange-500/10",
-        top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
-      },
-    };
+  const toneMap: Record<
+    string,
+    { top: string; glowA: string; glowB: string; border: string; wash: string }
+  > = {
+    blue: {
+      border: "border-sky-200/70 dark:border-sky-500/20",
+      wash: "from-sky-500/10 via-sky-500/0 to-transparent dark:from-sky-400/10 dark:via-sky-400/0",
+      glowA: "bg-sky-400/16 dark:bg-sky-500/12",
+      glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
+      top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
+    },
+    purple: {
+      border: "border-violet-200/70 dark:border-violet-500/20",
+      wash: "from-violet-500/10 via-violet-500/0 to-transparent dark:from-violet-400/10 dark:via-violet-400/0",
+      glowA: "bg-violet-400/16 dark:bg-violet-500/12",
+      glowB: "bg-fuchsia-400/10 dark:bg-fuchsia-500/10",
+      top: "from-violet-400/55 via-violet-300/20 to-transparent dark:from-violet-300/35 dark:via-violet-300/15",
+    },
+    teal: {
+      border: "border-emerald-200/70 dark:border-emerald-500/20",
+      wash: "from-emerald-500/10 via-emerald-500/0 to-transparent dark:from-emerald-400/10 dark:via-emerald-400/0",
+      glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
+      glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
+      top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
+    },
+    amber: {
+      border: "border-amber-200/70 dark:border-amber-500/20",
+      wash: "from-amber-500/12 via-amber-500/0 to-transparent dark:from-amber-400/10 dark:via-amber-400/0",
+      glowA: "bg-amber-400/16 dark:bg-amber-500/12",
+      glowB: "bg-orange-400/10 dark:bg-orange-500/10",
+      top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
+    },
+  };
 
   const t = toneMap[tone];
 
@@ -151,6 +147,7 @@ function MetricCard({
         "group relative overflow-hidden rounded-2xl border bg-white/88 p-4",
         "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
         "dark:bg-slate-950/45",
+        "max-w-full",
         t.border
       )}
     >
@@ -159,8 +156,8 @@ function MetricCard({
       <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
       <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
 
-      <div className="relative">
-        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
+      <div className="relative min-w-0">
+        <div className="truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
           {label}
         </div>
         <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
@@ -186,7 +183,7 @@ function SeverityBadge({ sev }: { sev?: string | null }) {
       : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
 
   return (
-    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", cls)}>
+    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", cls)}>
       {s}
     </span>
   );
@@ -204,7 +201,7 @@ function TypePill({ t }: { t?: string | null }) {
       : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
 
   return (
-    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", cls)}>
+    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", cls)}>
       {s}
     </span>
   );
@@ -213,7 +210,6 @@ function TypePill({ t }: { t?: string | null }) {
 function fmtCompactDate(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
-  // short but readable; avoids ultra-long locale strings
   try {
     return d.toLocaleString(undefined, {
       month: "short",
@@ -268,22 +264,17 @@ export default function AllEventsPage() {
   const allTypes = useMemo(() => {
     const list = events ?? [];
     const set = new Set<string>();
-    for (const e of list) {
-      if (e?.event_type) set.add(String(e.event_type));
-    }
+    for (const e of list) if (e?.event_type) set.add(String(e.event_type));
     return Array.from(set).sort();
   }, [events]);
 
   const allSeverities = useMemo(() => {
     const list = events ?? [];
     const set = new Set<string>();
-    for (const e of list) {
-      if (e?.severity) set.add(String(e.severity));
-    }
-    const arr = Array.from(set).sort();
-    // helpful stable ordering if present
+    for (const e of list) if (e?.severity) set.add(String(e.severity));
+    const arr = Array.from(set);
     const order = ["info", "warning", "critical"];
-    arr.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    arr.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
     return arr;
   }, [events]);
 
@@ -369,8 +360,8 @@ export default function AllEventsPage() {
   }, [events]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* BACKGROUND: blobs + radial wash + subtle grid (match monitor module) */}
+    <main className="relative min-h-screen overflow-x-hidden overflow-y-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
@@ -383,12 +374,12 @@ export default function AllEventsPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6 overflow-x-hidden">
         {/* Header */}
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100 max-w-full">
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-amber-300" />
                 </span>
@@ -402,7 +393,7 @@ export default function AllEventsPage() {
               </TinyChip>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                 All{" "}
                 <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 bg-clip-text text-transparent dark:from-amber-300 dark:via-orange-300 dark:to-sky-300">
@@ -427,18 +418,8 @@ export default function AllEventsPage() {
 
         {/* Metrics */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            tone="purple"
-            label="Events/day (7d)"
-            value={metrics.eventsPerDay}
-            sub="Rolling 7-day average"
-          />
-          <MetricCard
-            tone="teal"
-            label="Unique watches"
-            value={metrics.uniqueWatches}
-            sub="Distinct watch_id in dataset"
-          />
+          <MetricCard tone="purple" label="Events/day (7d)" value={metrics.eventsPerDay} sub="Rolling 7-day average" />
+          <MetricCard tone="teal" label="Unique watches" value={metrics.uniqueWatches} sub="Distinct watch_id in dataset" />
           <MetricCard
             tone="blue"
             label="Processed rate"
@@ -452,9 +433,7 @@ export default function AllEventsPage() {
               metrics.topTypes.length === 0 ? (
                 <span className="text-slate-400 dark:text-slate-500">—</span>
               ) : (
-                <span className="text-base font-semibold">
-                  {metrics.topTypes[0]?.[0] ?? "—"}
-                </span>
+                <span className="text-base font-semibold">{metrics.topTypes[0]?.[0] ?? "—"}</span>
               )
             }
             sub={
@@ -469,54 +448,51 @@ export default function AllEventsPage() {
         </section>
 
         {/* Filters */}
-        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="min-w-0">
+        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+              <div className="min-w-0 w-full sm:w-[420px] max-w-full">
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Search</div>
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search title / URL / watch_id / payload…"
                   className={cx(
-                    "mt-1 w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm text-slate-900 shadow-sm",
+                    "mt-1 w-full max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm text-slate-900 shadow-sm",
                     "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60",
-                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:ring-sky-500/40",
-                    "sm:w-[420px]"
+                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:ring-sky-500/40"
                   )}
                 />
               </div>
 
-              <div className="flex flex-wrap items-end gap-2">
-                <div>
+              <div className="flex flex-wrap items-end gap-2 min-w-0 max-w-full">
+                <div className="w-full sm:w-auto">
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Type</div>
                   <select
                     value={eventTypeFilter}
                     onChange={(e) => setEventTypeFilter(e.target.value)}
                     className={cx(
-                      "mt-1 rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
                   >
                     <option value="any">Any</option>
-                    {(allTypes.length ? allTypes : ["change_detected", "no_change", "scrape_failed", "error"]).map(
-                      (t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      )
-                    )}
+                    {(allTypes.length ? allTypes : ["change_detected", "no_change", "scrape_failed", "error"]).map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div>
+                <div className="w-full sm:w-auto">
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Severity</div>
                   <select
                     value={severityFilter}
                     onChange={(e) => setSeverityFilter(e.target.value)}
                     className={cx(
-                      "mt-1 rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -530,13 +506,13 @@ export default function AllEventsPage() {
                   </select>
                 </div>
 
-                <div>
+                <div className="w-full sm:w-auto">
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Processed</div>
                   <select
                     value={processedFilter}
                     onChange={(e) => setProcessedFilter(e.target.value)}
                     className={cx(
-                      "mt-1 rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "mt-1 w-full sm:w-auto max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -550,14 +526,14 @@ export default function AllEventsPage() {
             </div>
 
             <div className="flex flex-wrap items-end gap-2">
-              <div>
+              <div className="w-full sm:w-auto">
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Sort</div>
-                <div className="mt-1 flex gap-2">
+                <div className="mt-1 flex flex-wrap gap-2">
                   <select
                     value={sortKey}
                     onChange={(e) => setSortKey(e.target.value as SortKey)}
                     className={cx(
-                      "rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "w-full sm:w-auto rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -570,7 +546,7 @@ export default function AllEventsPage() {
                     value={sortDir}
                     onChange={(e) => setSortDir(e.target.value as SortDir)}
                     className={cx(
-                      "rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
+                      "w-full sm:w-auto rounded-xl border border-slate-200/80 bg-white/70 px-2.5 py-2 text-sm shadow-sm",
                       "focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                       "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:focus:ring-sky-500/40"
                     )}
@@ -587,7 +563,7 @@ export default function AllEventsPage() {
                   load();
                 }}
                 className={cx(
-                  "h-[42px] rounded-full px-4 text-sm font-semibold",
+                  "h-[42px] w-full sm:w-auto rounded-full px-4 text-sm font-semibold whitespace-nowrap",
                   "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                   "hover:bg-white hover:text-slate-900",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
@@ -601,7 +577,7 @@ export default function AllEventsPage() {
         </section>
 
         {/* List */}
-        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+        <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Events</div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -609,8 +585,7 @@ export default function AllEventsPage() {
               <span className="font-medium text-slate-700 dark:text-slate-200">
                 {total === 0 ? 0 : Math.min(PAGE_SIZE, total - (page - 1) * PAGE_SIZE)}
               </span>{" "}
-              of{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">{total}</span>{" "}
+              of <span className="font-medium text-slate-700 dark:text-slate-200">{total}</span>{" "}
               (page{" "}
               <span className="font-medium text-slate-700 dark:text-slate-200">
                 {page}/{pages}
@@ -627,11 +602,7 @@ export default function AllEventsPage() {
             ) : (
               pageItems.map((ev) => {
                 const id = String(ev.id ?? `${ev.watch_id ?? "w"}-${ev.created_at ?? Math.random()}`);
-                const title =
-                  ev.payload?.snapshot?.title ??
-                  ev.payload?.snapshot?.url ??
-                  ev.event_type ??
-                  "Event";
+                const title = ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? ev.event_type ?? "Event";
                 const url = ev.payload?.snapshot?.url ?? "";
                 const watchId = ev.watch_id ? String(ev.watch_id) : "";
                 const isExpanded = !!expanded[id];
@@ -644,21 +615,21 @@ export default function AllEventsPage() {
                       "dark:border-slate-800/60 dark:bg-slate-950/35"
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <TypePill t={ev.event_type} />
                           <SeverityBadge sev={ev.severity} />
                           {ev.processed ? (
-                            <span className="inline-flex items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100">
+                            <span className="inline-flex items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100 whitespace-nowrap">
                               processed
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-200/70 bg-white/75 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300">
+                            <span className="inline-flex items-center rounded-full border border-slate-200/70 bg-white/75 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300 whitespace-nowrap">
                               unprocessed
                             </span>
                           )}
-                          <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {fmtCompactDate(ev.created_at)}
                           </span>
                         </div>
@@ -667,32 +638,35 @@ export default function AllEventsPage() {
                           <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
                             {title}
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+
+                          {/* These lines are the most common cause of horizontal overflow */}
+                          <div className="mt-1 min-w-0 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                             {watchId ? (
-                              <span className="truncate">
+                              <div className="min-w-0 truncate">
                                 <span className="text-slate-400 dark:text-slate-500">watch:</span>{" "}
-                                {watchId}
-                              </span>
+                                <span className="truncate">{watchId}</span>
+                              </div>
                             ) : null}
                             {url ? (
-                              <span className="truncate">
+                              <div className="min-w-0 truncate">
                                 <span className="text-slate-400 dark:text-slate-500">url:</span>{" "}
-                                {url}
-                              </span>
+                                <span className="truncate">{url}</span>
+                              </div>
                             ) : null}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 flex-col items-end gap-2">
-                        <div className="flex gap-2">
+                      {/* Actions: wrap instead of overflowing */}
+                      <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
+                        <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
                           <button
                             onClick={() => {
                               navigator.clipboard?.writeText(safeStringify(ev.payload ?? ev));
                               alert("Copied payload");
                             }}
                             className={cx(
-                              "rounded-full px-3 py-1 text-xs font-semibold",
+                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
                               "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
                               "hover:bg-white hover:text-slate-900",
                               "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -704,7 +678,7 @@ export default function AllEventsPage() {
                           <button
                             onClick={() => setExpanded((s) => ({ ...s, [id]: !s[id] }))}
                             className={cx(
-                              "rounded-full px-3 py-1 text-xs font-semibold",
+                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
                               "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
                               "hover:bg-white hover:text-slate-900",
                               "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -717,7 +691,7 @@ export default function AllEventsPage() {
                         <a
                           href={watchId ? `/dashboard/monitor/watches?filter=${encodeURIComponent(watchId)}` : "/dashboard/monitor"}
                           className={cx(
-                            "rounded-full px-3 py-1 text-xs font-semibold",
+                            "inline-flex w-full sm:w-auto items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
                             "bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 text-slate-950",
                             "hover:from-sky-300 hover:via-sky-500 hover:to-indigo-400",
                             "shadow-[0_12px_26px_-18px_rgba(2,6,23,0.55)]"
@@ -730,8 +704,8 @@ export default function AllEventsPage() {
 
                     {isExpanded ? (
                       <div className="mt-3">
-                        <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-700 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-200">
-                          <div className="mb-2 flex items-center justify-between">
+                        <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-700 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-200 max-w-full overflow-hidden">
+                          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                               Payload JSON
                             </div>
@@ -742,7 +716,7 @@ export default function AllEventsPage() {
                                   alert("Copied URL");
                                 }}
                                 className={cx(
-                                  "rounded-full px-3 py-1 text-[11px] font-semibold",
+                                  "rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap",
                                   "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
                                   "hover:bg-white hover:text-slate-900",
                                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -753,7 +727,8 @@ export default function AllEventsPage() {
                             ) : null}
                           </div>
 
-                          <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words">
+                          {/* IMPORTANT: avoid horizontal overflow */}
+                          <pre className="max-h-56 max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words">
                             {safeStringify(ev.payload ?? {})}
                           </pre>
                         </div>
@@ -779,7 +754,7 @@ export default function AllEventsPage() {
                 onClick={() => setPage(1)}
                 disabled={page === 1}
                 className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold",
+                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
                   "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                   "hover:bg-white hover:text-slate-900 disabled:opacity-50",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -791,7 +766,7 @@ export default function AllEventsPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold",
+                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
                   "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                   "hover:bg-white hover:text-slate-900 disabled:opacity-50",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -803,7 +778,7 @@ export default function AllEventsPage() {
                 onClick={() => setPage((p) => Math.min(pages, p + 1))}
                 disabled={page === pages}
                 className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold",
+                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
                   "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                   "hover:bg-white hover:text-slate-900 disabled:opacity-50",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
@@ -815,7 +790,7 @@ export default function AllEventsPage() {
                 onClick={() => setPage(pages)}
                 disabled={page === pages}
                 className={cx(
-                  "rounded-full px-3 py-1.5 text-sm font-semibold",
+                  "rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap",
                   "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                   "hover:bg-white hover:text-slate-900 disabled:opacity-50",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
