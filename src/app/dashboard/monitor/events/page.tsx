@@ -3,15 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * All Events - audit & tracking console (viewport-safe)
- *
- * - No horizontal overflow on any screen size
- * - Responsive, grid-based filters (never exceeds 100vw)
- * - Event rows are min-w-0 safe; long tokens cannot push layout
- *
- * Uses:
- * - GET /api/monitor/events
- *
+ * All Events - viewport-safe, responsive
  * Path: src/app/dashboard/monitor/events/page.tsx
  */
 
@@ -24,193 +16,12 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-function TinyChip({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "success" | "signal";
-}) {
-  const tones =
-    tone === "signal"
-      ? "border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100"
-      : tone === "success"
-      ? "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100"
-      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
-
-  return (
-    <span
-      className={cx(
-        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur",
-        "min-w-0 max-w-full truncate",
-        tones
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
-function SoftButton({
-  href,
-  children,
-  variant = "secondary",
-  className,
-}: {
-  href: string;
-  children: React.ReactNode;
-  variant?: "primary" | "secondary";
-  className?: string;
-}) {
-  const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950 whitespace-nowrap";
-  if (variant === "primary") {
-    return (
-      <a
-        href={href}
-        className={cx(
-          base,
-          "text-slate-950 shadow-[0_16px_34px_-22px_rgba(2,6,23,0.55)]",
-          "bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500",
-          "hover:from-amber-300 hover:via-amber-500 hover:to-orange-400",
-          "focus-visible:ring-amber-400/70",
-          className
-        )}
-      >
-        {children}
-      </a>
-    );
+function safeStringify(obj: any) {
+  try {
+    return JSON.stringify(obj ?? {}, null, 2);
+  } catch {
+    return "{}";
   }
-  return (
-    <a
-      href={href}
-      className={cx(
-        base,
-        "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
-        "hover:bg-white hover:text-slate-900",
-        "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
-        "focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70",
-        className
-      )}
-    >
-      {children}
-    </a>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  sub,
-  tone = "blue",
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  tone?: "blue" | "purple" | "teal" | "amber";
-}) {
-  const toneMap: Record<
-    string,
-    { top: string; glowA: string; glowB: string; border: string; wash: string }
-  > = {
-    blue: {
-      border: "border-sky-200/70 dark:border-sky-500/20",
-      wash: "from-sky-500/10 via-sky-500/0 to-transparent dark:from-sky-400/10 dark:via-sky-400/0",
-      glowA: "bg-sky-400/16 dark:bg-sky-500/12",
-      glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
-      top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
-    },
-    purple: {
-      border: "border-violet-200/70 dark:border-violet-500/20",
-      wash: "from-violet-500/10 via-violet-500/0 to-transparent dark:from-violet-400/10 dark:via-violet-400/0",
-      glowA: "bg-violet-400/16 dark:bg-violet-500/12",
-      glowB: "bg-fuchsia-400/10 dark:bg-fuchsia-500/10",
-      top: "from-violet-400/55 via-violet-300/20 to-transparent dark:from-violet-300/35 dark:via-violet-300/15",
-    },
-    teal: {
-      border: "border-emerald-200/70 dark:border-emerald-500/20",
-      wash: "from-emerald-500/10 via-emerald-500/0 to-transparent dark:from-emerald-400/10 dark:via-emerald-400/0",
-      glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
-      glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
-      top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
-    },
-    amber: {
-      border: "border-amber-200/70 dark:border-amber-500/20",
-      wash: "from-amber-500/12 via-amber-500/0 to-transparent dark:from-amber-400/10 dark:via-amber-400/0",
-      glowA: "bg-amber-400/16 dark:bg-amber-500/12",
-      glowB: "bg-orange-400/10 dark:bg-orange-500/10",
-      top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
-    },
-  };
-
-  const t = toneMap[tone];
-
-  return (
-    <div
-      className={cx(
-        "group relative overflow-hidden rounded-2xl border bg-white/88 p-4",
-        "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
-        "dark:bg-slate-950/45",
-        "min-w-0 max-w-full",
-        t.border
-      )}
-    >
-      <div className={cx("pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r", t.top)} />
-      <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
-      <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
-      <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
-
-      <div className="relative min-w-0">
-        <div className="truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
-          {label}
-        </div>
-        <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
-          {value}
-        </div>
-        {sub ? (
-          <div className="mt-2">
-            <span className="block truncate whitespace-nowrap text-[11px] leading-none text-slate-500 dark:text-slate-400">
-              {sub}
-            </span>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function SeverityBadge({ sev }: { sev?: string | null }) {
-  const s = String(sev ?? "info").toLowerCase();
-  const cls =
-    s === "critical"
-      ? "border-red-200/70 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-100"
-      : s === "warning"
-      ? "border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100"
-      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
-
-  return (
-    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", cls)}>
-      {s}
-    </span>
-  );
-}
-
-function TypePill({ t }: { t?: string | null }) {
-  const s = String(t ?? "event").toLowerCase();
-  const cls =
-    s === "change_detected"
-      ? "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100"
-      : s === "scrape_failed" || s === "error"
-      ? "border-red-200/70 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-100"
-      : s === "no_change"
-      ? "border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-100"
-      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
-
-  return (
-    <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", cls)}>
-      {s}
-    </span>
-  );
 }
 
 function fmtCompactDate(iso?: string | null) {
@@ -228,12 +39,95 @@ function fmtCompactDate(iso?: string | null) {
   }
 }
 
-function safeStringify(obj: any) {
-  try {
-    return JSON.stringify(obj ?? {}, null, 2);
-  } catch {
-    return "{}";
-  }
+function Pill({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TypePill({ t }: { t?: string | null }) {
+  const s = String(t ?? "event");
+  const tone =
+    s === "change_detected"
+      ? "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100"
+      : s === "no_change"
+      ? "border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-100"
+      : s === "scrape_failed" || s === "error"
+      ? "border-red-200/70 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-100"
+      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
+
+  return <Pill className={tone}>{s}</Pill>;
+}
+
+function SeverityPill({ sev }: { sev?: string | null }) {
+  const s = String(sev ?? "info").toLowerCase();
+  const tone =
+    s === "critical"
+      ? "border-red-200/70 bg-red-50 text-red-700 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-100"
+      : s === "warning"
+      ? "border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-100"
+      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
+
+  return <Pill className={tone}>{s}</Pill>;
+}
+
+function MetricCard({
+  label,
+  value,
+  sub,
+  tone = "blue",
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  tone?: "blue" | "purple" | "teal" | "amber";
+}) {
+  const toneMap: Record<string, string> = {
+    blue: "border-sky-200/70 dark:border-sky-500/20",
+    purple: "border-violet-200/70 dark:border-violet-500/20",
+    teal: "border-emerald-200/70 dark:border-emerald-500/20",
+    amber: "border-amber-200/70 dark:border-amber-500/20",
+  };
+
+  return (
+    <div
+      className={cx(
+        "min-w-0 max-w-full overflow-hidden rounded-2xl border bg-white/88 p-4",
+        "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
+        "dark:bg-slate-950/45",
+        toneMap[tone]
+      )}
+    >
+      <div className="min-w-0">
+        <div className="truncate text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
+          {label}
+        </div>
+        <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
+          {value}
+        </div>
+        {sub ? (
+          <div className="mt-2">
+            <span className="block truncate whitespace-nowrap text-[11px] leading-none text-slate-500 dark:text-slate-400">
+              {sub}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export default function AllEventsPage() {
@@ -293,8 +187,10 @@ export default function AllEventsPage() {
     const q = String(query || "").trim().toLowerCase();
 
     let out = list.filter((ev) => {
-      if (eventTypeFilter !== "any" && (ev.event_type ?? "") !== eventTypeFilter) return false;
-      if (severityFilter !== "any" && (ev.severity ?? "") !== severityFilter) return false;
+      if (eventTypeFilter !== "any" && (ev.event_type ?? "") !== eventTypeFilter)
+        return false;
+      if (severityFilter !== "any" && (ev.severity ?? "") !== severityFilter)
+        return false;
 
       if (processedFilter !== "any") {
         const proc = !!ev.processed;
@@ -306,7 +202,9 @@ export default function AllEventsPage() {
         const title = ev.payload?.snapshot?.title ?? "";
         const url = ev.payload?.snapshot?.url ?? "";
         const watch = ev.watch_id ?? "";
-        const hay = `${title} ${url} ${watch} ${ev.payload ? safeStringify(ev.payload) : ""}`.toLowerCase();
+        const hay = `${title} ${url} ${watch} ${
+          ev.payload ? safeStringify(ev.payload) : ""
+        }`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
 
@@ -344,17 +242,21 @@ export default function AllEventsPage() {
     const list = events ?? [];
     if (!list.length) {
       return {
-        eventsPerDay: "—",
+        eventsPerDay: "—" as const,
         uniqueWatches: 0,
         processedPct: "—" as const,
         topTypes: [] as [string, number][],
       };
     }
     const now = Date.now();
-    const last7 = list.filter((ev) => now - new Date(ev.created_at).getTime() < 7 * 24 * 60 * 60 * 1000);
+    const last7 = list.filter(
+      (ev) => now - new Date(ev.created_at).getTime() < 7 * 24 * 60 * 60 * 1000
+    );
     const eventsPerDay = Math.round((last7.length / 7) * 10) / 10;
 
-    const uniqueWatches = new Set(list.map((e) => e.watch_id).filter(Boolean)).size;
+    const uniqueWatches = new Set(
+      list.map((e) => e.watch_id).filter(Boolean)
+    ).size;
 
     const processed = list.filter((e) => e.processed).length;
     const processedPct = Math.round((processed / list.length) * 100);
@@ -364,120 +266,111 @@ export default function AllEventsPage() {
       const k = String(e.event_type ?? "event");
       typeCounts[k] = (typeCounts[k] ?? 0) + 1;
     });
-    const topTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
 
     return { eventsPerDay, uniqueWatches, processedPct, topTypes };
   }, [events]);
 
   return (
     <main className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Background (clipped so it never causes horizontal overflow) */}
+      {/* Background (clipped so it cannot cause horizontal overflow) */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
-        <div className="absolute top-24 right-12 h-56 w-56 rounded-full bg-emerald-300/12 blur-3xl dark:bg-emerald-500/10" />
-
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
-
-        <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
-        </div>
       </div>
 
       <div className="relative mx-auto w-full max-w-7xl overflow-x-hidden px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6 space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between min-w-0">
-          <div className="space-y-3 min-w-0">
-            <div className="flex flex-wrap items-center gap-3 min-w-0">
-              <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100 truncate">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-amber-300" />
-                </span>
-                Commerce • AvidiaMonitor
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between min-w-0">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+              All{" "}
+              <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 bg-clip-text text-transparent dark:from-amber-300 dark:via-orange-300 dark:to-sky-300">
+                Monitor events
               </span>
-
-              <TinyChip tone="signal">Events console</TinyChip>
-              <TinyChip tone="success">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Filters • Search • Audit
-              </TinyChip>
-            </div>
-
-            <div className="space-y-2 min-w-0">
-              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
-                All{" "}
-                <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-sky-500 bg-clip-text text-transparent dark:from-amber-300 dark:via-orange-300 dark:to-sky-300">
-                  Monitor events
-                </span>
-              </h1>
-              <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                Audit, filter, and inspect events produced by the Monitor worker & scraper.
-              </p>
-            </div>
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              Audit, filter, and inspect events produced by the Monitor worker & scraper.
+            </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <SoftButton href="/dashboard/monitor" variant="primary">
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/dashboard/monitor"
+              className="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 text-slate-950 shadow-sm"
+            >
               Open Monitor
-            </SoftButton>
-            <SoftButton href="/dashboard" variant="secondary">
+            </a>
+            <a
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200"
+            >
               Back
-            </SoftButton>
+            </a>
           </div>
         </header>
 
         {/* Metrics */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 min-w-0">
-          <MetricCard tone="purple" label="Events/day (7d)" value={metrics.eventsPerDay} sub="Rolling 7-day average" />
-          <MetricCard tone="teal" label="Unique watches" value={metrics.uniqueWatches} sub="Distinct watch_id in dataset" />
+          <MetricCard
+            tone="purple"
+            label="Events/day (7d)"
+            value={metrics.eventsPerDay}
+            sub="Rolling 7-day average"
+          />
+          <MetricCard
+            tone="teal"
+            label="Unique watches"
+            value={metrics.uniqueWatches}
+            sub="Distinct watch_id in dataset"
+          />
           <MetricCard
             tone="blue"
             label="Processed rate"
             value={metrics.processedPct === "—" ? "—" : `${metrics.processedPct}%`}
-            sub="Events marked processed=true"
+            sub="processed=true share"
           />
           <MetricCard
             tone="amber"
             label="Top event types"
-            value={
-              metrics.topTypes.length === 0 ? (
-                <span className="text-slate-400 dark:text-slate-500">—</span>
-              ) : (
-                <span className="text-base font-semibold">{metrics.topTypes[0]?.[0] ?? "—"}</span>
-              )
-            }
+            value={metrics.topTypes.length ? metrics.topTypes[0][0] : "—"}
             sub={
-              metrics.topTypes.length === 0
-                ? "—"
-                : metrics.topTypes
+              metrics.topTypes.length
+                ? metrics.topTypes
                     .slice(0, 2)
                     .map(([t, c]) => `${t} · ${c}`)
                     .join("  •  ")
+                : "—"
             }
           />
         </section>
 
-        {/* Filters (GRID-BASED so it can never exceed viewport width) */}
+        {/* Filters (grid-based so it never exceeds viewport) */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 min-w-0">
-            {/* Search */}
             <div className="lg:col-span-6 min-w-0">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Search</div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Search
+              </div>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search title / URL / watch_id / payload…"
                 className={cx(
-                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm text-slate-900 shadow-sm",
+                  "mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm shadow-sm",
                   "placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-300/60",
                   "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:ring-sky-500/40"
                 )}
               />
             </div>
 
-            {/* Type */}
             <div className="lg:col-span-2 min-w-0">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Type</div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Type
+              </div>
               <select
                 value={eventTypeFilter}
                 onChange={(e) => setEventTypeFilter(e.target.value)}
@@ -488,7 +381,10 @@ export default function AllEventsPage() {
                 )}
               >
                 <option value="any">Any</option>
-                {(allTypes.length ? allTypes : ["change_detected", "no_change", "scrape_failed", "error"]).map((t) => (
+                {(allTypes.length
+                  ? allTypes
+                  : ["change_detected", "no_change", "scrape_failed", "error"]
+                ).map((t) => (
                   <option key={t} value={t}>
                     {t}
                   </option>
@@ -496,9 +392,10 @@ export default function AllEventsPage() {
               </select>
             </div>
 
-            {/* Severity */}
             <div className="lg:col-span-2 min-w-0">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Severity</div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Severity
+              </div>
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
@@ -509,17 +406,20 @@ export default function AllEventsPage() {
                 )}
               >
                 <option value="any">Any</option>
-                {(allSeverities.length ? allSeverities : ["info", "warning", "critical"]).map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {(allSeverities.length ? allSeverities : ["info", "warning", "critical"]).map(
+                  (s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  )
+                )}
               </select>
             </div>
 
-            {/* Processed */}
             <div className="lg:col-span-2 min-w-0">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Processed</div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Processed
+              </div>
               <select
                 value={processedFilter}
                 onChange={(e) => setProcessedFilter(e.target.value)}
@@ -535,11 +435,12 @@ export default function AllEventsPage() {
               </select>
             </div>
 
-            {/* Sort + Reload row */}
             <div className="lg:col-span-12 min-w-0">
-              <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-6 min-w-0">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Sort by</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Sort by
+                  </div>
                   <select
                     value={sortKey}
                     onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -556,7 +457,9 @@ export default function AllEventsPage() {
                 </div>
 
                 <div className="min-w-0">
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Direction</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Direction
+                  </div>
                   <select
                     value={sortDir}
                     onChange={(e) => setSortDir(e.target.value as SortDir)}
@@ -571,7 +474,7 @@ export default function AllEventsPage() {
                   </select>
                 </div>
 
-                <div className="sm:col-span-1 lg:col-span-2 min-w-0" />
+                <div className="sm:col-span-1 lg:col-span-2" />
 
                 <button
                   onClick={() => {
@@ -582,8 +485,7 @@ export default function AllEventsPage() {
                     "h-[42px] w-full rounded-full px-4 text-sm font-semibold whitespace-nowrap",
                     "border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm",
                     "hover:bg-white hover:text-slate-900",
-                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70"
+                    "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
                   )}
                 >
                   Reload
@@ -596,13 +498,18 @@ export default function AllEventsPage() {
         {/* List */}
         <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-x-hidden">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between min-w-0">
-            <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Events</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+              Events
+            </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
               Showing{" "}
               <span className="font-medium text-slate-700 dark:text-slate-200">
                 {total === 0 ? 0 : Math.min(PAGE_SIZE, total - (page - 1) * PAGE_SIZE)}
               </span>{" "}
-              of <span className="font-medium text-slate-700 dark:text-slate-200">{total}</span>{" "}
+              of{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {total}
+              </span>{" "}
               (page{" "}
               <span className="font-medium text-slate-700 dark:text-slate-200">
                 {page}/{pages}
@@ -612,14 +519,28 @@ export default function AllEventsPage() {
           </div>
 
           <div className="mt-3 space-y-2 min-w-0">
-            {loading && events === null ? (
-              <div className="text-sm text-slate-500 dark:text-slate-400">Loading…</div>
+            {events === null ? (
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Loading…
+              </div>
+            ) : loading && events.length === 0 ? (
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                Loading…
+              </div>
             ) : pageItems.length === 0 ? (
-              <div className="text-sm text-slate-500 dark:text-slate-400">No events</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                No events
+              </div>
             ) : (
               pageItems.map((ev) => {
-                const id = String(ev.id ?? `${ev.watch_id ?? "w"}-${ev.created_at ?? Math.random()}`);
-                const title = ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? ev.event_type ?? "Event";
+                const id = String(
+                  ev.id ?? `${ev.watch_id ?? "w"}-${ev.created_at ?? Math.random()}`
+                );
+                const title =
+                  ev.payload?.snapshot?.title ??
+                  ev.payload?.snapshot?.url ??
+                  ev.event_type ??
+                  "Event";
                 const url = ev.payload?.snapshot?.url ?? "";
                 const watchId = ev.watch_id ? String(ev.watch_id) : "";
                 const isExpanded = !!expanded[id];
@@ -628,26 +549,25 @@ export default function AllEventsPage() {
                   <div
                     key={id}
                     className={cx(
-                      "rounded-xl border border-slate-200/70 bg-white/70 p-3 shadow-sm",
-                      "dark:border-slate-800/60 dark:bg-slate-950/35",
-                      "min-w-0 max-w-full"
+                      "min-w-0 max-w-full rounded-xl border border-slate-200/70 bg-white/70 p-3 shadow-sm",
+                      "dark:border-slate-800/60 dark:bg-slate-950/35"
                     )}
                   >
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 min-w-0">
-                      {/* Left content */}
                       <div className="sm:col-span-9 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 min-w-0">
                           <TypePill t={ev.event_type} />
-                          <SeverityBadge sev={ev.severity} />
-                          {ev.processed ? (
-                            <span className="inline-flex items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100 whitespace-nowrap">
-                              processed
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full border border-slate-200/70 bg-white/75 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300 whitespace-nowrap">
-                              unprocessed
-                            </span>
-                          )}
+                          <SeverityPill sev={ev.severity} />
+                          <Pill
+                            className={
+                              ev.processed
+                                ? "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-100"
+                                : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300"
+                            }
+                          >
+                            {ev.processed ? "processed" : "unprocessed"}
+                          </Pill>
+
                           <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                             {fmtCompactDate(ev.created_at)}
                           </span>
@@ -655,3 +575,151 @@ export default function AllEventsPage() {
 
                         <div className="mt-2 min-w-0">
                           <div className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            {title}
+                          </div>
+
+                          <div className="mt-1 min-w-0 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                            {watchId ? (
+                              <div className="min-w-0">
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  watch:
+                                </span>{" "}
+                                <span className="block min-w-0 truncate">
+                                  {watchId}
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {url ? (
+                              <div className="min-w-0">
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  url:
+                                </span>{" "}
+                                <span className="block min-w-0 truncate">
+                                  {url}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-3 min-w-0">
+                        <div className="flex flex-wrap gap-2 sm:justify-end">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(
+                                safeStringify(ev.payload ?? ev)
+                              );
+                              alert("Copied payload");
+                            }}
+                            className={cx(
+                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+                              "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                              "hover:bg-white hover:text-slate-900",
+                              "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                            )}
+                          >
+                            Copy
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              setExpanded((s) => ({ ...s, [id]: !s[id] }))
+                            }
+                            className={cx(
+                              "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+                              "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                              "hover:bg-white hover:text-slate-900",
+                              "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                            )}
+                          >
+                            {isExpanded ? "Hide" : "Details"}
+                          </button>
+
+                          <a
+                            href={
+                              watchId
+                                ? `/dashboard/monitor/watches?filter=${encodeURIComponent(
+                                    watchId
+                                  )}`
+                                : "/dashboard/monitor"
+                            }
+                            className={cx(
+                              "inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+                              "bg-gradient-to-r from-sky-400 via-sky-500 to-indigo-500 text-slate-950",
+                              "hover:from-sky-300 hover:via-sky-500 hover:to-indigo-400 shadow-sm"
+                            )}
+                          >
+                            Open watch
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isExpanded ? (
+                      <div className="mt-3 min-w-0 max-w-full">
+                        <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-xs text-slate-700 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-200 overflow-hidden">
+                          <div className="mb-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                            Payload JSON
+                          </div>
+                          <pre className="max-h-56 max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-all">
+                            {safeStringify(ev.payload ?? {})}
+                          </pre>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Page{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {page}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {pages}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                className="rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm hover:bg-white disabled:opacity-50 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65"
+              >
+                First
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm hover:bg-white disabled:opacity-50 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65"
+              >
+                Prev
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                disabled={page === pages}
+                className="rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm hover:bg-white disabled:opacity-50 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65"
+              >
+                Next
+              </button>
+              <button
+                onClick={() => setPage(pages)}
+                disabled={page === pages}
+                className="rounded-full px-3 py-1.5 text-sm font-semibold whitespace-nowrap border border-slate-200/80 bg-white/70 text-slate-800 shadow-sm hover:bg-white disabled:opacity-50 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
