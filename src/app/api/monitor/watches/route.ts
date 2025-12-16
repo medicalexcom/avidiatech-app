@@ -10,12 +10,11 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { au
 
 export async function GET() {
   try {
-    // List watches (paginated? for now return recent 200)
-    const { data, error } = await supabaseAdmin.from("monitor_watches").select("*").order("created_at", { ascending: false }).limit(200);
+    const { data, error } = await supabaseAdmin.from("monitor_watches").select("*").order("created_at", { ascending: false }).limit(500);
     if (error) throw error;
     return NextResponse.json({ ok: true, watches: data }, { status: 200 });
   } catch (err: any) {
-    console.error("monitor.watches GET error:", err);
+    console.error("GET monitor.watches error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
   }
 }
@@ -25,7 +24,7 @@ export async function POST(req: Request) {
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json().catch(() => null);
+    const body = await req.json().catch(() => ({}));
     if (!body?.source_url) return NextResponse.json({ ok: false, error: "source_url required" }, { status: 400 });
 
     const payload: any = {
@@ -36,13 +35,14 @@ export async function POST(req: Request) {
       frequency_seconds: body.frequency_seconds ?? 86400,
       what_to_watch: body.what_to_watch ?? "all",
       created_by: userId,
+      auto_watch: body.auto_watch ?? true,
     };
 
     const { data, error } = await supabaseAdmin.from("monitor_watches").insert([payload]).select("*").maybeSingle();
     if (error) throw error;
     return NextResponse.json({ ok: true, watch: data }, { status: 201 });
   } catch (err: any) {
-    console.error("monitor.watches POST error:", err);
+    console.error("POST monitor.watches error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
   }
 }
