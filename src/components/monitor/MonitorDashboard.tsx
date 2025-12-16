@@ -5,11 +5,77 @@ import React, { useEffect, useState } from "react";
 /**
  * MonitorDashboard (enhanced)
  *
- * - Frequency is shown in days (spinner) and mapped to frequency_seconds for the API.
+ * - Combines presets + custom input for scheduling checks via an inline FrequencyControl
+ *   (no additional files required).
  * - New watch default frequency: 14 days (2 weeks).
- * - Presets: 1 day, 7 days, 14 days, 30 days.
- * - Shows helpful tooltips/labels so users understand what the number spinner does.
+ * - Per-watch inline frequency editor uses the same FrequencyControl component and requires
+ *   an explicit Save to apply the change (to avoid accidental updates).
+ *
+ * Expects these API routes:
+ * - GET /api/monitor/watches
+ * - POST /api/monitor/watches
+ * - PATCH /api/monitor/watches/:id
+ * - POST /api/monitor/check (body: { watchId })
+ * - GET /api/monitor/events
  */
+
+type FrequencyControlProps = {
+  days: number;
+  onChange: (days: number) => void;
+  ariaLabel?: string;
+  className?: string;
+};
+
+/** FrequencyControl: presets + custom input combo */
+function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyControlProps) {
+  const presets = [1, 7, 14, 30];
+  const [value, setValue] = useState<number>(Math.max(1, Math.round(days || 14)));
+
+  useEffect(() => {
+    setValue(Math.max(1, Math.round(days || 14)));
+  }, [days]);
+
+  return (
+    <div className={className ?? "flex items-center gap-2"}>
+      <label className="text-xs text-slate-500">Every</label>
+
+      <input
+        aria-label={ariaLabel ?? "frequency-days"}
+        type="number"
+        min={1}
+        step={1}
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        className="w-20 rounded border px-2 py-1 text-sm"
+        title="Number of days between checks (custom)"
+      />
+
+      <span className="text-xs text-slate-500">days</span>
+
+      <select
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        className="rounded border px-2 py-1 text-sm"
+        aria-label="frequency-presets"
+      >
+        {presets.map((p) => (
+          <option key={p} value={p}>
+            {p}d
+          </option>
+        ))}
+        <option value={value}>Custom</option>
+      </select>
+
+      <button
+        onClick={() => onChange(Math.max(1, Math.round(value)))}
+        className="ml-2 rounded border px-2 py-1 text-xs"
+        title="Apply frequency"
+      >
+        Save
+      </button>
+    </div>
+  );
+}
 
 export default function MonitorDashboard() {
   const [watches, setWatches] = useState<any[]>([]);
@@ -91,16 +157,10 @@ export default function MonitorDashboard() {
 
   async function updateWatch(id: string, patch: any) {
     try {
-      // convert patch.frequency_days => frequency_seconds if provided
-      const copy = { ...patch };
-      if (patch.frequency_days !== undefined) {
-        copy.frequency_seconds = daysToSeconds(Number(patch.frequency_days));
-        delete copy.frequency_days;
-      }
       const res = await fetch(`/api/monitor/watches/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(copy),
+        body: JSON.stringify(patch),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
@@ -136,6 +196,7 @@ export default function MonitorDashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Create watch row */}
       <div className="flex gap-2 items-center">
         <input
           value={newUrl}
@@ -144,38 +205,21 @@ export default function MonitorDashboard() {
           placeholder="https://example.com/product/..."
           aria-label="New watch URL"
         />
+
+        <FrequencyControl
+          days={newFrequencyDays}
+          onChange={(d) => setNewFrequencyDays(d)}
+          ariaLabel="New watch frequency (days)"
+        />
+
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500">Check every</label>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={newFrequencyDays}
-            onChange={(e) => setNewFrequencyDays(Number(e.target.value))}
-            className="w-20 rounded border px-2 py-1 text-sm"
-            title="Number of days between checks"
-          />
-          <span className="text-xs text-slate-500">days</span>
-
-          <select
-            aria-label="preset frequency"
-            onChange={(e) => setNewFrequencyDays(Number(e.target.value))}
-            value={newFrequencyDays}
-            className="ml-2 rounded border px-2 py-1 text-sm"
-          >
-            <option value={1}>1 day</option>
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days</option>
-          </select>
+          <button onClick={createWatch} className="px-3 py-2 rounded bg-amber-500 text-white shadow">
+            Add Watch
+          </button>
+          <button onClick={() => { loadWatches(); loadEvents(); }} className="px-3 py-2 rounded border">
+            Refresh
+          </button>
         </div>
-
-        <button onClick={createWatch} className="px-3 py-2 rounded bg-amber-500 text-white shadow">
-          Add Watch
-        </button>
-        <button onClick={() => { loadWatches(); loadEvents(); }} className="px-3 py-2 rounded border">
-          Refresh
-        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -188,40 +232,44 @@ export default function MonitorDashboard() {
               <div className="text-sm text-slate-500">No watches configured yet</div>
             ) : (
               watches.map((w) => {
-                const freqDays = secondsToDays(w.frequency_seconds) ?? 1;
+                // local state for inline frequency editor (so other inputs don't re-render it)
+                const freqDays = secondsToDays(w?.frequency_seconds) ?? 14;
+                const [localDays, setLocalDays] = useState<number>(freqDays);
                 return (
                   <div key={w.id} className="p-3 border rounded bg-white/50 flex items-start justify-between">
                     <div className="min-w-0">
                       <div className="truncate font-medium">{w.source_url}</div>
                       <div className="text-xs text-slate-500">
-                        last: {w.last_check_at ? new Date(w.last_check_at).toLocaleString() : "never"}
-                        {" · "}
-                        {w.last_status ?? "unknown"}
+                        last: {w.last_check_at ? new Date(w.last_check_at).toLocaleString() : "never"} · {w.last_status ?? "unknown"}
                         {w.muted_until ? ` · muted until ${new Date(w.muted_until).toLocaleString()}` : ""}
                       </div>
 
                       <div className="mt-2 text-xs flex items-center gap-3">
-                        <div>
-                          <label className="text-xs text-slate-500 mr-1">Freq (days)</label>
-                          <input
-                            type="number"
-                            min={1}
-                            step={1}
-                            defaultValue={freqDays}
-                            onBlur={(e) => updateWatch(w.id, { frequency_days: Number(e.currentTarget.value) })}
-                            className="w-20 rounded border px-2 py-1 text-xs"
-                          />
+                        <FrequencyControl
+                          days={localDays}
+                          onChange={(d) => setLocalDays(d)}
+                          ariaLabel={`Frequency for ${w.source_url}`}
+                          className="items-center"
+                        />
+                        <div className="flex gap-2 ml-2">
+                          <button onClick={() => updateWatch(w.id, { frequency_seconds: daysToSeconds(localDays) })} className="px-2 py-1 text-xs border rounded">
+                            Save
+                          </button>
+                          <button onClick={() => setLocalDays(freqDays)} className="px-2 py-1 text-xs border rounded">
+                            Reset
+                          </button>
                         </div>
+                        <div className="ml-2 text-xs text-slate-500">Hint: frequency controls how often the worker will consider this watch for checking.</div>
+                      </div>
 
-                        <div>
-                          <label className="text-xs text-slate-500 mr-1">Price Δ %</label>
-                          <input
-                            type="number"
-                            defaultValue={w.price_threshold_percent ?? ""}
-                            onBlur={(e) => updateWatch(w.id, { price_threshold_percent: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
-                            className="w-20 rounded border px-2 py-1 text-xs"
-                          />
-                        </div>
+                      <div className="mt-2 text-xs">
+                        <label className="text-xs text-slate-500 mr-1">Price Δ %</label>
+                        <input
+                          type="number"
+                          defaultValue={w.price_threshold_percent ?? ""}
+                          onBlur={(e) => updateWatch(w.id, { price_threshold_percent: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
+                          className="w-28 rounded border px-2 py-1 text-xs"
+                        />
                       </div>
                     </div>
 
