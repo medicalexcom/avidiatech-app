@@ -16,6 +16,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import * as cheerio from "cheerio";
+import type { CheerioAPI } from "cheerio";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -43,15 +44,16 @@ function parsePrice(text: string | undefined): number | null {
   return n;
 }
 
-function normalizeSpecs($: cheerio.Root): Record<string, string> {
+function normalizeSpecs($: CheerioAPI): Record<string, string> {
   const specs: Record<string, string> = {};
-  $("table").each((_, table) => {
-    const rows = $(table).find("tr");
+  // Common pattern: <table> of specs with two columns
+  $<any>("table").each((_, table) => {
+    const rows = $<any>(table).find("tr");
     rows.each((_, tr) => {
-      const tds = $(tr).find("td, th");
+      const tds = $<any>(tr).find("td, th");
       if (tds.length >= 2) {
-        const k = $(tds[0]).text().trim();
-        const v = $(tds[1]).text().trim();
+        const k = $<any>(tds[0]).text().trim();
+        const v = $<any>(tds[1]).text().trim();
         if (k) specs[k] = v;
       }
     });
@@ -108,7 +110,7 @@ export async function runWatchOnce(watchId: string) {
       return { ok: false, reason: "scrape_failed", payload };
     }
     const html = await res.text();
-    const $ = cheerio.load(html);
+    const $ = cheerio.load(html) as CheerioAPI;
 
     snapshot.title = ($("meta[property='og:title']").attr("content") || $("title").text() || $("h1").first().text() || "").trim() || null;
 
