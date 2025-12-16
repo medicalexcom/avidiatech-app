@@ -1,10 +1,12 @@
 /**
- * Simple worker that polls monitor_watches and runs due watches.
+ * Monitor worker (updated)
  *
- * Usage (locally or in a server process):
- *   node -r dotenv/config ./dist/lib/monitor/worker.js
+ * - Queries monitor_watches via the PostgREST client (no raw RPC).
+ * - Filters watches client-side to find those due for checking (avoids using `.rpc("sql", ...)`).
+ * - Calls runWatchOnce for each due watch with a small delay to avoid bursts.
  *
- * or import and call startWorker() in a server environment (PM2, systemd, or a serverless schedule).
+ * Replace the previous worker file with this version to fix the TypeScript build error
+ * caused by calling `.catch()` on the RPC builder.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -12,38 +14,60 @@ import { runWatchOnce } from "./core";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
+}
+
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-export async function pollOnce() {
-  // Find watches due for check (last_check_at is null or older than now - frequency_seconds)
-  const now = new Date().toISOString();
-  const sql = `
-    SELECT *
-    FROM public.monitor_watches
-    WHERE (last_check_at IS NULL)
-       OR (last_check_at + (frequency_seconds || ' seconds')::interval) <= now()
-    ORDER BY last_check_at NULLS FIRST
-    LIMIT 50;
-  `;
-  const { data: watches, error } = await supabaseAdmin.rpc("sql", { q: sql }).catch(() => ({ data: null, error: null })) as any;
-  // Above uses RPC fallback; if your supabase doesn't accept raw SQL through rpc, switch to JS filtering:
-  let list = watches;
-  if (!Array.isArray(list)) {
-    // fallback: simple select (may not honor frequency exactly)
-    const { data } = await supabaseAdmin.from("monitor_watches").select("*").order("last_check_at", { ascending: true }).limit(50);
-    list = data ?? [];
-  }
+/**
+ * Fetch candidate watches and return those that are due for a check.
+ * We fetch a page of watches ordered by last_check_at and then compute due status client-side.
+ */
+async function getDueWatches(limit = 200) {
+  const { data, error } = await supabaseAdmin
+    .from("monitor_watches")
+    .select("*")
+    .order("last_check_at", { ascending: true })
+    .limit(limit);
 
-  for (const w of list) {
-    try {
-      console.log(`Checking watch ${w.id} ${w.source_url}`);
-      const r = await runWatchOnce(String(w.id));
-      console.log("result:", r);
-      // Small delay between checks to avoid bursts
-      await new Promise((res) => setTimeout(res, 500));
-    } catch (err: any) {
-      console.error("watch run error", err);
+  if (error) {
+    console.error("Failed to load monitor_watches:", error);
+    return [];
+  }
+  const now = Date.now();
+  const list = Array.isArray(data) ? data : [];
+  const due = list.filter((w: any) => {
+    const freq = Number(w.frequency_seconds ?? 86400);
+    if (!w.last_check_at) return true;
+    const last = new Date(w.last_check_at).getTime();
+    return last + freq * 1000 <= now;
+  });
+  return due;
+}
+
+export async function pollOnce() {
+  try {
+    const dueWatches = await getDueWatches(200);
+    if (!dueWatches.length) {
+      // nothing due right now
+      return;
     }
+
+    for (const w of dueWatches) {
+      try {
+        // run the watch (updates events and watch row)
+        console.log(`Monitor worker: checking watch ${w.id} ${w.source_url}`);
+        const r = await runWatchOnce(String(w.id));
+        console.log("Monitor worker result:", r);
+      } catch (err: any) {
+        console.error(`Error running watch ${w?.id}:`, err);
+      }
+      // polite delay between checks
+      await new Promise((res) => setTimeout(res, 300));
+    }
+  } catch (err: any) {
+    console.error("pollOnce unexpected error:", err);
   }
 }
 
