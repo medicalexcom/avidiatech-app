@@ -3,16 +3,22 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard (compact redesign)
+ * MonitorDashboard (updated)
  *
- * - Removes the hint text from each watch card.
- * - Reworks the watch card layout to be more compact and make better use of space.
- * - Keeps FrequencyControl and WatchRow (hooks-safe) — no additional files required.
+ * - FrequencyControl simplified: users type a number in days.
+ * - Preset quick-buttons available (1d / 7d / 14d / 30d) — no extra select/dropdown.
+ * - All frequency values are explicitly in days (no ambiguity).
+ * - Watch cards redesigned (compact) — hint text removed.
  *
- * Replace the existing src/components/monitor/MonitorDashboard.tsx with this file.
+ * API expectations (unchanged):
+ * - GET /api/monitor/watches
+ * - POST /api/monitor/watches
+ * - PATCH /api/monitor/watches/:id
+ * - POST /api/monitor/check
+ * - GET /api/monitor/events
  */
 
-/** FrequencyControl: presets + custom input combo (compact) */
+/** FrequencyControl: number input (days) + small preset buttons */
 type FrequencyControlProps = {
   days: number;
   onChange: (days: number) => void;
@@ -30,38 +36,44 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
 
   return (
     <div className={className ?? "flex items-center gap-2"}>
-      <input
-        aria-label={ariaLabel ?? "frequency-days"}
-        type="number"
-        min={1}
-        step={1}
-        value={value}
-        onChange={(e) => setValue(Number(e.target.value))}
-        className="w-16 rounded border px-2 py-1 text-sm"
-        title="Number of days between checks (custom)"
-      />
+      <label className="sr-only">Frequency (days)</label>
 
-      <select
-        value={value}
-        onChange={(e) => setValue(Number(e.target.value))}
-        className="rounded border px-2 py-1 text-sm"
-        aria-label="frequency-presets"
-      >
+      <div className="flex items-center gap-2">
+        <input
+          aria-label={ariaLabel ?? "frequency-days"}
+          type="number"
+          min={1}
+          step={1}
+          value={value}
+          onChange={(e) => setValue(Number(e.target.value || 1))}
+          className="w-20 rounded border px-2 py-1 text-sm"
+          title="Number of days between checks (days)"
+        />
+        <span className="text-xs text-slate-500">days</span>
+      </div>
+
+      <div className="flex items-center gap-1">
         {presets.map((p) => (
-          <option key={p} value={p}>
+          <button
+            key={p}
+            onClick={() => {
+              setValue(p);
+              onChange(p);
+            }}
+            className="text-xs rounded border px-2 py-1 bg-white"
+            title={`Set to ${p} day${p > 1 ? "s" : ""}`}
+          >
             {p}d
-          </option>
+          </button>
         ))}
-        <option value={value}>Custom</option>
-      </select>
-
-      <button
-        onClick={() => onChange(Math.max(1, Math.round(value)))}
-        className="ml-2 rounded border px-2 py-1 text-xs"
-        title="Apply frequency"
-      >
-        Save
-      </button>
+        <button
+          onClick={() => onChange(Math.max(1, Math.round(value)))}
+          className="ml-2 rounded bg-amber-500 text-white px-2 py-1 text-xs"
+          title="Apply frequency (days)"
+        >
+          Apply
+        </button>
+      </div>
     </div>
   );
 }
@@ -89,7 +101,7 @@ function StatusBadge({ status }: { status?: string | null }) {
   return <span className={`inline-flex items-center gap-2 rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{s.replace("_", " ")}</span>;
 }
 
-/** Child component for a single watch row (hooks allowed here) */
+/** Child component for a single watch row */
 function WatchRow({
   watch,
   onSaveFreq,
@@ -124,17 +136,15 @@ function WatchRow({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="text-xs text-slate-500">Frequency</div>
-            <div className="ml-1">
-              <FrequencyControl
-                days={localDays}
-                onChange={(d) => setLocalDays(d)}
-                ariaLabel={`Frequency for ${watch.source_url}`}
-                className="items-center"
-              />
-            </div>
+            <FrequencyControl
+              days={localDays}
+              onChange={(d) => setLocalDays(d)}
+              ariaLabel={`Frequency for ${watch.source_url}`}
+              className="items-center"
+            />
           </div>
 
           <div className="flex items-center gap-2">
