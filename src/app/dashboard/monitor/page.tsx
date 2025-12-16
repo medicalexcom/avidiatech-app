@@ -4,16 +4,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 
 /**
- * Monitor dashboard page (metrics update)
+ * Monitor dashboard page (metrics update + scroll behavior)
  *
- * - Renamed Admin metrics card to "Monitor Metrics"
- * - Added a set of non-duplicative operational metrics:
- *   - % of watches auto-created (auto_watch)
- *   - % of watches linked to products (product linkage)
- *   - avg retry_count across watches
- *   - notifications (last 7 days)
- * - Removed the Manage rules / View notifications buttons from the metrics card.
- * - Quick Actions remain unchanged.
+ * - Updated to reflect the scrollable Watch/Event panel behavior.
+ * - Renamed metrics card to "Monitor Metrics".
+ * - Additional non-duplicative metrics kept.
+ * - Removed Manage rules / View notifications buttons from Metrics card (they remain in Quick Actions).
  */
 
 function StatCard({ title, value, caption }: { title: string; value: React.ReactNode; caption?: string }) {
@@ -106,7 +102,7 @@ export default function MonitorPage() {
     return Math.round((last7 / 7) * 10) / 10;
   }, [events]);
 
-  // New non-duplicative metrics:
+  // Non-duplicative metrics:
   const notificationsLast7Days = useMemo(() => {
     if (!notifications) return "—";
     const cnt = notifications.filter((n) => {
