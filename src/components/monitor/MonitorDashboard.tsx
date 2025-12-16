@@ -3,20 +3,20 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard (frequency control simplified)
+ * MonitorDashboard (frequency control + compact watch list)
  *
- * - FrequencyControl now uses a preset dropdown (1d,7d,14d,30d) and a "Custom..." option.
- *   If "Custom..." is selected, an inline numeric input appears to type days.
- * - This removes the ambiguous always-visible custom numeric field while still allowing custom values.
- * - WatchRow uses hooks safely (no hooks in loops).
+ * - Preset dropdown shows numeric values only (1,7,14,30) — no duplicated 'd' suffix.
+ * - If "Custom..." selected a small numeric input appears (days).
+ * - Shows up to WATCHES_PER_VIEW watches and EVENTS_PER_VIEW events.
+ * - Watches + Recent events are wrapped in a vertical scroll container so the panel
+ *   remains compact (scrolls both lists together). Default shows 10 watches + 10 events.
+ * - Includes a "View all" link suggestion for a dedicated, full list page.
  *
- * API expectations:
- * - GET /api/monitor/watches
- * - POST /api/monitor/watches
- * - PATCH /api/monitor/watches/:id
- * - POST /api/monitor/check (body: { watchId })
- * - GET /api/monitor/events
+ * No additional files required.
  */
+
+const WATCHES_PER_VIEW = 10;
+const EVENTS_PER_VIEW = 10;
 
 /** FrequencyControl: preset dropdown + optional custom days input */
 type FrequencyControlProps = {
@@ -28,15 +28,15 @@ type FrequencyControlProps = {
 
 function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyControlProps) {
   const presets = [1, 7, 14, 30];
-  // selectedPreset: number or 'custom'
-  const isPreset = presets.includes(Math.max(1, Math.round(days || 14)));
-  const [selected, setSelected] = useState<string>(isPreset ? String(Math.round(days || 14)) : "custom");
-  const [customValue, setCustomValue] = useState<number>(isPreset ? Math.round(days || 14) : Math.max(1, Math.round(days || 14)));
+  const normalized = Math.max(1, Math.round(days || 14));
+  const [selected, setSelected] = useState<string>(presets.includes(normalized) ? String(normalized) : "custom");
+  const [customValue, setCustomValue] = useState<number>(normalized);
 
   useEffect(() => {
     const p = presets.includes(Math.max(1, Math.round(days || 14)));
     setSelected(p ? String(Math.round(days || 14)) : "custom");
     setCustomValue(Math.max(1, Math.round(days || 14)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days]);
 
   return (
@@ -47,20 +47,16 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
         onChange={(e) => {
           const v = e.target.value;
           setSelected(v);
-          if (v === "custom") {
-            // keep customValue; do not call onChange until Save is pressed
-            return;
-          } else {
-            const n = Number(v);
-            setCustomValue(n);
-            onChange(n);
-          }
+          if (v === "custom") return;
+          const n = Number(v);
+          setCustomValue(n);
+          onChange(n);
         }}
         className="rounded border px-2 py-1 text-sm"
       >
         {presets.map((p) => (
           <option key={p} value={String(p)}>
-            {p}d
+            {String(p)}
           </option>
         ))}
         <option value="custom">Custom…</option>
@@ -366,7 +362,8 @@ export default function MonitorDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Scrollable area containing Watches + Recent events */}
+      <div style={{ maxHeight: "64vh", overflowY: "auto" }} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="col-span-2">
           <h4 className="text-sm font-semibold">Watches</h4>
           <div className="mt-2 space-y-3">
@@ -375,17 +372,15 @@ export default function MonitorDashboard() {
             ) : watches.length === 0 ? (
               <div className="text-sm text-slate-500">No watches configured yet</div>
             ) : (
-              watches.map((w) => (
-                <WatchRow
-                  key={w.id}
-                  watch={w}
-                  onSaveFreq={saveFreq}
-                  onTriggerCheck={triggerCheck}
-                  onUpdate={updateWatch}
-                />
+              (watches.slice(0, WATCHES_PER_VIEW)).map((w) => (
+                <WatchRow key={w.id} watch={w} onSaveFreq={saveFreq} onTriggerCheck={triggerCheck} onUpdate={updateWatch} />
               ))
             )}
           </div>
+
+          {watches.length > WATCHES_PER_VIEW ? (
+            <div className="mt-3 text-xs text-slate-500">Showing {WATCHES_PER_VIEW} of {watches.length} watches. <a className="underline" href="/dashboard/monitor/all">View all</a></div>
+          ) : null}
         </div>
 
         <div>
@@ -396,7 +391,7 @@ export default function MonitorDashboard() {
             ) : events.length === 0 ? (
               <div className="text-sm text-slate-500">No events</div>
             ) : (
-              events.slice(0, 6).map((ev) => (
+              events.slice(0, EVENTS_PER_VIEW).map((ev) => (
                 <div key={ev.id} className="p-2 border rounded bg-slate-50">
                   <div className="text-xs text-slate-500">{ev.event_type}</div>
                   <div className="text-sm font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url}</div>
@@ -405,6 +400,10 @@ export default function MonitorDashboard() {
               ))
             )}
           </div>
+
+          {events.length > EVENTS_PER_VIEW ? (
+            <div className="mt-3 text-xs text-slate-500">Showing {EVENTS_PER_VIEW} of {events.length} events. <a className="underline" href="/dashboard/monitor/events">View all</a></div>
+          ) : null}
         </div>
       </div>
     </div>
