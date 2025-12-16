@@ -1,3 +1,4 @@
+url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/dashboard/match/page.tsx
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,11 +9,18 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage (upgrade: explicit file upload)
+ * MatchPage (improved XLSX/CSV parsing)
  *
- * - Adds a visible XLSX/CSV file input to the Upload panel so users can upload product sheets.
- * - Keeps existing UploadPastePanel (if present) and also provides a fallback file input.
- * - Uses dynamic xlsx import to parse files client-side and populate preview rows.
+ * Fixes:
+ * - More robust dynamic import of `xlsx` (supports both CJS and ESM shapes).
+ * - Handles CSV files by reading text and using XLSX.read(..., { type: "string" }).
+ * - Better error reporting in the UI (alerts and console details).
+ * - Limits preview rows and avoids reading entire workbook where possible.
+ *
+ * If you still see parse failures:
+ * - Open browser console to inspect the logged error (we print full error).
+ * - Check that the uploaded file is a valid .xlsx/.xls/.csv (not password-protected).
+ * - For very large files prefer uploading to the server and parsing there.
  */
 
 type PreviewRow = {
@@ -51,26 +59,66 @@ export default function MatchPage() {
     if (!file) return;
 
     try {
-      const XLSX = (await import("xlsx")).default;
-      const arrayBuffer = await file.arrayBuffer();
-      const wb = XLSX.read(arrayBuffer, { type: "array" });
-      // choose first sheet
-      const sheetName = wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rawJson = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[];
-      const mapped: PreviewRow[] = rawJson.slice(0, 200).map((r, i) => ({
+      // dynamic import, support both ESM and CJS shapes
+      const mod = await import("xlsx");
+      const XLSX = (mod && (mod as any).default) ? (mod as any).default : mod;
+
+      if (!XLSX || typeof XLSX.read !== "function") {
+        console.error("xlsx library does not expose read()", mod);
+        alert("Spreadsheet parser not available in the browser. Please install xlsx or use CSV uploads.");
+        return;
+      }
+
+      const name = file.name?.toLowerCase() ?? "";
+      let wb: any;
+
+      if (name.endsWith(".csv")) {
+        // CSV parsing: read text and parse as a single-sheet workbook
+        const text = await file.text();
+        // try to parse CSV into workbook
+        wb = XLSX.read(text, { type: "string", raw: false });
+      } else {
+        // Excel (.xlsx/.xls) read as array buffer
+        const arrayBuffer = await file.arrayBuffer();
+        // Use `type: "array"` which is appropriate for ArrayBuffer
+        wb = XLSX.read(arrayBuffer, { type: "array", raw: false });
+      }
+
+      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
+        console.warn("Workbook empty or unreadable", wb);
+        alert("Uploaded workbook appears empty or unreadable. Please check the file.");
+        return;
+      }
+
+      // Prefer sheet named "SearchExport" if present (per spec), otherwise first sheet
+      const preferred = wb.SheetNames.find((s: string) => /searchexport/i.test(s)) ?? wb.SheetNames[0];
+      const ws = wb.Sheets[preferred];
+      if (!ws) {
+        console.warn("Sheet not found:", preferred, wb.SheetNames);
+        alert("Could not find a usable sheet in the workbook.");
+        return;
+      }
+
+      // Convert to JSON with defaults (avoid huge objects)
+      const rawJson = XLSX.utils.sheet_to_json(ws, { defval: "", blankrows: false }) as any[];
+
+      // Map common columns to our expected fields
+      const mapped: PreviewRow[] = rawJson.slice(0, 200).map((r: any, i: number) => ({
         row_id: String(i + 1),
-        supplier_name: (r["Supplier Name"] ?? r["supplier"] ?? r.supplier_name ?? "").toString(),
-        sku: (r["SKU"] ?? r["sku"] ?? r["Item SKU"] ?? "").toString(),
-        ndc_item_code: (r["NDC Item Code"] ?? r["NDC"] ?? r.ndc ?? "").toString(),
-        product_name: (r["Product Name"] ?? r["Item Name"] ?? r.name ?? "").toString(),
-        brand_name: (r["Brand Name"] ?? r["Brand"] ?? r.brand ?? "").toString(),
+        supplier_name: String(r["Supplier Name"] ?? r["supplier"] ?? r.supplier_name ?? r.supplier ?? r["Vendor"] ?? "").trim(),
+        sku: String(r["SKU"] ?? r["sku"] ?? r["Item SKU"] ?? r.mpn ?? r.sku ?? "").trim(),
+        ndc_item_code: String(r["NDC Item Code"] ?? r["NDC"] ?? r.ndc ?? r.ndc_item_code ?? "").trim(),
+        product_name: String(r["Product Name"] ?? r["Item Name"] ?? r.name ?? r.title ?? "").trim(),
+        brand_name: String(r["Brand Name"] ?? r["Brand"] ?? r.brand ?? "").trim(),
         raw: r
       }));
+
       setFilePreviewRows(mapped);
-    } catch (err) {
-      console.error("Failed parsing uploaded file:", err);
-      alert("Failed to parse file in the browser. Please ensure it's an XLSX/CSV file and try again.");
+    } catch (err: any) {
+      console.error("Failed to parse uploaded file:", err);
+      // Show the error message to the user to aid debugging
+      const msg = err?.message ? String(err.message) : String(err);
+      alert(`Failed to parse file in the browser: ${msg}\n\nOpen the browser console for more details.`);
     }
   }, []);
 
@@ -155,12 +203,12 @@ export default function MatchPage() {
       // eslint-disable-next-line no-await-in-loop
       const job = await fetchJobStatus(id);
       if (job) {
-        if (["running","partial","succeeded","failed","canceled"].includes(job.status)) {
+        if (["running", "partial", "succeeded", "failed", "canceled"].includes(job.status)) {
           // eslint-disable-next-line no-await-in-loop
           await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
         }
       }
-      if (!job || ["succeeded","failed","partial","canceled"].includes(job?.status)) {
+      if (!job || ["succeeded", "failed", "partial", "canceled"].includes(job?.status)) {
         keep = false;
         break;
       }
@@ -265,8 +313,8 @@ export default function MatchPage() {
   const uploadProps = useMemo(() => ({
     onFile: handleFile,
     onPasteRows: (rows: any[]) => {
-      const mapped = (rows || []).slice(0, 200).map((r:any, i:number) => ({
-        row_id: String(i+1),
+      const mapped = (rows || []).slice(0, 200).map((r: any, i: number) => ({
+        row_id: String(i + 1),
         supplier_name: r["Supplier Name"] ?? r.supplier_name ?? r.supplier ?? "",
         sku: r["SKU"] ?? r.sku ?? "",
         ndc_item_code: r["NDC Item Code"] ?? r.ndc ?? r.ndc_item_code ?? "",
