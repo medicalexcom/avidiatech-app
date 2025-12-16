@@ -14,23 +14,44 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars");
 }
 
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
 
+/**
+ * POST /api/upload-to-supabase
+ * Expects multipart/form-data with "file"
+ * Returns JSON: { ok: true, jobId, file_path, file_name, file_format, warning? }
+ *
+ * Additionally: best-effort creates a monitor watch for the uploaded item by calling
+ * createWatchForIngestion(...) with a canonical source_url (if provided) or a supabase:// placeholder.
+ * The watch creation runs asynchronously and does not block the response.
+ */
 export async function POST(req: Request) {
   try {
+    // Clerk authentication (server-side). Pass req so Clerk reads cookies/headers.
     const { userId } = getAuth(req as any);
-    if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
 
     const form = await req.formData();
     const file = form.get("file") as File | null;
     if (!file) return NextResponse.json({ ok: false, error: "No file provided" }, { status: 400 });
 
+    // Optional canonical source URL provided by the client (if available)
+    const canonicalUrlFromForm = (form.get("source_url") as string) || (form.get("canonical_url") as string) || null;
+
+    // Read file into buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // Build safe path (timestamp + sanitized)
     const originalName = file.name ?? `file-${Date.now()}`;
     const safeName = originalName.replace(/\s+/g, "_");
-    const pathRelative = `${Date.now()}-${safeName}`;
+    const pathRelative = `${Date.now()}-${safeName}`; // relative to bucket
 
+    // Upload to Supabase Storage using service role
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(pathRelative, buffer, { contentType: file.type ?? undefined, upsert: false });
@@ -40,11 +61,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: uploadError.message ?? String(uploadError) }, { status: 500 });
     }
 
-    const rawPath = (uploadData && ((uploadData as any).path || (uploadData as any).fullPath)) ?? pathRelative;
+    // Determine canonical full path and normalized relative path
+    const rawPath =
+      (uploadData && ((uploadData as any).path || (uploadData as any).fullPath || (uploadData as any).Key)) ??
+      pathRelative;
     const relativePath = String(rawPath).replace(new RegExp(`^${BUCKET}\\/`), "").replace(/^\/+/, "");
     const canonicalFilePath = `${BUCKET}/${relativePath}`;
 
-    // Build ingestion payload
+    // Prepare ingestion row payload
     const payload = {
       file_path: canonicalFilePath,
       file_name: originalName,
@@ -56,8 +80,7 @@ export async function POST(req: Request) {
       created_at: new Date().toISOString(),
     };
 
-    // Try to insert ingestion row
-    let insertedRow: any = null;
+    // Try insert into product_ingestions (service role bypasses RLS)
     try {
       const { data: inserted, error: insertError } = await supabaseAdmin
         .from("product_ingestions")
@@ -66,46 +89,109 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (insertError) {
+        // If table missing or insert failed, return synthetic jobId but include warning
         console.warn("Insert into product_ingestions failed:", insertError);
-      } else {
-        insertedRow = inserted;
+        const syntheticId = randomUUID();
+
+        // Best-effort watch creation using available information (non-blocking)
+        (async () => {
+          try {
+            const sourceUrl = canonicalUrlFromForm ?? `supabase://${canonicalFilePath}`;
+            await createWatchForIngestion({
+              source_url: sourceUrl,
+              product_id: null,
+              created_by: userId,
+            });
+            console.log("Created monitor watch for upload (synthetic):", sourceUrl);
+          } catch (err: any) {
+            console.warn("createWatchForIngestion failed (synthetic):", err?.message ?? err);
+          }
+        })();
+
+        return NextResponse.json(
+          {
+            ok: true,
+            warning: "Could not create DB row; returning synthetic jobId. Please check product_ingestions table/permissions.",
+            jobId: syntheticId,
+            file_path: canonicalFilePath,
+            file_name: originalName,
+            file_format: payload.file_format,
+            rawUpload: uploadData,
+            dbError: insertError.message ?? insertError,
+          },
+          { status: 200 }
+        );
       }
-    } catch (err: any) {
-      console.warn("Unexpected insert error:", err);
-    }
 
-    // Determine jobId
-    let jobId: string | null = null;
-    if (insertedRow) {
-      jobId = insertedRow.id ?? insertedRow.job_id ?? null;
-      if (jobId && typeof jobId !== "string") jobId = String(jobId);
-    }
-    if (!jobId) jobId = randomUUID();
-
-    // Best-effort: create a monitor watch for this uploaded file
-    (async () => {
-      try {
-        const sourceUrl = `supabase://${canonicalFilePath}`; // placeholder; replace with canonical URL if available
-        await createWatchForIngestion({
-          source_url: sourceUrl,
-          product_id: insertedRow?.id ?? null,
-          created_by: userId,
-        });
-        console.log("Created monitor watch for upload", sourceUrl);
-      } catch (err: any) {
-        console.warn("createWatchForIngestion failed:", err?.message ?? err);
+      // Determine jobId from inserted row (common id field: id)
+      let jobId: string | null = null;
+      if (inserted) {
+        jobId = (inserted as any).id ?? (inserted as any).job_id ?? null;
+        if (jobId !== null && typeof jobId !== "string") jobId = String(jobId);
       }
-    })();
+      // Fallback: if no id returned, generate a UUID
+      if (!jobId) jobId = randomUUID();
 
-    return NextResponse.json({
-      ok: true,
-      jobId,
-      file_path: canonicalFilePath,
-      file_name: originalName,
-      file_format: payload.file_format,
-      rawUpload: uploadData,
-      inserted: insertedRow ?? null,
-    }, { status: 200 });
+      // Best-effort: create a monitor watch for this uploaded file (async, non-blocking)
+      (async () => {
+        try {
+          const sourceUrl = canonicalUrlFromForm ?? `supabase://${canonicalFilePath}`;
+          await createWatchForIngestion({
+            source_url: sourceUrl,
+            product_id: inserted?.id ?? null,
+            created_by: userId,
+            frequency_seconds: null,
+          });
+          console.log("Created monitor watch for upload", sourceUrl);
+        } catch (err: any) {
+          console.warn("createWatchForIngestion failed:", err?.message ?? err);
+        }
+      })();
+
+      return NextResponse.json(
+        {
+          ok: true,
+          jobId,
+          file_path: canonicalFilePath,
+          file_name: originalName,
+          file_format: payload.file_format,
+          rawUpload: uploadData,
+          inserted: inserted ?? null,
+        },
+        { status: 200 }
+      );
+    } catch (errInsert: any) {
+      console.error("Unexpected insert error:", errInsert);
+      const syntheticId = randomUUID();
+
+      // Attempt best-effort watch creation
+      (async () => {
+        try {
+          const sourceUrl = canonicalUrlFromForm ?? `supabase://${canonicalFilePath}`;
+          await createWatchForIngestion({
+            source_url: sourceUrl,
+            product_id: null,
+            created_by: userId,
+          });
+          console.log("Created monitor watch for upload (unexpected error path)", sourceUrl);
+        } catch (err: any) {
+          console.warn("createWatchForIngestion failed (unexpected):", err?.message ?? err);
+        }
+      })();
+
+      return NextResponse.json(
+        {
+          ok: true,
+          warning: "Unexpected DB error while creating ingestion; returning synthetic jobId.",
+          jobId: syntheticId,
+          file_path: canonicalFilePath,
+          file_name: originalName,
+          file_format: payload.file_format,
+          dbError: String(errInsert?.message ?? errInsert),
+        },
+        { status: 200 }
+      );
+    }
   } catch (err: any) {
     console.error("upload-to-supabase route error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
