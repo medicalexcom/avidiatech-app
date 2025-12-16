@@ -3,11 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * All Events - audit & tracking console
+ * All Events - audit & tracking console (fixed)
  *
- * Features:
+ * Cleaned-up and fixed JSX/parsing error. This page:
  * - Loads events (client-side paging)
- * - Filters: event_type, severity, processed (true/false/any), status-like filters using event_type
+ * - Filters: event_type, severity, processed (true/false/any)
  * - Search by watch URL or payload content (simple text match)
  * - Sort by created_at, event_type, severity
  * - Metrics: events/day, unique watches changed, processed rate, top event types
@@ -15,7 +15,7 @@ import React, { useEffect, useMemo, useState } from "react";
  * Uses:
  * - GET /api/monitor/events
  *
- * Drop at: src/app/dashboard/monitor/events/page.tsx
+ * Path: src/app/dashboard/monitor/events/page.tsx
  */
 
 type SortKey = "created_at" | "event_type" | "severity";
@@ -50,7 +50,8 @@ export default function AllEventsPage() {
     load();
   }, []);
 
-  const filtered = useMemo(() => {
+  // Filter + sort memo
+  const filteredAndSorted = useMemo(() => {
     const list = events ?? [];
     const q = String(query || "").trim().toLowerCase();
     let out = list.filter((ev) => {
@@ -69,8 +70,8 @@ export default function AllEventsPage() {
     });
 
     out.sort((a: any, b: any) => {
-      let av = a[sortKey];
-      let bv = b[sortKey];
+      let av: any = a[sortKey];
+      let bv: any = b[sortKey];
       if (sortKey === "created_at") {
         av = a.created_at ? new Date(a.created_at).getTime() : 0;
         bv = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -85,9 +86,9 @@ export default function AllEventsPage() {
     return out;
   }, [events, query, eventTypeFilter, severityFilter, processedFilter, sortKey, sortDir]);
 
-  const total = filtered.length;
+  const total = filteredAndSorted.length;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageItems = filteredAndSorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // metrics
   const metrics = useMemo(() => {
@@ -190,26 +191,28 @@ export default function AllEventsPage() {
           </div>
 
           <div className="space-y-3">
-            {loading && !events ? <div>Loading…</div> : pageItems.length === 0 ? <div className="text-sm text-slate-500">No events</div> : pageItems.map((ev) => (
-              <div key={ev.id} className="p-3 border rounded-lg">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? ev.event_type}</div>
-                      <div className="text-xs text-slate-400">{ev.watch_id ? `watch:${ev.watch_id}` : ""}</div>
+            {loading && !events ? <div>Loading…</div> : pageItems.length === 0 ? <div className="text-sm text-slate-500">No events</div> : (
+              pageItems.map((ev) => (
+                <div key={ev.id} className="p-3 border rounded-lg">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-medium truncate">{ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url ?? ev.event_type}</div>
+                        <div className="text-xs text-slate-400">{ev.watch_id ? `watch:${ev.watch_id}` : ""}</div>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">{ev.event_type} · {ev.severity} · {new Date(ev.created_at).toLocaleString()}</div>
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">{ev.event_type} · {ev.severity} · {new Date(ev.created_at).toLocaleString()}</div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <button onClick={() => { navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2)); alert("Copied payload"); }} className="px-3 py-1 rounded border text-xs">Copy</button>
+                      <a href={`/dashboard/monitor/watches?filter=${encodeURIComponent(ev.watch_id ?? "")}`} className="px-3 py-1 rounded border text-xs">Open watch</a>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-2">
-                    <button onClick={() => { navigator.clipboard?.writeText(JSON.stringify(ev.payload ?? ev, null, 2)); alert("Copied payload"); }} className="px-3 py-1 rounded border text-xs">Copy</button>
-                    <a href={`/dashboard/monitor/watches?filter=${encodeURIComponent(ev.watch_id ?? "")}`} className="px-3 py-1 rounded border text-xs">Open watch</a>
-                  </div>
+                  <pre className="mt-3 bg-slate-50 p-3 rounded text-xs max-h-40 overflow-auto">{JSON.stringify(ev.payload ?? {}, null, 2)}</pre>
                 </div>
-
-                <pre className="mt-3 bg-slate-50 p-3 rounded text-xs max-h-40 overflow-auto">{JSON.stringify(ev.payload ?? {}, null, 2)}</pre>
-              </div>
-            )))}
+              ))
+            )}
           </div>
 
           {/* Pagination */}
@@ -226,57 +229,4 @@ export default function AllEventsPage() {
       </div>
     </main>
   );
-
-  // derived helpers for pagination
-  function derivePaging(arr: any[]) {
-    const total = arr.length;
-    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const pageItems = arr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-    return { total, pages, pageItems };
-  }
-
-  // compute derived (we reuse filtered logic inline to have access to total/pages)
-  const { total, pages, pageItems } = (() => {
-    const list = filteredWithSort();
-    const total = list.length;
-    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const pageItems = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-    return { total, pages, pageItems };
-  })();
-
-  // helper to reuse filtered + sorted list
-  function filteredWithSort() {
-    const list = events ?? [];
-    const q = String(query || "").trim().toLowerCase();
-    let out = list.filter((ev) => {
-      if (eventTypeFilter !== "any" && (ev.event_type ?? "") !== eventTypeFilter) return false;
-      if (severityFilter !== "any" && (ev.severity ?? "") !== severityFilter) return false;
-      if (processedFilter !== "any") {
-        const proc = !!ev.processed;
-        if (processedFilter === "yes" && !proc) return false;
-        if (processedFilter === "no" && proc) return false;
-      }
-      if (q) {
-        const hay = `${ev.payload ? JSON.stringify(ev.payload) : ""} ${ev.watch_id ?? ""} ${ev.payload?.snapshot?.url ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-
-    out.sort((a: any, b: any) => {
-      let av = a[sortKey];
-      let bv = b[sortKey];
-      if (sortKey === "created_at") {
-        av = a.created_at ? new Date(a.created_at).getTime() : 0;
-        bv = b.created_at ? new Date(b.created_at).getTime() : 0;
-      } else {
-        av = String(av ?? "");
-        bv = String(bv ?? "");
-      }
-      if (av === bv) return 0;
-      return sortDir === "asc" ? (av < bv ? -1 : 1) : av > bv ? -1 : 1;
-    });
-
-    return out;
-  }
 }
