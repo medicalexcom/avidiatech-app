@@ -1,17 +1,14 @@
 /**
- * Core Monitor logic
- * - fetches a URL
- * - extracts a normalized snapshot (title, price, specs table, images)
- * - computes a simple diff against last_snapshot
- * - writes a monitor_event row and updates the watch last_snapshot/last_check_at/last_status
+ * runWatchOnce with retry/backoff and improved request handling.
  *
- * Uses Supabase admin (service role) to read/write DB and storage.
+ * Behavior:
+ * - Tries up to maxAttempts to fetch a URL.
+ * - Uses exponential backoff between attempts and updates next_check_at on failure.
+ * - Adds more robust request headers (User-Agent, Accept).
+ * - For final failure writes a monitor_event 'scrape_failed' and updates watch.last_error/retry_count/next_check_at.
+ * - On success resets retry_count/last_error/next_check_at and continues normal diff logic.
  *
- * Requires env:
- * - SUPABASE_URL
- * - SUPABASE_SERVICE_ROLE_KEY
- *
- * Note: uses global fetch (Node 18+ / Vercel). Keep cheerio as a dependency.
+ * NOTE: For JS-heavy pages or persistent 403/429, consider a headless-browser fallback (Playwright/Puppeteer).
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -35,6 +32,10 @@ export type Snapshot = {
   fetched_at?: string | null;
 };
 
+function sleep(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
 function parsePrice(text: string | undefined): number | null {
   if (!text) return null;
   const cleaned = String(text).replace(/[, ]+/g, "").match(/-?\d+(\.\d+)?/);
@@ -46,7 +47,6 @@ function parsePrice(text: string | undefined): number | null {
 
 function normalizeSpecs($: CheerioAPI): Record<string, string> {
   const specs: Record<string, string> = {};
-  // Common pattern: <table> of specs with two columns
   $("table").each((_, table) => {
     const rows = $(table).find("tr");
     rows.each((_, tr) => {
@@ -93,6 +93,9 @@ function computeDiff(oldSnap: Snapshot | null, newSnap: Snapshot) {
   return diffs;
 }
 
+/**
+ * runWatchOnce - resilient fetch with retries
+ */
 export async function runWatchOnce(watchId: string) {
   const { data: watchRow, error: watchErr } = await supabaseAdmin.from("monitor_watches").select("*").eq("id", watchId).limit(1).maybeSingle();
   if (watchErr) throw new Error(`failed to load watch ${watchErr.message ?? String(watchErr)}`);
@@ -101,19 +104,91 @@ export async function runWatchOnce(watchId: string) {
   const url = String(watchRow.source_url);
   let snapshot: Snapshot = { url, fetched_at: new Date().toISOString() };
 
-  try {
-    const res = await fetch(url, { method: "GET" });
-    if (!res.ok) {
-      const payload = { status: res.status, statusText: res.statusText };
-      await supabaseAdmin.from("monitor_events").insert([{ watch_id: watchId, tenant_id: watchRow.tenant_id ?? null, product_id: watchRow.product_id ?? null, event_type: "scrape_failed", severity: "warning", payload }]);
-      await supabaseAdmin.from("monitor_watches").update({ last_check_at: new Date().toISOString(), last_status: "scrape_failed" }).eq("id", watchId);
-      return { ok: false, reason: "scrape_failed", payload };
-    }
-    const html = await res.text();
-    const $ = cheerio.load(html) as CheerioAPI;
+  // Retry/backoff configuration
+  const maxAttempts = 3;
+  const baseDelayMs = 1000; // base backoff
+  let attempt = 0;
+  let lastError: string | null = null;
+  let html: string | null = null;
+  let success = false;
 
+  const defaultHeaders = {
+    // rotate / customize this header if you have a pool of values
+    "User-Agent": "AvidiaMonitor/1.0 (+https://your.app)",
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    // Add other headers if helpful (Referer etc.)
+  };
+
+  while (attempt < maxAttempts && !success) {
+    attempt++;
+    try {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const signal = controller ? controller.signal : undefined;
+      // set a per-attempt timeout (fetch should be the global fetch in Node/Vercel)
+      const timeoutMs = 15_000;
+      if (controller) setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(url, { method: "GET", headers: defaultHeaders as any, signal } as any);
+      // treat HTTP 2xx as success; 429/403 are retryable but require backoff
+      if (res.ok) {
+        html = await res.text();
+        success = true;
+        break;
+      } else {
+        // non-OK: capture status
+        lastError = `HTTP ${res.status} ${res.statusText}`;
+        // for 429/503/403 treat as retryable
+        if ([429, 503, 403].includes(res.status)) {
+          const wait = baseDelayMs * Math.pow(2, attempt - 1);
+          await sleep(wait);
+          continue;
+        } else {
+          // non-retryable HTTP error -> stop retry loop
+          break;
+        }
+      }
+    } catch (err: any) {
+      // network or abort errors
+      lastError = String(err?.message ?? err);
+      const wait = baseDelayMs * Math.pow(2, attempt - 1);
+      await sleep(wait);
+      // continue to retry until attempts exhausted
+    }
+  }
+
+  // If failed to fetch after retries -> write a failure event, update watch with next_check_at/backoff and return
+  if (!success || !html) {
+    const errorMsg = lastError ?? "unknown error";
+    const nextBackoffSeconds = Math.min(60 * 60, Math.pow(2, Math.min(6, (watchRow.retry_count ?? 0))) * 60); // cap to 1h
+    const nextCheck = new Date(Date.now() + nextBackoffSeconds * 1000).toISOString();
+
+    await supabaseAdmin.from("monitor_events").insert([{
+      watch_id: watchId,
+      tenant_id: watchRow.tenant_id ?? null,
+      product_id: watchRow.product_id ?? null,
+      event_type: "scrape_failed",
+      severity: "warning",
+      payload: { error: errorMsg, attempts: attempt },
+    }]);
+
+    await supabaseAdmin.from("monitor_watches").update({
+      retry_count: (watchRow.retry_count ?? 0) + 1,
+      last_error: errorMsg,
+      last_check_at: new Date().toISOString(),
+      last_status: "scrape_failed",
+      next_check_at: nextCheck,
+    }).eq("id", watchId);
+
+    return { ok: false, reason: "scrape_failed", error: errorMsg };
+  }
+
+  // success: parse html and continue
+  try {
+    const $ = cheerio.load(html) as CheerioAPI;
     snapshot.title = ($("meta[property='og:title']").attr("content") || $("title").text() || $("h1").first().text() || "").trim() || null;
 
+    // price heuristics
     const priceSelectors = ["[itemprop=price]", ".price", ".product-price", ".price__amount", "#price", ".sale-price"];
     let priceText: string | null = null;
     for (const sel of priceSelectors) {
@@ -154,10 +229,14 @@ export async function runWatchOnce(watchId: string) {
       payload: eventPayload,
     }]);
 
+    // update watch row: reset retry metadata on success
     await supabaseAdmin.from("monitor_watches").update({
       last_snapshot: snapshot,
       last_check_at: new Date().toISOString(),
       last_status: hasChanges ? "changed" : "ok",
+      retry_count: 0,
+      last_error: null,
+      next_check_at: null,
     }).eq("id", watchId);
 
     return { ok: true, changed: hasChanges, diff, snapshot };
@@ -171,7 +250,7 @@ export async function runWatchOnce(watchId: string) {
       severity: "critical",
       payload: { error: e },
     }]);
-    await supabaseAdmin.from("monitor_watches").update({ last_check_at: new Date().toISOString(), last_status: "error" }).eq("id", watchId);
+    await supabaseAdmin.from("monitor_watches").update({ last_check_at: new Date().toISOString(), last_status: "error", last_error: e }).eq("id", watchId);
     return { ok: false, error: e };
   }
 }
