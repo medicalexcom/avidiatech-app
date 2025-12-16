@@ -8,10 +8,14 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — requires tenant UUID input before creating jobs
+ * MatchPage — automated tenant resolution (server-side)
  *
- * - Adds tenant UUID input (validated) and persists to localStorage.
- * - Ensures create/start requests include tenant_id as a UUID.
+ * This page no longer requests a tenant UUID from the user. The server will
+ * resolve the tenant automatically from the current user's orgId (Clerk)
+ * using the configured mapping table. Create/start flows send the job request
+ * without tenant_id and rely on the server to map the tenant.
+ *
+ * Buttons are enabled once a preview exists and parsing is complete.
  */
 
 type PreviewRow = {
@@ -24,23 +28,8 @@ type PreviewRow = {
   raw?: any;
 };
 
-function isUuid(s?: string | null) {
-  if (!s) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
 export default function MatchPage() {
   const featureEnabled = true;
-
-  // tenant
-  const [tenantId, setTenantId] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem("av_match_tenant");
-    } catch {
-      return null;
-    }
-  });
-  const [tenantError, setTenantError] = useState<string | null>(null);
 
   // preview / upload state
   const [filePreviewRows, setFilePreviewRows] = useState<PreviewRow[]>([]);
@@ -60,13 +49,6 @@ export default function MatchPage() {
   const [resultsStatusFilter, setResultsStatusFilter] = useState<string | undefined>(undefined);
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
-
-  useEffect(() => {
-    // persist tenantId to localStorage
-    try {
-      if (tenantId) localStorage.setItem("av_match_tenant", tenantId);
-    } catch {}
-  }, [tenantId]);
 
   // parse file (xlsx/csv); produce preview rows (first 200)
   const handleFile = useCallback(async (file: File | null) => {
@@ -122,22 +104,16 @@ export default function MatchPage() {
     }
   }, []);
 
-  // create job from preview rows (includes tenant_id)
+  // create job from preview rows (no tenant_id sent — server will resolve automatically)
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
       alert("No preview rows to create job from.");
       return null;
     }
-    if (!tenantId || !isUuid(tenantId)) {
-      setTenantError("Please provide a valid tenant UUID before creating a job.");
-      alert("Tenant UUID missing or invalid. Please enter a valid tenant UUID.");
-      return null;
-    }
-    setTenantError(null);
     setCreatingJob(true);
     try {
-      const body = { tenant_id: tenantId, file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
+      const body = { file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
       const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
       if (!res.ok || !j?.ok) {
@@ -155,7 +131,7 @@ export default function MatchPage() {
     } finally {
       setCreatingJob(false);
     }
-  }, [filePreviewRows, tenantId]);
+  }, [filePreviewRows]);
 
   // Start processing job (server-side worker)
   const startJob = useCallback(async (id?: string | null) => {
@@ -220,7 +196,7 @@ export default function MatchPage() {
     } finally {
       setPolling(false);
     }
-  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
+  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset, fetchResultsRows]);
 
   // fetch rows from job (paged)
   async function fetchResultsRows(id: string, status?: string | undefined, limit = 50, offset = 0) {
@@ -325,20 +301,10 @@ export default function MatchPage() {
               <div className="mt-2 font-mono text-sm">{jobId ? `job:${jobId}` : "No job"}</div>
               <div className="mt-2 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
               <div className="mt-3 space-y-2">
-                <div>
-                  <input
-                    placeholder="Tenant UUID"
-                    value={tenantId ?? ""}
-                    onChange={(e) => { setTenantId(e.target.value.trim()); if (tenantError) setTenantError(null); }}
-                    className="w-full rounded border px-2 py-1 text-xs"
-                  />
-                  {tenantError ? <div className="text-xs text-red-600 mt-1">{tenantError}</div> : <div className="text-xs text-slate-400 mt-1">Provide tenant UUID (required)</div>}
-                </div>
-
-                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length || !tenantId || !isUuid(tenantId)} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
+                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
                   {creatingJob || startingJob ? "Working…" : "Upload & Create"}
                 </button>
-                <button onClick={() => createJob()} disabled={parsing || creatingJob || !filePreviewRows.length || !tenantId || !isUuid(tenantId)} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+                <button onClick={() => createJob()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {creatingJob ? "Creating…" : "Create job from preview"}
                 </button>
                 <button onClick={() => startJob(jobId)} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
