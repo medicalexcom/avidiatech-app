@@ -32,7 +32,7 @@ export default function NotificationsList() {
       const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) throw new Error(j?.error ?? "patch failed");
       await load();
-    } catch (err:any) {
+    } catch (err: any) {
       alert(String(err?.message ?? err));
     }
   }
@@ -44,7 +44,18 @@ export default function NotificationsList() {
         <button onClick={load} className="px-2 py-1 border rounded text-sm">Refresh</button>
       </div>
 
-      {loading ? <div>Loading…</div> : items.length === 0 ? <div>No notifications</div> : (
+      {loading ? (
+        <div>Loading…</div>
+      ) : items.length === 0 ? (
+        <div className="p-6 text-center">
+          <div className="text-lg font-semibold">No notifications yet</div>
+          <p className="text-sm text-slate-500 mt-2">Notifications appear when a rule matches an event (e.g., price change). Try one of the actions below to generate a test notification.</p>
+          <div className="mt-4 flex justify-center gap-3">
+            <a href="/dashboard/monitor" className="px-4 py-2 rounded border text-sm">Add watch</a>
+            <a href="/dashboard/monitor/rules" className="px-4 py-2 rounded bg-amber-500 text-white text-sm">Create rule</a>
+          </div>
+        </div>
+      ) : (
         <div className="space-y-2">
           {items.map((n) => (
             <div key={n.id} className={`p-3 border rounded ${n.read ? "bg-white/60" : "bg-amber-50"}`}>
