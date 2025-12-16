@@ -1,4 +1,3 @@
-url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/dashboard/match/page.tsx
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -9,17 +8,16 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage (improved XLSX/CSV parsing)
+ * MatchPage (improved XLSX/CSV parsing + upload input)
  *
- * Fixes:
- * - More robust dynamic import of `xlsx` (supports both CJS and ESM shapes).
- * - Handles CSV files by reading text and using XLSX.read(..., { type: "string" }).
- * - Better error reporting in the UI (alerts and console details).
- * - Limits preview rows and avoids reading entire workbook where possible.
+ * - Robust dynamic import of `xlsx` (supports both CJS and ESM shapes).
+ * - CSV fallback parsing.
+ * - Explicit visible file input so users can upload XLSX/CSV files.
+ * - Create job, start job, poll status, fetch rows, approve candidates (calls approve API endpoint if implemented).
  *
  * If you still see parse failures:
- * - Open browser console to inspect the logged error (we print full error).
- * - Check that the uploaded file is a valid .xlsx/.xls/.csv (not password-protected).
+ * - Open the browser console to inspect the logged error (we print full error).
+ * - Verify the uploaded file is valid .xlsx/.xls/.csv (not password protected).
  * - For very large files prefer uploading to the server and parsing there.
  */
 
@@ -75,12 +73,10 @@ export default function MatchPage() {
       if (name.endsWith(".csv")) {
         // CSV parsing: read text and parse as a single-sheet workbook
         const text = await file.text();
-        // try to parse CSV into workbook
         wb = XLSX.read(text, { type: "string", raw: false });
       } else {
         // Excel (.xlsx/.xls) read as array buffer
         const arrayBuffer = await file.arrayBuffer();
-        // Use `type: "array"` which is appropriate for ArrayBuffer
         wb = XLSX.read(arrayBuffer, { type: "array", raw: false });
       }
 
@@ -116,7 +112,6 @@ export default function MatchPage() {
       setFilePreviewRows(mapped);
     } catch (err: any) {
       console.error("Failed to parse uploaded file:", err);
-      // Show the error message to the user to aid debugging
       const msg = err?.message ? String(err.message) : String(err);
       alert(`Failed to parse file in the browser: ${msg}\n\nOpen the browser console for more details.`);
     }
