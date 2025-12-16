@@ -9,14 +9,12 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { au
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    // optional auth check
     const { userId } = getAuth(req as any);
     if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
     if (!params?.id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
 
-    // sanitize allowed fields for update
     const allowed: any = {};
     const fields = ["frequency_seconds", "price_threshold_percent", "muted_until", "sensitivity", "auto_watch"];
     for (const f of fields) {
