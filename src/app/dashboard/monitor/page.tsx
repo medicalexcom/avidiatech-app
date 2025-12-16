@@ -3,14 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import MonitorDashboard from "@/components/monitor/MonitorDashboard";
 
-/**
- * Monitor dashboard page (metrics update + scroll behavior)
- *
- * - Recent monitor events card now has a bounded vertical scroll area
- *   (prevents the page from growing indefinitely).
- * - No other layout changes.
- */
-
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
@@ -28,7 +20,6 @@ function StatCard({
   caption?: string;
   tone?: StatTone;
 }) {
-  // GSC-like performance tile tones
   const toneMap: Record<
     StatTone,
     {
@@ -37,7 +28,6 @@ function StatCard({
       glowA: string;
       glowB: string;
       top: string;
-      chip: string;
     }
   > = {
     blue: {
@@ -46,8 +36,6 @@ function StatCard({
       glowA: "bg-sky-400/16 dark:bg-sky-500/12",
       glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
       top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
-      chip:
-        "border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-200",
     },
     purple: {
       border: "border-violet-200/70 dark:border-violet-500/20",
@@ -55,8 +43,6 @@ function StatCard({
       glowA: "bg-violet-400/16 dark:bg-violet-500/12",
       glowB: "bg-fuchsia-400/10 dark:bg-fuchsia-500/10",
       top: "from-violet-400/55 via-violet-300/20 to-transparent dark:from-violet-300/35 dark:via-violet-300/15",
-      chip:
-        "border-violet-200/70 bg-violet-50 text-violet-700 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-violet-200",
     },
     teal: {
       border: "border-emerald-200/70 dark:border-emerald-500/20",
@@ -64,8 +50,6 @@ function StatCard({
       glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
       glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
       top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
-      chip:
-        "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200",
     },
     amber: {
       border: "border-amber-200/70 dark:border-amber-500/20",
@@ -73,8 +57,6 @@ function StatCard({
       glowA: "bg-amber-400/16 dark:bg-amber-500/12",
       glowB: "bg-orange-400/10 dark:bg-orange-500/10",
       top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
-      chip:
-        "border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-200",
     },
   };
 
@@ -97,37 +79,26 @@ function StatCard({
         )}
       />
 
-      {/* GSC-style soft wash + glows */}
+      {/* soft wash + glows */}
       <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
       <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
       <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
 
       <div className="relative">
-        <div className="flex items-center justify-between gap-3">
-          {/* Title Case (no uppercase) */}
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-            {title}
-          </div>
-
-          <span
-            className={cx(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium shadow-sm",
-              t.chip
-            )}
-          >
-            Live
-          </span>
+        {/* Force single line title (shrink text slightly so it never wraps) */}
+        <div className="text-[13px] font-semibold leading-none text-slate-900 dark:text-slate-50">
+          <span className="block truncate whitespace-nowrap">{title}</span>
         </div>
 
         <div className="mt-3 flex items-end justify-between gap-3">
-          <div className="text-3xl font-semibold leading-none text-slate-900 dark:text-slate-50">
+          <div className="text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
             {value}
           </div>
         </div>
 
         {caption ? (
-          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            {caption}
+          <div className="mt-2 text-[11px] leading-none text-slate-500 dark:text-slate-400">
+            <span className="block truncate whitespace-nowrap">{caption}</span>
           </div>
         ) : null}
       </div>
@@ -292,7 +263,6 @@ export default function MonitorPage() {
     return Math.round((last7 / 7) * 10) / 10;
   }, [events]);
 
-  // Non-duplicative metrics:
   const notificationsLast7Days = useMemo(() => {
     if (!notifications) return "—";
     const cnt = notifications.filter((n) => {
@@ -336,7 +306,6 @@ export default function MonitorPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* BACKGROUND: layered blobs + radial wash + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/15" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
@@ -352,7 +321,6 @@ export default function MonitorPage() {
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10">
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
-            {/* Identity row (aligned with other modules) */}
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100">
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
@@ -392,10 +360,7 @@ export default function MonitorPage() {
             <SoftButton href="/dashboard/monitor/rules" variant="secondary">
               Rules ({rulesCount})
             </SoftButton>
-            <SoftButton
-              href="/dashboard/monitor/notifications"
-              variant="secondary"
-            >
+            <SoftButton href="/dashboard/monitor/notifications" variant="secondary">
               Notifications ({unreadNotificationsCount})
             </SoftButton>
           </div>
@@ -434,7 +399,6 @@ export default function MonitorPage() {
               <MonitorDashboard />
             </div>
 
-            {/* Recent events: bounded scroll area to avoid infinite page growth */}
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -755,7 +719,6 @@ export default function MonitorPage() {
                 </li>
               </ul>
 
-              {/* keep lastCheckSample state “alive” without exposing sensitive details */}
               {lastCheckSample ? (
                 <div className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 text-[11px] text-slate-600 dark:border-slate-800/60 dark:bg-slate-900/30 dark:text-slate-300">
                   <div className="font-semibold text-slate-700 dark:text-slate-200">
