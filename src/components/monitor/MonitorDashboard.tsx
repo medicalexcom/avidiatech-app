@@ -31,23 +31,7 @@ function secondsToDays(sec: number | null | undefined) {
   return Math.max(1, Math.round(sec / (24 * 60 * 60)));
 }
 
-function safeUrlParts(url?: string | null) {
-  if (!url) return { host: null as string | null, shortPath: null as string | null };
-  try {
-    const u = new URL(url);
-    const host = u.host;
-    const path = u.pathname || "";
-    // show a short path hint without dumping full URL
-    const segs = path.split("/").filter(Boolean);
-    const last = segs[segs.length - 1] ?? "";
-    const shortPath = last ? `…/${last}` : null;
-    return { host, shortPath };
-  } catch {
-    return { host: null, shortPath: null };
-  }
-}
-
-/** FrequencyControl: preset dropdown + anchored custom days popover (no weird layout jumps) */
+/** FrequencyControl: preset dropdown + anchored custom days popover (stable positioning) */
 type FrequencyControlProps = {
   days: number;
   onChange: (days: number) => void;
@@ -92,10 +76,8 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
         <option value="custom">Custom…</option>
       </select>
 
-      {/* keep the "days" label compact */}
       <span className="text-xs text-slate-500">days</span>
 
-      {/* anchored popover (no reflow) */}
       {selected === "custom" ? (
         <div className="absolute left-0 top-full z-20 mt-2 w-[260px] rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
           <div className="flex items-center gap-2">
@@ -110,7 +92,7 @@ function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyCon
             />
             <button
               onClick={() => onChange(Math.max(1, Math.round(customValue)))}
-              className="h-8 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="h-8 rounded-md bg-indigo-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
               title="Apply custom frequency (days)"
             >
               Apply
@@ -154,12 +136,15 @@ function Dot({ tone }: { tone: "ok" | "warn" | "bad" | "neutral" }) {
   return <span className={cx("inline-block h-2 w-2 rounded-full", cls)} />;
 }
 
-const btn =
-  "h-8 rounded-md px-3 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-slate-200";
-const btnGhost = "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900";
-const btnSave = "bg-amber-500 text-white hover:bg-amber-400 disabled:opacity-60 disabled:cursor-not-allowed";
+/** Button styles (updated colors for better UI) */
+const bBase =
+  "h-8 rounded-md px-3 text-xs font-semibold shadow-sm transition focus:outline-none focus:ring-2";
+const bGhost = cx(bBase, "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-200");
+const bCheck = cx(bBase, "bg-sky-600 text-white hover:bg-sky-500 focus:ring-sky-200");
+const bSave = cx(bBase, "bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed focus:ring-indigo-200");
+const bMute = cx(bBase, "bg-slate-900 text-white hover:bg-slate-800 focus:ring-slate-300");
 
-/** Compact Watch card (no extra frames/pills; everything fits and wraps cleanly) */
+/** Compact Watch card */
 function WatchRow({
   watch,
   onSaveFreq,
@@ -185,7 +170,6 @@ function WatchRow({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      {/* Row 1: URL + status/time + buttons (no overlap; wraps if needed) */}
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -195,9 +179,7 @@ function WatchRow({
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <StatusBadge status={watch.last_status} />
             <span className="text-slate-300">·</span>
-            <span className="whitespace-nowrap">
-              {watch.last_check_at ? new Date(watch.last_check_at).toLocaleString() : "never"}
-            </span>
+            <span className="whitespace-nowrap">{watch.last_check_at ? new Date(watch.last_check_at).toLocaleString() : "never"}</span>
             {watch.muted_until ? (
               <>
                 <span className="text-slate-300">·</span>
@@ -208,7 +190,7 @@ function WatchRow({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <button onClick={() => onTriggerCheck(watch.id)} className={cx(btn, btnGhost)} title="Run a check now">
+          <button onClick={() => onTriggerCheck(watch.id)} className={bCheck} title="Run a check now">
             Check
           </button>
 
@@ -222,7 +204,7 @@ function WatchRow({
               }
             }}
             disabled={saving}
-            className={cx(btn, btnSave)}
+            className={bSave}
             title="Save frequency"
           >
             {saving ? "Saving…" : "Save"}
@@ -234,7 +216,7 @@ function WatchRow({
                 muted_until: watch.muted_until ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
               })
             }
-            className={cx(btn, btnGhost)}
+            className={bMute}
             title={watch.muted_until ? "Unmute" : "Mute 24h"}
           >
             {watch.muted_until ? "Unmute" : "Mute"}
@@ -242,16 +224,10 @@ function WatchRow({
         </div>
       </div>
 
-      {/* Row 2: compact controls (no big pills) */}
       <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-600">Frequency</span>
-          <FrequencyControl
-            days={localDays}
-            onChange={(d) => setLocalDays(d)}
-            ariaLabel={`Frequency for ${watch.source_url}`}
-            className="shrink-0"
-          />
+          <FrequencyControl days={localDays} onChange={(d) => setLocalDays(d)} ariaLabel={`Frequency for ${watch.source_url}`} />
         </div>
 
         <div className="flex items-center justify-between gap-2 lg:justify-end">
@@ -400,20 +376,15 @@ export default function MonitorDashboard() {
           aria-label="New watch URL"
         />
 
-        {/* keep control from wrapping weirdly */}
         <div className="flex items-center gap-2 shrink-0">
-          <FrequencyControl
-            days={newFrequencyDays}
-            onChange={(d) => setNewFrequencyDays(d)}
-            ariaLabel="New watch frequency (days)"
-          />
+          <FrequencyControl days={newFrequencyDays} onChange={(d) => setNewFrequencyDays(d)} ariaLabel="New watch frequency (days)" />
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={createWatch} className="px-3 py-2 rounded bg-amber-500 text-white shadow">
+          <button onClick={createWatch} className="px-3 py-2 rounded bg-indigo-600 text-white shadow hover:bg-indigo-500">
             Add Watch
           </button>
-          <button onClick={() => { loadWatches(); loadEvents(); }} className="px-3 py-2 rounded border">
+          <button onClick={() => { loadWatches(); loadEvents(); }} className="px-3 py-2 rounded border border-slate-200 bg-white hover:bg-slate-50">
             Refresh
           </button>
         </div>
@@ -441,8 +412,7 @@ export default function MonitorDashboard() {
 
           {watches.length > WATCHES_PER_VIEW ? (
             <div className="mt-3 text-xs text-slate-500">
-              Showing {WATCHES_PER_VIEW} of {watches.length} watches.{" "}
-              <a className="underline" href="/dashboard/monitor/all">View all</a>
+              Showing {WATCHES_PER_VIEW} of {watches.length} watches. <a className="underline" href="/dashboard/monitor/all">View all</a>
             </div>
           ) : null}
         </div>
@@ -453,55 +423,29 @@ export default function MonitorDashboard() {
             <div className="text-xs text-slate-500">{events.length ? `${events.length} total` : ""}</div>
           </div>
 
-          {/* Back to the “better” compact version: no full URL line, just smart link hints */}
-          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {/* Restored: close to original compact form (no host chips, minimal, not heavily truncated) */}
+          <div className="mt-2 space-y-2">
             {loading && !events.length ? (
-              <div className="p-3 text-sm text-slate-500">Loading…</div>
+              <div className="text-sm text-slate-500">Loading…</div>
             ) : events.length === 0 ? (
-              <div className="p-3 text-sm text-slate-500">No events</div>
+              <div className="text-sm text-slate-500">No events</div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {events.slice(0, EVENTS_PER_VIEW).map((ev) => {
-                  const url = ev.payload?.snapshot?.url ?? null;
-                  const title = ev.payload?.snapshot?.title ?? url ?? "Event";
-                  const { host, shortPath } = safeUrlParts(url);
-
-                  const et = String(ev.event_type ?? "").toLowerCase();
-                  const tone: "ok" | "warn" | "bad" | "neutral" =
-                    et.includes("change") || et.includes("changed") ? "warn" : et.includes("fail") || et.includes("error") ? "bad" : "neutral";
-
-                  return (
-                    <div key={ev.id} className="p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Dot tone={tone} />
-                            <div className="truncate text-xs font-semibold text-slate-700">{ev.event_type}</div>
-                            {host ? (
-                              <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                                {host}{shortPath ? ` ${shortPath}` : ""}
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-1 truncate text-sm font-medium text-slate-900">{title}</div>
-                        </div>
-
-                        <div className="shrink-0 text-[11px] text-slate-400 whitespace-nowrap">
-                          {new Date(ev.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              events.slice(0, EVENTS_PER_VIEW).map((ev) => (
+                <div key={ev.id} className="p-2 border rounded bg-slate-50">
+                  <div className="text-xs text-slate-500">{ev.event_type}</div>
+                  {/* allow more room: no truncate, soft wrap */}
+                  <div className="text-sm font-medium text-slate-900 break-words">
+                    {ev.payload?.snapshot?.title ?? ev.payload?.snapshot?.url}
+                  </div>
+                  <div className="text-xs text-slate-400">{new Date(ev.created_at).toLocaleString()}</div>
+                </div>
+              ))
             )}
           </div>
 
           {events.length > EVENTS_PER_VIEW ? (
             <div className="mt-3 text-xs text-slate-500">
-              Showing {EVENTS_PER_VIEW} of {events.length} events.{" "}
-              <a className="underline" href="/dashboard/monitor/events">View all</a>
+              Showing {EVENTS_PER_VIEW} of {events.length} events. <a className="underline" href="/dashboard/monitor/events">View all</a>
             </div>
           ) : null}
         </div>
