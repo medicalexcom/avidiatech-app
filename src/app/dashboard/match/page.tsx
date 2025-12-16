@@ -8,15 +8,10 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — file upload UX fixes & clearer controls
+ * MatchPage — requires tenant UUID input before creating jobs
  *
- * Behaviors:
- * - explicit file input visible and working
- * - dynamic XLSX import robust (ESM/CJS)
- * - parsing errors surfaced with alert + console details
- * - Create/Start buttons enabled/disabled correctly and show spinner states
- * - "Upload & Create" convenience action to parse + create job in a single click
- * - ApproveCandidate calls the approve API route (see server route below)
+ * - Adds tenant UUID input (validated) and persists to localStorage.
+ * - Ensures create/start requests include tenant_id as a UUID.
  */
 
 type PreviewRow = {
@@ -29,8 +24,23 @@ type PreviewRow = {
   raw?: any;
 };
 
+function isUuid(s?: string | null) {
+  if (!s) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
 export default function MatchPage() {
   const featureEnabled = true;
+
+  // tenant
+  const [tenantId, setTenantId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("av_match_tenant");
+    } catch {
+      return null;
+    }
+  });
+  const [tenantError, setTenantError] = useState<string | null>(null);
 
   // preview / upload state
   const [filePreviewRows, setFilePreviewRows] = useState<PreviewRow[]>([]);
@@ -51,7 +61,14 @@ export default function MatchPage() {
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
 
-  // parsing function (xlsx + csv fallback)
+  useEffect(() => {
+    // persist tenantId to localStorage
+    try {
+      if (tenantId) localStorage.setItem("av_match_tenant", tenantId);
+    } catch {}
+  }, [tenantId]);
+
+  // parse file (xlsx/csv); produce preview rows (first 200)
   const handleFile = useCallback(async (file: File | null) => {
     setParsingError(null);
     setFilePreviewRows([]);
@@ -59,7 +76,6 @@ export default function MatchPage() {
     setParsing(true);
 
     try {
-      // dynamic import supporting ESM and CJS shapes
       const mod = await import("xlsx");
       const XLSX = (mod && (mod as any).default) ? (mod as any).default : mod;
       if (!XLSX || typeof XLSX.read !== "function") {
@@ -106,16 +122,22 @@ export default function MatchPage() {
     }
   }, []);
 
-  // create job from preview rows
+  // create job from preview rows (includes tenant_id)
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
       alert("No preview rows to create job from.");
       return null;
     }
+    if (!tenantId || !isUuid(tenantId)) {
+      setTenantError("Please provide a valid tenant UUID before creating a job.");
+      alert("Tenant UUID missing or invalid. Please enter a valid tenant UUID.");
+      return null;
+    }
+    setTenantError(null);
     setCreatingJob(true);
     try {
-      const body = { tenant_id: undefined, file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
+      const body = { tenant_id: tenantId, file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
       const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
       if (!res.ok || !j?.ok) {
@@ -124,7 +146,6 @@ export default function MatchPage() {
         return null;
       }
       setJobId(j.job_id);
-      // fetch job header immediately
       await fetchJobStatus(j.job_id);
       return j.job_id;
     } catch (err) {
@@ -134,7 +155,7 @@ export default function MatchPage() {
     } finally {
       setCreatingJob(false);
     }
-  }, [filePreviewRows]);
+  }, [filePreviewRows, tenantId]);
 
   // Start processing job (server-side worker)
   const startJob = useCallback(async (id?: string | null) => {
@@ -151,13 +172,13 @@ export default function MatchPage() {
       }
       pollJobStatus(jid);
     } catch (err) {
-      console.error("startJob error:", err);
+      console.error("startJob error", err);
     } finally {
       setStartingJob(false);
     }
   }, [jobId]);
 
-  // combined action: parse file (already parsed) -> create job -> start job
+  // combined action: create then start
   const createAndStart = useCallback(async () => {
     const jid = await createJob();
     if (jid) await startJob(jid);
@@ -188,7 +209,6 @@ export default function MatchPage() {
       while (true) {
         // eslint-disable-next-line no-await-in-loop
         const job = await fetchJobStatus(id);
-        // refresh result rows while running
         if (job && ["running", "partial", "succeeded"].includes(job.status)) {
           // eslint-disable-next-line no-await-in-loop
           await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
@@ -200,7 +220,7 @@ export default function MatchPage() {
     } finally {
       setPolling(false);
     }
-  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset, fetchResultsRows]);
+  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
   // fetch rows from job (paged)
   async function fetchResultsRows(id: string, status?: string | undefined, limit = 50, offset = 0) {
@@ -241,7 +261,6 @@ export default function MatchPage() {
         alert("Approve failed: " + (j?.error ?? res.statusText));
         return;
       }
-      // refresh rows and job header
       await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
       await fetchJobStatus(jobId);
     } catch (err) {
@@ -269,7 +288,7 @@ export default function MatchPage() {
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // props for child components (cast to any to avoid strict prop mismatch)
+  // props for child components (cast to any)
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
   const resultsTableProps = useMemo(() => ({ rows: resultsRows, loading: resultsLoading, selectedRowIds, toggleRowSelection, onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset), approveCandidate }), [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, resultsLimit, resultsOffset, resultsStatusFilter, approveCandidate]);
   const bulkActionsProps = useMemo(() => ({ selectedCount: Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length, onBulkApprove: bulkApproveSelected, onClearSelection: clearSelection }), [selectedRowIds, bulkApproveSelected, clearSelection]);
@@ -306,10 +325,20 @@ export default function MatchPage() {
               <div className="mt-2 font-mono text-sm">{jobId ? `job:${jobId}` : "No job"}</div>
               <div className="mt-2 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
               <div className="mt-3 space-y-2">
-                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
+                <div>
+                  <input
+                    placeholder="Tenant UUID"
+                    value={tenantId ?? ""}
+                    onChange={(e) => { setTenantId(e.target.value.trim()); if (tenantError) setTenantError(null); }}
+                    className="w-full rounded border px-2 py-1 text-xs"
+                  />
+                  {tenantError ? <div className="text-xs text-red-600 mt-1">{tenantError}</div> : <div className="text-xs text-slate-400 mt-1">Provide tenant UUID (required)</div>}
+                </div>
+
+                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length || !tenantId || !isUuid(tenantId)} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
                   {creatingJob || startingJob ? "Working…" : "Upload & Create"}
                 </button>
-                <button onClick={() => createJob()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+                <button onClick={() => createJob()} disabled={parsing || creatingJob || !filePreviewRows.length || !tenantId || !isUuid(tenantId)} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {creatingJob ? "Creating…" : "Create job from preview"}
                 </button>
                 <button onClick={() => startJob(jobId)} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
