@@ -15,37 +15,116 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+type StatTone = "blue" | "purple" | "teal" | "amber";
+
 function StatCard({
   title,
   value,
   caption,
+  tone = "blue",
 }: {
   title: string;
   value: React.ReactNode;
   caption?: string;
+  tone?: StatTone;
 }) {
+  // GSC-like performance tile tones
+  const toneMap: Record<
+    StatTone,
+    {
+      border: string;
+      wash: string;
+      glowA: string;
+      glowB: string;
+      top: string;
+      chip: string;
+    }
+  > = {
+    blue: {
+      border: "border-sky-200/70 dark:border-sky-500/20",
+      wash: "from-sky-500/10 via-sky-500/0 to-transparent dark:from-sky-400/10 dark:via-sky-400/0",
+      glowA: "bg-sky-400/16 dark:bg-sky-500/12",
+      glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
+      top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
+      chip:
+        "border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-400/25 dark:bg-sky-500/10 dark:text-sky-200",
+    },
+    purple: {
+      border: "border-violet-200/70 dark:border-violet-500/20",
+      wash: "from-violet-500/10 via-violet-500/0 to-transparent dark:from-violet-400/10 dark:via-violet-400/0",
+      glowA: "bg-violet-400/16 dark:bg-violet-500/12",
+      glowB: "bg-fuchsia-400/10 dark:bg-fuchsia-500/10",
+      top: "from-violet-400/55 via-violet-300/20 to-transparent dark:from-violet-300/35 dark:via-violet-300/15",
+      chip:
+        "border-violet-200/70 bg-violet-50 text-violet-700 dark:border-violet-400/25 dark:bg-violet-500/10 dark:text-violet-200",
+    },
+    teal: {
+      border: "border-emerald-200/70 dark:border-emerald-500/20",
+      wash: "from-emerald-500/10 via-emerald-500/0 to-transparent dark:from-emerald-400/10 dark:via-emerald-400/0",
+      glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
+      glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
+      top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
+      chip:
+        "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200",
+    },
+    amber: {
+      border: "border-amber-200/70 dark:border-amber-500/20",
+      wash: "from-amber-500/12 via-amber-500/0 to-transparent dark:from-amber-400/10 dark:via-amber-400/0",
+      glowA: "bg-amber-400/16 dark:bg-amber-500/12",
+      glowB: "bg-orange-400/10 dark:bg-orange-500/10",
+      top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
+      chip:
+        "border-amber-200/70 bg-amber-50 text-amber-700 dark:border-amber-400/25 dark:bg-amber-500/10 dark:text-amber-200",
+    },
+  };
+
+  const t = toneMap[tone];
+
   return (
     <div
       className={cx(
-        "group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white/85 p-4 shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)]",
-        "backdrop-blur-xl",
-        "dark:border-slate-800/60 dark:bg-slate-950/45"
+        "group relative overflow-hidden rounded-2xl border bg-white/88 p-4",
+        "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
+        "dark:bg-slate-950/45",
+        t.border
       )}
     >
-      {/* subtle top accent */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-sky-400/40 via-emerald-400/30 to-amber-400/40 dark:from-sky-300/30 dark:via-emerald-300/25 dark:to-amber-300/30" />
-      <div className="pointer-events-none absolute -right-12 -top-14 h-28 w-28 rounded-full bg-sky-300/15 blur-2xl dark:bg-sky-500/10" />
-      <div className="pointer-events-none absolute -left-10 -bottom-14 h-28 w-28 rounded-full bg-amber-300/15 blur-2xl dark:bg-amber-500/10" />
+      {/* subtle top accent (per-card) */}
+      <div
+        className={cx(
+          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
+          t.top
+        )}
+      />
+
+      {/* GSC-style soft wash + glows */}
+      <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
+      <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
+      <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
 
       <div className="relative">
-        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300">
-          {title}
+        <div className="flex items-center justify-between gap-3">
+          {/* Title Case (no uppercase) */}
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+            {title}
+          </div>
+
+          <span
+            className={cx(
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium shadow-sm",
+              t.chip
+            )}
+          >
+            Live
+          </span>
         </div>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <div className="text-2xl font-semibold leading-none text-slate-900 dark:text-slate-50">
+
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="text-3xl font-semibold leading-none text-slate-900 dark:text-slate-50">
             {value}
           </div>
         </div>
+
         {caption ? (
           <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             {caption}
@@ -313,7 +392,10 @@ export default function MonitorPage() {
             <SoftButton href="/dashboard/monitor/rules" variant="secondary">
               Rules ({rulesCount})
             </SoftButton>
-            <SoftButton href="/dashboard/monitor/notifications" variant="secondary">
+            <SoftButton
+              href="/dashboard/monitor/notifications"
+              variant="secondary"
+            >
               Notifications ({unreadNotificationsCount})
             </SoftButton>
           </div>
@@ -324,21 +406,25 @@ export default function MonitorPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 title="Watches"
+                tone="blue"
                 value={loadingSummary ? "…" : watchesCount}
                 caption="Configured watches"
               />
               <StatCard
                 title="Events (24h)"
+                tone="purple"
                 value={loadingSummary ? "…" : eventsCount24h}
                 caption="Events in last 24 hours"
               />
               <StatCard
                 title="Avg frequency (days)"
+                tone="teal"
                 value={loadingSummary ? "…" : avgFrequencyDays}
                 caption="Average check frequency"
               />
               <StatCard
                 title="Failing watches"
+                tone="amber"
                 value={loadingSummary ? "…" : failingWatchesCount}
                 caption="Watches with errors/retries"
               />
