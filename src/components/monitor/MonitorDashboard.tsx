@@ -3,22 +3,22 @@
 import React, { useEffect, useState } from "react";
 
 /**
- * MonitorDashboard (updated)
+ * MonitorDashboard (frequency control simplified)
  *
- * - FrequencyControl simplified: users type a number in days.
- * - Preset quick-buttons available (1d / 7d / 14d / 30d) — no extra select/dropdown.
- * - All frequency values are explicitly in days (no ambiguity).
- * - Watch cards redesigned (compact) — hint text removed.
+ * - FrequencyControl now uses a preset dropdown (1d,7d,14d,30d) and a "Custom..." option.
+ *   If "Custom..." is selected, an inline numeric input appears to type days.
+ * - This removes the ambiguous always-visible custom numeric field while still allowing custom values.
+ * - WatchRow uses hooks safely (no hooks in loops).
  *
- * API expectations (unchanged):
+ * API expectations:
  * - GET /api/monitor/watches
  * - POST /api/monitor/watches
  * - PATCH /api/monitor/watches/:id
- * - POST /api/monitor/check
+ * - POST /api/monitor/check (body: { watchId })
  * - GET /api/monitor/events
  */
 
-/** FrequencyControl: number input (days) + small preset buttons */
+/** FrequencyControl: preset dropdown + optional custom days input */
 type FrequencyControlProps = {
   days: number;
   onChange: (days: number) => void;
@@ -28,52 +28,67 @@ type FrequencyControlProps = {
 
 function FrequencyControl({ days, onChange, ariaLabel, className }: FrequencyControlProps) {
   const presets = [1, 7, 14, 30];
-  const [value, setValue] = useState<number>(Math.max(1, Math.round(days || 14)));
+  // selectedPreset: number or 'custom'
+  const isPreset = presets.includes(Math.max(1, Math.round(days || 14)));
+  const [selected, setSelected] = useState<string>(isPreset ? String(Math.round(days || 14)) : "custom");
+  const [customValue, setCustomValue] = useState<number>(isPreset ? Math.round(days || 14) : Math.max(1, Math.round(days || 14)));
 
   useEffect(() => {
-    setValue(Math.max(1, Math.round(days || 14)));
+    const p = presets.includes(Math.max(1, Math.round(days || 14)));
+    setSelected(p ? String(Math.round(days || 14)) : "custom");
+    setCustomValue(Math.max(1, Math.round(days || 14)));
   }, [days]);
 
   return (
     <div className={className ?? "flex items-center gap-2"}>
-      <label className="sr-only">Frequency (days)</label>
-
-      <div className="flex items-center gap-2">
-        <input
-          aria-label={ariaLabel ?? "frequency-days"}
-          type="number"
-          min={1}
-          step={1}
-          value={value}
-          onChange={(e) => setValue(Number(e.target.value || 1))}
-          className="w-20 rounded border px-2 py-1 text-sm"
-          title="Number of days between checks (days)"
-        />
-        <span className="text-xs text-slate-500">days</span>
-      </div>
-
-      <div className="flex items-center gap-1">
+      <select
+        aria-label={ariaLabel ?? "frequency-presets"}
+        value={selected}
+        onChange={(e) => {
+          const v = e.target.value;
+          setSelected(v);
+          if (v === "custom") {
+            // keep customValue; do not call onChange until Save is pressed
+            return;
+          } else {
+            const n = Number(v);
+            setCustomValue(n);
+            onChange(n);
+          }
+        }}
+        className="rounded border px-2 py-1 text-sm"
+      >
         {presets.map((p) => (
-          <button
-            key={p}
-            onClick={() => {
-              setValue(p);
-              onChange(p);
-            }}
-            className="text-xs rounded border px-2 py-1 bg-white"
-            title={`Set to ${p} day${p > 1 ? "s" : ""}`}
-          >
+          <option key={p} value={String(p)}>
             {p}d
-          </button>
+          </option>
         ))}
-        <button
-          onClick={() => onChange(Math.max(1, Math.round(value)))}
-          className="ml-2 rounded bg-amber-500 text-white px-2 py-1 text-xs"
-          title="Apply frequency (days)"
-        >
-          Apply
-        </button>
-      </div>
+        <option value="custom">Custom…</option>
+      </select>
+
+      {selected === "custom" ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={customValue}
+            onChange={(e) => setCustomValue(Number(e.target.value))}
+            className="w-20 rounded border px-2 py-1 text-sm"
+            title="Custom days between checks"
+          />
+          <span className="text-xs text-slate-500">days</span>
+          <button
+            onClick={() => onChange(Math.max(1, Math.round(customValue)))}
+            className="ml-1 rounded border px-2 py-1 text-xs"
+            title="Apply custom frequency (days)"
+          >
+            Apply
+          </button>
+        </div>
+      ) : (
+        <div className="text-xs text-slate-500">days</div>
+      )}
     </div>
   );
 }
@@ -101,7 +116,7 @@ function StatusBadge({ status }: { status?: string | null }) {
   return <span className={`inline-flex items-center gap-2 rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{s.replace("_", " ")}</span>;
 }
 
-/** Child component for a single watch row */
+/** Child component for a single watch row (hooks allowed here) */
 function WatchRow({
   watch,
   onSaveFreq,
@@ -136,7 +151,7 @@ function WatchRow({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-4">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-3">
             <div className="text-xs text-slate-500">Frequency</div>
             <FrequencyControl
