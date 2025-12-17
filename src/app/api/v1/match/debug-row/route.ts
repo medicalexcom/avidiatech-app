@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
-import { debugRowTrace } from "../../../../../../lib/match/matcher";
+// Correct relative import path from this route to src/lib/match/matcher.ts
+import { debugRowTrace } from "../../../../../lib/match/matcher";
 
 export const runtime = "nodejs";
 
