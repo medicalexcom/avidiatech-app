@@ -1,11 +1,12 @@
-// SerpAPI helpers and lightweight page validation used by the matcher
+// SerpAPI helpers and enhanced page validation used by the matcher
 export type SearchResult = { url: string; title?: string; snippet?: string };
 
 const DEFAULT_TIMEOUT = Number(process.env.SEARCH_TIMEOUT_MS ?? 8000);
 
-function timeoutFetch(input: RequestInfo, init: RequestInit = {}, timeout = DEFAULT_TIMEOUT) {
+export function timeoutFetch(input: RequestInfo, init: RequestInit = {}, timeout = DEFAULT_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
+  // @ts-ignore - Node native fetch supports signal
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
@@ -21,7 +22,6 @@ export function hostnameFromUrl(url: string | null | undefined): string | null {
 
 /**
  * Query SerpAPI for results.
- * Returns array of { url, title, snippet }.
  */
 export async function serpApiSearch(q: string, apiKey?: string, num = 10, timeoutMs = DEFAULT_TIMEOUT): Promise<SearchResult[]> {
   if (!apiKey) return [];
@@ -30,79 +30,110 @@ export async function serpApiSearch(q: string, apiKey?: string, num = 10, timeou
     const res = await timeoutFetch(url, {}, timeoutMs);
     if (!res.ok) throw new Error(`SerpAPI error ${res.status}`);
     const json = await res.json();
-    const organic = json.orgic_results ?? json.organic_results ?? json.organic_results ?? [];
+    const organic = (json.organic_results ?? json.orgic_results ?? []) as any[];
     const results: SearchResult[] = (organic || []).map((r: any) => ({
-      url: r.link ?? r.url ?? r['displayed_link'] ?? undefined,
-      title: r.title ?? r.name ?? undefined,
-      snippet: r.snippet ?? r.snippet ?? undefined
-    })).filter(Boolean);
+      url: r.link ?? r.url ?? r['displayed_link'],
+      title: r.title ?? r.name,
+      snippet: r.snippet ?? r.snippet
+    })).filter((x) => !!x.url);
     return results;
-  } catch (err) {
-    console.warn("serpApiSearch error:", err?.message ?? err);
+  } catch (err: any) {
+    console.warn("serpApiSearch error:", String(err?.message ?? err));
     return [];
   }
 }
 
 /**
- * Lightweight page validation: fetch page body and check for presence of sku, ndc, name tokens.
- * Returns { ok, score, matchedTokens, snippet, domain }.
+ * Compute simple token overlap ratio between two strings (0..1)
+ */
+export function tokenOverlapScore(a?: string | null, b?: string | null): number {
+  if (!a || !b) return 0;
+  const ta = a.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(Boolean);
+  const tb = b.toLowerCase().replace(/[^\w\s]/g, " ").split(/\s+/).filter(Boolean);
+  if (!ta.length || !tb.length) return 0;
+  const setB = new Set(tb);
+  const matches = ta.reduce((acc, t) => acc + (setB.has(t) ? 1 : 0), 0);
+  return matches / Math.max(ta.length, tb.length);
+}
+
+/**
+ * Enhanced page validation:
+ * - Parses JSON-LD <script type="application/ld+json"> Product blocks
+ * - Checks <title>, first <h1>
+ * - Performs sku/ndc substring match and token overlap scoring
+ * - Returns score (0..1) and matched tokens/details
  */
 export async function validatePageBasic(url: string, checks: { sku?: string | null; ndc?: string | null; name?: string | null; supplierDomain?: string | null }, timeoutMs = DEFAULT_TIMEOUT) {
   try {
     const res = await timeoutFetch(url, { redirect: "follow" }, timeoutMs);
     if (!res.ok) return { ok: false, error: `status ${res.status}` };
-    const text = await res.text();
-    const body = text.toLowerCase();
+    const html = await res.text();
+    const lc = html.toLowerCase();
+
     let score = 0;
     const matchedTokens: string[] = [];
 
-    if (checks.sku) {
-      const sku = checks.sku.toLowerCase();
-      if (body.includes(sku)) {
-        score += 0.7;
-        matchedTokens.push(`sku:${checks.sku}`);
+    // 1) JSON-LD: find <script type="application/ld+json"> blocks and parse
+    try {
+      const ldRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+      const ldMatches = [...html.matchAll(ldRegex)];
+      for (const m of ldMatches) {
+        try {
+          const obj = JSON.parse(m[1]);
+          const items = Array.isArray(obj) ? obj : [obj];
+          for (const item of items) {
+            const t = (item["@type"] ?? item["@type"] || "").toString().toLowerCase();
+            if (t.includes("product") || item.name || item.sku) {
+              if (checks.sku && item.sku && item.sku.toString().toLowerCase().includes(checks.sku.toLowerCase())) {
+                score += 0.8;
+                matchedTokens.push("jsonld.sku");
+              }
+              if (checks.name && item.name) {
+                const ov = tokenOverlapScore(checks.name, item.name);
+                if (ov > 0) { score += Math.min(0.6, ov * 0.6); matchedTokens.push(`jsonld.name:${ov.toFixed(2)}`); }
+              }
+            }
+          }
+        } catch {
+          // ignore JSON parse errors
+        }
       }
+    } catch {
+      // ignore
     }
 
-    if (checks.ndc) {
-      const ndc = checks.ndc.toLowerCase();
-      if (body.includes(ndc)) {
-        score += 0.6;
-        matchedTokens.push(`ndc:${checks.ndc}`);
-      }
-    }
+    // 2) title and first h1
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1] : "";
+    const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+    const h1 = h1Match ? h1Match[1] : "";
 
-    if (checks.name) {
-      const name = checks.name.toLowerCase().replace(/[^\w\s]/g, " ");
-      const tokens = name.split(/\s+/).filter(Boolean);
-      if (tokens.length) {
-        const matches = tokens.reduce((acc, t) => acc + (body.includes(t) ? 1 : 0), 0);
-        const frac = matches / tokens.length;
-        score += Math.min(0.5, frac * 0.5);
-        if (matches > 0) matchedTokens.push(`name_tokens:${matches}/${tokens.length}`);
-      }
-    }
+    // SKU / NDC substring in body
+    if (checks.sku && lc.includes(checks.sku.toLowerCase())) { score += 0.6; matchedTokens.push("body.sku"); }
+    if (checks.ndc && lc.includes(checks.ndc.toLowerCase())) { score += 0.6; matchedTokens.push("body.ndc"); }
+
+    // token overlap with title/h1
+    const titleOv = tokenOverlapScore(checks.name, title);
+    if (titleOv > 0) { score += Math.min(0.5, titleOv * 0.6); matchedTokens.push(`title:${titleOv.toFixed(2)}`); }
+
+    const h1Ov = tokenOverlapScore(checks.name, h1);
+    if (h1Ov > 0) { score += Math.min(0.6, h1Ov * 0.6); matchedTokens.push(`h1:${h1Ov.toFixed(2)}`); }
 
     // supplier/domain bonus
     let domain: string | null = null;
     try {
       const u = new URL(url);
       domain = u.hostname.replace(/^www\./, "");
-      if (checks.supplierDomain && checks.supplierDomain.toLowerCase().includes(domain)) {
-        score += 0.1;
-        matchedTokens.push(`domain:${domain}`);
-      } else if (checks.supplierDomain && domain.includes(checks.supplierDomain.toLowerCase())) {
-        score += 0.08;
-        matchedTokens.push(`domain_partial:${domain}`);
+      if (checks.supplierDomain && domain.includes(checks.supplierDomain)) {
+        score += 0.12;
+        matchedTokens.push("domain.match");
       }
     } catch { /* ignore */ }
 
-    // clamp score
     if (score > 1) score = 1;
-
-    const snippet = (body.slice(0, 2000) || "").replace(/\s+/g, " ").slice(0, 2000);
+    const snippet = (lc.slice(0, 2000) || "").replace(/\s+/g, " ").slice(0, 2000);
     return { ok: true, score, matchedTokens, snippet, domain };
-  } catch (err) {
+  } catch (err: any) {
     return { ok: false, error: String(err?.message ?? err) };
   }
 }
