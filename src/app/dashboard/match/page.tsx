@@ -8,13 +8,18 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage (debug-enabled)
+ * MatchPage — debug + robust buttons
  *
- * - Adds debug state: lastCreateResponse, lastRowsResponse, lastFetchError
- * - Adds a "Refresh rows" manual button to fetch rows on demand
- * - Displays the raw server responses to help diagnose why ResultsTable may be empty
+ * Changes:
+ * - Keeps the previous debug panel and fallback table so rows are visible immediately.
+ * - Ensures Create / Start / Refresh buttons call their handlers and surface network results.
+ * - Adds explicit console.log lines for button clicks and more robust error state so you can
+ *   see any failures in the Debug panel.
  *
- * Keep this patch until we confirm rows render correctly, then remove debug panel.
+ * Replace the existing file with this version and redeploy. After deploy:
+ * - Upload a file, click "Create job from preview" or "Upload & Create".
+ * - Use "Refresh rows" to force a fetch of rows.
+ * - The Debug panel will show create response, last rows response and any fetch error.
  */
 
 type PreviewRow = {
@@ -30,43 +35,40 @@ type PreviewRow = {
 export default function MatchPage() {
   const featureEnabled = true;
 
-  // preview / upload state
+  // upload / preview
   const [filePreviewRows, setFilePreviewRows] = useState<PreviewRow[]>([]);
-  const [parsingError, setParsingError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [parsingError, setParsingError] = useState<string | null>(null);
 
-  // job state
+  // job / status
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<any | null>(null);
   const [creatingJob, setCreatingJob] = useState(false);
   const [startingJob, setStartingJob] = useState(false);
   const [polling, setPolling] = useState(false);
 
-  // results state / pagination / filters
+  // results
   const [resultsRows, setResultsRows] = useState<any[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsStatusFilter, setResultsStatusFilter] = useState<string | undefined>(undefined);
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
 
-  // debug state
+  // debug
   const [lastCreateResponse, setLastCreateResponse] = useState<any | null>(null);
   const [lastRowsResponse, setLastRowsResponse] = useState<any | null>(null);
   const [lastFetchError, setLastFetchError] = useState<string | null>(null);
 
-  // parse file (xlsx/csv); produce preview rows (first 200)
+  // parse file (xlsx/csv)
   const handleFile = useCallback(async (file: File | null) => {
     setParsingError(null);
     setFilePreviewRows([]);
     if (!file) return;
     setParsing(true);
-
     try {
       const mod = await import("xlsx");
       const XLSX = (mod && (mod as any).default) ? (mod as any).default : mod;
-      if (!XLSX || typeof XLSX.read !== "function") {
-        throw new Error("xlsx library does not expose read()");
-      }
+      if (!XLSX || typeof XLSX.read !== "function") throw new Error("xlsx library not available in browser");
 
       const name = (file.name || "").toLowerCase();
       let wb: any;
@@ -78,9 +80,7 @@ export default function MatchPage() {
         wb = XLSX.read(arrayBuffer, { type: "array", raw: false });
       }
 
-      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) {
-        throw new Error("Workbook empty or unreadable");
-      }
+      if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) throw new Error("Workbook empty or unreadable");
 
       const preferred = wb.SheetNames.find((s: string) => /searchexport/i.test(s)) ?? wb.SheetNames[0];
       const ws = wb.Sheets[preferred];
@@ -96,77 +96,80 @@ export default function MatchPage() {
         brand_name: String(r["Brand Name"] ?? r["Brand"] ?? r.brand ?? "").trim(),
         raw: r
       }));
-
+      console.log("Parsed preview rows:", mapped.length);
       setFilePreviewRows(mapped);
     } catch (err: any) {
       console.error("Failed to parse uploaded file:", err);
-      const msg = err?.message ?? String(err);
-      setParsingError(msg);
-      alert(`Failed to parse file: ${msg}\nSee console for details.`);
+      setParsingError(String(err?.message ?? err));
+      alert(`Failed to parse file: ${String(err?.message ?? err)} — see console`);
     } finally {
       setParsing(false);
     }
   }, []);
 
-  // create job from preview rows (no tenant_id sent — server resolves)
+  // create job
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
       alert("No preview rows to create job from.");
       return null;
     }
+
+    console.log("Create job clicked — rows:", payloadRows.length);
     setCreatingJob(true);
+    setLastCreateResponse(null);
     try {
       const body = { file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
       const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const j = await res.json().catch(() => null);
-      setLastCreateResponse(j ?? { status: res.status, statusText: res.statusText });
+      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
+      setLastCreateResponse(j);
+      console.log("Create job response:", j);
       if (!res.ok || !j?.ok) {
-        console.error("create job failed:", j);
         alert("Create job failed: " + (j?.error ?? res.statusText));
         return null;
       }
       setJobId(j.job_id);
+      // immediately fetch job header and rows for feedback
       await fetchJobStatus(j.job_id);
+      await fetchResultsRows(j.job_id, resultsStatusFilter, resultsLimit, resultsOffset);
       return j.job_id;
-    } catch (err) {
+    } catch (err: any) {
       console.error("createJob error:", err);
       setLastCreateResponse({ error: String(err) });
-      alert("Create job failed (see console).");
+      setLastFetchError(String(err?.message ?? err));
+      alert("Create job failed (see console)");
       return null;
     } finally {
       setCreatingJob(false);
     }
-  }, [filePreviewRows]);
+  }, [filePreviewRows, fetchResultsRows, fetchJobStatus, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // Start processing job (server-side worker)
+  // start job
   const startJob = useCallback(async (id?: string | null) => {
     const jid = id ?? jobId;
     if (!jid) return alert("No job selected to start.");
+    console.log("Start resolve clicked for job:", jid);
     setStartingJob(true);
+    setLastCreateResponse(null);
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jid)}/start`, { method: "POST" });
-      const j = await res.json().catch(() => null);
+      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
+      setLastCreateResponse(j);
+      console.log("Start response:", j);
       if (!res.ok || !j?.ok) {
-        console.error("start job failed", j);
         alert("Start job failed: " + (j?.error ?? res.statusText));
         return;
       }
       pollJobStatus(jid);
-    } catch (err) {
+    } catch (err: any) {
       console.error("startJob error:", err);
+      setLastFetchError(String(err?.message ?? err));
     } finally {
       setStartingJob(false);
     }
-  }, [jobId]);
+  }, [jobId, pollJobStatus]);
 
-  // combined action: create then start
-  const createAndStart = useCallback(async () => {
-    const jid = await createJob();
-    if (jid) await startJob(jid);
-  }, [createJob, startJob]);
-
-  // fetch job header/status
+  // fetch job status
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
@@ -175,7 +178,7 @@ export default function MatchPage() {
         setJobStatus(j.job ?? null);
         return j.job ?? null;
       }
-      setLastCreateResponse(j ?? { status: res.status, statusText: res.statusText });
+      console.warn("fetchJobStatus returned non-ok", j ?? res.status);
       return null;
     } catch (err) {
       console.warn("fetchJobStatus error", err);
@@ -183,7 +186,7 @@ export default function MatchPage() {
     }
   }, []);
 
-  // poll job status until final state
+  // poll job status
   const pollJobStatus = useCallback(async (id: string) => {
     if (!id) return;
     setPolling(true);
@@ -203,9 +206,9 @@ export default function MatchPage() {
     } finally {
       setPolling(false);
     }
-  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
+  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset, fetchResultsRows]);
 
-  // fetch rows from job (paged)
+  // fetch rows
   const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
     setResultsLoading(true);
     setLastFetchError(null);
@@ -214,9 +217,10 @@ export default function MatchPage() {
       if (status) url.searchParams.set("status", status);
       url.searchParams.set("limit", String(limit));
       url.searchParams.set("offset", String(offset));
+      console.log("Fetching rows from", url.toString());
       const res = await fetch(url.toString());
-      const j = await res.json().catch(() => null);
-      setLastRowsResponse(j ?? { status: res.status, statusText: res.statusText });
+      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
+      setLastRowsResponse(j);
       if (!res.ok || !j?.ok) {
         console.error("fetchResultsRows failed", j);
         setResultsRows([]);
@@ -224,6 +228,7 @@ export default function MatchPage() {
         return;
       }
       setResultsRows(j.rows ?? []);
+      console.log("Fetched rows:", (j.rows ?? []).length);
     } catch (err: any) {
       console.warn("fetchResultsRows error", err);
       setResultsRows([]);
@@ -233,7 +238,7 @@ export default function MatchPage() {
     }
   }, []);
 
-  // effect: when jobId changes, fetch rows once
+  // when jobId changes fetch rows once
   useEffect(() => {
     if (!jobId) {
       setResultsRows([]);
@@ -243,7 +248,7 @@ export default function MatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  // approve candidate (calls server approve endpoint)
+  // Approve candidate (calls server approve endpoint)
   const approveCandidate = useCallback(async (rowIdentifier: string, candidateUrl: string) => {
     if (!jobId) return alert("No job context");
     if (!confirm("Approve this candidate URL and mark row resolved?")) return;
@@ -264,13 +269,12 @@ export default function MatchPage() {
       console.error("approveCandidate error:", err);
       alert("Approve failed (see console)");
     }
-  }, [jobId, resultsLimit, resultsOffset, resultsStatusFilter]);
+  }, [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
-  // bulk approve selected (UI components supply selection)
+  // bulk approve
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
-
   const bulkApproveSelected = useCallback(async () => {
     if (!jobId) return alert("No job selected");
     const ids = Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]);
@@ -285,18 +289,18 @@ export default function MatchPage() {
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // props for child components (cast to any)
+  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
-  const resultsTableProps = useMemo(() => ({ rows: resultsRows, loading: resultsLoading, selectedRowIds, toggleRowSelection, onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset), approveCandidate }), [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, resultsLimit, resultsOffset, resultsStatusFilter, approveCandidate]);
+  const resultsTableProps = useMemo(() => ({ rows: resultsRows, loading: resultsLoading, selectedRowIds, toggleRowSelection, onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset), approveCandidate }), [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset, approveCandidate]);
   const bulkActionsProps = useMemo(() => ({ selectedCount: Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length, onBulkApprove: bulkApproveSelected, onClearSelection: clearSelection }), [selectedRowIds, bulkApproveSelected, clearSelection]);
 
-  // components cast to any safe renderer
   const UploadComp: any = UploadPastePanel as any;
   const FiltersComp: any = MatchFilters as any;
   const ResultsComp: any = ResultsTable as any;
   const BulkComp: any = BulkActions as any;
   const JobProgressComp: any = JobProgress as any;
 
+  // UI
   if (!featureEnabled) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
@@ -319,21 +323,22 @@ export default function MatchPage() {
           <div className="w-72">
             <div className="rounded-xl border p-3 bg-white">
               <div className="text-xs text-slate-500">Job</div>
-              <div className="mt-2 font-mono text-sm">{jobId ? `job:${jobId}` : "No job"}</div>
+              <div className="mt-2 font-mono text-sm break-all">{jobId ? `job:${jobId}` : "No job"}</div>
               <div className="mt-2 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
               <div className="mt-3 space-y-2">
-                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
+                <button onClick={() => { console.log("Upload & Create click"); createAndStart(); }} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
                   {creatingJob || startingJob ? "Working…" : "Upload & Create"}
                 </button>
-                <button onClick={() => createJob()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+
+                <button onClick={() => { console.log("Create from preview click"); void createJob(); }} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {creatingJob ? "Creating…" : "Create job from preview"}
                 </button>
-                <button onClick={() => startJob(jobId)} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+
+                <button onClick={() => { console.log("Start resolve click"); void startJob(jobId); }} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {startingJob || polling ? "Starting…" : "Start resolve"}
                 </button>
 
-                {/* Manual refresh rows */}
-                <button onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
+                <button onClick={() => { console.log("Refresh rows click"); jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset); }} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
                   Refresh rows
                 </button>
               </div>
@@ -341,7 +346,7 @@ export default function MatchPage() {
           </div>
         </header>
 
-        {/* Main Grid */}
+        {/* Main grid */}
         <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)]">
           <div className="space-y-4">
             {/* Upload panel */}
@@ -367,7 +372,7 @@ export default function MatchPage() {
               </div>
             </div>
 
-            {/* Filters + Bulk actions */}
+            {/* Filters + bulk */}
             <div className="rounded-2xl border bg-white p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -375,13 +380,14 @@ export default function MatchPage() {
                   <p className="text-xs text-slate-500">Filter by status and apply bulk actions.</p>
                 </div>
               </div>
+
               <div className="mt-3 flex gap-4">
                 <FiltersComp onChangeStatus={(s: string) => { setResultsStatusFilter(s || undefined); if (jobId) fetchResultsRows(jobId, s || undefined, resultsLimit, 0); }} />
                 <BulkComp {...bulkActionsProps} />
               </div>
             </div>
 
-            {/* Results table */}
+            {/* Results */}
             <div className="rounded-2xl border bg-white p-3">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-semibold">3 · Review results</h2>
@@ -390,20 +396,53 @@ export default function MatchPage() {
 
               <div className="mt-2">
                 <ResultsComp {...resultsTableProps} />
+
+                {/* Fallback simple table */}
+                {resultsRows && resultsRows.length > 0 ? (
+                  <div className="mt-4 rounded-md border bg-white p-3">
+                    <h4 className="text-sm font-semibold mb-2">Fallback: Raw rows (simple view)</h4>
+                    <div className="overflow-auto">
+                      <table className="w-full table-auto text-sm">
+                        <thead>
+                          <tr className="text-left">
+                            <th className="px-2 py-1">Row ID</th>
+                            <th className="px-2 py-1">SKU</th>
+                            <th className="px-2 py-1">Product Name</th>
+                            <th className="px-2 py-1">Supplier</th>
+                            <th className="px-2 py-1">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultsRows.map((r: any) => (
+                            <tr key={r.id} className="border-t">
+                              <td className="px-2 py-1">{r.row_id ?? r.id}</td>
+                              <td className="px-2 py-1">{r.sku}</td>
+                              <td className="px-2 py-1">{r.product_name}</td>
+                              <td className="px-2 py-1">{r.supplier_name}</td>
+                              <td className="px-2 py-1">{r.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 mt-3">No rows to display yet.</div>
+                )}
               </div>
             </div>
 
-            {/* Debug panel (show raw server responses) */}
+            {/* Debug */}
             <div className="rounded-2xl border bg-white p-3">
               <h3 className="text-sm font-semibold">Debug</h3>
               <div className="mt-2 text-xs">
                 <div className="mb-2">
                   <strong>Last create response:</strong>
-                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{lastCreateResponse ? JSON.stringify(lastCreateResponse, null, 2) : "none"}</pre>
+                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{lastCreateResponse ? JSON.stringify(lastCreateResponse, null, 2) : "none"}</pre>
                 </div>
                 <div className="mb-2">
                   <strong>Last rows response:</strong>
-                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{lastRowsResponse ? JSON.stringify(lastRowsResponse, null, 2) : "none"}</pre>
+                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{lastRowsResponse ? JSON.stringify(lastRowsResponse, null, 2) : "none"}</pre>
                 </div>
                 <div className="mb-2">
                   <strong>Last fetch error:</strong>
@@ -411,13 +450,13 @@ export default function MatchPage() {
                 </div>
                 <div>
                   <strong>Preview sample:</strong>
-                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{filePreviewRows.length ? JSON.stringify(filePreviewRows.slice(0,5), null, 2) : "none"}</pre>
+                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{filePreviewRows.length ? JSON.stringify(filePreviewRows.slice(0,5), null, 2) : "none"}</pre>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right column: job progress & tips */}
+          {/* Right column */}
           <aside className="space-y-4">
             <div className="rounded-2xl border bg-white p-4">
               <h3 className="text-sm font-semibold">Match queue</h3>
