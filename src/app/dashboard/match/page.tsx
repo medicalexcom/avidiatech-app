@@ -1,4 +1,3 @@
-url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/dashboard/match/page.tsx
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
