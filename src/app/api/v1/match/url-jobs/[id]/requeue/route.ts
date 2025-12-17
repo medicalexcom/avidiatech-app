@@ -20,23 +20,23 @@ export async function POST(req: Request, context: any) {
     const jobId = params?.id;
     if (!jobId) return NextResponse.json({ ok: false, error: "jobId required" }, { status: 400 });
 
-    // Requeue rows that are unresolved or failed (you may adjust statuses)
-    const { error, count } = await supabaseAdmin
+    const now = new Date().toISOString();
+
+    // Update rows' status back to queued for unresolved/failed rows, return the updated rows
+    const { data, error } = await supabaseAdmin
       .from("match_url_job_rows")
-      .update({ status: "queued", updated_at: new Date().toISOString() })
+      .update({ status: "queued", updated_at: now })
       .in("status", ["unresolved", "failed"])
       .eq("job_id", jobId)
-      .select("*", { count: "exact" });
+      .select(); // select updated rows (no extra options to avoid TS signature issues)
 
     if (error) {
       console.error("requeue update error:", error);
       return NextResponse.json({ ok: false, error: error.message ?? String(error) }, { status: 500 });
     }
 
-    // Note: some Supabase versions return count differently; we'll return a success with the updated rows count if available.
-    // If count not available, return ok:true and let the client poll rows.
-    const updatedCount = Array.isArray(count) ? count.length : null;
-    return NextResponse.json({ ok: true, requeued: updatedCount ?? null }, { status: 200 });
+    const requeuedCount = Array.isArray(data) ? data.length : 0;
+    return NextResponse.json({ ok: true, requeued: requeuedCount }, { status: 200 });
   } catch (err: any) {
     console.error("requeue route error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
