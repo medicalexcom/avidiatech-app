@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UploadPastePanel from "./_components/UploadPastePanel";
 import JobProgress from "./_components/JobProgress";
 import MatchFilters from "./_components/MatchFilters";
@@ -9,15 +9,7 @@ import BulkActions from "./_components/BulkActions";
 
 /**
  * MatchPage — premium layout + efficient real estate + no horizontal overflow
- *
- * Goals:
- * - Premium SaaS look (blobs, grid wash, glass cards)
- * - Uses space efficiently (no big blank areas)
- * - Mobile-first: everything stays within viewport (no horizontal clipping)
- * - Job actions are sticky on desktop, collapsible-ish on small screens
- * - Tables live in overflow-x containers only (so the page never overflows)
- *
- * Note: keeps all existing behavior and endpoints.
+ * + Shows selected upload file name + detected sheet name before proceeding.
  */
 
 type PreviewRow = {
@@ -41,6 +33,19 @@ function escapeCsv(value: any) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let b = bytes;
+  let i = 0;
+  while (b >= 1024 && i < units.length - 1) {
+    b /= 1024;
+    i += 1;
+  }
+  const val = i === 0 ? Math.round(b) : Math.round(b * 10) / 10;
+  return `${val} ${units[i]}`;
 }
 
 function TinyChip({
@@ -91,8 +96,12 @@ function StatPill({
 
   return (
     <div className={cx("rounded-2xl border px-3 py-2 shadow-sm backdrop-blur", tones)}>
-      <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">{value}</div>
+      <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+        {label}
+      </div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
+        {value}
+      </div>
     </div>
   );
 }
@@ -165,6 +174,12 @@ export default function MatchPage() {
   const [parsing, setParsing] = useState(false);
   const [parsingError, setParsingError] = useState<string | null>(null);
 
+  // selected file + detected sheet
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [selectedFileMeta, setSelectedFileMeta] = useState<{ size?: number; type?: string } | null>(null);
+  const [detectedSheetName, setDetectedSheetName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // job / status
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<any | null>(null);
@@ -179,11 +194,25 @@ export default function MatchPage() {
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
 
+  const clearSelectedFile = useCallback(() => {
+    setSelectedFileName(null);
+    setSelectedFileMeta(null);
+    setDetectedSheetName(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
   // parse file (xlsx/csv)
   const handleFile = useCallback(async (file: File | null) => {
     setParsingError(null);
     setFilePreviewRows([]);
+    setDetectedSheetName(null);
+
     if (!file) return;
+
+    // show immediately
+    setSelectedFileName(file.name || "Selected file");
+    setSelectedFileMeta({ size: file.size, type: file.type });
+
     setParsing(true);
     try {
       const mod = await import("xlsx");
@@ -202,7 +231,11 @@ export default function MatchPage() {
 
       if (!wb || !wb.SheetNames || wb.SheetNames.length === 0) throw new Error("Workbook empty or unreadable");
 
-      const preferred = wb.SheetNames.find((s: string) => /searchexport/i.test(s)) ?? wb.SheetNames[0];
+      const preferred =
+        wb.SheetNames.find((s: string) => /searchexport/i.test(s)) ?? wb.SheetNames[0];
+
+      setDetectedSheetName(preferred || null);
+
       const ws = wb.Sheets[preferred];
       if (!ws) throw new Error(`Sheet not found: ${preferred}`);
 
@@ -306,7 +339,10 @@ export default function MatchPage() {
 
       setCreatingJob(true);
       try {
-        const body = { file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
+        const body = {
+          file_name: selectedFileName || `upload-${Date.now()}`,
+          rows: payloadRows.map((r) => ({ ...r, raw: r.raw })),
+        };
         const res = await fetch("/api/v1/match/url-jobs", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -329,7 +365,7 @@ export default function MatchPage() {
         setCreatingJob(false);
       }
     },
-    [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]
+    [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter, selectedFileName]
   );
 
   // start job
@@ -355,13 +391,11 @@ export default function MatchPage() {
     [jobId, pollJobStatus]
   );
 
-  // combined action: create then start
   const createAndStart = useCallback(async () => {
     const jid = await createJob();
     if (jid) await startJob(jid);
   }, [createJob, startJob]);
 
-  // retry unresolved
   const retryUnresolved = useCallback(async () => {
     if (!jobId) return alert("No job selected");
     try {
@@ -379,7 +413,6 @@ export default function MatchPage() {
     }
   }, [jobId, startJob, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // when jobId changes fetch rows once
   useEffect(() => {
     if (!jobId) {
       setResultsRows([]);
@@ -389,7 +422,6 @@ export default function MatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  // Approve candidate (calls server approve endpoint)
   const approveCandidate = useCallback(
     async (rowIdentifier: string, candidateUrl: string) => {
       if (!jobId) return alert("No job context");
@@ -418,7 +450,6 @@ export default function MatchPage() {
     [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]
   );
 
-  // bulk approve
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
@@ -434,9 +465,8 @@ export default function MatchPage() {
     }
     clearSelection();
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
-  }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter, clearSelection, fetchResultsRows]);
+  }, [selectedRowIds, resultsRows, jobId, approveCandidate, clearSelection, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
 
-  // CSV export
   const exportResultsCsv = useCallback(() => {
     if (!resultsRows || resultsRows.length === 0) return alert("No results to export");
     const baseCols = ["row_id", "supplier_name", "sku", "ndc_item_code", "product_name", "brand_name"];
@@ -464,9 +494,7 @@ export default function MatchPage() {
 
       let cand = "";
       if (Array.isArray(r.candidates) && r.candidates.length) {
-        cand = r.candidates
-          .map((c: any) => (typeof c === "string" ? c : c.url ?? JSON.stringify(c)))
-          .join(" | ");
+        cand = r.candidates.map((c: any) => (typeof c === "string" ? c : c.url ?? JSON.stringify(c))).join(" | ");
       }
       rowValues.push(r.status ?? "", r.resolved_url ?? "", r.resolved_domain ?? "", r.confidence ?? "", cand);
       lines.push(rowValues.map(escapeCsv).join(","));
@@ -484,7 +512,6 @@ export default function MatchPage() {
     URL.revokeObjectURL(url);
   }, [resultsRows, jobId]);
 
-  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
   const resultsTableProps = useMemo(
     () => ({
@@ -507,14 +534,10 @@ export default function MatchPage() {
   );
 
   const UploadComp: any = UploadPastePanel as any;
-  const FiltersComp: any = MatchFilters as any;
   const ResultsComp: any = ResultsTable as any;
-  const BulkComp: any = BulkActions as any;
   const JobProgressComp: any = JobProgress as any;
 
-  // derived quick stats
   const previewCount = filePreviewRows.length;
-  const selectedCount = Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length;
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -525,7 +548,6 @@ export default function MatchPage() {
   const resolvedCount = (statusCounts["resolved"] ?? 0) + (statusCounts["succeeded"] ?? 0);
   const unresolvedCount = (statusCounts["unresolved"] ?? 0) + (statusCounts["failed"] ?? 0);
 
-  // UI
   if (!featureEnabled) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
@@ -543,12 +565,11 @@ export default function MatchPage() {
 
   return (
     <main className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Background (clipped so nothing can cause horizontal overflow) */}
+      {/* background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-52 -left-44 h-[30rem] w-[30rem] rounded-full bg-fuchsia-300/16 blur-3xl dark:bg-fuchsia-500/12" />
         <div className="absolute -bottom-52 right-[-14rem] h-[34rem] w-[34rem] rounded-full bg-sky-300/18 blur-3xl dark:bg-sky-500/12" />
         <div className="absolute top-28 right-10 h-64 w-64 rounded-full bg-emerald-300/10 blur-3xl dark:bg-emerald-500/10" />
-
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.05] dark:opacity-[0.07]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
@@ -556,7 +577,7 @@ export default function MatchPage() {
       </div>
 
       <div className="relative mx-auto w-full max-w-7xl space-y-6 px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6">
-        {/* Header */}
+        {/* header */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -583,12 +604,11 @@ export default function MatchPage() {
               </p>
             </div>
 
-            {/* quick stats row */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatPill label="Selected file" value={selectedFileName ? selectedFileName : "—"} tone="signal" />
               <StatPill label="Preview rows" value={parsing ? "Parsing…" : previewCount} tone="signal" />
               <StatPill label="Resolved" value={jobId ? resolvedCount : "—"} tone="success" />
               <StatPill label="Unresolved" value={jobId ? unresolvedCount : "—"} tone={jobId && unresolvedCount > 0 ? "danger" : "neutral"} />
-              <StatPill label="Selected" value={selectedCount} tone={selectedCount ? "signal" : "neutral"} />
             </div>
           </div>
 
@@ -605,11 +625,9 @@ export default function MatchPage() {
           </div>
         </header>
 
-        {/* Main layout */}
         <section className="grid gap-6 lg:grid-cols-12">
-          {/* Left column */}
+          {/* left */}
           <div className="lg:col-span-8 space-y-4 min-w-0">
-            {/* Upload */}
             <div
               id="match-upload"
               className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45"
@@ -617,9 +635,7 @@ export default function MatchPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                      Upload or paste rows
-                    </h2>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Upload or paste rows</h2>
                     <TinyChip>Step 1</TinyChip>
                   </div>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -633,9 +649,10 @@ export default function MatchPage() {
                     onClick={() => {
                       setFilePreviewRows([]);
                       setParsingError(null);
+                      clearSelectedFile();
                     }}
                     disabled={parsing}
-                    title="Clear preview"
+                    title="Clear preview + selected file"
                   >
                     Clear
                   </SoftButton>
@@ -650,10 +667,14 @@ export default function MatchPage() {
                     title="Upload XLSX/CSV"
                   >
                     <input
+                      ref={fileInputRef}
                       id="match-upload-file"
                       type="file"
                       accept=".xlsx,.xls,.csv"
-                      onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        void handleFile(f);
+                      }}
                       className="hidden"
                     />
                     Choose file
@@ -662,7 +683,68 @@ export default function MatchPage() {
               </div>
 
               <div className="mt-4 space-y-3">
-                <UploadComp {...uploadProps} />
+                {/* Selected file row + detected sheet */}
+                <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        Selected file
+                      </div>
+
+                      {selectedFileName ? (
+                        <div className="mt-1 min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            {selectedFileName}
+                          </div>
+
+                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                            <span className="truncate">
+                              {selectedFileMeta?.size ? formatBytes(selectedFileMeta.size) : "—"}
+                              {selectedFileMeta?.type ? ` · ${selectedFileMeta.type}` : ""}
+                            </span>
+
+                            {detectedSheetName ? (
+                              <>
+                                <span className="opacity-60">•</span>
+                                <span className="truncate">
+                                  Sheet: <span className="font-medium">{detectedSheetName}</span>
+                                </span>
+                              </>
+                            ) : null}
+
+                            {parsing ? (
+                              <>
+                                <span className="opacity-60">•</span>
+                                <span>parsing…</span>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                          No file selected yet.
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedFileName ? (
+                      <button
+                        onClick={clearSelectedFile}
+                        className={cx(
+                          "shrink-0 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap",
+                          "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+                          "hover:bg-white hover:text-slate-900",
+                          "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
+                        )}
+                        title="Remove selected file"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <UploadComp onFile={handleFile} />
 
                 {parsingError ? (
                   <div className="rounded-xl border border-red-200/70 bg-red-50/80 p-3 text-xs text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100">
@@ -674,7 +756,6 @@ export default function MatchPage() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs text-slate-600 dark:text-slate-300">
                     Preview rows: <span className="font-semibold">{previewCount}</span>
-                    {parsing ? <span className="ml-2 text-slate-500">· parsing…</span> : null}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -700,43 +781,42 @@ export default function MatchPage() {
               </div>
             </div>
 
-            {/* Filters + Bulk */}
+            {/* Filters + bulk */}
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                      Filter and approve
-                    </h2>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Filter and approve</h2>
                     <TinyChip>Step 2</TinyChip>
                   </div>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Narrow by status, select rows, then bulk approve top candidates.
                   </p>
                 </div>
+              </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                  <div className="min-w-0">
-                    <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          Status
-                        </span>
-                        <FiltersComp
-                          onChangeStatus={(s: string) => {
-                            const val = s || undefined;
-                            setResultsStatusFilter(val);
-                            if (jobId) fetchResultsRows(jobId, val, resultsLimit, 0);
-                          }}
-                        />
-                      </div>
+              <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        Status
+                      </span>
+
+                      <MatchFilters
+                        onChangeStatus={(s: string) => {
+                          const val = s || undefined;
+                          setResultsStatusFilter(val);
+                          if (jobId) fetchResultsRows(jobId, val, resultsLimit, 0);
+                        }}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  <div className="min-w-0">
-                    <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                      <BulkComp {...bulkActionsProps} />
-                    </div>
+                <div className="min-w-0">
+                  <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                    <BulkActions {...bulkActionsProps} />
                   </div>
                 </div>
               </div>
@@ -750,15 +830,10 @@ export default function MatchPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                      Review results
-                    </h2>
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Review results</h2>
                     <TinyChip>Step 3</TinyChip>
                     {resultsLoading ? <TinyChip tone="signal">Loading…</TinyChip> : null}
                   </div>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Approve candidates and export resolved URLs back to your sheet.
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -766,33 +841,19 @@ export default function MatchPage() {
                     variant="secondary"
                     onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
                     disabled={!jobId}
-                    title="Refresh rows"
                   >
                     Refresh
                   </SoftButton>
-
-                  <SoftButton
-                    variant="secondary"
-                    onClick={() => void retryUnresolved()}
-                    disabled={!jobId}
-                    title="Requeue unresolved/failed rows"
-                  >
+                  <SoftButton variant="secondary" onClick={() => void retryUnresolved()} disabled={!jobId}>
                     Retry unresolved
                   </SoftButton>
-
-                  <SoftButton
-                    variant="secondary"
-                    onClick={() => exportResultsCsv()}
-                    disabled={!resultsRows || resultsRows.length === 0}
-                    title="Download CSV with resolved_url and candidates"
-                  >
+                  <SoftButton variant="secondary" onClick={() => exportResultsCsv()} disabled={!resultsRows || resultsRows.length === 0}>
                     Download CSV
                   </SoftButton>
                 </div>
               </div>
 
               <div className="mt-4 space-y-4 min-w-0">
-                {/* ResultsTable (wrap in overflow container to prevent horizontal overflow) */}
                 <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
                   <div className="w-full overflow-x-auto">
                     <div className="min-w-[720px]">
@@ -800,216 +861,32 @@ export default function MatchPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Fallback table */}
-                {resultsRows && resultsRows.length > 0 ? (
-                  <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                        Fallback: Raw rows
-                      </h3>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        Simple view (always available)
-                      </div>
-                    </div>
-
-                    <div className="mt-3 w-full overflow-x-auto">
-                      <table className="min-w-[920px] w-full table-auto text-sm">
-                        <thead>
-                          <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
-                            <th className="px-2 py-2 font-medium">Row</th>
-                            <th className="px-2 py-2 font-medium">SKU</th>
-                            <th className="px-2 py-2 font-medium">Product</th>
-                            <th className="px-2 py-2 font-medium">Supplier</th>
-                            <th className="px-2 py-2 font-medium">Status</th>
-                            <th className="px-2 py-2 font-medium">Resolved URL</th>
-                            <th className="px-2 py-2 font-medium">Confidence</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {resultsRows.map((r: any) => (
-                            <tr key={r.id} className="border-t border-slate-200/70 dark:border-slate-800/60 align-top">
-                              <td className="px-2 py-2">{r.row_id ?? r.id}</td>
-                              <td className="px-2 py-2">{r.sku}</td>
-                              <td className="px-2 py-2 max-w-[340px]">
-                                <div className="truncate">{r.product_name}</div>
-                              </td>
-                              <td className="px-2 py-2">{r.supplier_name}</td>
-                              <td className="px-2 py-2">{r.status}</td>
-                              <td className="px-2 py-2 max-w-[460px]">
-                                {r.resolved_url ? (
-                                  <a
-                                    href={r.resolved_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-sky-700 underline underline-offset-2 dark:text-sky-200"
-                                  >
-                                    {r.resolved_url}
-                                  </a>
-                                ) : Array.isArray(r.candidates) && r.candidates.length ? (
-                                  <div className="text-xs space-y-1">
-                                    {r.candidates.slice(0, 3).map((c: any, idx: number) => {
-                                      const url = c?.url ?? (typeof c === "string" ? c : "");
-                                      return url ? (
-                                        <div key={idx} className="truncate">
-                                          <a
-                                            href={url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-sky-700 underline underline-offset-2 dark:text-sky-200"
-                                          >
-                                            {url}
-                                          </a>
-                                        </div>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">—</span>
-                                )}
-                              </td>
-                              <td className="px-2 py-2">{r.confidence ?? ""}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-500 dark:text-slate-400">No rows to display yet.</div>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Right column (sticky on desktop, full-width on mobile) */}
+          {/* right */}
           <aside className="lg:col-span-4 space-y-4 min-w-0">
-            {/* Sticky job card */}
-            <div className="lg:sticky lg:top-6 space-y-4">
-              <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-hidden">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                        Job console
-                      </h3>
-                      <TinyChip tone={polling ? "signal" : "neutral"}>{polling ? "Polling" : "Idle"}</TinyChip>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Create, run, refresh, export.
-                    </div>
-                  </div>
-
-                  <TinyChip tone={jobId ? "success" : "neutral"}>{jobStatusText}</TinyChip>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-3">
-                  <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                    <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Job</div>
-                    <div className="mt-1 flex items-center gap-2 min-w-0">
-                      <div className="font-mono text-xs text-slate-900 dark:text-slate-50 truncate">
-                        {jobId ? `job:${jobId}` : "No job"}
-                      </div>
-                      {jobId ? (
-                        <button
-                          onClick={() => {
-                            navigator.clipboard?.writeText(String(jobId));
-                            alert("Job id copied");
-                          }}
-                          className="shrink-0 rounded-full border border-slate-200/80 bg-white/70 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-white hover:text-slate-900 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50"
-                          title="Copy job id"
-                        >
-                          Copy
-                        </button>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-2 text-center text-xs shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Limit</div>
-                        <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{resultsLimit}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-2 text-center text-xs shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Offset</div>
-                        <div className="mt-1 font-semibold text-slate-900 dark:text-slate-50">{resultsOffset}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <SoftButton
-                      variant="primary"
-                      onClick={() => void startJob(jobId)}
-                      disabled={!jobId || startingJob || polling}
-                      title="Start resolver"
-                      className="w-full"
-                    >
-                      {startingJob || polling ? "Starting…" : "Start resolve"}
-                    </SoftButton>
-
-                    <SoftButton
-                      variant="secondary"
-                      onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
-                      disabled={!jobId}
-                      className="w-full"
-                      title="Refresh rows"
-                    >
-                      Refresh rows
-                    </SoftButton>
-
-                    <SoftButton
-                      variant="secondary"
-                      onClick={() => void retryUnresolved()}
-                      disabled={!jobId}
-                      className="w-full"
-                      title="Retry unresolved/failed"
-                    >
-                      Retry unresolved
-                    </SoftButton>
-
-                    <SoftButton
-                      variant="secondary"
-                      onClick={() => exportResultsCsv()}
-                      disabled={!resultsRows || resultsRows.length === 0}
-                      className="w-full"
-                      title="Download CSV"
-                    >
-                      Download CSV
-                    </SoftButton>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                    <JobProgressComp
-                      jobId={jobId}
-                      jobStatus={jobStatus}
-                      startJob={() => startJob(jobId)}
-                      refresh={() => jobId && fetchJobStatus(jobId)}
-                      polling={polling}
-                    />
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45 overflow-hidden">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Job console</h3>
+                    <TinyChip tone={polling ? "signal" : "neutral"}>{polling ? "Polling" : "Idle"}</TinyChip>
                   </div>
                 </div>
+
+                <TinyChip tone={jobId ? "success" : "neutral"}>{jobStatus?.status ? String(jobStatus.status) : "—"}</TinyChip>
               </div>
 
-              {/* compact tips */}
-              <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 text-xs shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/35">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-slate-900 dark:text-slate-50">Accuracy tips</div>
-                  <TinyChip tone="signal">Quality</TinyChip>
-                </div>
-                <ul className="mt-3 space-y-2 text-slate-600 dark:text-slate-300">
-                  <li className="flex gap-2">
-                    <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-fuchsia-400" />
-                    <span>Include SKU/MPN and a clean Product Name.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-sky-400" />
-                    <span>One row per variant improves URL matching.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-                    <span>Approve edge cases, then export and continue the pipeline.</span>
-                  </li>
-                </ul>
+              <div className="mt-3 rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                <JobProgressComp
+                  jobId={jobId}
+                  jobStatus={jobStatus}
+                  startJob={() => startJob(jobId)}
+                  refresh={() => jobId && fetchJobStatus(jobId)}
+                  polling={polling}
+                />
               </div>
             </div>
           </aside>
