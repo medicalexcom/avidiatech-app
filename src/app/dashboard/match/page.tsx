@@ -95,7 +95,7 @@ function StatPill({
       : "border-slate-200/70 bg-white/75 text-slate-700 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-200";
 
   return (
-    <div className={cx("rounded-2xl border px-3 py-2 shadow-sm backdrop-blur", tones)}>
+    <div className={cx("rounded-2xl border px-3 py-2 shadow-sm backdrop-blur min-w-0", tones)}>
       <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
         {label}
       </div>
@@ -276,120 +276,101 @@ export default function MatchPage() {
   }, []);
 
   // fetch rows
-  const fetchResultsRows = useCallback(
-    async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
-      setResultsLoading(true);
-      try {
-        const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
-        if (status) url.searchParams.set("status", status);
-        url.searchParams.set("limit", String(limit));
-        url.searchParams.set("offset", String(offset));
-        const res = await fetch(url.toString());
-        const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) {
-          setResultsRows([]);
-          return [];
-        }
-        setResultsRows(j.rows ?? []);
-        return j.rows ?? [];
-      } catch (err) {
-        console.warn("fetchResultsRows error", err);
+  const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
+    setResultsLoading(true);
+    try {
+      const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
+      if (status) url.searchParams.set("status", status);
+      url.searchParams.set("limit", String(limit));
+      url.searchParams.set("offset", String(offset));
+      const res = await fetch(url.toString());
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
         setResultsRows([]);
         return [];
-      } finally {
-        setResultsLoading(false);
       }
-    },
-    []
-  );
+      setResultsRows(j.rows ?? []);
+      return j.rows ?? [];
+    } catch (err) {
+      console.warn("fetchResultsRows error", err);
+      setResultsRows([]);
+      return [];
+    } finally {
+      setResultsLoading(false);
+    }
+  }, []);
 
   // poll job status
-  const pollJobStatus = useCallback(
-    async (id: string) => {
-      if (!id) return;
-      setPolling(true);
-      try {
-        const intervalMs = 2500;
-        while (true) {
+  const pollJobStatus = useCallback(async (id: string) => {
+    if (!id) return;
+    setPolling(true);
+    try {
+      const intervalMs = 2500;
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const job = await fetchJobStatus(id);
+        if (job && ["running", "partial", "succeeded"].includes(job.status)) {
           // eslint-disable-next-line no-await-in-loop
-          const job = await fetchJobStatus(id);
-          if (job && ["running", "partial", "succeeded"].includes(job.status)) {
-            // eslint-disable-next-line no-await-in-loop
-            await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
-          }
-          if (!job || ["succeeded", "failed", "partial", "canceled"].includes(job?.status)) break;
-          // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, intervalMs));
+          await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
         }
-      } finally {
-        setPolling(false);
+        if (!job || ["succeeded", "failed", "partial", "canceled"].includes(job?.status)) break;
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, intervalMs));
       }
-    },
-    [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]
-  );
+    } finally {
+      setPolling(false);
+    }
+  }, [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
 
   // create job
-  const createJob = useCallback(
-    async (rows?: PreviewRow[]) => {
-      const payloadRows = (rows ?? filePreviewRows) || [];
-      if (!payloadRows.length) {
-        alert("No preview rows to create job from.");
-        return null;
-      }
+  const createJob = useCallback(async (rows?: PreviewRow[]) => {
+    const payloadRows = (rows ?? filePreviewRows) || [];
+    if (!payloadRows.length) {
+      alert("No preview rows to create job from.");
+      return null;
+    }
 
-      setCreatingJob(true);
-      try {
-        const body = {
-          file_name: selectedFileName || `upload-${Date.now()}`,
-          rows: payloadRows.map((r) => ({ ...r, raw: r.raw })),
-        };
-        const res = await fetch("/api/v1/match/url-jobs", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) {
-          alert("Create job failed: " + (j?.error ?? res.statusText));
-          return null;
-        }
-        setJobId(j.job_id);
-        await fetchJobStatus(j.job_id);
-        await fetchResultsRows(j.job_id, resultsStatusFilter, resultsLimit, resultsOffset);
-        return j.job_id;
-      } catch (err: any) {
-        console.error("createJob error:", err);
-        alert("Create job failed (see console)");
+    setCreatingJob(true);
+    try {
+      const body = { file_name: selectedFileName || `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
+      const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        alert("Create job failed: " + (j?.error ?? res.statusText));
         return null;
-      } finally {
-        setCreatingJob(false);
       }
-    },
-    [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter, selectedFileName]
-  );
+      setJobId(j.job_id);
+      await fetchJobStatus(j.job_id);
+      await fetchResultsRows(j.job_id, resultsStatusFilter, resultsLimit, resultsOffset);
+      return j.job_id;
+    } catch (err: any) {
+      console.error("createJob error:", err);
+      alert("Create job failed (see console)");
+      return null;
+    } finally {
+      setCreatingJob(false);
+    }
+  }, [filePreviewRows, selectedFileName, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
   // start job
-  const startJob = useCallback(
-    async (id?: string | null) => {
-      const jid = id ?? jobId;
-      if (!jid) return alert("No job selected to start.");
-      setStartingJob(true);
-      try {
-        const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jid)}/start`, { method: "POST" });
-        const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) {
-          alert("Start job failed: " + (j?.error ?? res.statusText));
-          return;
-        }
-        pollJobStatus(jid);
-      } catch (err: any) {
-        console.error("startJob error:", err);
-      } finally {
-        setStartingJob(false);
+  const startJob = useCallback(async (id?: string | null) => {
+    const jid = id ?? jobId;
+    if (!jid) return alert("No job selected to start.");
+    setStartingJob(true);
+    try {
+      const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jid)}/start`, { method: "POST" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        alert("Start job failed: " + (j?.error ?? res.statusText));
+        return;
       }
-    },
-    [jobId, pollJobStatus]
-  );
+      pollJobStatus(jid);
+    } catch (err: any) {
+      console.error("startJob error:", err);
+    } finally {
+      setStartingJob(false);
+    }
+  }, [jobId, pollJobStatus]);
 
   const createAndStart = useCallback(async () => {
     const jid = await createJob();
@@ -422,33 +403,27 @@ export default function MatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  const approveCandidate = useCallback(
-    async (rowIdentifier: string, candidateUrl: string) => {
-      if (!jobId) return alert("No job context");
-      if (!confirm("Approve this candidate URL and mark row resolved?")) return;
-      try {
-        const res = await fetch(
-          `/api/v1/match/url-jobs/${encodeURIComponent(jobId)}/rows/${encodeURIComponent(rowIdentifier)}/approve`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ approved_url: candidateUrl }),
-          }
-        );
-        const j = await res.json().catch(() => null);
-        if (!res.ok || !j?.ok) {
-          alert("Approve failed: " + (j?.error ?? res.statusText));
-          return;
-        }
-        await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
-        await fetchJobStatus(jobId);
-      } catch (err) {
-        console.error("approveCandidate error:", err);
-        alert("Approve failed (see console)");
+  const approveCandidate = useCallback(async (rowIdentifier: string, candidateUrl: string) => {
+    if (!jobId) return alert("No job context");
+    if (!confirm("Approve this candidate URL and mark row resolved?")) return;
+    try {
+      const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jobId)}/rows/${encodeURIComponent(rowIdentifier)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ approved_url: candidateUrl })
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        alert("Approve failed: " + (j?.error ?? res.statusText));
+        return;
       }
-    },
-    [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]
-  );
+      await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
+      await fetchJobStatus(jobId);
+    } catch (err) {
+      console.error("approveCandidate error:", err);
+      alert("Approve failed (see console)");
+    }
+  }, [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
@@ -512,29 +487,27 @@ export default function MatchPage() {
     URL.revokeObjectURL(url);
   }, [resultsRows, jobId]);
 
+  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
-  const resultsTableProps = useMemo(
-    () => ({
-      rows: resultsRows,
-      loading: resultsLoading,
-      selectedRowIds,
-      toggleRowSelection,
-      onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset),
-      approveCandidate,
-    }),
-    [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset, approveCandidate]
-  );
-  const bulkActionsProps = useMemo(
-    () => ({
-      selectedCount: Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length,
-      onBulkApprove: bulkApproveSelected,
-      onClearSelection: clearSelection,
-    }),
-    [selectedRowIds, bulkApproveSelected, clearSelection]
-  );
+  const resultsTableProps = useMemo(() => ({
+    rows: resultsRows,
+    loading: resultsLoading,
+    selectedRowIds,
+    toggleRowSelection,
+    onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset),
+    approveCandidate
+  }), [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset, approveCandidate]);
+  const bulkActionsProps = useMemo(() => ({
+    selectedCount: Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length,
+    onBulkApprove: bulkApproveSelected,
+    onClearSelection: clearSelection
+  }), [selectedRowIds, bulkApproveSelected, clearSelection]);
 
+  // IMPORTANT: render these as any to avoid prop typing mismatches
   const UploadComp: any = UploadPastePanel as any;
+  const FiltersComp: any = MatchFilters as any; // ✅ FIX
   const ResultsComp: any = ResultsTable as any;
+  const BulkComp: any = BulkActions as any;
   const JobProgressComp: any = JobProgress as any;
 
   const previewCount = filePreviewRows.length;
@@ -560,8 +533,6 @@ export default function MatchPage() {
       </main>
     );
   }
-
-  const jobStatusText = jobStatus?.status ? String(jobStatus.status) : "—";
 
   return (
     <main className="relative min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
@@ -613,15 +584,9 @@ export default function MatchPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            <SoftButton href="#match-upload" variant="primary">
-              Upload
-            </SoftButton>
-            <SoftButton href="#match-results" variant="secondary">
-              Results
-            </SoftButton>
-            <SoftButton href="/dashboard/import" variant="secondary">
-              Import
-            </SoftButton>
+            <SoftButton href="#match-upload" variant="primary">Upload</SoftButton>
+            <SoftButton href="#match-results" variant="secondary">Results</SoftButton>
+            <SoftButton href="/dashboard/import" variant="secondary">Import</SoftButton>
           </div>
         </header>
 
@@ -744,7 +709,7 @@ export default function MatchPage() {
                   </div>
                 </div>
 
-                <UploadComp onFile={handleFile} />
+                <UploadComp {...uploadProps} />
 
                 {parsingError ? (
                   <div className="rounded-xl border border-red-200/70 bg-red-50/80 p-3 text-xs text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-100">
@@ -803,7 +768,8 @@ export default function MatchPage() {
                         Status
                       </span>
 
-                      <MatchFilters
+                      {/* ✅ FIX: use FiltersComp (any) */}
+                      <FiltersComp
                         onChangeStatus={(s: string) => {
                           const val = s || undefined;
                           setResultsStatusFilter(val);
@@ -816,7 +782,7 @@ export default function MatchPage() {
 
                 <div className="min-w-0">
                   <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                    <BulkActions {...bulkActionsProps} />
+                    <BulkComp {...bulkActionsProps} />
                   </div>
                 </div>
               </div>
@@ -876,7 +842,9 @@ export default function MatchPage() {
                   </div>
                 </div>
 
-                <TinyChip tone={jobId ? "success" : "neutral"}>{jobStatus?.status ? String(jobStatus.status) : "—"}</TinyChip>
+                <TinyChip tone={jobId ? "success" : "neutral"}>
+                  {jobStatus?.status ? String(jobStatus.status) : "—"}
+                </TinyChip>
               </div>
 
               <div className="mt-3 rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
