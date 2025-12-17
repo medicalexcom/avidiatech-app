@@ -8,10 +8,12 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — debug + robust buttons
+ * MatchPage — cleaned (debug removed) + Retry Unresolved
  *
- * Fixed: moved fetchResultsRows / fetchJobStatus above createJob to satisfy TS.
- * Includes debug panel + fallback table so rows are visible immediately.
+ * - Removed the debug panel.
+ * - Kept simple fallback table so rows are visible immediately.
+ * - Adds a "Retry unresolved" button that calls POST /api/v1/match/url-jobs/[id]/requeue
+ *   then starts the job processing so the worker can try to find candidate URLs again.
  */
 
 type PreviewRow = {
@@ -45,11 +47,6 @@ export default function MatchPage() {
   const [resultsStatusFilter, setResultsStatusFilter] = useState<string | undefined>(undefined);
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
-
-  // debug
-  const [lastCreateResponse, setLastCreateResponse] = useState<any | null>(null);
-  const [lastRowsResponse, setLastRowsResponse] = useState<any | null>(null);
-  const [lastFetchError, setLastFetchError] = useState<string | null>(null);
 
   // parse file (xlsx/csv)
   const handleFile = useCallback(async (file: File | null) => {
@@ -88,7 +85,6 @@ export default function MatchPage() {
         brand_name: String(r["Brand Name"] ?? r["Brand"] ?? r.brand ?? "").trim(),
         raw: r
       }));
-      console.log("Parsed preview rows:", mapped.length);
       setFilePreviewRows(mapped);
     } catch (err: any) {
       console.error("Failed to parse uploaded file:", err);
@@ -108,7 +104,6 @@ export default function MatchPage() {
         setJobStatus(j.job ?? null);
         return j.job ?? null;
       }
-      console.warn("fetchJobStatus returned non-ok", j ?? res.status);
       return null;
     } catch (err) {
       console.warn("fetchJobStatus error", err);
@@ -119,28 +114,23 @@ export default function MatchPage() {
   // fetch rows
   const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
     setResultsLoading(true);
-    setLastFetchError(null);
     try {
       const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
       if (status) url.searchParams.set("status", status);
       url.searchParams.set("limit", String(limit));
       url.searchParams.set("offset", String(offset));
-      console.log("Fetching rows from", url.toString());
       const res = await fetch(url.toString());
-      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
-      setLastRowsResponse(j);
+      const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
-        console.error("fetchResultsRows failed", j);
         setResultsRows([]);
-        setLastFetchError(String(j?.error ?? res.statusText));
         return;
       }
       setResultsRows(j.rows ?? []);
-      console.log("Fetched rows:", (j.rows ?? []).length);
-    } catch (err: any) {
+      return j.rows ?? [];
+    } catch (err) {
       console.warn("fetchResultsRows error", err);
       setResultsRows([]);
-      setLastFetchError(String(err?.message ?? err));
+      return [];
     } finally {
       setResultsLoading(false);
     }
@@ -176,28 +166,21 @@ export default function MatchPage() {
       return null;
     }
 
-    console.log("Create job clicked — rows:", payloadRows.length);
     setCreatingJob(true);
-    setLastCreateResponse(null);
     try {
       const body = { file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
       const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
-      setLastCreateResponse(j);
-      console.log("Create job response:", j);
+      const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         alert("Create job failed: " + (j?.error ?? res.statusText));
         return null;
       }
       setJobId(j.job_id);
-      // immediately fetch job header and rows for feedback
       await fetchJobStatus(j.job_id);
       await fetchResultsRows(j.job_id, resultsStatusFilter, resultsLimit, resultsOffset);
       return j.job_id;
     } catch (err: any) {
       console.error("createJob error:", err);
-      setLastCreateResponse({ error: String(err) });
-      setLastFetchError(String(err?.message ?? err));
       alert("Create job failed (see console)");
       return null;
     } finally {
@@ -209,14 +192,10 @@ export default function MatchPage() {
   const startJob = useCallback(async (id?: string | null) => {
     const jid = id ?? jobId;
     if (!jid) return alert("No job selected to start.");
-    console.log("Start resolve clicked for job:", jid);
     setStartingJob(true);
-    setLastCreateResponse(null);
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jid)}/start`, { method: "POST" });
-      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
-      setLastCreateResponse(j);
-      console.log("Start response:", j);
+      const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         alert("Start job failed: " + (j?.error ?? res.statusText));
         return;
@@ -224,7 +203,6 @@ export default function MatchPage() {
       pollJobStatus(jid);
     } catch (err: any) {
       console.error("startJob error:", err);
-      setLastFetchError(String(err?.message ?? err));
     } finally {
       setStartingJob(false);
     }
@@ -235,6 +213,26 @@ export default function MatchPage() {
     const jid = await createJob();
     if (jid) await startJob(jid);
   }, [createJob, startJob]);
+
+  // retry unresolved: requeue rows with status unresolved | failed then start processing
+  const retryUnresolved = useCallback(async () => {
+    if (!jobId) return alert("No job selected");
+    try {
+      const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jobId)}/requeue`, { method: "POST" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        alert("Retry failed: " + (j?.error ?? res.statusText));
+        return;
+      }
+      // start processing again
+      await startJob(jobId);
+      // fetch rows after a short delay
+      setTimeout(() => fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset), 2500);
+    } catch (err: any) {
+      console.error("retryUnresolved error:", err);
+      alert("Retry failed (see console)");
+    }
+  }, [jobId, startJob, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
   // when jobId changes fetch rows once
   useEffect(() => {
@@ -324,20 +322,24 @@ export default function MatchPage() {
               <div className="mt-2 font-mono text-sm break-all">{jobId ? `job:${jobId}` : "No job"}</div>
               <div className="mt-2 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
               <div className="mt-3 space-y-2">
-                <button onClick={() => { console.log("Upload & Create click"); createAndStart(); }} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
+                <button onClick={() => createAndStart()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60">
                   {creatingJob || startingJob ? "Working…" : "Upload & Create"}
                 </button>
 
-                <button onClick={() => { console.log("Create from preview click"); void createJob(); }} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+                <button onClick={() => void createJob()} disabled={parsing || creatingJob || !filePreviewRows.length} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {creatingJob ? "Creating…" : "Create job from preview"}
                 </button>
 
-                <button onClick={() => { console.log("Start resolve click"); void startJob(jobId); }} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
+                <button onClick={() => void startJob(jobId)} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {startingJob || polling ? "Starting…" : "Start resolve"}
                 </button>
 
-                <button onClick={() => { console.log("Refresh rows click"); jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset); }} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
+                <button onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
                   Refresh rows
+                </button>
+
+                <button onClick={() => retryUnresolved()} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
+                  Retry unresolved
                 </button>
               </div>
             </div>
@@ -427,29 +429,6 @@ export default function MatchPage() {
                 ) : (
                   <div className="text-xs text-slate-500 mt-3">No rows to display yet.</div>
                 )}
-              </div>
-            </div>
-
-            {/* Debug */}
-            <div className="rounded-2xl border bg-white p-3">
-              <h3 className="text-sm font-semibold">Debug</h3>
-              <div className="mt-2 text-xs">
-                <div className="mb-2">
-                  <strong>Last create response:</strong>
-                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{lastCreateResponse ? JSON.stringify(lastCreateResponse, null, 2) : "none"}</pre>
-                </div>
-                <div className="mb-2">
-                  <strong>Last rows response:</strong>
-                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{lastRowsResponse ? JSON.stringify(lastRowsResponse, null, 2) : "none"}</pre>
-                </div>
-                <div className="mb-2">
-                  <strong>Last fetch error:</strong>
-                  <div className="text-red-600 text-xs">{lastFetchError ?? "none"}</div>
-                </div>
-                <div>
-                  <strong>Preview sample:</strong>
-                  <pre className="max-h-48 overflow-auto bg-slate-50 p-2 text-xs">{filePreviewRows.length ? JSON.stringify(filePreviewRows.slice(0,5), null, 2) : "none"}</pre>
-                </div>
               </div>
             </div>
           </div>
