@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
-import { processRow } from "../../../../../../../../lib/match/matcher";
+// Correct relative path (7 levels up from this file) to reach src/lib/match/matcher
+import { processRow } from "../../../../../../../lib/match/matcher";
 
 export const runtime = "nodejs";
 
@@ -63,13 +64,7 @@ export async function POST(req: Request, context: any) {
 
     // Update job stats: compute unresolved/resolved counts (best-effort)
     try {
-      const { data: counts } = await supabaseAdmin
-        .from("match_url_job_rows")
-        .select("status", { count: "exact" })
-        .eq("job_id", jobId);
-      // counts may not be reliable depending on driver; instead compute resolved/unresolved via simple queries
-      const { data: resCount } = await supabaseAdmin.from("match_url_job_rows").select("id").eq("job_id", jobId).in("status", ["resolved_confident", "resolved"]).maybeSingle();
-      // best-effort set job to succeeded (or partial)
+      // best-effort set job to partial (worker may update later)
       await supabaseAdmin.from("match_url_jobs").update({ status: "partial", updated_at: new Date().toISOString() }).eq("id", jobId);
     } catch (err) {
       // ignore
