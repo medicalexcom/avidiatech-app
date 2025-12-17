@@ -10,16 +10,8 @@ import BulkActions from "./_components/BulkActions";
 /**
  * MatchPage — debug + robust buttons
  *
- * Changes:
- * - Keeps the previous debug panel and fallback table so rows are visible immediately.
- * - Ensures Create / Start / Refresh buttons call their handlers and surface network results.
- * - Adds explicit console.log lines for button clicks and more robust error state so you can
- *   see any failures in the Debug panel.
- *
- * Replace the existing file with this version and redeploy. After deploy:
- * - Upload a file, click "Create job from preview" or "Upload & Create".
- * - Use "Refresh rows" to force a fetch of rows.
- * - The Debug panel will show create response, last rows response and any fetch error.
+ * Fixed: moved fetchResultsRows / fetchJobStatus above createJob to satisfy TS.
+ * Includes debug panel + fallback table so rows are visible immediately.
  */
 
 type PreviewRow = {
@@ -107,6 +99,75 @@ export default function MatchPage() {
     }
   }, []);
 
+  // fetch job status
+  const fetchJobStatus = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
+      const j = await res.json().catch(() => null);
+      if (res.ok && j?.ok) {
+        setJobStatus(j.job ?? null);
+        return j.job ?? null;
+      }
+      console.warn("fetchJobStatus returned non-ok", j ?? res.status);
+      return null;
+    } catch (err) {
+      console.warn("fetchJobStatus error", err);
+      return null;
+    }
+  }, []);
+
+  // fetch rows
+  const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
+    setResultsLoading(true);
+    setLastFetchError(null);
+    try {
+      const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
+      if (status) url.searchParams.set("status", status);
+      url.searchParams.set("limit", String(limit));
+      url.searchParams.set("offset", String(offset));
+      console.log("Fetching rows from", url.toString());
+      const res = await fetch(url.toString());
+      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
+      setLastRowsResponse(j);
+      if (!res.ok || !j?.ok) {
+        console.error("fetchResultsRows failed", j);
+        setResultsRows([]);
+        setLastFetchError(String(j?.error ?? res.statusText));
+        return;
+      }
+      setResultsRows(j.rows ?? []);
+      console.log("Fetched rows:", (j.rows ?? []).length);
+    } catch (err: any) {
+      console.warn("fetchResultsRows error", err);
+      setResultsRows([]);
+      setLastFetchError(String(err?.message ?? err));
+    } finally {
+      setResultsLoading(false);
+    }
+  }, []);
+
+  // poll job status
+  const pollJobStatus = useCallback(async (id: string) => {
+    if (!id) return;
+    setPolling(true);
+    try {
+      const intervalMs = 2500;
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const job = await fetchJobStatus(id);
+        if (job && ["running", "partial", "succeeded"].includes(job.status)) {
+          // eslint-disable-next-line no-await-in-loop
+          await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
+        }
+        if (!job || ["succeeded", "failed", "partial", "canceled"].includes(job?.status)) break;
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+    } finally {
+      setPolling(false);
+    }
+  }, [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
+
   // create job
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
@@ -142,7 +203,7 @@ export default function MatchPage() {
     } finally {
       setCreatingJob(false);
     }
-  }, [filePreviewRows, fetchResultsRows, fetchJobStatus, resultsLimit, resultsOffset, resultsStatusFilter]);
+  }, [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
   // start job
   const startJob = useCallback(async (id?: string | null) => {
@@ -169,74 +230,11 @@ export default function MatchPage() {
     }
   }, [jobId, pollJobStatus]);
 
-  // fetch job status
-  const fetchJobStatus = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
-      const j = await res.json().catch(() => null);
-      if (res.ok && j?.ok) {
-        setJobStatus(j.job ?? null);
-        return j.job ?? null;
-      }
-      console.warn("fetchJobStatus returned non-ok", j ?? res.status);
-      return null;
-    } catch (err) {
-      console.warn("fetchJobStatus error", err);
-      return null;
-    }
-  }, []);
-
-  // poll job status
-  const pollJobStatus = useCallback(async (id: string) => {
-    if (!id) return;
-    setPolling(true);
-    try {
-      const intervalMs = 2500;
-      while (true) {
-        // eslint-disable-next-line no-await-in-loop
-        const job = await fetchJobStatus(id);
-        if (job && ["running", "partial", "succeeded"].includes(job.status)) {
-          // eslint-disable-next-line no-await-in-loop
-          await fetchResultsRows(id, resultsStatusFilter, resultsLimit, resultsOffset);
-        }
-        if (!job || ["succeeded", "failed", "partial", "canceled"].includes(job?.status)) break;
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, intervalMs));
-      }
-    } finally {
-      setPolling(false);
-    }
-  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset, fetchResultsRows]);
-
-  // fetch rows
-  const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
-    setResultsLoading(true);
-    setLastFetchError(null);
-    try {
-      const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
-      if (status) url.searchParams.set("status", status);
-      url.searchParams.set("limit", String(limit));
-      url.searchParams.set("offset", String(offset));
-      console.log("Fetching rows from", url.toString());
-      const res = await fetch(url.toString());
-      const j = await res.json().catch(() => ({ status: res.status, statusText: res.statusText }));
-      setLastRowsResponse(j);
-      if (!res.ok || !j?.ok) {
-        console.error("fetchResultsRows failed", j);
-        setResultsRows([]);
-        setLastFetchError(String(j?.error ?? res.statusText));
-        return;
-      }
-      setResultsRows(j.rows ?? []);
-      console.log("Fetched rows:", (j.rows ?? []).length);
-    } catch (err: any) {
-      console.warn("fetchResultsRows error", err);
-      setResultsRows([]);
-      setLastFetchError(String(err?.message ?? err));
-    } finally {
-      setResultsLoading(false);
-    }
-  }, []);
+  // combined action: create then start
+  const createAndStart = useCallback(async () => {
+    const jid = await createJob();
+    if (jid) await startJob(jid);
+  }, [createJob, startJob]);
 
   // when jobId changes fetch rows once
   useEffect(() => {
