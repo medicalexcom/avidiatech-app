@@ -6,7 +6,7 @@ const DEFAULT_TIMEOUT = Number(process.env.SEARCH_TIMEOUT_MS ?? 8000);
 export function timeoutFetch(input: RequestInfo, init: RequestInit = {}, timeout = DEFAULT_TIMEOUT) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
-  // @ts-ignore - Node native fetch supports signal
+  // @ts-ignore - Node native fetch supports signal in newer runtimes; keep as-is for serverless environments
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
@@ -82,14 +82,15 @@ export async function validatePageBasic(url: string, checks: { sku?: string | nu
           const obj = JSON.parse(m[1]);
           const items = Array.isArray(obj) ? obj : [obj];
           for (const item of items) {
-            const t = (item["@type"] ?? item["@type"] || "").toString().toLowerCase();
-            if (t.includes("product") || item.name || item.sku) {
-              if (checks.sku && item.sku && item.sku.toString().toLowerCase().includes(checks.sku.toLowerCase())) {
+            // safer access for @type / type
+            const t = String(item?.["@type"] ?? item?.type ?? "").toLowerCase();
+            if (t.includes("product") || item?.name || item?.sku) {
+              if (checks.sku && item?.sku && String(item.sku).toLowerCase().includes(checks.sku.toLowerCase())) {
                 score += 0.8;
                 matchedTokens.push("jsonld.sku");
               }
-              if (checks.name && item.name) {
-                const ov = tokenOverlapScore(checks.name, item.name);
+              if (checks.name && item?.name) {
+                const ov = tokenOverlapScore(checks.name, String(item.name));
                 if (ov > 0) { score += Math.min(0.6, ov * 0.6); matchedTokens.push(`jsonld.name:${ov.toFixed(2)}`); }
               }
             }
