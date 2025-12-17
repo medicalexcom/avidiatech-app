@@ -9,6 +9,16 @@ function timeoutFetch(input: RequestInfo, init: RequestInit = {}, timeout = DEFA
   return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
+export function hostnameFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Query SerpAPI for results.
  * Returns array of { url, title, snippet }.
@@ -20,7 +30,7 @@ export async function serpApiSearch(q: string, apiKey?: string, num = 10, timeou
     const res = await timeoutFetch(url, {}, timeoutMs);
     if (!res.ok) throw new Error(`SerpAPI error ${res.status}`);
     const json = await res.json();
-    const organic = json.organic_results ?? json.organic_results ?? [];
+    const organic = json.orgic_results ?? json.organic_results ?? json.organic_results ?? [];
     const results: SearchResult[] = (organic || []).map((r: any) => ({
       url: r.link ?? r.url ?? r['displayed_link'] ?? undefined,
       title: r.title ?? r.name ?? undefined,
