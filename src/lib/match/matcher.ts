@@ -1,7 +1,8 @@
-// Per-row matcher: site-restricted SerpAPI queries + site-search patterns + enhanced validation.
-// Exports:
-// - processRow(row) : performs matching and updates DB (same as before, but stronger)
-// - debugRowTrace(row) : runs pipeline without updating DB and returns full trace for debugging.
+// Per-row matcher (manufacturer-only, strict).
+// - Only accepts candidates that are on the resolved manufacturer's domain.
+// - No reseller fallback; if no manufacturer-domain candidate meets threshold, the row remains unresolved.
+// - Exposes debugRowTrace(row) to inspect the exact queries, SerpAPI hits, site-search attempts and validation scores.
+// - processRow(row) runs the same pipeline and writes resolved_confident or unresolved to the DB.
 
 import { createClient } from "@supabase/supabase-js";
 import { serpApiSearch, validatePageBasic, hostnameFromUrl, tokenOverlapScore, timeoutFetch } from "./serp";
@@ -15,94 +16,11 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { au
 const SERPAPI_KEY = process.env.SERPAPI_KEY ?? "";
 const SEARCH_MAX_RESULTS = Number(process.env.SEARCH_MAX_RESULTS ?? 8);
 const VALIDATION_THRESHOLD = Number(process.env.VALIDATION_CONFIDENCE_THRESHOLD ?? 0.65);
-const ALLOW_RESELLERS = String(process.env.ALLOW_RESELLERS ?? "false").toLowerCase() === "true";
 
-/** normalize supplier key heuristically */
+/** Normalize supplier key heuristically */
 function normalizeSupplierKey(s?: string | null) {
   if (!s) return "";
   return s.toString().toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9]/g, "");
-}
-
-/** extract hrefs from HTML (simple) */
-function extractHrefs(html: string, baseUrl?: string) {
-  const hrefs: string[] = [];
-  const regex = /href=(?:"|')([^"'#>]+)(?:"|')/gi;
-  for (const m of html.matchAll(regex)) {
-    try {
-      const candidate = m[1];
-      if (!candidate) continue;
-      // resolve relative urls if base provided
-      const url = baseUrl ? new URL(candidate, baseUrl).toString() : candidate;
-      hrefs.push(url);
-    } catch {
-      // skip invalid URLs
-    }
-  }
-  return hrefs;
-}
-
-/**
- * Resolve manufacturer's canonical domain:
- * 1) product_source_index lookup for source_domain
- * 2) SerpAPI "official site" queries fallback
- */
-export async function resolveManufacturerDomain(row: any): Promise<string | null> {
-  const supplierKey = row.supplier_key ?? normalizeSupplierKey(row.supplier_name);
-  const supplierName = (row.supplier_name ?? "").toString().trim();
-  const tenantId = row.tenant_id ?? null;
-
-  // 1) check product_source_index
-  try {
-    const { data } = await supabaseAdmin
-      .from("product_source_index")
-      .select("source_domain")
-      .eq("tenant_id", tenantId)
-      .eq("supplier_key", supplierKey)
-      .limit(6);
-
-    if (Array.isArray(data) && data.length) {
-      const candidates = data.map((d: any) => (typeof d.source_domain === "string" ? d.source_domain.replace(/^www\./, "").toLowerCase() : null)).filter(Boolean);
-      for (const c of candidates) {
-        if (!c) continue;
-        if (supplierKey && c.includes(supplierKey)) return c;
-        if (supplierName && c.includes(supplierName.toLowerCase().replace(/\s+/g, ""))) return c;
-      }
-      if (candidates.length) return candidates[0];
-    }
-  } catch (err) {
-    console.warn("resolveManufacturerDomain: product_source_index lookup failed", String(err));
-  }
-
-  // 2) query SerpAPI for official site
-  if (!SERPAPI_KEY || !supplierName) return null;
-  const queries = [
-    `${supplierName} official site`,
-    `${supplierName} manufacturer official website`,
-    `${supplierName} company website`,
-    `${supplierName} official website`
-  ];
-  for (const q of queries) {
-    try {
-      const res = await serpApiSearch(q, SERPAPI_KEY, 5);
-      if (!res || res.length === 0) continue;
-      for (const r of res) {
-        const host = hostnameFromUrl(r.url);
-        if (!host) continue;
-        const normHost = host.toLowerCase();
-        const normSupplierKey = normalizeSupplierKey(supplierKey);
-        const normSupplierName = supplierName.toLowerCase().replace(/\s+/g, "");
-        if ((normSupplierKey && normHost.includes(normSupplierKey)) || (supplierName && normHost.includes(normSupplierName))) {
-          return normHost;
-        }
-      }
-      const top = res[0];
-      const hostTop = hostnameFromUrl(top.url);
-      if (hostTop) return hostTop;
-    } catch (err) {
-      console.warn("resolveManufacturerDomain: serp error", String(err));
-    }
-  }
-  return null;
 }
 
 /** Build prioritized queries */
@@ -151,7 +69,91 @@ function buildSiteSearchUrls(domain: string, sku?: string | null, productName?: 
   return patterns;
 }
 
-/** Validate candidate list and return validated results (non-db) */
+/** extract hrefs from HTML (simple regex-based) */
+function extractHrefs(html: string, baseUrl?: string) {
+  const hrefs: string[] = [];
+  const regex = /href=(?:"|')([^"'#>]+)(?:"|')/gi;
+  for (const m of html.matchAll(regex)) {
+    try {
+      const candidate = m[1];
+      if (!candidate) continue;
+      const url = baseUrl ? new URL(candidate, baseUrl).toString() : candidate;
+      hrefs.push(url);
+    } catch {
+      // skip invalid
+    }
+  }
+  return hrefs;
+}
+
+/**
+ * Resolve manufacturer's canonical domain:
+ * 1) Check product_source_index entries for source_domain
+ * 2) Fallback: use SerpAPI queries "supplier official site" to find manufacturer domain
+ */
+export async function resolveManufacturerDomain(row: any): Promise<string | null> {
+  const supplierKey = row.supplier_key ?? normalizeSupplierKey(row.supplier_name);
+  const supplierName = (row.supplier_name ?? "").toString().trim();
+  const tenantId = row.tenant_id ?? null;
+
+  // 1) product_source_index
+  try {
+    const { data } = await supabaseAdmin
+      .from("product_source_index")
+      .select("source_domain")
+      .eq("tenant_id", tenantId)
+      .eq("supplier_key", supplierKey)
+      .limit(6);
+
+    if (Array.isArray(data) && data.length) {
+      const candidates = data.map((d: any) => (typeof d.source_domain === "string" ? d.source_domain.replace(/^www\./, "").toLowerCase() : null)).filter(Boolean);
+      for (const c of candidates) {
+        if (!c) continue;
+        if (supplierKey && c.includes(supplierKey)) return c;
+        if (supplierName && c.includes(supplierName.toLowerCase().replace(/\s+/g, ""))) return c;
+      }
+      if (candidates.length) return candidates[0];
+    }
+  } catch (err) {
+    // ignore DB lookup errors
+    console.warn("resolveManufacturerDomain: index lookup failed", String(err));
+  }
+
+  // 2) SerpAPI fallback
+  if (!SERPAPI_KEY || !supplierName) return null;
+  const queries = [
+    `${supplierName} official site`,
+    `${supplierName} manufacturer official website`,
+    `${supplierName} company website`,
+    `${supplierName} official website`
+  ];
+  for (const q of queries) {
+    try {
+      const res = await serpApiSearch(q, SERPAPI_KEY, 5);
+      if (!res || res.length === 0) continue;
+      for (const r of res) {
+        const host = hostnameFromUrl(r.url);
+        if (!host) continue;
+        const normHost = host.toLowerCase();
+        const normSupplierKey = normalizeSupplierKey(supplierKey);
+        const normSupplierName = supplierName.toLowerCase().replace(/\s+/g, "");
+        if ((normSupplierKey && normHost.includes(normSupplierKey)) || (supplierName && normHost.includes(normSupplierName))) {
+          return normHost;
+        }
+      }
+      // otherwise return top domain as best guess
+      const top = res[0];
+      const hostTop = hostnameFromUrl(top.url);
+      if (hostTop) return hostTop;
+    } catch (err) {
+      console.warn("resolveManufacturerDomain: serp error", String(err));
+    }
+  }
+
+  return null;
+}
+
+/** Validate candidate list (non-db) */
 async function validateCandidates(candidateList: Array<{ url: string; title?: string; snippet?: string; source: string }>, checks: any, manufacturerDomain?: string | null) {
   const validated: any[] = [];
   for (const c of candidateList.slice(0, SEARCH_MAX_RESULTS)) {
@@ -170,19 +172,18 @@ async function validateCandidates(candidateList: Array<{ url: string; title?: st
 }
 
 /**
- * Debug trace for a single row. Does NOT update DB.
- * Returns manufacturerDomain, queries tried, serp results, siteSearch attempts, validation per candidate, and recommended chosen candidate (if any).
+ * debugRowTrace(row) — runs the full pipeline but does NOT write to DB.
+ * Returns manufacturerDomain, queries tried, serp hits, site-search attempts, candidate validation, and final decision.
  */
 export async function debugRowTrace(row: any) {
   const trace: any = { row_id: row.row_id ?? row.id, sku: row.sku ?? null, product_name: row.product_name ?? null, supplier_name: row.supplier_name ?? null, steps: [] };
   const queries = buildQueries(row);
   trace.steps.push({ step: "build_queries", queries });
 
-  // resolve manufacturer domain
   const manufacturerDomain = await resolveManufacturerDomain(row);
   trace.manufacturerDomain = manufacturerDomain;
 
-  // build site-restricted queries first if manufacturerDomain exists
+  // site-restricted queries if we have manufacturer domain
   const siteQueries: string[] = [];
   if (manufacturerDomain) {
     if (row.sku) siteQueries.push(`site:${manufacturerDomain} ${row.sku}`);
@@ -191,14 +192,13 @@ export async function debugRowTrace(row: any) {
   }
   trace.steps.push({ step: "site_queries", siteQueries });
 
-  // Run SerpAPI queries (siteQueries first)
+  // run SerpAPI queries (siteQueries first)
   const serpResultsByQuery: any[] = [];
   if (SERPAPI_KEY) {
     const runQueries = [...siteQueries, ...queries];
     for (const q of runQueries) {
       const res = await serpApiSearch(q, SERPAPI_KEY, SEARCH_MAX_RESULTS);
       serpResultsByQuery.push({ query: q, results: res });
-      // stop early if we have many candidates
       if (serpResultsByQuery.flatMap((s) => s.results ?? []).length >= SEARCH_MAX_RESULTS) break;
     }
   } else {
@@ -217,8 +217,9 @@ export async function debugRowTrace(row: any) {
   }
 
   trace.candidate_pool_count = candidatesMap.size;
+  trace.candidates_raw = Array.from(candidatesMap.values()).map((c) => ({ url: c.url, source: c.source }));
 
-  // If no candidates and we have manufacturer domain, try site-search patterns
+  // if zero candidates and manufacturerDomain present, try site-search patterns
   const siteSearchs: any[] = [];
   if (manufacturerDomain && candidatesMap.size === 0) {
     const patterns = buildSiteSearchUrls(manufacturerDomain, row.sku, row.product_name);
@@ -241,11 +242,9 @@ export async function debugRowTrace(row: any) {
   }
   trace.siteSearchAttempts = siteSearchs;
 
-  // filter candidates to manufacturer domain only unless ALLOW_RESELLERS
+  // filter to manufacturer domain ONLY (strict)
   let candidateList = Array.from(candidatesMap.values());
-  trace.candidates_raw = candidateList.map((c) => ({ url: c.url, source: c.source }));
-
-  if (!ALLOW_RESELLERS && manufacturerDomain) {
+  if (manufacturerDomain) {
     candidateList = candidateList.filter((c) => {
       const host = hostnameFromUrl(c.url);
       if (!host) return false;
@@ -256,15 +255,19 @@ export async function debugRowTrace(row: any) {
       trace.final = { ok: false, reason: "no_manufacturer_candidates" };
       return trace;
     }
+  } else {
+    // no manufacturer domain discovered => fail strictly
+    trace.final = { ok: false, reason: "no_manufacturer_domain" };
+    return trace;
   }
 
-  // Validate candidates and collect results
+  // validate candidates
   const checks = { sku: row.sku ?? null, ndc: row.ndc_item_code ?? null, name: row.product_name ?? null, supplierKey: row.supplier_key ?? null };
   const validated = await validateCandidates(candidateList, checks, manufacturerDomain);
   trace.validation = validated;
 
-  // decide threshold: relax threshold slightly for manufacturer domain
-  const threshold = manufacturerDomain ? Math.max(0.5, VALIDATION_THRESHOLD - 0.1) : VALIDATION_THRESHOLD;
+  // choose threshold (manufacturer domain — keep threshold as configured)
+  const threshold = VALIDATION_THRESHOLD;
   trace.threshold = threshold;
 
   validated.sort((a, b) => b.score - a.score);
@@ -279,22 +282,22 @@ export async function debugRowTrace(row: any) {
 }
 
 /**
- * processRow: same production behaviour as before but with improvements:
- * - site-restricted SerpAPI queries first
- * - enhanced validation (JSON-LD/title/h1/token overlap)
- * - site-search attempts
- * - accepts only manufacturer-domain candidates by default (unless ALLOW_RESELLERS)
+ * processRow(row) — production: runs pipeline and writes DB changes.
+ * Strict manufacturer-only acceptance; no reseller fallback.
  */
 export async function processRow(row: any) {
-  // run trace to compute recommended best candidate
   const trace = await debugRowTrace(row);
 
   if (!trace.final || !trace.final.ok) {
-    // update row unresolved (include candidate list)
-    await supabaseAdmin
-      .from("match_url_job_rows")
-      .update({ candidates: trace.validation ?? [], status: "unresolved", confidence: 0, updated_at: new Date().toISOString() })
-      .eq("id", row.id);
+    // write unresolved with validation candidates (scores) and confidence 0
+    try {
+      await supabaseAdmin
+        .from("match_url_job_rows")
+        .update({ candidates: trace.validation ?? [], status: "unresolved", confidence: 0, updated_at: new Date().toISOString() })
+        .eq("id", row.id);
+    } catch (err) {
+      console.warn("processRow: write unresolved failed", String(err));
+    }
     return { ok: false, trace };
   }
 
@@ -302,20 +305,24 @@ export async function processRow(row: any) {
   const resolvedDomain = best.domain ?? hostnameFromUrl(best.url);
   const acceptedCandidate = { url: best.url, domain: resolvedDomain, score: best.score, source: best.source, snippet: best.snippet ?? null };
 
-  await supabaseAdmin
-    .from("match_url_job_rows")
-    .update({
-      candidates: [acceptedCandidate],
-      status: "resolved_confident",
-      resolved_url: best.url,
-      resolved_domain: resolvedDomain,
-      confidence: best.score,
-      matched_by: "serpapi:manufacturer_strict",
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", row.id);
+  try {
+    await supabaseAdmin
+      .from("match_url_job_rows")
+      .update({
+        candidates: [acceptedCandidate],
+        status: "resolved_confident",
+        resolved_url: best.url,
+        resolved_domain: resolvedDomain,
+        confidence: best.score,
+        matched_by: "serpapi:manufacturer_strict",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", row.id);
+  } catch (err) {
+    console.warn("processRow: update resolved failed", String(err));
+  }
 
-  // upsert minimal product_source_index (best-effort)
+  // upsert minimal product_source_index to help future matches (manufacturer info)
   try {
     const now = new Date().toISOString();
     const payload: any = {
@@ -337,7 +344,7 @@ export async function processRow(row: any) {
     };
     await supabaseAdmin.from("product_source_index").upsert(payload, { onConflict: "tenant_id,supplier_key,sku_norm" });
   } catch (err) {
-    console.warn("product_source_index upsert failed:", err);
+    console.warn("product_source_index upsert failed:", String(err));
   }
 
   return { ok: true, accepted: acceptedCandidate, trace };
