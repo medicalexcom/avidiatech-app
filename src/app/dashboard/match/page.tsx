@@ -8,10 +8,11 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — premium, compact, no horizontal overflow, mobile-first.
+ * MatchPage — premium, compact, mobile-first, no horizontal overflow.
  * - Selected file name shown before proceeding
  * - Primary CTA lives with Choose file in Upload card
- * - MatchFilters rendered as any to avoid prop typing mismatch
+ * - Restores bottom fallback preview table under results (like original)
+ * - Adds file preview table under upload (optional but very useful)
  */
 
 type PreviewRow = {
@@ -171,25 +172,21 @@ function SoftButton({
 export default function MatchPage() {
   const featureEnabled = true;
 
-  // upload / preview
   const [filePreviewRows, setFilePreviewRows] = useState<PreviewRow[]>([]);
   const [parsing, setParsing] = useState(false);
   const [parsingError, setParsingError] = useState<string | null>(null);
 
-  // selected file + detected sheet
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [selectedFileMeta, setSelectedFileMeta] = useState<{ size?: number; type?: string } | null>(null);
   const [detectedSheetName, setDetectedSheetName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // job / status
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<any | null>(null);
   const [creatingJob, setCreatingJob] = useState(false);
   const [startingJob, setStartingJob] = useState(false);
   const [polling, setPolling] = useState(false);
 
-  // results
   const [resultsRows, setResultsRows] = useState<any[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [resultsStatusFilter, setResultsStatusFilter] = useState<string | undefined>(undefined);
@@ -203,7 +200,6 @@ export default function MatchPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
-  // parse file (xlsx/csv)
   const handleFile = useCallback(async (file: File | null) => {
     setParsingError(null);
     setFilePreviewRows([]);
@@ -211,7 +207,6 @@ export default function MatchPage() {
 
     if (!file) return;
 
-    // show immediately
     setSelectedFileName(file.name || "Selected file");
     setSelectedFileMeta({ size: file.size, type: file.type });
 
@@ -261,7 +256,6 @@ export default function MatchPage() {
     }
   }, []);
 
-  // fetch job status
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
@@ -277,7 +271,6 @@ export default function MatchPage() {
     }
   }, []);
 
-  // fetch rows
   const fetchResultsRows = useCallback(
     async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
       setResultsLoading(true);
@@ -305,7 +298,6 @@ export default function MatchPage() {
     []
   );
 
-  // poll job status
   const pollJobStatus = useCallback(
     async (id: string) => {
       if (!id) return;
@@ -330,7 +322,6 @@ export default function MatchPage() {
     [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]
   );
 
-  // create job
   const createJob = useCallback(
     async (rows?: PreviewRow[]) => {
       const payloadRows = (rows ?? filePreviewRows) || [];
@@ -370,7 +361,6 @@ export default function MatchPage() {
     [filePreviewRows, selectedFileName, fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]
   );
 
-  // start job
   const startJob = useCallback(
     async (id?: string | null) => {
       const jid = id ?? jobId;
@@ -510,8 +500,8 @@ export default function MatchPage() {
     URL.revokeObjectURL(url);
   }, [resultsRows, jobId]);
 
-  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
+
   const resultsTableProps = useMemo(
     () => ({
       rows: resultsRows,
@@ -523,6 +513,7 @@ export default function MatchPage() {
     }),
     [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset, approveCandidate]
   );
+
   const bulkActionsProps = useMemo(
     () => ({
       selectedCount: Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]).length,
@@ -532,7 +523,7 @@ export default function MatchPage() {
     [selectedRowIds, bulkApproveSelected, clearSelection]
   );
 
-  // IMPORTANT: MatchFilters as any (fixes your TS error)
+  // IMPORTANT: MatchFilters typed as any to avoid your TS failure
   const UploadComp: any = UploadPastePanel as any;
   const FiltersComp: any = MatchFilters as any;
   const ResultsComp: any = ResultsTable as any;
@@ -577,7 +568,7 @@ export default function MatchPage() {
       </div>
 
       <div className="relative mx-auto w-full max-w-7xl space-y-6 px-4 pt-4 pb-10 sm:px-6 lg:px-8 lg:pt-6">
-        {/* header (no Upload CTA here) */}
+        {/* header */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -607,11 +598,7 @@ export default function MatchPage() {
               <StatPill label="Selected file" value={selectedFileName ? selectedFileName : "—"} tone="signal" />
               <StatPill label="Preview rows" value={parsing ? "Parsing…" : previewCount} tone="signal" />
               <StatPill label="Resolved" value={jobId ? resolvedCount : "—"} tone="success" />
-              <StatPill
-                label="Unresolved"
-                value={jobId ? unresolvedCount : "—"}
-                tone={jobId && unresolvedCount > 0 ? "danger" : "neutral"}
-              />
+              <StatPill label="Unresolved" value={jobId ? unresolvedCount : "—"} tone={jobId && unresolvedCount > 0 ? "danger" : "neutral"} />
             </div>
           </div>
 
@@ -624,11 +611,8 @@ export default function MatchPage() {
         <section className="grid gap-6 lg:grid-cols-12">
           {/* left */}
           <div className="lg:col-span-8 space-y-4 min-w-0">
-            {/* UPLOAD CARD with primary actions */}
-            <div
-              id="match-upload"
-              className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45"
-            >
+            {/* upload card */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -640,7 +624,6 @@ export default function MatchPage() {
                   </p>
                 </div>
 
-                {/* action cluster (makes sense: right next to file selection) */}
                 <div className="flex flex-wrap items-center gap-2">
                   <label
                     className={cx(
@@ -768,15 +751,59 @@ export default function MatchPage() {
                   </div>
                 ) : null}
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-slate-600 dark:text-slate-300">
-                    Preview rows: <span className="font-semibold">{previewCount}</span>
+                {/* ✅ File PREVIEW table restored/added (this is the "preview at the bottom" before job creation) */}
+                <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        File Preview
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Showing up to 50 rows from the parsed file (of {previewCount} preview rows).
+                      </div>
+                    </div>
+                    <TinyChip tone={previewCount ? "success" : "neutral"}>
+                      {previewCount ? "Ready" : "No rows"}
+                    </TinyChip>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <TinyChip tone={previewCount ? "success" : "neutral"}>
-                      {previewCount ? "Ready to create job" : "Add rows to proceed"}
-                    </TinyChip>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="min-w-[900px] w-full table-auto text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
+                          <th className="px-2 py-2">Row</th>
+                          <th className="px-2 py-2">SKU</th>
+                          <th className="px-2 py-2">Product Name</th>
+                          <th className="px-2 py-2">Supplier</th>
+                          <th className="px-2 py-2">Brand</th>
+                          <th className="px-2 py-2">NDC</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filePreviewRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-2 py-3 text-xs text-slate-500 dark:text-slate-400">
+                              No preview rows yet. Choose a file or paste rows.
+                            </td>
+                          </tr>
+                        ) : (
+                          filePreviewRows.slice(0, 50).map((r) => (
+                            <tr key={r.row_id} className="border-t border-slate-200/60 dark:border-slate-800/60 align-top">
+                              <td className="px-2 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">{r.row_id}</td>
+                              <td className="px-2 py-2 font-medium text-slate-900 dark:text-slate-50 whitespace-nowrap">{r.sku || "—"}</td>
+                              <td className="px-2 py-2 min-w-0">
+                                <div className="truncate max-w-[520px] text-slate-900 dark:text-slate-50">
+                                  {r.product_name || "—"}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.supplier_name || "—"}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.brand_name || "—"}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.ndc_item_code || "—"}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -834,6 +861,9 @@ export default function MatchPage() {
                     <TinyChip>Step 3</TinyChip>
                     {resultsLoading ? <TinyChip tone="signal">Loading…</TinyChip> : null}
                   </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Use the main grid, then confirm via the simple preview at the bottom (restored).
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -854,12 +884,111 @@ export default function MatchPage() {
               </div>
 
               <div className="mt-4 space-y-4 min-w-0">
+                {/* main grid */}
                 <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-2 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
                   <div className="w-full overflow-x-auto">
                     <div className="min-w-[720px]">
                       <ResultsComp {...resultsTableProps} />
                     </div>
                   </div>
+                </div>
+
+                {/* ✅ RESTORED: bottom fallback preview like your original code */}
+                <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-3 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Preview (Simple View)
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Quick scan of the raw rows with resolved URL clickable (matches your original bottom preview).
+                      </p>
+                    </div>
+                    <TinyChip tone={resultsRows?.length ? "success" : "neutral"}>
+                      {resultsRows?.length ? `${resultsRows.length} rows` : "No rows"}
+                    </TinyChip>
+                  </div>
+
+                  {resultsRows && resultsRows.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-[1100px] w-full table-auto text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-slate-500 dark:text-slate-400">
+                            <th className="px-2 py-2">Row</th>
+                            <th className="px-2 py-2">SKU</th>
+                            <th className="px-2 py-2">Product Name</th>
+                            <th className="px-2 py-2">Supplier</th>
+                            <th className="px-2 py-2">Status</th>
+                            <th className="px-2 py-2">Resolved URL</th>
+                            <th className="px-2 py-2">Confidence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultsRows.map((r: any) => (
+                            <tr key={r.id ?? r.row_id} className="border-t border-slate-200/60 dark:border-slate-800/60 align-top">
+                              <td className="px-2 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {r.row_id ?? r.id}
+                              </td>
+                              <td className="px-2 py-2 font-medium text-slate-900 dark:text-slate-50 whitespace-nowrap">
+                                {r.sku ?? "—"}
+                              </td>
+                              <td className="px-2 py-2 min-w-0">
+                                <div className="truncate max-w-[520px] text-slate-900 dark:text-slate-50">
+                                  {r.product_name ?? "—"}
+                                </div>
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.supplier_name ?? "—"}</td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.status ?? "—"}</td>
+                              <td className="px-2 py-2 min-w-0">
+                                {r.resolved_url ? (
+                                  <a
+                                    href={r.resolved_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sky-700 underline underline-offset-2 dark:text-sky-300"
+                                    title={r.resolved_url}
+                                  >
+                                    <span className="truncate inline-block max-w-[520px] align-bottom">
+                                      {r.resolved_url}
+                                    </span>
+                                  </a>
+                                ) : Array.isArray(r.candidates) && r.candidates.length ? (
+                                  <div className="text-xs space-y-1">
+                                    {r.candidates.slice(0, 3).map((c: any, idx: number) => {
+                                      const u = typeof c === "string" ? c : c?.url ?? "";
+                                      if (!u) return null;
+                                      return (
+                                        <div key={idx} className="min-w-0">
+                                          <a
+                                            href={u}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-sky-700 underline underline-offset-2 dark:text-sky-300"
+                                            title={u}
+                                          >
+                                            <span className="truncate inline-block max-w-[520px] align-bottom">
+                                              {u}
+                                            </span>
+                                          </a>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2 whitespace-nowrap">{r.confidence ?? ""}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                      No rows to display yet. Create and start a job first.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
