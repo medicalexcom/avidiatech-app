@@ -8,12 +8,11 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — cleaned (debug removed) + Retry Unresolved
+ * MatchPage — shows fallback rows, resolved URLs and CSV export
  *
- * - Removed the debug panel.
- * - Kept simple fallback table so rows are visible immediately.
- * - Adds a "Retry unresolved" button that calls POST /api/v1/match/url-jobs/[id]/requeue
- *   then starts the job processing so the worker can try to find candidate URLs again.
+ * - Shows resolved_url in the fallback table (clickable).
+ * - Adds "Download CSV" button to export original + added columns:
+ *   status, resolved_url, resolved_domain, confidence, candidates
  */
 
 type PreviewRow = {
@@ -25,6 +24,15 @@ type PreviewRow = {
   brand_name?: string;
   raw?: any;
 };
+
+function escapeCsv(value: any) {
+  if (value === null || value === undefined) return "";
+  const s = typeof value === "string" ? value : String(value);
+  if (s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
 
 export default function MatchPage() {
   const featureEnabled = true;
@@ -123,7 +131,7 @@ export default function MatchPage() {
       const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         setResultsRows([]);
-        return;
+        return [];
       }
       setResultsRows(j.rows ?? []);
       return j.rows ?? [];
@@ -285,6 +293,60 @@ export default function MatchPage() {
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter]);
 
+  // CSV export: build headers from original raw fields + core fields + added columns
+  const exportResultsCsv = useCallback(() => {
+    if (!resultsRows || resultsRows.length === 0) return alert("No results to export");
+    // base mapped columns we used for preview
+    const baseCols = ["row_id", "supplier_name", "sku", "ndc_item_code", "product_name", "brand_name"];
+    // collect raw keys across rows
+    const rawKeys = new Set<string>();
+    for (const r of resultsRows) {
+      const raw = r.raw ?? {};
+      if (raw && typeof raw === "object") {
+        Object.keys(raw).forEach((k) => rawKeys.add(k));
+      }
+    }
+    // remove any raw keys that are duplicates of baseCols (case-insensitive)
+    const lowerBase = new Set(Array.from(baseCols).map((c) => c.toLowerCase()));
+    const extraRawKeys = Array.from(rawKeys).filter((k) => !lowerBase.has(k.toLowerCase()));
+    const addedCols = ["status", "resolved_url", "resolved_domain", "confidence", "candidates"];
+    const headers = [...baseCols, ...extraRawKeys, ...addedCols];
+
+    const lines: string[] = [];
+    lines.push(headers.map(escapeCsv).join(","));
+
+    for (const r of resultsRows) {
+      const raw = r.raw ?? {};
+      const rowValues: any[] = [];
+      for (const h of baseCols) {
+        const v = r[h] ?? raw[h] ?? raw[h.replace(/\s+/g, " ")] ?? "";
+        rowValues.push(v);
+      }
+      for (const rk of extraRawKeys) {
+        const v = raw[rk] ?? "";
+        rowValues.push(v);
+      }
+      // candidates: join candidate urls or objects
+      let cand = "";
+      if (Array.isArray(r.candidates) && r.candidates.length) {
+        cand = r.candidates.map((c: any) => (typeof c === "string" ? c : c.url ?? JSON.stringify(c))).join(" | ");
+      }
+      rowValues.push(r.status ?? "", r.resolved_url ?? "", r.resolved_domain ?? "", r.confidence ?? "", cand);
+      lines.push(rowValues.map(escapeCsv).join(","));
+    }
+
+    const csvBlob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(csvBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    const filename = `match-results-${jobId ?? Date.now()}.csv`;
+    a.setAttribute("download", filename);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [resultsRows, jobId]);
+
   // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
   const resultsTableProps = useMemo(() => ({ rows: resultsRows, loading: resultsLoading, selectedRowIds, toggleRowSelection, onRefresh: () => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset), approveCandidate }), [resultsRows, resultsLoading, selectedRowIds, toggleRowSelection, jobId, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset, approveCandidate]);
@@ -340,6 +402,10 @@ export default function MatchPage() {
 
                 <button onClick={() => retryUnresolved()} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
                   Retry unresolved
+                </button>
+
+                <button onClick={() => exportResultsCsv()} disabled={!resultsRows || resultsRows.length === 0} className="w-full rounded border px-3 py-2 text-sm mt-2">
+                  Download CSV
                 </button>
               </div>
             </div>
@@ -397,7 +463,7 @@ export default function MatchPage() {
               <div className="mt-2">
                 <ResultsComp {...resultsTableProps} />
 
-                {/* Fallback simple table */}
+                {/* Fallback simple table with resolved_url clickable */}
                 {resultsRows && resultsRows.length > 0 ? (
                   <div className="mt-4 rounded-md border bg-white p-3">
                     <h4 className="text-sm font-semibold mb-2">Fallback: Raw rows (simple view)</h4>
@@ -410,16 +476,34 @@ export default function MatchPage() {
                             <th className="px-2 py-1">Product Name</th>
                             <th className="px-2 py-1">Supplier</th>
                             <th className="px-2 py-1">Status</th>
+                            <th className="px-2 py-1">Resolved URL</th>
+                            <th className="px-2 py-1">Confidence</th>
                           </tr>
                         </thead>
                         <tbody>
                           {resultsRows.map((r: any) => (
-                            <tr key={r.id} className="border-t">
-                              <td className="px-2 py-1">{r.row_id ?? r.id}</td>
-                              <td className="px-2 py-1">{r.sku}</td>
-                              <td className="px-2 py-1">{r.product_name}</td>
-                              <td className="px-2 py-1">{r.supplier_name}</td>
-                              <td className="px-2 py-1">{r.status}</td>
+                            <tr key={r.id} className="border-t align-top">
+                              <td className="px-2 py-1 align-top">{r.row_id ?? r.id}</td>
+                              <td className="px-2 py-1 align-top">{r.sku}</td>
+                              <td className="px-2 py-1 align-top">{r.product_name}</td>
+                              <td className="px-2 py-1 align-top">{r.supplier_name}</td>
+                              <td className="px-2 py-1 align-top">{r.status}</td>
+                              <td className="px-2 py-1 align-top">
+                                {r.resolved_url ? (
+                                  <a href={r.resolved_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                                    {r.resolved_url}
+                                  </a>
+                                ) : (Array.isArray(r.candidates) && r.candidates.length ? (
+                                  <div className="text-xs">
+                                    {r.candidates.slice(0,3).map((c:any, idx:number) => (
+                                      <div key={idx}>
+                                        <a href={c.url ?? (typeof c === "string" ? c : "")} target="_blank" rel="noreferrer" className="text-blue-600 underline">{c.url ?? (c)}</a>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : <span className="text-xs text-slate-500">—</span>)}
+                              </td>
+                              <td className="px-2 py-1 align-top">{r.confidence ?? ""}</td>
                             </tr>
                           ))}
                         </tbody>
