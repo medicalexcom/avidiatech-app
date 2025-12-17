@@ -1,3 +1,4 @@
+url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/app/dashboard/match/page.tsx
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,14 +9,13 @@ import ResultsTable from "./_components/ResultsTable";
 import BulkActions from "./_components/BulkActions";
 
 /**
- * MatchPage — automated tenant resolution (server-side)
+ * MatchPage (debug-enabled)
  *
- * This page no longer requests a tenant UUID from the user. The server will
- * resolve the tenant automatically from the current user's orgId (Clerk)
- * using the configured mapping table. Create/start flows send the job request
- * without tenant_id and rely on the server to map the tenant.
+ * - Adds debug state: lastCreateResponse, lastRowsResponse, lastFetchError
+ * - Adds a "Refresh rows" manual button to fetch rows on demand
+ * - Displays the raw server responses to help diagnose why ResultsTable may be empty
  *
- * Buttons are enabled once a preview exists and parsing is complete.
+ * Keep this patch until we confirm rows render correctly, then remove debug panel.
  */
 
 type PreviewRow = {
@@ -49,6 +49,11 @@ export default function MatchPage() {
   const [resultsStatusFilter, setResultsStatusFilter] = useState<string | undefined>(undefined);
   const [resultsLimit, setResultsLimit] = useState<number>(50);
   const [resultsOffset, setResultsOffset] = useState<number>(0);
+
+  // debug state
+  const [lastCreateResponse, setLastCreateResponse] = useState<any | null>(null);
+  const [lastRowsResponse, setLastRowsResponse] = useState<any | null>(null);
+  const [lastFetchError, setLastFetchError] = useState<string | null>(null);
 
   // parse file (xlsx/csv); produce preview rows (first 200)
   const handleFile = useCallback(async (file: File | null) => {
@@ -104,7 +109,7 @@ export default function MatchPage() {
     }
   }, []);
 
-  // create job from preview rows (no tenant_id sent — server will resolve automatically)
+  // create job from preview rows (no tenant_id sent — server resolves)
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
@@ -115,7 +120,8 @@ export default function MatchPage() {
     try {
       const body = { file_name: `upload-${Date.now()}`, rows: payloadRows.map((r) => ({ ...r, raw: r.raw })) };
       const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
+      setLastCreateResponse(j ?? { status: res.status, statusText: res.statusText });
       if (!res.ok || !j?.ok) {
         console.error("create job failed:", j);
         alert("Create job failed: " + (j?.error ?? res.statusText));
@@ -126,6 +132,7 @@ export default function MatchPage() {
       return j.job_id;
     } catch (err) {
       console.error("createJob error:", err);
+      setLastCreateResponse({ error: String(err) });
       alert("Create job failed (see console).");
       return null;
     } finally {
@@ -140,7 +147,7 @@ export default function MatchPage() {
     setStartingJob(true);
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(jid)}/start`, { method: "POST" });
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         console.error("start job failed", j);
         alert("Start job failed: " + (j?.error ?? res.statusText));
@@ -148,7 +155,7 @@ export default function MatchPage() {
       }
       pollJobStatus(jid);
     } catch (err) {
-      console.error("startJob error", err);
+      console.error("startJob error:", err);
     } finally {
       setStartingJob(false);
     }
@@ -164,11 +171,12 @@ export default function MatchPage() {
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
       if (res.ok && j?.ok) {
         setJobStatus(j.job ?? null);
         return j.job ?? null;
       }
+      setLastCreateResponse(j ?? { status: res.status, statusText: res.statusText });
       return null;
     } catch (err) {
       console.warn("fetchJobStatus error", err);
@@ -196,31 +204,45 @@ export default function MatchPage() {
     } finally {
       setPolling(false);
     }
-  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset, fetchResultsRows]);
+  }, [fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
   // fetch rows from job (paged)
-  async function fetchResultsRows(id: string, status?: string | undefined, limit = 50, offset = 0) {
+  const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
     setResultsLoading(true);
+    setLastFetchError(null);
     try {
       const url = new URL(`/api/v1/match/url-jobs/${encodeURIComponent(id)}/rows`, location.origin);
       if (status) url.searchParams.set("status", status);
       url.searchParams.set("limit", String(limit));
       url.searchParams.set("offset", String(offset));
       const res = await fetch(url.toString());
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
+      setLastRowsResponse(j ?? { status: res.status, statusText: res.statusText });
       if (!res.ok || !j?.ok) {
         console.error("fetchResultsRows failed", j);
         setResultsRows([]);
+        setLastFetchError(String(j?.error ?? res.statusText));
         return;
       }
       setResultsRows(j.rows ?? []);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("fetchResultsRows error", err);
       setResultsRows([]);
+      setLastFetchError(String(err?.message ?? err));
     } finally {
       setResultsLoading(false);
     }
-  }
+  }, []);
+
+  // effect: when jobId changes, fetch rows once
+  useEffect(() => {
+    if (!jobId) {
+      setResultsRows([]);
+      return;
+    }
+    fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   // approve candidate (calls server approve endpoint)
   const approveCandidate = useCallback(async (rowIdentifier: string, candidateUrl: string) => {
@@ -232,7 +254,7 @@ export default function MatchPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ approved_url: candidateUrl })
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         alert("Approve failed: " + (j?.error ?? res.statusText));
         return;
@@ -310,6 +332,11 @@ export default function MatchPage() {
                 <button onClick={() => startJob(jobId)} disabled={!jobId || startingJob || polling} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60">
                   {startingJob || polling ? "Starting…" : "Start resolve"}
                 </button>
+
+                {/* Manual refresh rows */}
+                <button onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)} disabled={!jobId} className="w-full rounded border px-3 py-2 text-sm mt-1">
+                  Refresh rows
+                </button>
               </div>
             </div>
           </div>
@@ -364,6 +391,29 @@ export default function MatchPage() {
 
               <div className="mt-2">
                 <ResultsComp {...resultsTableProps} />
+              </div>
+            </div>
+
+            {/* Debug panel (show raw server responses) */}
+            <div className="rounded-2xl border bg-white p-3">
+              <h3 className="text-sm font-semibold">Debug</h3>
+              <div className="mt-2 text-xs">
+                <div className="mb-2">
+                  <strong>Last create response:</strong>
+                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{lastCreateResponse ? JSON.stringify(lastCreateResponse, null, 2) : "none"}</pre>
+                </div>
+                <div className="mb-2">
+                  <strong>Last rows response:</strong>
+                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{lastRowsResponse ? JSON.stringify(lastRowsResponse, null, 2) : "none"}</pre>
+                </div>
+                <div className="mb-2">
+                  <strong>Last fetch error:</strong>
+                  <div className="text-red-600 text-xs">{lastFetchError ?? "none"}</div>
+                </div>
+                <div>
+                  <strong>Preview sample:</strong>
+                  <pre className="max-h-36 overflow-auto bg-slate-50 p-2 text-xs">{filePreviewRows.length ? JSON.stringify(filePreviewRows.slice(0,5), null, 2) : "none"}</pre>
+                </div>
               </div>
             </div>
           </div>
