@@ -162,15 +162,10 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 }
 
 /**
- * IMPORTANT: We bypass Clerk for internal endpoints BEFORE invoking clerkMiddleware.
- * This prevents Clerk from rejecting service-to-service calls that use x-pipeline-secret
- * or HMAC signatures instead of user sessions.
+ * Keep clerkMiddleware behavior for app routes; but early-bypass exact internal endpoints
+ * that must be callable by background workers (they validate their own secrets).
  *
- * Implementation note:
- * clerkMiddleware returns a handler that expects two arguments; to avoid
- * TypeScript mismatch when delegating, we call the wrapped handler with `as any`
- * for the second parameter (the NextFetchEvent) — that keeps the original behavior
- * while allowing an early-return bypass for internal endpoints.
+ * NOTE: do NOT bypass the user-facing /api/v1/pipeline/run route — it must run Clerk auth.
  */
 
 const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
@@ -209,10 +204,16 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Early bypass for internal worker callbacks, output endpoints and debug endpoints
+  // Early bypass ONLY for the internal endpoints we expect to be called without Clerk session:
+  // - internal pipeline runner endpoints
+  // - output fetch endpoint for a pipeline run (only when URL contains "/output/")
+  // - ingest callback
+  // - debug endpoints
+  const isPipelineOutputFetch =
+    pathname.startsWith("/api/v1/pipeline/run/") && pathname.includes("/output/");
   if (
     pathname.startsWith("/api/v1/pipeline/internal") ||
-    pathname.startsWith("/api/v1/pipeline/run") || // allow internal pipeline output fetches
+    isPipelineOutputFetch ||
     pathname.startsWith("/api/v1/ingest/callback") ||
     pathname.startsWith("/api/v1/debug")
   ) {
