@@ -16,12 +16,27 @@ export interface DescribeRequest {
 export interface SeoFields {
   h1?: string;
   pageTitle?: string;
+  title?: string; // some generators use title
   metaDescription?: string;
+  keywords?: string[] | string; // new: search keywords
   seoShortDescription?: string;
 }
 
 export interface DescribeSections {
+  // Overview should be full HTML canvas (we’ll render descriptionHtml there)
   overview?: string;
+
+  // New: sections you want as HTML
+  hook?: string;
+  mainDescription?: string;
+  featuresBenefits?: string;
+  specifications?: string;
+  internalLinks?: string;
+  whyChoose?: string;
+  manuals?: string;
+  faqs?: string;
+
+  // Keep old fields for backward compatibility
   features?: string[];
   specsSummary?: Record<string, any>;
   includedItems?: string[];
