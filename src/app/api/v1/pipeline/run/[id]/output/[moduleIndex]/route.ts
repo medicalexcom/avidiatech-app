@@ -2,6 +2,23 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 
+/**
+ * Pipeline output fetch endpoint
+ *
+ * Behavior:
+ * - If request includes valid x-pipeline-secret === process.env.PIPELINE_INTERNAL_SECRET,
+ *   the route allows the request without Clerk session (service-to-service).
+ * - Otherwise, it requires a Clerk-authenticated user and enforces ownership (run.created_by).
+ *
+ * Returns:
+ * {
+ *   pipelineRunId: string,
+ *   module: { index, name, status },
+ *   output_ref: string,
+ *   output: any
+ * }
+ */
+
 function clerkUserIdToUuid(clerkUserId: string): string {
   const hash = crypto.createHash("sha1").update(`clerk:${clerkUserId}`).digest("hex");
   const a = hash.slice(0, 8);
@@ -26,8 +43,19 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string; moduleIndex: string }> }
 ) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // If caller provided the internal secret, allow service access without Clerk session.
+  const req = _req as Request;
+  const providedSecret = (req.headers.get("x-pipeline-secret") || "").toString();
+  const expectedSecret = process.env.PIPELINE_INTERNAL_SECRET || "";
+  const isInternalCall = Boolean(expectedSecret && providedSecret && providedSecret === expectedSecret);
+
+  let clerkUserId: string | null = null;
+  if (!isInternalCall) {
+    // Enforce Clerk auth for user requests
+    const a = await auth();
+    clerkUserId = a.userId ?? null;
+    if (!clerkUserId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const supabase = getSupabaseServerClient();
   if (!supabase) {
@@ -38,27 +66,36 @@ export async function GET(
   }
 
   const { id, moduleIndex } = await ctx.params;
-
   const idx = Number(moduleIndex);
   if (!Number.isInteger(idx) || idx < 0 || idx > 1000) {
     return NextResponse.json({ error: "invalid_module_index" }, { status: 400 });
   }
 
-  const createdBy = clerkUserIdToUuid(userId);
+  // Verify ownership on pipeline run for non-internal callers
+  if (!isInternalCall) {
+    const createdBy = clerkUserIdToUuid(clerkUserId as string);
+    const { data: run, error: runErr } = await supabase
+      .from("pipeline_runs")
+      .select("id, created_by")
+      .eq("id", id)
+      .maybeSingle();
 
-  // Verify ownership on pipeline run
-  const { data: run, error: runErr } = await supabase
-    .from("pipeline_runs")
-    .select("id, created_by")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (runErr) {
-    return NextResponse.json({ error: "run_query_failed", details: String(runErr?.message ?? runErr) }, { status: 500 });
-  }
-  if (!run || run.created_by !== createdBy) {
-    // keep 404 to avoid leaking existence
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (runErr) {
+      return NextResponse.json({ error: "run_query_failed", details: String(runErr?.message ?? runErr) }, { status: 500 });
+    }
+    if (!run || run.created_by !== createdBy) {
+      // keep 404 to avoid leaking existence
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+  } else {
+    // For internal calls we still want to ensure the run exists (no ownership check)
+    const { data: runCheck, error: runErr } = await supabase.from("pipeline_runs").select("id").eq("id", id).maybeSingle();
+    if (runErr) {
+      return NextResponse.json({ error: "run_query_failed", details: String(runErr?.message ?? runErr) }, { status: 500 });
+    }
+    if (!runCheck) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
   }
 
   // Find module run
