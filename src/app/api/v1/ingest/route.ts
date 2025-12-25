@@ -16,13 +16,15 @@ const APP_URL =
  * construct a temporary profile object so ingestion can continue while you run
  * the DB migration to create `profiles`.
  *
- * Control the fallback behavior using the env var:
+ * This update improves the profile lookup to be resilient to different column
+ * names. Historically the code queried `profiles.user_id` which may not exist;
+ * now we attempt `clerk_user_id` first (recommended), and if that column is not
+ * present we fall back to `user_id`. If both columns are missing the existing
+ * missing-table handling remains in place.
+ *
+ * Control fallback behavior using the env var:
  * - ALLOW_PROFILE_FALLBACK=true  -> use a temporary profile when DB lookup fails
  * - ALLOW_PROFILE_FALLBACK=false -> return a 500 profile_lookup_failed (default)
- *
- * IMPORTANT: The temporary profile is not persisted. Use this only as a short-term
- * debugging / recovery mechanism. Create the real `public.profiles` table and seed
- * proper records as soon as possible.
  */
 
 export async function POST(req: NextRequest) {
@@ -74,64 +76,92 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ---- Profile lookup with safe fallback ----
-    // Try to resolve a profile row for the current user. If the DB lookup fails
-    // because the `profiles` table is missing (PGRST205), optionally fall back to
-    // a temporary in-memory profile (controlled by env ALLOW_PROFILE_FALLBACK).
+    // ---- Profile lookup with robust column support + safe fallback ----
+    // Try clerk_user_id first (the column created by the migration), then fall back to user_id.
+    // If the profiles table itself is missing (PGRST205) optionally fallback to a temp profile.
     let profileData: any = null;
     let tenant_id: string | null = null;
     let role: string = "user";
 
     try {
-      const { data, error } = await supabase
+      // First, attempt to look up by clerk_user_id (most common)
+      const byClerk = await supabase
         .from("profiles")
         .select("id, tenant_id, role")
-        .eq("user_id", userId)
+        .eq("clerk_user_id", userId)
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        // Unexpected DB error — rethrow so we can inspect and optionally fallback below
-        throw error;
+      if (!byClerk.error) {
+        profileData = byClerk.data ?? null;
+      } else {
+        // If clerk_user_id column doesn't exist (or other DB error), try user_id
+        const errMsg = String(byClerk.error?.message ?? "");
+        const isMissingCol =
+          String(byClerk.error?.code) === "42703" ||
+          errMsg.includes("does not exist") ||
+          errMsg.includes("Could not find the table");
+
+        if (isMissingCol) {
+          // Try the legacy column name user_id
+          const byUser = await supabase
+            .from("profiles")
+            .select("id, tenant_id, role")
+            .eq("user_id", userId)
+            .limit(1)
+            .maybeSingle();
+
+          if (!byUser.error) {
+            profileData = byUser.data ?? null;
+          } else {
+            // byUser also errored — rethrow so outer catch handles missing-table vs other errors
+            throw byUser.error;
+          }
+        } else {
+          // Some other DB error when querying clerk_user_id — rethrow
+          throw byClerk.error;
+        }
       }
 
-      if (data) {
-        profileData = data;
-        tenant_id = data.tenant_id ?? null;
-        role = data.role ?? "user";
-        console.info("[ingest] profile found", { correlation_id, profileId: data.id });
+      if (profileData) {
+        tenant_id = profileData.tenant_id ?? null;
+        role = profileData.role ?? "user";
+        console.info("[ingest] profile found", { correlation_id, profileId: profileData.id });
       } else {
         // No matching profile row
         console.warn("[ingest] profile not found for user", { correlation_id, userId });
       }
     } catch (err: any) {
-      // Detect PostgREST schema/cache error (missing table)
+      // Detect PostgREST schema/cache error (missing table) or column issues
       const isPgrstMissingTable =
         err &&
         (err.code === "PGRST205" ||
           (typeof err.message === "string" && err.message.includes("Could not find the table")));
 
+      const isColumnMissing =
+        err &&
+        (String(err.code) === "42703" ||
+          (typeof err.message === "string" && err.message.includes("does not exist")));
+
       console.error("[ingest] profile lookup failed", { correlation_id, err });
 
-      if (isPgrstMissingTable) {
-        // When the profiles table is missing we can optionally fallback to a temporary profile.
+      if (isPgrstMissingTable || isColumnMissing) {
         const allowFallback = String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() === "true";
 
         if (!allowFallback) {
           // Do not attempt fallback — return clear error so ops can run migrations
-          console.warn("[ingest] profiles table missing and fallback disabled. Aborting.");
+          console.warn("[ingest] profiles table/column missing and fallback disabled. Aborting.");
           return NextResponse.json(
-            { error: "profile_lookup_failed", detail: "profiles table missing in DB (PGRST205)" },
+            { error: "profile_lookup_failed", detail: isPgrstMissingTable ? "profiles table missing in DB (PGRST205)" : "profiles table missing expected column" },
             { status: 500 }
           );
         }
 
         // Build a minimal temporary profile object from the Clerk session (best-effort).
-        // NOTE: safeGetAuth currently provides userId; if you have richer server-side
-        // Clerk user info you may extend this to populate email/display_name.
         const tempProfile = {
           id: `tmp_${userId}`,
           tenant_id: null,
+          clerk_user_id: userId,
           user_id: userId,
           role: "owner", // temporary elevated role for convenience during recovery; change as needed
           _temporary: true,
@@ -139,9 +169,9 @@ export async function POST(req: NextRequest) {
         profileData = tempProfile;
         tenant_id = null;
         role = tempProfile.role;
-        console.warn("[ingest] using temporary fallback profile due to missing table", { correlation_id, tempProfileId: tempProfile.id });
+        console.warn("[ingest] using temporary fallback profile due to missing table/column", { correlation_id, tempProfileId: tempProfile.id });
       } else {
-        // Other DB error — surface a generic profile lookup failure
+        // Other DB error — surface generic profile lookup failure
         return NextResponse.json(
           { error: "profile_lookup_failed" },
           { status: 500 }
