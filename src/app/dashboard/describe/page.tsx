@@ -12,6 +12,7 @@ import DescribeOutput from "@/components/describe/DescribeOutput";
  * - Output preview lives below, left side (primary workspace)
  * - Right rail carries guidance + engine snapshot (premium, compact, aligned)
  * - No extra page-level scroll containers; rely on normal page scroll
+ * - Avoid overflow clipping that can make the page feel “paralyzed”
  */
 
 export const dynamic = "force-dynamic";
@@ -184,10 +185,11 @@ function StatCard({
   );
 }
 
-export default async function DescribePage() {
+export default function DescribePage() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Background: premium glows + subtle grid (hybrid) */}
+    // IMPORTANT: no overflow-hidden (prevents clipping / “stuck” feeling)
+    <main className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Background: premium glows + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/14" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/14" />
@@ -201,105 +203,188 @@ export default async function DescribePage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* Header / Hero */}
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-fuchsia-700 shadow-sm backdrop-blur dark:border-fuchsia-400/30 dark:bg-slate-950/55 dark:text-fuchsia-100">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-fuchsia-400/60 bg-slate-100 dark:border-fuchsia-400/30 dark:bg-slate-900">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
-                </span>
-                Content • AvidiaDescribe
-              </span>
-
-              <TinyChip tone="success">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Render + GPT • Instructioned
-              </TinyChip>
-
-              <TinyChip tone="signal">✨ Notes → store-ready page</TinyChip>
-            </div>
-
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
-                Describe the product in{" "}
-                <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
-                  your own words
-                </span>
-                . We turn it into a store-ready page.
-              </h1>
-              <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                Start with a name, short context, and a few real constraints. AvidiaDescribe
-                runs your custom instruction profile and returns SEO-ready copy that stays
-                consistent across brands, categories, and channels.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-3 lg:justify-end">
-            <SoftButton href="#describe-input" variant="primary">
-              Start describing
-            </SoftButton>
-            <SoftButton href="/dashboard/extract" variant="secondary">
-              Open Extract
-            </SoftButton>
-            <SoftButton href="/dashboard/seo" variant="secondary">
-              Open SEO
-            </SoftButton>
-          </div>
-        </header>
-
-        {/* Compact “stats” row (visual, not data-driven) */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
-          <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
-          <StatCard title="Rule fidelity" tone="emerald" value="Locked" caption="Custom instructions enforced" />
-          <StatCard title="Time to draft" tone="amber" value="Fast" caption="Designed for throughput" />
-        </section>
-
-        {/* INPUTS: always on top (Import-style) */}
-        <section
-          id="describe-input"
-          className={cx(
-            "rounded-[28px] bg-gradient-to-r from-fuchsia-200/60 via-pink-200/35 to-sky-200/55 p-[1px]",
-            "shadow-[0_18px_55px_-35px_rgba(2,6,23,0.55)] dark:shadow-[0_18px_55px_-35px_rgba(0,0,0,0.75)]",
-            "dark:from-fuchsia-500/22 dark:via-pink-500/14 dark:to-sky-500/18"
-          )}
-        >
+        {/* HERO + INPUT (Import-style: input immediately accessible) */}
+        <section className="rounded-[28px] bg-gradient-to-r from-fuchsia-200/60 via-pink-200/35 to-sky-200/55 p-[1px] shadow-[0_18px_55px_-35px_rgba(2,6,23,0.55)] dark:from-fuchsia-500/22 dark:via-pink-500/14 dark:to-sky-500/18 dark:shadow-[0_18px_55px_-35px_rgba(0,0,0,0.75)]">
           <div className="rounded-[27px] border border-white/50 bg-white/75 p-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/50 lg:p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <TinyChip tone="brand">
-                    <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
-                    Describe input
-                  </TinyChip>
-                  <TinyChip>Name • short context • constraints</TinyChip>
-                </div>
-                <h2 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Input first. Output follows.
-                </h2>
-                <p className="mt-1 max-w-2xl text-[11px] text-slate-600 dark:text-slate-300">
-                  Fill in the fields (name, short description, notes, claims, disclaimers, audience).
-                  Keep it real — the best outputs come from specific constraints, not marketing fluff.
-                </p>
-              </div>
+            {/* top strip */}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-fuchsia-700 shadow-sm backdrop-blur dark:border-fuchsia-400/30 dark:bg-slate-950/55 dark:text-fuchsia-100">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-fuchsia-400/60 bg-slate-100 dark:border-fuchsia-400/30 dark:bg-slate-900">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
+                  </span>
+                  Content • AvidiaDescribe
+                </span>
 
-              <div className="flex shrink-0 items-center gap-2">
                 <TinyChip tone="success">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Auto-structured output
+                  Render + GPT • Instructioned
                 </TinyChip>
+
+                <TinyChip tone="signal">✨ Notes → store-ready page</TinyChip>
+              </div>
+
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <SoftButton href="#describe-input" variant="primary">
+                  Start describing
+                </SoftButton>
+                <SoftButton href="/dashboard/extract" variant="secondary">
+                  Open Extract
+                </SoftButton>
+                <SoftButton href="/dashboard/seo" variant="secondary">
+                  Open SEO
+                </SoftButton>
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-30px_rgba(2,6,23,0.45)] dark:border-slate-800/60 dark:bg-slate-950/45">
-              <DescribeForm />
+            {/* main hero row */}
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.15fr),minmax(0,0.85fr)] lg:items-start">
+              {/* LEFT: hero text + form directly under it */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+                    Describe the product in{" "}
+                    <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
+                      your own words
+                    </span>
+                    . We turn it into a store-ready page.
+                  </h1>
+                  <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+                    Start with a name, short context, and a few real constraints. AvidiaDescribe
+                    runs your custom instruction profile and returns SEO-ready copy that stays
+                    consistent across brands, categories, and channels.
+                  </p>
+                </div>
+
+                {/* INPUTS: right here, always accessible */}
+                <div
+                  id="describe-input"
+                  className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-30px_rgba(2,6,23,0.45)] dark:border-slate-800/60 dark:bg-slate-950/45"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <TinyChip tone="brand">
+                          <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
+                          Describe input
+                        </TinyChip>
+                        <TinyChip>Name • short context • constraints</TinyChip>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-600 dark:text-slate-300">
+                        Be specific. Mention audience, do/don’t claims, warranty/disclaimer rules,
+                        and what must appear in the output.
+                      </p>
+                    </div>
+
+                    <TinyChip tone="success" />
+                  </div>
+
+                  <div className="mt-3">
+                    <DescribeForm />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT: compact guidance stack (tight, aligned) */}
+              <div className="flex flex-col gap-3">
+                <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/45">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Quick flow
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Keep it fast, consistent, and usable downstream.
+                      </p>
+                    </div>
+                    <TinyChip tone="brand">
+                      <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
+                      Guide
+                    </TinyChip>
+                  </div>
+
+                  <div className="mt-3 space-y-2 text-[11px]">
+                    {[
+                      {
+                        n: "1",
+                        tone: "border-fuchsia-400/50 text-fuchsia-700 dark:text-fuchsia-200",
+                        label: "Fill the inputs",
+                        body: "Name + short context + constraints you actually care about.",
+                      },
+                      {
+                        n: "2",
+                        tone: "border-sky-400/50 text-sky-700 dark:text-sky-200",
+                        label: "Review the preview",
+                        body: "Check structure, claims, disclaimers, and tone fidelity.",
+                      },
+                      {
+                        n: "3",
+                        tone: "border-emerald-400/50 text-emerald-700 dark:text-emerald-200",
+                        label: "Send downstream",
+                        body: "Reuse the output in SEO, Import, or exporters.",
+                      },
+                    ].map((s) => (
+                      <div
+                        key={s.n}
+                        className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30"
+                      >
+                        <div
+                          className={cx(
+                            "mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border bg-white dark:bg-slate-950",
+                            s.tone
+                          )}
+                        >
+                          <span className="text-[12px] font-semibold">{s.n}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-900 dark:text-slate-50">
+                            {s.label}
+                          </div>
+                          <div className="mt-0.5 text-slate-600 dark:text-slate-300">
+                            {s.body}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="rounded-2xl border border-sky-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-sky-500/25 dark:bg-slate-950/45 dark:text-slate-100">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Example input
+                    </div>
+                    <div className="mt-2 leading-relaxed">
+                      “Lightweight aluminum walker with wheels, small apartments, highlight
+                      stability and safe use; include warranty + no medical claims.”
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-500/25 dark:bg-slate-950/45 dark:text-slate-100">
+                    <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Typical output
+                    </div>
+                    <ul className="mt-2 list-inside list-disc space-y-1">
+                      <li>Clean H1 + scannable sections</li>
+                      <li>Benefit-first bullets (not fluff)</li>
+                      <li>Compliance-safe disclaimers</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* compact “stats” row (fills hero real estate without gaps) */}
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
+              <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
+              <StatCard title="Rule fidelity" tone="emerald" value="Locked" caption="Custom instructions enforced" />
+              <StatCard title="Time to draft" tone="amber" value="Fast" caption="Designed for throughput" />
             </div>
           </div>
         </section>
 
-        {/* WORKSPACE: Output (left) + Guidance rail (right) */}
+        {/* WORKSPACE: Output (left) + Rail (right) */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
           {/* LEFT: output preview primary */}
           <div className="lg:col-span-8">
@@ -313,16 +398,20 @@ export default async function DescribePage() {
                     </TinyChip>
                     <TinyChip>HTML + structured payload</TinyChip>
                   </div>
-                  <h3 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  <h2 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Preview results
-                  </h3>
+                  </h2>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    This is what ships — headings, bullets, disclaimers, and SEO metadata behavior included.
+                    This is what ships — sections, bullets, disclaimers, and SEO behavior included.
                   </p>
                 </div>
 
                 <div className="hidden shrink-0 sm:flex">
-                  <SoftButton href="/dashboard/seo" variant="secondary" className="px-3 py-1.5 text-xs">
+                  <SoftButton
+                    href="/dashboard/seo"
+                    variant="secondary"
+                    className="px-3 py-1.5 text-xs"
+                  >
                     Send to SEO ↗
                   </SoftButton>
                 </div>
@@ -334,77 +423,8 @@ export default async function DescribePage() {
             </div>
           </div>
 
-          {/* RIGHT: guidance rail */}
+          {/* RIGHT: engine snapshot + compact checklist */}
           <aside className="space-y-4 lg:col-span-4">
-            {/* Quick steps (moved out of the form area) */}
-            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Quick flow
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Keep it fast, consistent, and usable downstream.
-                  </p>
-                </div>
-                <TinyChip tone="brand">
-                  <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
-                  Guide
-                </TinyChip>
-              </div>
-
-              <div className="mt-4 space-y-2 text-[11px]">
-                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
-                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-fuchsia-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-fuchsia-700 dark:text-fuchsia-200">
-                      1
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Fill the input block
-                    </div>
-                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                      Name + short context + constraints you actually care about.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
-                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-sky-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-sky-700 dark:text-sky-200">
-                      2
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Review the canvas
-                    </div>
-                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                      Make sure claims, disclaimers, and structure match your rules.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
-                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-200">
-                      3
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Send downstream
-                    </div>
-                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                      Reuse the same structure in SEO, Import, or exports.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Engine snapshot (premium, compact) */}
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -483,28 +503,16 @@ export default async function DescribePage() {
               </div>
             </div>
 
-            {/* Example cards (tight, aligned) */}
-            <div className="grid grid-cols-1 gap-3">
-              <div className="rounded-2xl border border-sky-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-sky-500/25 dark:bg-slate-950/45 dark:text-slate-100">
-                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Example input
-                </div>
-                <div className="mt-2 leading-relaxed">
-                  “Lightweight aluminum walker with wheels, small apartments,
-                  highlight stability and safe use; include warranty + no medical claims.”
-                </div>
+            <div className="rounded-2xl border border-amber-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-amber-500/25 dark:bg-slate-950/45 dark:text-slate-100">
+              <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Quality checklist
               </div>
-
-              <div className="rounded-2xl border border-emerald-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-500/25 dark:bg-slate-950/45 dark:text-slate-100">
-                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Typical output
-                </div>
-                <ul className="mt-2 list-inside list-disc space-y-1">
-                  <li>Clean H1 + scannable sections</li>
-                  <li>Benefit-first bullets (not fluff)</li>
-                  <li>Compliance-safe disclaimers</li>
-                </ul>
-              </div>
+              <ul className="mt-2 list-inside list-disc space-y-1">
+                <li>No medical claims unless allowed</li>
+                <li>Warranty/disclaimer included when required</li>
+                <li>Scannable sections + clean bullets</li>
+                <li>Meta behavior respects length caps</li>
+              </ul>
             </div>
           </aside>
         </section>
