@@ -16,27 +16,9 @@ const MODEL =
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-function safeSnippet(v: string, n = 2500) {
+function safeSnippet(v: string, n = 12000) {
   const s = String(v || "");
   return s.length > n ? s.slice(0, n) + "…(truncated)" : s;
-}
-
-function isNonEmptyString(v: any) {
-  return typeof v === "string" && v.trim().length > 0;
-}
-
-function asStringArray(v: any): string[] | null {
-  if (!Array.isArray(v)) return null;
-  const out = v.filter((x) => typeof x === "string" && x.trim().length > 0);
-  return out.length ? out : [];
-}
-
-function requireField(condition: boolean, message: string) {
-  if (!condition) {
-    const err: any = new Error(message);
-    err.code = "describe_invalid_model_output";
-    throw err;
-  }
 }
 
 function extractTextFromResponses(res: any): string {
@@ -65,24 +47,73 @@ function extractTextFromResponses(res: any): string {
   }
 }
 
+function isNonEmptyString(v: any) {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+function requireField(condition: boolean, message: string) {
+  if (!condition) {
+    const err: any = new Error(message);
+    err.code = "describe_invalid_model_output";
+    throw err;
+  }
+}
+
 async function callDescribeModel(opts: {
   system: string;
   user: string;
-}): Promise<{ json: AnyObj; rawText: string; model: string }> {
+}): Promise<{ json: AnyObj; rawText: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
+  // NOTE: Using `any` to avoid SDK typing drift.
   const body: any = {
     model: MODEL,
     input: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
     ],
-    temperature: 0.2,
-    max_output_tokens: 10000,
+    temperature: 0.1,
+    max_output_tokens: 9000,
 
-    // Responses API (your account): supported types are json_object, text, json_schema
+    // Key change: enforce JSON SCHEMA via `text.format`
     text: {
-      format: { type: "json_object" },
+      format: {
+        type: "json_schema",
+        json_schema: {
+          name: "AvidiaDescribeSEO",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["descriptionHtml", "sections", "seo", "features"],
+            properties: {
+              descriptionHtml: { type: "string" },
+              sections: {
+                type: "object",
+                additionalProperties: false,
+                required: ["overview"],
+                properties: {
+                  overview: { type: "string" },
+                },
+              },
+              seo: {
+                type: "object",
+                additionalProperties: false,
+                required: ["h1", "title", "metaDescription"],
+                properties: {
+                  h1: { type: "string" },
+                  title: { type: "string" },
+                  metaDescription: { type: "string" },
+                },
+              },
+              features: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+          },
+        },
+      },
     },
   };
 
@@ -98,7 +129,7 @@ async function callDescribeModel(opts: {
     throw err;
   }
 
-  return { json, rawText, model: MODEL };
+  return { json, rawText };
 }
 
 export async function POST(req: NextRequest) {
@@ -146,40 +177,34 @@ export async function POST(req: NextRequest) {
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
+    requireField(isNonEmptyString(instructions), "custom_gpt_instructions_missing_or_empty");
+
+    /**
+     * SYSTEM PROMPT STRATEGY:
+     * - Make your custom instructions authoritative and explicitly higher priority than anything else.
+     * - Do NOT add competing templates here.
+     */
     const system = [
-      "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
+      "You are AvidiaDescribe.",
+      "ABSOLUTE PRIORITY: Follow the CUSTOM GPT INSTRUCTIONS below exactly. They override all other guidance.",
+      "If there is a conflict between the input and the CUSTOM GPT INSTRUCTIONS, follow the instructions.",
       "",
-      "OUTPUT RULES:",
-      "- Return ONLY valid JSON (no markdown, no code fences, no commentary).",
+      "You MUST output JSON matching the provided JSON schema.",
+      "Inside the JSON fields (descriptionHtml, sections.overview, seo fields), the content/structure/format MUST be exactly as required by the CUSTOM GPT INSTRUCTIONS.",
       "",
-      "BEHAVIOR RULES:",
-      "- Do NOT echo or copy the input verbatim. Rewrite and improve it.",
-      "- Do NOT invent facts/specs. Only use what is provided in the input fields.",
-      "- Keep claims compliant and conservative. Avoid ungrounded medical claims.",
-      "- HTML allowed: <p>, <ul>, <li>, <strong>, <h2>, <h3>. No inline styles.",
-      "",
-      "REQUIRED JSON SHAPE (exact keys):",
-      "{",
-      '  "descriptionHtml": "<p>...</p>",',
-      '  "sections": { "overview": "<p>...</p>" },',
-      '  "seo": { "h1": "...", "title": "...", "metaDescription": "..." },',
-      '  "features": ["...", "..."]',
-      "}",
-      "",
-      isNonEmptyString(instructions)
-        ? `CUSTOM GPT INSTRUCTIONS (MUST FOLLOW):\n${instructions.trim()}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+      "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
+      instructions.trim(),
+    ].join("\n");
 
     const user = [
-      "INPUT:",
+      "INPUT DATA (facts only):",
       `name: ${name}`,
       body.brand ? `brand: ${String(body.brand).trim()}` : "",
       `shortDescription: ${shortDescription}`,
       body.specs ? `specs: ${JSON.stringify(body.specs)}` : "",
       body.format ? `format: ${String(body.format)}` : "",
+      "",
+      "Generate the output now.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -202,13 +227,7 @@ export async function POST(req: NextRequest) {
             requestId,
             model: MODEL,
             instruction_source: instructionsSource || null,
-            request: {
-              name,
-              shortDescription,
-              brand: body.brand ?? null,
-              specs: body.specs ?? null,
-              format: body.format ?? null,
-            },
+            request: { name, shortDescription, brand: body.brand ?? null, specs: body.specs ?? null, format: body.format ?? null },
             error: String(err?.message || err),
             raw: safeSnippet(String(err?.raw || rawText || "")),
           },
@@ -236,48 +255,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required fields (NO fallback-to-input behavior)
-    const descriptionHtml = parsed?.descriptionHtml ?? null;
-    requireField(isNonEmptyString(descriptionHtml), "missing_descriptionHtml");
+    // Validate presence (no fallback to input)
+    requireField(isNonEmptyString(parsed?.descriptionHtml), "missing_descriptionHtml");
+    requireField(isNonEmptyString(parsed?.sections?.overview), "missing_sections.overview");
+    requireField(isNonEmptyString(parsed?.seo?.h1), "missing_seo.h1");
+    requireField(isNonEmptyString(parsed?.seo?.title), "missing_seo.title");
+    requireField(isNonEmptyString(parsed?.seo?.metaDescription), "missing_seo.metaDescription");
+    requireField(Array.isArray(parsed?.features), "missing_features_array");
 
-    const overview = parsed?.sections?.overview ?? null;
-    requireField(isNonEmptyString(overview), "missing_sections.overview");
-
-    const seo = parsed?.seo ?? null;
-    requireField(!!seo && typeof seo === "object", "missing_seo_object");
-    requireField(isNonEmptyString((seo as any).h1), "missing_seo.h1");
-    requireField(isNonEmptyString((seo as any).title), "missing_seo.title");
-    requireField(isNonEmptyString((seo as any).metaDescription), "missing_seo.metaDescription");
-
-    const features = asStringArray(parsed?.features);
-
-    const normalized: AnyObj = {
-      ...parsed,
-      descriptionHtml: String(descriptionHtml),
-      sections: { ...(parsed.sections || {}), overview: String(overview) },
-      seo: {
-        ...(parsed.seo || {}),
-        h1: String((seo as any).h1),
-        title: String((seo as any).title),
-        metaDescription: String((seo as any).metaDescription),
-      },
-      features,
-      _debug: {
-        ...(parsed._debug || {}),
-        mode: "openai_direct_responses_text_format_json_object",
-        requestId,
-        model: MODEL,
-        instruction_source: instructionsSource || null,
-      },
-    };
-
+    // Persist success
     try {
       await saveIngestion({
         tenantId,
         userId,
         type: "describe",
         status: "success",
-        normalizedPayload: normalized.normalizedPayload ?? null,
+        normalizedPayload: parsed.normalizedPayload ?? null,
         rawPayload: parsed ?? null,
       });
     } catch {
@@ -285,16 +278,23 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      await incrementUsageCounter({
-        tenantId,
-        metric: "describe_calls",
-        incrementBy: 1,
-      });
+      await incrementUsageCounter({ tenantId, metric: "describe_calls", incrementBy: 1 });
     } catch {
       // ignore
     }
 
-    return NextResponse.json(normalized);
+    // Attach debug without changing schema (client can ignore)
+    const response: AnyObj = {
+      ...parsed,
+      _debug: {
+        requestId,
+        model: MODEL,
+        instruction_source: instructionsSource || null,
+        mode: "json_schema_enforced_custom_instructions_authoritative",
+      },
+    };
+
+    return NextResponse.json(response);
   } catch (err: any) {
     if (err?.code === "describe_invalid_model_output") {
       return NextResponse.json(
@@ -302,7 +302,6 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
-
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
