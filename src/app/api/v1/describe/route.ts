@@ -5,21 +5,6 @@ import type { DescribeRequest } from "@/components/describe/types";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import OpenAI from "openai";
 
-/**
- * AvidiaDescribe API route (OpenAI direct via Responses API)
- *
- * IMPORTANT:
- * - OpenAI Responses API no longer accepts `response_format`.
- *   JSON enforcement moved to `text.format`.
- *
- * Env:
- * - OPENAI_API_KEY (required)
- * - OPENAI_DESCRIBE_MODEL (optional)
- * - OPENAI_SEO_MODEL (optional)
- * - OPENAI_MODEL (optional)
- * - DEBUG_DESCRIBE_MODEL_OUTPUT="true" (optional)
- */
-
 type AnyObj = Record<string, any>;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -54,10 +39,6 @@ function requireField(condition: boolean, message: string) {
   }
 }
 
-/**
- * Extract text from Responses API output.
- * Defensive against SDK output shape differences.
- */
 function extractTextFromResponses(res: any): string {
   const out0 = res?.output?.at?.(0) ?? res?.output?.[0] ?? null;
   if (!out0) return "";
@@ -77,7 +58,6 @@ function extractTextFromResponses(res: any): string {
 
   if (typeof out0?.text === "string") return out0.text;
 
-  // Fallback (debug)
   try {
     return JSON.stringify(out0);
   } catch {
@@ -91,8 +71,6 @@ async function callDescribeModel(opts: {
 }): Promise<{ json: AnyObj; rawText: string; model: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  // NOTE: Use `as any` to avoid SDK typing drift across versions.
-  // The OpenAI API error you saw confirms `text.format` is supported.
   const body: any = {
     model: MODEL,
     input: [
@@ -102,9 +80,9 @@ async function callDescribeModel(opts: {
     temperature: 0.2,
     max_output_tokens: 1600,
 
-    // NEW: JSON output enforcement for Responses API
+    // Responses API (your account): supported types are json_object, text, json_schema
     text: {
-      format: { type: "json" },
+      format: { type: "json_object" },
     },
   };
 
@@ -130,7 +108,6 @@ export async function POST(req: NextRequest) {
     process.env.NODE_ENV !== "production";
 
   try {
-    // Auth (Clerk)
     const auth = safeGetAuth(req as any) as any;
     if (!auth || !auth.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -138,7 +115,6 @@ export async function POST(req: NextRequest) {
     const userId = auth.userId as string;
     const tenantId = ((auth.actor as any)?.tenantId as string) || null;
 
-    // Parse body
     const body = (await req.json().catch(() => null)) as DescribeRequest | null;
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 422 });
@@ -167,17 +143,14 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Load tenant instructions
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
-    // System prompt: strict JSON-only + compliance
     const system = [
       "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
       "",
       "OUTPUT RULES:",
       "- Return ONLY valid JSON (no markdown, no code fences, no commentary).",
-      "- The response must be parseable JSON (since the API requests JSON output).",
       "",
       "BEHAVIOR RULES:",
       "- Do NOT echo or copy the input verbatim. Rewrite and improve it.",
@@ -211,7 +184,6 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n");
 
-    // Call model
     let parsed: AnyObj;
     let rawText = "";
 
@@ -220,7 +192,6 @@ export async function POST(req: NextRequest) {
       parsed = result.json;
       rawText = result.rawText;
     } catch (err: any) {
-      // Persist failure
       try {
         await saveIngestion({
           tenantId,
@@ -293,14 +264,13 @@ export async function POST(req: NextRequest) {
       features,
       _debug: {
         ...(parsed._debug || {}),
-        mode: "openai_direct_responses_text_format_json",
+        mode: "openai_direct_responses_text_format_json_object",
         requestId,
         model: MODEL,
         instruction_source: instructionsSource || null,
       },
     };
 
-    // Persist success
     try {
       await saveIngestion({
         tenantId,
@@ -314,7 +284,6 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Increment usage counter
     try {
       await incrementUsageCounter({
         tenantId,
