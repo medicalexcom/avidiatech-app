@@ -161,8 +161,27 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
   return false;
 }
 
+/**
+ * IMPORTANT CHANGE: bypass Clerk/session enforcement for internal endpoints
+ * that are invoked by background workers/runners or by external services:
+ * - /api/v1/pipeline/internal/*
+ * - /api/v1/ingest/callback
+ * - /api/v1/debug/*
+ *
+ * These endpoints perform their own auth (x-pipeline-secret or HMAC),
+ * so they must not be blocked by Clerk middleware.
+ */
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
+
+  // Bypass auth for internal runner and callback endpoints
+  if (
+    pathname.startsWith("/api/v1/pipeline/internal") ||
+    pathname.startsWith("/api/v1/ingest/callback") ||
+    pathname.startsWith("/api/v1/debug")
+  ) {
+    return NextResponse.next();
+  }
 
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/settings") && !pathname.startsWith("/api")) {
     return NextResponse.next();
