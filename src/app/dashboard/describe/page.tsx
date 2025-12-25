@@ -1,17 +1,17 @@
 // src/app/dashboard/describe/page.tsx
+"use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import DescribeForm from "@/components/describe/DescribeForm";
 import DescribeOutput from "@/components/describe/DescribeOutput";
 
 /**
  * /dashboard/describe
  *
- * Goals:
- * - Inputs immediately accessible at the top (Import-style)
- * - Output preview lives below, left side (primary workspace)
- * - Right rail carries guidance + engine snapshot (premium, compact, aligned)
- * - No extra page-level scroll containers; rely on normal page scroll
+ * Change in this version:
+ * - Forces the default output "View" to HTML by setting ?view=html when missing.
+ *   (No component edits required; DescribeOutput can read the query param.)
  */
 
 export const dynamic = "force-dynamic";
@@ -155,12 +155,7 @@ function StatCard({
         t.border
       )}
     >
-      <div
-        className={cx(
-          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
-          t.top
-        )}
-      />
+      <div className={cx("pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r", t.top)} />
       <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
       <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
       <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
@@ -184,10 +179,27 @@ function StatCard({
   );
 }
 
-export default async function DescribePage() {
+export default function DescribePage() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  // ✅ Default the output "View" to HTML
+  useEffect(() => {
+    if (!params) return;
+
+    // If the page already has a view param, do nothing.
+    // Otherwise force ?view=html (no scroll-jump).
+    const current = params.get("view");
+    if (current) return;
+
+    const sp = new URLSearchParams(params.toString());
+    sp.set("view", "html");
+    router.replace(`?${sp.toString()}`, { scroll: false });
+  }, [params, router]);
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* Background: premium glows + subtle grid (hybrid) */}
+      {/* Background: premium glows + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/14" />
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/14" />
@@ -249,7 +261,7 @@ export default async function DescribePage() {
           </div>
         </header>
 
-        {/* Compact “stats” row (visual, not data-driven) */}
+        {/* Compact “stats” row */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
           <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
@@ -311,13 +323,13 @@ export default async function DescribePage() {
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       Live canvas
                     </TinyChip>
-                    <TinyChip>HTML + structured payload</TinyChip>
+                    <TinyChip>Default view: HTML</TinyChip>
                   </div>
                   <h3 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
                     Preview results
                   </h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    This is what ships — headings, bullets, disclaimers, and SEO metadata behavior included.
+                    HTML is the default view. Switch to JSON only when you need to debug payload shape.
                   </p>
                 </div>
 
@@ -336,13 +348,10 @@ export default async function DescribePage() {
 
           {/* RIGHT: guidance rail */}
           <aside className="space-y-4 lg:col-span-4">
-            {/* Quick steps (moved out of the form area) */}
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Quick flow
-                  </h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Quick flow</h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Keep it fast, consistent, and usable downstream.
                   </p>
@@ -356,14 +365,10 @@ export default async function DescribePage() {
               <div className="mt-4 space-y-2 text-[11px]">
                 <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
                   <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-fuchsia-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-fuchsia-700 dark:text-fuchsia-200">
-                      1
-                    </span>
+                    <span className="text-[12px] font-semibold text-fuchsia-700 dark:text-fuchsia-200">1</span>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Fill the input block
-                    </div>
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">Fill the input block</div>
                     <div className="mt-0.5 text-slate-600 dark:text-slate-300">
                       Name + short context + constraints you actually care about.
                     </div>
@@ -372,45 +377,34 @@ export default async function DescribePage() {
 
                 <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
                   <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-sky-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-sky-700 dark:text-sky-200">
-                      2
-                    </span>
+                    <span className="text-[12px] font-semibold text-sky-700 dark:text-sky-200">2</span>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Review the canvas
-                    </div>
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">Review the canvas</div>
                     <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                      Make sure claims, disclaimers, and structure match your rules.
+                      Claims, disclaimers, and structure should match your rules.
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
                   <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/50 bg-white dark:bg-slate-950">
-                    <span className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-200">
-                      3
-                    </span>
+                    <span className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-200">3</span>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50">
-                      Send downstream
-                    </div>
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">Send downstream</div>
                     <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                      Reuse the same structure in SEO, Import, or exports.
+                      Reuse the structure in SEO, Import, and exports.
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Engine snapshot (premium, compact) */}
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Describe engine snapshot
-                  </h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Describe engine snapshot</h3>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     How Describe turns notes into consistent, shippable output.
                   </p>
@@ -426,17 +420,17 @@ export default async function DescribePage() {
                   {
                     dot: "bg-fuchsia-400",
                     title: "Input channel",
-                    body: "Short notes, specs, selling points, constraints, compliance hints.",
+                    body: "Short notes, specs, constraints, compliance hints.",
                   },
                   {
                     dot: "bg-sky-400",
                     title: "Instruction profile",
-                    body: "Locks to your global rules: tone, sections, SEO meta, disclaimers.",
+                    body: "Locks to your global rules: tone, sections, meta, disclaimers.",
                   },
                   {
                     dot: "bg-emerald-400",
                     title: "Output canvas",
-                    body: "Structured HTML + payload you can export or feed into other modules.",
+                    body: "Structured HTML (default) + payload for downstream use.",
                   },
                 ].map((x) => (
                   <div
@@ -447,63 +441,11 @@ export default async function DescribePage() {
                       <span className={cx("h-3 w-3 rounded-full", x.dot)} />
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900 dark:text-slate-50">
-                        {x.title}
-                      </div>
-                      <div className="mt-0.5 text-slate-600 dark:text-slate-300">
-                        {x.body}
-                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-50">{x.title}</div>
+                      <div className="mt-0.5 text-slate-600 dark:text-slate-300">{x.body}</div>
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-[11px] shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Output includes
-                  </div>
-                  <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700 dark:text-slate-200">
-                    <li>H1 + sections</li>
-                    <li>Bullets</li>
-                    <li>Meta behavior</li>
-                  </ul>
-                </div>
-
-                <div className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-[11px] shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Designed for
-                  </div>
-                  <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700 dark:text-slate-200">
-                    <li>Product pages</li>
-                    <li>Imports</li>
-                    <li>Downstream SEO</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Example cards (tight, aligned) */}
-            <div className="grid grid-cols-1 gap-3">
-              <div className="rounded-2xl border border-sky-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-sky-500/25 dark:bg-slate-950/45 dark:text-slate-100">
-                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Example input
-                </div>
-                <div className="mt-2 leading-relaxed">
-                  “Lightweight aluminum walker with wheels, small apartments,
-                  highlight stability and safe use; include warranty + no medical claims.”
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-500/25 dark:bg-slate-950/45 dark:text-slate-100">
-                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Typical output
-                </div>
-                <ul className="mt-2 list-inside list-disc space-y-1">
-                  <li>Clean H1 + scannable sections</li>
-                  <li>Benefit-first bullets (not fluff)</li>
-                  <li>Compliance-safe disclaimers</li>
-                </ul>
               </div>
             </div>
           </aside>
