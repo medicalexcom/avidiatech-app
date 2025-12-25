@@ -2,13 +2,94 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
 /**
+ * Try to build a normalized_payload object from the extract artifact structure.
+ * This is intentionally permissive: it uses the richest available fields and
+ * keeps the shape reasonably similar to what other parts of the app expect.
+ */
+function buildNormalizedFromExtractArtifact(extract: any) {
+  if (!extract || typeof extract !== "object") return null;
+
+  // Prefer explicit normalized_payload if present
+  if (extract.normalized_payload && typeof extract.normalized_payload === "object") {
+    return extract.normalized_payload;
+  }
+
+  const normalized: any = {};
+
+  // Name - prefer name_best, then name_raw
+  normalized.name = extract.name_best || extract.name_raw || extract.title || null;
+  normalized.name_best = normalized.name;
+
+  // Description - prefer description_raw or sections.description or a join of features_html
+  normalized.description =
+    extract.description_raw ||
+    extract.sections?.description ||
+    (Array.isArray(extract.features_html) ? extract.features_html.slice(0, 6).join("\n\n") : null) ||
+    null;
+
+  // Images - standardize to array of { url, alt? }
+  if (Array.isArray(extract.images)) {
+    normalized.images = extract.images
+      .map((i: any) => {
+        if (!i) return null;
+        if (typeof i === "string") return { url: i };
+        if (i.url) return { url: i.url, alt: i.alt ?? null };
+        return null;
+      })
+      .filter(Boolean);
+  } else {
+    normalized.images = [];
+  }
+
+  // PDF manuals
+  normalized.pdf_manual_urls = Array.isArray(extract.pdf_manual_urls)
+    ? extract.pdf_manual_urls
+    : Array.isArray(extract.pdfs)
+    ? extract.pdfs
+    : [];
+
+  // Features: prefer features_structured, features_raw, features_html
+  if (Array.isArray(extract.features_structured) && extract.features_structured.length > 0) {
+    normalized.features_raw = extract.features_structured;
+  } else if (Array.isArray(extract.features_raw) && extract.features_raw.length > 0) {
+    normalized.features_raw = extract.features_raw;
+  } else if (Array.isArray(extract.features_html) && extract.features_html.length > 0) {
+    normalized.features_raw = extract.features_html;
+  } else {
+    normalized.features_raw = [];
+  }
+
+  // Specs: prefer structured specs
+  normalized.specs = extract.specs_structured || extract.specs || extract.sections?.specifications || {};
+
+  // brand, sku
+  if (extract.brand) normalized.brand = extract.brand;
+  if (extract.sku) normalized.sku = extract.sku;
+
+  // small metadata & fallback fields
+  if (extract.quality_score != null) normalized.quality_score = extract.quality_score;
+  normalized._source = extract.source || null;
+  normalized._artifact_generated_at = extract.generatedAt || extract.created_at || null;
+
+  // Cleanup empty arrays/objects for cleanliness
+  if (Array.isArray(normalized.images) && normalized.images.length === 0) delete normalized.images;
+  if (Array.isArray(normalized.features_raw) && normalized.features_raw.length === 0) delete normalized.features_raw;
+  if (Array.isArray(normalized.pdf_manual_urls) && normalized.pdf_manual_urls.length === 0) delete normalized.pdf_manual_urls;
+  if (normalized.specs && Object.keys(normalized.specs).length === 0) delete normalized.specs;
+
+  // Ensure we return at least one usable field
+  if (!normalized.name && !normalized.description && !normalized.features_raw && !normalized.specs) return null;
+  return normalized;
+}
+
+/**
  * runSeoForIngestion
  *
  * - Loads product_ingestions row for ingestionId.
  * - If normalized_payload missing, tries to fallback to the extractor artifact:
  *   - looks up module_runs (input_ref = ingestionId, module_name = 'extract') for an output_ref
- *   - if found, fetches the artifact via internal output endpoint
- *   - if artifact contains normalized_payload, persist it to product_ingestions
+ *   - if found, fetches the artifact via internal output endpoint (using PIPELINE_INTERNAL_SECRET)
+ *   - attempts to build a normalized payload from the artifact and persists it
  * - Calls callSeoModel with a normalized payload and persists seo results.
  */
 export async function runSeoForIngestion(ingestionId: string): Promise<{
@@ -36,7 +117,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     throw new Error("ingestion_not_found");
   }
 
-  // 2) If normalized_payload missing, try to recover it from extract artifact
+  // 2) If normalized_payload missing, try to recover it from extract artifact or build from extract data
   let normalized = (ingestion as any).normalized_payload as any;
 
   if (!normalized) {
@@ -59,7 +140,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
         const pipelineRunId = extractRow.pipeline_run_id;
         const moduleIndex = extractRow.module_index;
 
-        // Construct internal output URL and call with internal secret (server-side)
         const internalUrl = `${process.env.APP_URL?.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(
           String(pipelineRunId)
         )}/output/${encodeURIComponent(String(moduleIndex))}`;
@@ -68,20 +148,42 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
           const res = await fetch(internalUrl, {
             method: "GET",
             headers: {
-              "Accept": "application/json",
-              // include internal secret so internal endpoint authenticates
+              Accept: "application/json",
               "x-pipeline-secret": process.env.PIPELINE_INTERNAL_SECRET || "",
             },
           });
 
           if (res.ok) {
             const body = await res.json().catch(() => null);
-            // Try common shapes: { normalized_payload } or { data: { normalized_payload } } or direct object
-            const candidate =
-              body?.normalized_payload ?? body?.data?.normalized_payload ?? body?.data ?? body;
 
-            if (candidate && typeof candidate === "object" && Object.keys(candidate).length > 0) {
-              normalized = candidate;
+            // Candidate shapes:
+            // - artifact may be returned as body.output.extract
+            // - artifact may embed normalized_payload at various places
+            let candidate =
+              body?.normalized_payload ?? body?.data?.normalized_payload ?? body?.data ?? body ?? null;
+
+            // If API returns wrapper { output: { extract: { ... } } }
+            if (!candidate && body?.output?.extract) {
+              candidate = body.output.extract;
+            } else if (!candidate && body?.output) {
+              candidate = body.output;
+            }
+
+            // Now try to build normalized payload from candidate if needed
+            let maybeNormalized: any = null;
+            if (candidate && typeof candidate === "object") {
+              // If candidate already looks normalized (has keys we expect), use it
+              if (candidate.name || candidate.name_best || candidate.features_raw || candidate.specs) {
+                maybeNormalized = candidate;
+              } else if (candidate.extract) {
+                maybeNormalized = buildNormalizedFromExtractArtifact(candidate.extract);
+              } else {
+                maybeNormalized = buildNormalizedFromExtractArtifact(candidate);
+              }
+            }
+
+            if (maybeNormalized) {
+              normalized = maybeNormalized;
               // persist normalized_payload back into product_ingestions so future runs don't need fallback
               try {
                 const { error: updErr } = await supabase
@@ -101,11 +203,19 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
                 console.warn("[runSeoForIngestion] error persisting normalized_payload:", err);
               }
             } else {
-              console.warn("[runSeoForIngestion] artifact fetch returned no normalized payload", { pipelineRunId, moduleIndex });
+              console.warn("[runSeoForIngestion] artifact fetch returned no usable normalized payload", {
+                pipelineRunId,
+                moduleIndex,
+                output_ref: extractRow.output_ref,
+              });
             }
           } else {
             const txt = await res.text().catch(() => "");
-            console.warn("[runSeoForIngestion] failed to fetch artifact via internal output endpoint", { internalUrl, status: res.status, body: txt });
+            console.warn("[runSeoForIngestion] failed to fetch artifact via internal output endpoint", {
+              internalUrl,
+              status: res.status,
+              body: txt,
+            });
           }
         } catch (err) {
           console.warn("[runSeoForIngestion] error fetching artifact via internal output endpoint", err);
