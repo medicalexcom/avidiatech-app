@@ -163,8 +163,18 @@ function StatCard({
         )}
       />
       <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
-      <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
-      <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
+      <div
+        className={cx(
+          "pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl",
+          t.glowA
+        )}
+      />
+      <div
+        className={cx(
+          "pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl",
+          t.glowB
+        )}
+      />
 
       <div className="relative">
         <div className="text-[13px] font-semibold leading-none text-slate-900 dark:text-slate-50">
@@ -249,8 +259,8 @@ export default function DescribePage() {
                     . We turn it into a store-ready page.
                   </h1>
                   <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                    Start with a name, short context, and a few real constraints. AvidiaDescribe runs
-                    your custom instruction profile and returns SEO-ready copy that stays consistent
+                    Start with a name, short context, and a few real constraints.
+                    AvidiaDescribe runs your custom instruction profile and returns SEO-ready copy that stays consistent
                     across brands, categories, and channels.
                   </p>
                 </div>
@@ -275,7 +285,7 @@ export default function DescribePage() {
                       </p>
                     </div>
 
-                    {/* FIX: TinyChip must have children */}
+                    {/* IMPORTANT: TinyChip requires children */}
                     <TinyChip tone="success">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       Ready for output
@@ -379,10 +389,30 @@ export default function DescribePage() {
 
             {/* compact “stats” row */}
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
-              <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
-              <StatCard title="Rule fidelity" tone="emerald" value="Locked" caption="Custom instructions enforced" />
-              <StatCard title="Time to draft" tone="amber" value="Fast" caption="Designed for throughput" />
+              <StatCard
+                title="Input length"
+                tone="fuchsia"
+                value="Short"
+                caption="Works from tiny prompts"
+              />
+              <StatCard
+                title="Output shape"
+                tone="sky"
+                value="Structured"
+                caption="Headers, bullets, meta"
+              />
+              <StatCard
+                title="Rule fidelity"
+                tone="emerald"
+                value="Locked"
+                caption="Custom instructions enforced"
+              />
+              <StatCard
+                title="Time to draft"
+                tone="amber"
+                value="Fast"
+                caption="Designed for throughput"
+              />
             </div>
           </div>
         </section>
@@ -409,12 +439,18 @@ export default function DescribePage() {
                 </div>
 
                 <div className="hidden shrink-0 sm:flex">
-                  <SoftButton href="/dashboard/seo" variant="secondary" className="px-3 py-1.5 text-xs">
+                  <SoftButton
+                    href="/dashboard/seo"
+                    variant="secondary"
+                    className="px-3 py-1.5 text-xs"
+                  >
                     Send to SEO ↗
                   </SoftButton>
                 </div>
               </div>
 
+              {/* NOTE: HTML-view-default + no-inner-scroll must be implemented in DescribeOutput
+                 (the component that owns the Styled/HTML toggle + renderer). */}
               <div className="mt-4">
                 <DescribeOutput />
               </div>
