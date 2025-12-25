@@ -78,9 +78,9 @@ async function callDescribeModel(opts: {
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
     ],
-    temperature: 0.1,
+    temperature: 0.2,
     // Increase from 1600 -> 8000 (adjust as needed)
-    max_output_tokens: 8000,
+    max_output_tokens: 10000,
 
     text: {
       format: { type: "json_object" },
