@@ -10,6 +10,21 @@ const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ||
   "http://localhost:3000";
 
+/**
+ * Note: this route includes a safe fallback for profile lookup failures caused by
+ * a missing `public.profiles` table (PostgREST error PGRST205). The fallback will
+ * construct a temporary profile object so ingestion can continue while you run
+ * the DB migration to create `profiles`.
+ *
+ * Control the fallback behavior using the env var:
+ * - ALLOW_PROFILE_FALLBACK=true  -> use a temporary profile when DB lookup fails
+ * - ALLOW_PROFILE_FALLBACK=false -> return a 500 profile_lookup_failed (default)
+ *
+ * IMPORTANT: The temporary profile is not persisted. Use this only as a short-term
+ * debugging / recovery mechanism. Create the real `public.profiles` table and seed
+ * proper records as soon as possible.
+ */
+
 export async function POST(req: NextRequest) {
   try {
     const { userId } =
@@ -59,24 +74,89 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Resolve profile / tenant
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("id, tenant_id, role")
-      .eq("user_id", userId)
-      .limit(1)
-      .single();
+    // ---- Profile lookup with safe fallback ----
+    // Try to resolve a profile row for the current user. If the DB lookup fails
+    // because the `profiles` table is missing (PGRST205), optionally fall back to
+    // a temporary in-memory profile (controlled by env ALLOW_PROFILE_FALLBACK).
+    let profileData: any = null;
+    let tenant_id: string | null = null;
+    let role: string = "user";
 
-    if (profileError) {
-      console.warn("profile lookup failed", profileError);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, tenant_id, role")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        // Unexpected DB error — rethrow so we can inspect and optionally fallback below
+        throw error;
+      }
+
+      if (data) {
+        profileData = data;
+        tenant_id = data.tenant_id ?? null;
+        role = data.role ?? "user";
+        console.info("[ingest] profile found", { correlation_id, profileId: data.id });
+      } else {
+        // No matching profile row
+        console.warn("[ingest] profile not found for user", { correlation_id, userId });
+      }
+    } catch (err: any) {
+      // Detect PostgREST schema/cache error (missing table)
+      const isPgrstMissingTable =
+        err &&
+        (err.code === "PGRST205" ||
+          (typeof err.message === "string" && err.message.includes("Could not find the table")));
+
+      console.error("[ingest] profile lookup failed", { correlation_id, err });
+
+      if (isPgrstMissingTable) {
+        // When the profiles table is missing we can optionally fallback to a temporary profile.
+        const allowFallback = String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() === "true";
+
+        if (!allowFallback) {
+          // Do not attempt fallback — return clear error so ops can run migrations
+          console.warn("[ingest] profiles table missing and fallback disabled. Aborting.");
+          return NextResponse.json(
+            { error: "profile_lookup_failed", detail: "profiles table missing in DB (PGRST205)" },
+            { status: 500 }
+          );
+        }
+
+        // Build a minimal temporary profile object from the Clerk session (best-effort).
+        // NOTE: safeGetAuth currently provides userId; if you have richer server-side
+        // Clerk user info you may extend this to populate email/display_name.
+        const tempProfile = {
+          id: `tmp_${userId}`,
+          tenant_id: null,
+          user_id: userId,
+          role: "owner", // temporary elevated role for convenience during recovery; change as needed
+          _temporary: true,
+        };
+        profileData = tempProfile;
+        tenant_id = null;
+        role = tempProfile.role;
+        console.warn("[ingest] using temporary fallback profile due to missing table", { correlation_id, tempProfileId: tempProfile.id });
+      } else {
+        // Other DB error — surface a generic profile lookup failure
+        return NextResponse.json(
+          { error: "profile_lookup_failed" },
+          { status: 500 }
+        );
+      }
+    }
+
+    // If profileData still null (no row found and no fallback), return error
+    if (!profileData) {
+      console.warn("[ingest] profile not found and no fallback available", { correlation_id, userId });
       return NextResponse.json(
         { error: "profile_lookup_failed" },
         { status: 500 }
       );
     }
-
-    const tenant_id = profileData?.tenant_id || null;
-    const role = profileData?.role || "user";
 
     // Quota check (if applicable)
     if (role !== "owner") {
@@ -85,7 +165,7 @@ export async function POST(req: NextRequest) {
         .select("*")
         .eq("tenant_id", tenant_id)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (counters && typeof counters.ingest_calls === "number") {
         const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT
@@ -271,7 +351,7 @@ export async function POST(req: NextRequest) {
     if (diagErr) {
       console.error(
         "failed to persist engine_call diagnostics",
-        diagErr.message || diagErr
+        diagErr.message || String(diagErr)
       );
       return NextResponse.json(
         {
