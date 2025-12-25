@@ -73,11 +73,17 @@ export default function ExtractPage() {
     setPreview(null);
     setPreviewError(null);
 
-    // scroll to results area
+    // scroll to results area (after layout has painted)
     setTimeout(() => {
       const el = document.getElementById("extract-results");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 250);
+      if (!el) return;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }, 50);
   }
 
   // When jobId + jobUrl set, call:
@@ -163,7 +169,7 @@ export default function ExtractPage() {
       : "Awaiting first URL";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    <main className="relative min-h-screen overflow-x-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* BACKGROUND: layered gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/20" />
@@ -174,7 +180,7 @@ export default function ExtractPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
+      <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-6 lg:px-8 lg:pt-6 lg:pb-8">
         {/* HERO */}
         <section className="space-y-5">
           <div className="rounded-[28px] bg-gradient-to-r from-cyan-200/60 via-sky-200/40 to-emerald-200/60 p-[1px] shadow-2xl shadow-slate-200/70 dark:from-cyan-500/25 dark:via-sky-500/15 dark:to-emerald-500/25 dark:shadow-slate-950/70">
@@ -223,9 +229,9 @@ export default function ExtractPage() {
                       — as clean, normalized JSON.
                     </h1>
                     <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
-                      Paste any product URL. AvidiaExtract hits your ingest engine,
-                      strips noise, standardizes specs, and streams back a
-                      JSON-first view that plugs into SEO, Describe, and any
+                      Paste any product URL. AvidiaExtract hits your ingest
+                      engine, strips noise, standardizes specs, and streams back
+                      a JSON-first view that plugs into SEO, Describe, and any
                       ecommerce stack.
                     </p>
                   </div>
@@ -238,7 +244,8 @@ export default function ExtractPage() {
                           Extract launcher
                         </p>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Submit a manufacturer URL; AvidiaExtract handles the rest.
+                          Submit a manufacturer URL; AvidiaExtract handles the
+                          rest.
                         </p>
                       </div>
 
@@ -260,11 +267,14 @@ export default function ExtractPage() {
 
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                        Extraction response is streamed into both the human view and the JSON viewer below.
+                        Extraction response is streamed into both the human view
+                        and the JSON viewer below.
                       </p>
                       <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                        {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
+                        {rowLoading || previewLoading
+                          ? "Pipeline running…"
+                          : "Idle"}
                       </div>
                     </div>
                   </div>
@@ -272,7 +282,7 @@ export default function ExtractPage() {
 
                 {/* RIGHT: 3 stacked cards (Quick start + Example + Feeds) */}
                 <div className="flex h-full flex-col gap-3">
-                  {/* NEW: Quick start card (moved from launcher) */}
+                  {/* Quick start card */}
                   <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                       Quick start
@@ -302,7 +312,8 @@ export default function ExtractPage() {
                             Step 2
                           </p>
                           <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                            Inspect the extraction canvas and JSON viewer in real time.
+                            Inspect the extraction canvas and JSON viewer in
+                            real time.
                           </p>
                         </div>
                       </div>
@@ -315,8 +326,9 @@ export default function ExtractPage() {
                       Example extraction
                     </p>
                     <p className="leading-relaxed">
-                      Unified JSON with name, brand, attributes, features, manuals,
-                      images, and normalized specs — ready for any downstream module.
+                      Unified JSON with name, brand, attributes, features,
+                      manuals, images, and normalized specs — ready for any
+                      downstream module.
                     </p>
                   </div>
 
@@ -343,7 +355,8 @@ export default function ExtractPage() {
                   <div className="space-y-0">
                     <p className="font-semibold">Opinionated normalization</p>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Features, manuals, images, and specs are shaped into a predictable schema.
+                      Features, manuals, images, and specs are shaped into a
+                      predictable schema.
                     </p>
                   </div>
                 </div>
@@ -355,7 +368,8 @@ export default function ExtractPage() {
                   <div className="space-y-0">
                     <p className="font-semibold">Debuggable at every step</p>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Human preview, Tabs, and JSON viewer all stay in sync with the ingest engine.
+                      Human preview, Tabs, and JSON viewer all stay in sync with
+                      the ingest engine.
                     </p>
                   </div>
                 </div>
@@ -367,7 +381,8 @@ export default function ExtractPage() {
                   <div className="space-y-0">
                     <p className="font-semibold">Built for the rest of Avidia</p>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      One ingestion layer powering AvidiaDescribe, AvidiaSEO, and any custom exporter.
+                      One ingestion layer powering AvidiaDescribe, AvidiaSEO,
+                      and any custom exporter.
                     </p>
                   </div>
                 </div>
@@ -567,7 +582,10 @@ export default function ExtractPage() {
             </div>
 
             {/* TabsShell: anchored block for raw data */}
-            <div className="mt-2" id="extract-results">
+            <div
+              className="mt-2 scroll-mt-24 lg:scroll-mt-28"
+              id="extract-results"
+            >
               <div className="mb-2 flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -589,7 +607,7 @@ export default function ExtractPage() {
           </section>
 
           {/* RIGHT: JSON viewer card (sticky, premium) */}
-          <aside className="lg:sticky lg:top-6">
+          <aside className="lg:sticky lg:top-24">
             <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80">
               <div className="flex items-start justify-between gap-3">
                 <div>
