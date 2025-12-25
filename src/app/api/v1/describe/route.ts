@@ -77,10 +77,13 @@ async function callDescribeModel(opts: { system: string; user: string }) {
         name: "AvidiaDescribeFull",
         strict: true,
         schema: {
-          // IMPORTANT: OpenAI strict schema requires closed objects
           type: "object",
           additionalProperties: false,
-          required: ["descriptionHtml", "sections", "seo", "features"],
+
+          // IMPORTANT (OpenAI strict validator):
+          // required must include EVERY key in properties
+          required: ["descriptionHtml", "sections", "seo", "features", "data_gaps"],
+
           properties: {
             descriptionHtml: { type: "string" },
 
@@ -127,7 +130,7 @@ async function callDescribeModel(opts: { system: string; user: string }) {
               items: { type: "string" },
             },
 
-            // Optional, but explicitly allowed
+            // REQUIRED (can be empty array)
             data_gaps: {
               type: "array",
               items: { type: "string" },
@@ -216,7 +219,7 @@ export async function POST(req: NextRequest) {
       "HARD REQUIREMENTS:",
       "1) Output MUST include ALL required sections/fields per the JSON schema (even if some are 'Not available').",
       "2) Do NOT invent facts. Use ONLY the packet fields as grounding.",
-      "3) If info is missing, still output the section and add a note in data_gaps.",
+      "3) If info is missing, still output the section and add a note in data_gaps (data_gaps can be empty).",
       "4) The formatting/structure of the HTML content MUST follow the CUSTOM GPT INSTRUCTIONS.",
       "",
       "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
@@ -276,13 +279,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required fields exist (no fallback to input)
+    // Validate required fields exist
     requireField(isNonEmptyString(parsed?.descriptionHtml), "missing_descriptionHtml");
     requireField(isNonEmptyString(parsed?.sections?.overview), "missing_sections.overview");
     requireField(isNonEmptyString(parsed?.seo?.h1), "missing_seo.h1");
     requireField(isNonEmptyString(parsed?.seo?.title), "missing_seo.title");
     requireField(isNonEmptyString(parsed?.seo?.metaDescription), "missing_seo.metaDescription");
     requireField(Array.isArray(parsed?.features), "missing_features_array");
+    requireField(Array.isArray(parsed?.data_gaps), "missing_data_gaps_array");
 
     // Persist success
     try {
@@ -310,7 +314,7 @@ export async function POST(req: NextRequest) {
         requestId,
         model: MODEL,
         instruction_source: instructionsSource || null,
-        mode: "json_schema_closed_objects_full_sections",
+        mode: "json_schema_closed_objects_required_all_properties",
       },
     });
   } catch (err: any) {
