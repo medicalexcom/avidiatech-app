@@ -61,7 +61,7 @@ export default function DescribeOutput() {
     | "json"
   >("overview");
 
-  const [viewMode, setViewMode] = useState<"styled" | "iframe">("styled");
+  const [viewMode, setViewMode] = useState<"styled" | "iframe">("iframe");
 
   useEffect(() => {
     setTab("overview");
