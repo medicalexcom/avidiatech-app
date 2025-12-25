@@ -286,7 +286,6 @@ export default function DescribePage() {
                       </p>
                     </div>
 
-                    {/* FIX: TinyChip must have children */}
                     <TinyChip tone="success">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       Ready for output
@@ -426,53 +425,73 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* Scoped overrides: make HTML Viewer default + remove nested frame/scroll */}
+              {/* Scoped overrides driven by data-preview-mode set by the script below */}
               <style>{`
-                /* Keep the preview area from creating its own scroll containers */
-                [data-describe-preview] .overflow-auto,
-                [data-describe-preview] .overflow-y-auto,
-                [data-describe-preview] .overflow-x-auto,
-                [data-describe-preview] pre,
-                [data-describe-preview] textarea {
+                /* Styled + HTML: expand fully (no nested frame/scroll) */
+                [data-describe-preview][data-preview-mode="styled"] .overflow-auto,
+                [data-describe-preview][data-preview-mode="styled"] .overflow-y-auto,
+                [data-describe-preview][data-preview-mode="styled"] .overflow-x-auto,
+                [data-describe-preview][data-preview-mode="styled"] pre,
+                [data-describe-preview][data-preview-mode="styled"] textarea,
+                [data-describe-preview][data-preview-mode="styled"] iframe,
+                [data-describe-preview][data-preview-mode="html"] .overflow-auto,
+                [data-describe-preview][data-preview-mode="html"] .overflow-y-auto,
+                [data-describe-preview][data-preview-mode="html"] .overflow-x-auto,
+                [data-describe-preview][data-preview-mode="html"] pre,
+                [data-describe-preview][data-preview-mode="html"] textarea,
+                [data-describe-preview][data-preview-mode="html"] iframe {
                   overflow: visible !important;
                   max-height: none !important;
                   height: auto !important;
                 }
 
-                /* If the HTML viewer uses code/preview frames, strip the "extra frame" look */
-                [data-describe-preview] pre,
-                [data-describe-preview] textarea,
-                [data-describe-preview] code,
-                [data-describe-preview] iframe {
+                /* Remove the “extra frame” feel inside the preview surface for Styled/HTML */
+                [data-describe-preview][data-preview-mode="styled"] pre,
+                [data-describe-preview][data-preview-mode="styled"] textarea,
+                [data-describe-preview][data-preview-mode="styled"] code,
+                [data-describe-preview][data-preview-mode="styled"] iframe,
+                [data-describe-preview][data-preview-mode="html"] pre,
+                [data-describe-preview][data-preview-mode="html"] textarea,
+                [data-describe-preview][data-preview-mode="html"] code,
+                [data-describe-preview][data-preview-mode="html"] iframe {
                   border: 0 !important;
                   box-shadow: none !important;
                   outline: none !important;
                 }
 
-                /* Avoid inner rounded/bordered wrappers becoming a visible second frame */
-                [data-describe-preview] [class*="border"],
-                [data-describe-preview] [class*="ring"] {
-                  /* Don’t nuke Tailwind borders globally—only remove when they are the inner viewer shell */
+                /* Raw JSON: keep it inside the card (contained scroll), don’t spill under other cards */
+                [data-describe-preview][data-preview-mode="raw"] pre,
+                [data-describe-preview][data-preview-mode="raw"] textarea {
+                  max-height: 60vh !important;
+                  overflow: auto !important;
+                  border: 0 !important;
+                  box-shadow: none !important;
+                  outline: none !important;
                 }
 
-                /* If a nested viewer shell uses overflow-hidden + fixed height, force it to grow */
-                [data-describe-preview] [style*="overflow: auto"],
-                [data-describe-preview] [style*="overflow:auto"],
-                [data-describe-preview] [style*="overflow-y: auto"],
-                [data-describe-preview] [style*="overflow-y:auto"] {
+                /* If the Raw JSON viewer is inside a wrapper that sets overflow hidden/auto weirdly, normalize it */
+                [data-describe-preview][data-preview-mode="raw"] .overflow-hidden {
                   overflow: visible !important;
                 }
               `}</style>
 
-              <div className="mt-4" data-describe-preview>
+              <div className="mt-4" data-describe-preview data-preview-mode="html">
                 <DescribeOutput />
               </div>
 
-              <Script id="describe-html-viewer-default" strategy="afterInteractive">
+              <Script id="describe-preview-default-html-and-containment" strategy="afterInteractive">
                 {`
                   (function () {
                     var root = document.querySelector('[data-describe-preview]');
                     if (!root) return;
+
+                    // Allow user to toggle freely; we only force HTML as default on initial load
+                    // and when the tablist gets replaced (typical after a new generation render).
+                    var state = window.__AVIDIA_DESCRIBE_PREVIEW_STATE || {
+                      userToggled: false,
+                      lastTablist: null
+                    };
+                    window.__AVIDIA_DESCRIBE_PREVIEW_STATE = state;
 
                     function textOf(el) {
                       return ((el && (el.textContent || el.innerText)) || '').trim();
@@ -486,53 +505,57 @@ export default function DescribePage() {
                       return /active|selected|current/i.test(cls);
                     }
 
-                    function clickHtmlViewerTab() {
-                      // Find a tab/button/link whose label looks like "HTML Viewer" (or at least "HTML")
+                    function findTabs() {
                       var candidates = Array.prototype.slice.call(
                         root.querySelectorAll('button,[role="tab"],a')
                       );
 
-                      var htmlBtn =
-                        candidates.find(function (b) {
-                          return /html\\s*viewer/i.test(textOf(b));
-                        }) ||
-                        candidates.find(function (b) {
-                          // fallback: a button that contains "HTML" but not "Styled"
+                      // Prefer explicit tabs
+                      var htmlTab = candidates.find(function (b) { return /html\\s*viewer/i.test(textOf(b)); })
+                        || candidates.find(function (b) {
                           var t = textOf(b);
-                          return /\\bhtml\\b/i.test(t) && !/styled/i.test(t);
+                          return /\\bhtml\\b/i.test(t) && !/styled/i.test(t) && !/json/i.test(t);
                         });
 
-                      if (htmlBtn && !isActiveTab(htmlBtn)) {
-                        try { htmlBtn.click(); } catch (e) {}
-                      }
+                      var styledTab = candidates.find(function (b) { return /^\\s*styled\\s*$/i.test(textOf(b)) || /\\bstyled\\b/i.test(textOf(b)); });
+                      var rawTab = candidates.find(function (b) { return /raw\\s*json/i.test(textOf(b)) || (/\\bjson\\b/i.test(textOf(b)) && /raw/i.test(textOf(b))); })
+                        || candidates.find(function (b) { return /^\\s*json\\s*$/i.test(textOf(b)); });
+
+                      var active = candidates.find(function (b) { return isActiveTab(b); });
+
+                      return { candidates: candidates, htmlTab: htmlTab, styledTab: styledTab, rawTab: rawTab, active: active };
                     }
 
-                    function unscrollify() {
-                      // Remove nested scrollbars and force content to expand like Styled view.
-                      var nodes = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe');
-                      nodes.forEach(function (el) {
+                    function inferMode(activeTabText) {
+                      var t = (activeTabText || '').toLowerCase();
+                      if (t.includes('raw') || t.includes('json')) return 'raw';
+                      if (t.includes('styled')) return 'styled';
+                      if (t.includes('html')) return 'html';
+                      // fallback: default to html
+                      return 'html';
+                    }
+
+                    function bindUserToggleHandlers(tabs) {
+                      tabs.forEach(function (b) {
                         try {
-                          var st = window.getComputedStyle(el);
-                          var oy = st.overflowY;
-                          var ox = st.overflowX;
-
-                          if (oy === 'auto' || oy === 'scroll') {
-                            el.style.overflowY = 'visible';
-                            el.style.maxHeight = 'none';
-                            el.style.height = 'auto';
-                          }
-                          if (ox === 'auto' || ox === 'scroll') {
-                            el.style.overflowX = 'visible';
-                          }
-
-                          // Strip "frame" feel on the inner viewer surface
-                          el.style.border = '0';
-                          el.style.boxShadow = 'none';
-                          el.style.outline = 'none';
+                          if (!b || b.dataset.__avidiaBound) return;
+                          b.dataset.__avidiaBound = "1";
+                          b.addEventListener('click', function () {
+                            state.userToggled = true;
+                          }, { passive: true });
                         } catch (e) {}
                       });
+                    }
 
-                      // If HTML Viewer is rendered in an iframe and it's same-origin, resize to content.
+                    function getTablistEl() {
+                      return root.querySelector('[role="tablist"]') || null;
+                    }
+
+                    function setModeAttr(mode) {
+                      try { root.setAttribute('data-preview-mode', mode); } catch (e) {}
+                    }
+
+                    function resizeIframesIfPossible() {
                       var iframes = root.querySelectorAll('iframe');
                       iframes.forEach(function (ifr) {
                         try {
@@ -550,28 +573,85 @@ export default function DescribePage() {
                             ifr.style.boxShadow = 'none';
                           }
                         } catch (e) {
-                          // cross-origin iframes can't be measured; ignore safely
+                          // cross-origin: ignore safely
                         }
                       });
                     }
 
+                    function applyLayoutForMode(mode) {
+                      setModeAttr(mode);
+
+                      if (mode === 'raw') {
+                        // Contain Raw JSON inside this card
+                        var nodes = root.querySelectorAll('pre,textarea');
+                        nodes.forEach(function (el) {
+                          try {
+                            el.style.maxHeight = '60vh';
+                            el.style.overflow = 'auto';
+                            el.style.border = '0';
+                            el.style.boxShadow = 'none';
+                            el.style.outline = 'none';
+                          } catch (e) {}
+                        });
+                        return;
+                      }
+
+                      // Styled / HTML: expand (no nested scroll/frame)
+                      var nodes2 = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe');
+                      nodes2.forEach(function (el) {
+                        try {
+                          el.style.overflow = 'visible';
+                          el.style.maxHeight = 'none';
+                          el.style.height = 'auto';
+                          el.style.border = '0';
+                          el.style.boxShadow = 'none';
+                          el.style.outline = 'none';
+                        } catch (e) {}
+                      });
+
+                      resizeIframesIfPossible();
+                    }
+
+                    function setDefaultToHtmlIfNeeded(tabInfo) {
+                      // Reset userToggled when tablist gets replaced (commonly happens after new generation)
+                      var tablist = getTablistEl();
+                      if (tablist && tablist !== state.lastTablist) {
+                        state.lastTablist = tablist;
+                        state.userToggled = false;
+                      }
+
+                      // Default behavior: show HTML Viewer unless user already toggled
+                      if (!state.userToggled && tabInfo.htmlTab && !isActiveTab(tabInfo.htmlTab)) {
+                        try { tabInfo.htmlTab.click(); } catch (e) {}
+                      }
+                    }
+
                     function run() {
-                      clickHtmlViewerTab();
-                      unscrollify();
+                      var t = findTabs();
+                      bindUserToggleHandlers(t.candidates);
+
+                      // Ensure HTML is the default view on load / fresh render
+                      setDefaultToHtmlIfNeeded(t);
+
+                      // After potential click, re-evaluate active mode
+                      t = findTabs();
+                      var mode = inferMode(textOf(t.active));
+
+                      applyLayoutForMode(mode);
                     }
 
                     // Initial run
                     run();
 
-                    // Re-run whenever DescribeOutput re-renders (new generation, toggles, etc.)
-                    var mo = new MutationObserver(function () {
-                      run();
-                    });
+                    // Re-run on DescribeOutput changes, but do NOT lock the user out of toggling.
+                    var mo = new MutationObserver(function () { run(); });
                     mo.observe(root, { childList: true, subtree: true });
 
-                    // Keep iframe/content sizing correct on viewport changes
                     window.addEventListener('resize', function () {
-                      unscrollify();
+                      // Keep iframe sizing healthy in HTML mode
+                      var t = findTabs();
+                      var mode = inferMode(textOf(t.active));
+                      applyLayoutForMode(mode);
                     });
                   })();
                 `}
