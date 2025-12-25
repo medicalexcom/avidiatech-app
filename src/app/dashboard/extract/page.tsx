@@ -162,10 +162,51 @@ export default function ExtractPage() {
 
       {/* Wrapper aligned with Describe/Translate (starts higher) */}
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO: Extract identity + ExtractHeader (no framed banner) */}
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
-          {/* LEFT: headline + story + status chips */}
-          <div className="min-w-[260px] flex-1 space-y-5">
+        {/* HERO: prioritize launcher (input) first */}
+        <section className="relative grid gap-6 lg:grid-cols-[minmax(0,460px),minmax(0,1fr)] lg:items-start">
+          {/* FIRST: ExtractHeader inside a "launcher" card (sticky on desktop) */}
+          <div className="order-1">
+            <div className="lg:sticky lg:top-6">
+              <div className="flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-xl shadow-slate-200/60 dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_50px_rgba(15,23,42,0.95)]">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Extract launcher
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Submit a manufacturer URL; AvidiaExtract handles the rest.
+                    </p>
+                  </div>
+                  {jobId && (
+                    <div className="text-right">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Current job
+                      </p>
+                      <p className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
+                        {jobId.slice(0, 10)}…
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="min-h-[220px] flex-1">
+                  <ExtractHeader onJobCreated={onJobCreated} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-500">
+                    Extraction response is streamed into both the human view and
+                    the JSON viewer below.
+                  </p>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                    {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECOND: headline + story + status chips */}
+          <div className="order-2 min-w-[260px] flex-1 space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-800 shadow-sm dark:border-cyan-500/60 dark:bg-slate-950/90 dark:text-cyan-100">
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-400/70 bg-slate-100 dark:bg-slate-900">
@@ -286,45 +327,6 @@ export default function ExtractPage() {
                 <span>
                   Inspect the extraction canvas and JSON viewer in real time.
                 </span>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT: ExtractHeader inside a "launcher" card */}
-          <div className="mt-4 w-full lg:mt-0 lg:w-[420px] xl:w-[440px]">
-            <div className="flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-xl shadow-slate-200/60 dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_50px_rgba(15,23,42,0.95)]">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Extract launcher
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Submit a manufacturer URL; AvidiaExtract handles the rest.
-                  </p>
-                </div>
-                {jobId && (
-                  <div className="text-right">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Current job
-                    </p>
-                    <p className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
-                      {jobId.slice(0, 10)}…
-                    </p>
-                  </div>
-                )}
-              </div>
-              <div className="min-h-[220px] flex-1">
-                <ExtractHeader onJobCreated={onJobCreated} />
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                  Extraction response is streamed into both the human view and
-                  the JSON viewer below.
-                </p>
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                  {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
-                </div>
               </div>
             </div>
           </div>
