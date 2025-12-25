@@ -5,36 +5,65 @@
 
 import crypto from "crypto";
 
-/**
- * signPayload - compute HMAC SHA256 hex signature
- * @param payload string - raw string payload (JSON.stringify(body))
- * @param secret string - shared secret (INGEST_SECRET)
- * @returns hex string signature
- */
 export function signPayload(payload: string, secret: string): string {
   if (!secret || !payload) return "";
   return crypto.createHmac("sha256", secret).update(payload).digest("hex");
 }
 
 /**
- * verifySignature - timing-safe comparison of expected vs provided signature
- * @param payload string - raw string payload (JSON.stringify(body))
- * @param signature string - signature from header
- * @param secret string - shared secret (INGEST_SECRET)
- * @returns boolean - true if valid
+ * Try to parse provided signature into a Buffer.
+ * Accepts:
+ *  - raw hex (e.g. "a3f...")
+ *  - prefixed hex (e.g. "sha256=a3f...")
+ *  - base64 (e.g. "AbC...==")
  */
-export function verifySignature(payload: string, signature: string | undefined | null, secret: string): boolean {
+function signatureToBuffer(sig?: string | null): Buffer | null {
+  if (!sig) return null;
+  sig = sig.trim();
+
+  // strip common prefix 'sha256=' if present
+  if (sig.toLowerCase().startsWith("sha256=")) {
+    sig = sig.slice("sha256=".length);
+  }
+
+  // try hex
+  try {
+    if (/^[0-9a-fA-F]+$/.test(sig)) {
+      return Buffer.from(sig, "hex");
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  // try base64
+  try {
+    return Buffer.from(sig, "base64");
+  } catch (err) {
+    // ignore
+  }
+
+  return null;
+}
+
+export function verifySignature(
+  payload: string,
+  signature: string | undefined | null,
+  secret: string
+): boolean {
   if (!secret) return false;
   if (!signature) return false;
   try {
-    const expected = signPayload(payload, secret);
-    const expectedBuf = Buffer.from(expected, "hex");
-    const actualBuf = Buffer.from(signature, "hex");
-    // lengths must match for timingSafeEqual
+    const expectedHex = signPayload(payload, secret);
+    const expectedBuf = Buffer.from(expectedHex, "hex");
+
+    const actualBuf = signatureToBuffer(signature);
+    if (!actualBuf) return false;
+
+    // Must match length for timingSafeEqual
     if (expectedBuf.length !== actualBuf.length) return false;
+
     return crypto.timingSafeEqual(expectedBuf, actualBuf);
   } catch (err) {
-    // any failure in parsing/comparison -> invalid
     return false;
   }
 }
