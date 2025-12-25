@@ -1,6 +1,7 @@
 // src/app/dashboard/describe/page.tsx
 
 import React from "react";
+import Script from "next/script";
 import DescribeForm from "@/components/describe/DescribeForm";
 import DescribeOutput from "@/components/describe/DescribeOutput";
 
@@ -259,8 +260,8 @@ export default function DescribePage() {
                     . We turn it into a store-ready page.
                   </h1>
                   <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                    Start with a name, short context, and a few real constraints.
-                    AvidiaDescribe runs your custom instruction profile and returns SEO-ready copy that stays consistent
+                    Start with a name, short context, and a few real constraints. AvidiaDescribe runs
+                    your custom instruction profile and returns SEO-ready copy that stays consistent
                     across brands, categories, and channels.
                   </p>
                 </div>
@@ -285,7 +286,7 @@ export default function DescribePage() {
                       </p>
                     </div>
 
-                    {/* IMPORTANT: TinyChip requires children */}
+                    {/* FIX: TinyChip must have children */}
                     <TinyChip tone="success">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       Ready for output
@@ -389,30 +390,10 @@ export default function DescribePage() {
 
             {/* compact “stats” row */}
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard
-                title="Input length"
-                tone="fuchsia"
-                value="Short"
-                caption="Works from tiny prompts"
-              />
-              <StatCard
-                title="Output shape"
-                tone="sky"
-                value="Structured"
-                caption="Headers, bullets, meta"
-              />
-              <StatCard
-                title="Rule fidelity"
-                tone="emerald"
-                value="Locked"
-                caption="Custom instructions enforced"
-              />
-              <StatCard
-                title="Time to draft"
-                tone="amber"
-                value="Fast"
-                caption="Designed for throughput"
-              />
+              <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
+              <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
+              <StatCard title="Rule fidelity" tone="emerald" value="Locked" caption="Custom instructions enforced" />
+              <StatCard title="Time to draft" tone="amber" value="Fast" caption="Designed for throughput" />
             </div>
           </div>
         </section>
@@ -439,21 +420,162 @@ export default function DescribePage() {
                 </div>
 
                 <div className="hidden shrink-0 sm:flex">
-                  <SoftButton
-                    href="/dashboard/seo"
-                    variant="secondary"
-                    className="px-3 py-1.5 text-xs"
-                  >
+                  <SoftButton href="/dashboard/seo" variant="secondary" className="px-3 py-1.5 text-xs">
                     Send to SEO ↗
                   </SoftButton>
                 </div>
               </div>
 
-              {/* NOTE: HTML-view-default + no-inner-scroll must be implemented in DescribeOutput
-                 (the component that owns the Styled/HTML toggle + renderer). */}
-              <div className="mt-4">
+              {/* Scoped overrides: make HTML Viewer default + remove nested frame/scroll */}
+              <style>{`
+                /* Keep the preview area from creating its own scroll containers */
+                [data-describe-preview] .overflow-auto,
+                [data-describe-preview] .overflow-y-auto,
+                [data-describe-preview] .overflow-x-auto,
+                [data-describe-preview] pre,
+                [data-describe-preview] textarea {
+                  overflow: visible !important;
+                  max-height: none !important;
+                  height: auto !important;
+                }
+
+                /* If the HTML viewer uses code/preview frames, strip the "extra frame" look */
+                [data-describe-preview] pre,
+                [data-describe-preview] textarea,
+                [data-describe-preview] code,
+                [data-describe-preview] iframe {
+                  border: 0 !important;
+                  box-shadow: none !important;
+                  outline: none !important;
+                }
+
+                /* Avoid inner rounded/bordered wrappers becoming a visible second frame */
+                [data-describe-preview] [class*="border"],
+                [data-describe-preview] [class*="ring"] {
+                  /* Don’t nuke Tailwind borders globally—only remove when they are the inner viewer shell */
+                }
+
+                /* If a nested viewer shell uses overflow-hidden + fixed height, force it to grow */
+                [data-describe-preview] [style*="overflow: auto"],
+                [data-describe-preview] [style*="overflow:auto"],
+                [data-describe-preview] [style*="overflow-y: auto"],
+                [data-describe-preview] [style*="overflow-y:auto"] {
+                  overflow: visible !important;
+                }
+              `}</style>
+
+              <div className="mt-4" data-describe-preview>
                 <DescribeOutput />
               </div>
+
+              <Script id="describe-html-viewer-default" strategy="afterInteractive">
+                {`
+                  (function () {
+                    var root = document.querySelector('[data-describe-preview]');
+                    if (!root) return;
+
+                    function textOf(el) {
+                      return ((el && (el.textContent || el.innerText)) || '').trim();
+                    }
+
+                    function isActiveTab(el) {
+                      if (!el) return false;
+                      var aria = el.getAttribute && el.getAttribute('aria-selected');
+                      if (aria === 'true') return true;
+                      var cls = (el.className || '').toString();
+                      return /active|selected|current/i.test(cls);
+                    }
+
+                    function clickHtmlViewerTab() {
+                      // Find a tab/button/link whose label looks like "HTML Viewer" (or at least "HTML")
+                      var candidates = Array.prototype.slice.call(
+                        root.querySelectorAll('button,[role="tab"],a')
+                      );
+
+                      var htmlBtn =
+                        candidates.find(function (b) {
+                          return /html\\s*viewer/i.test(textOf(b));
+                        }) ||
+                        candidates.find(function (b) {
+                          // fallback: a button that contains "HTML" but not "Styled"
+                          var t = textOf(b);
+                          return /\\bhtml\\b/i.test(t) && !/styled/i.test(t);
+                        });
+
+                      if (htmlBtn && !isActiveTab(htmlBtn)) {
+                        try { htmlBtn.click(); } catch (e) {}
+                      }
+                    }
+
+                    function unscrollify() {
+                      // Remove nested scrollbars and force content to expand like Styled view.
+                      var nodes = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe');
+                      nodes.forEach(function (el) {
+                        try {
+                          var st = window.getComputedStyle(el);
+                          var oy = st.overflowY;
+                          var ox = st.overflowX;
+
+                          if (oy === 'auto' || oy === 'scroll') {
+                            el.style.overflowY = 'visible';
+                            el.style.maxHeight = 'none';
+                            el.style.height = 'auto';
+                          }
+                          if (ox === 'auto' || ox === 'scroll') {
+                            el.style.overflowX = 'visible';
+                          }
+
+                          // Strip "frame" feel on the inner viewer surface
+                          el.style.border = '0';
+                          el.style.boxShadow = 'none';
+                          el.style.outline = 'none';
+                        } catch (e) {}
+                      });
+
+                      // If HTML Viewer is rendered in an iframe and it's same-origin, resize to content.
+                      var iframes = root.querySelectorAll('iframe');
+                      iframes.forEach(function (ifr) {
+                        try {
+                          var doc = ifr.contentDocument;
+                          if (!doc) return;
+                          var h = Math.max(
+                            doc.documentElement ? doc.documentElement.scrollHeight : 0,
+                            doc.body ? doc.body.scrollHeight : 0
+                          );
+                          if (h && isFinite(h)) {
+                            ifr.style.height = h + 'px';
+                            ifr.style.maxHeight = 'none';
+                            ifr.style.overflow = 'visible';
+                            ifr.style.border = '0';
+                            ifr.style.boxShadow = 'none';
+                          }
+                        } catch (e) {
+                          // cross-origin iframes can't be measured; ignore safely
+                        }
+                      });
+                    }
+
+                    function run() {
+                      clickHtmlViewerTab();
+                      unscrollify();
+                    }
+
+                    // Initial run
+                    run();
+
+                    // Re-run whenever DescribeOutput re-renders (new generation, toggles, etc.)
+                    var mo = new MutationObserver(function () {
+                      run();
+                    });
+                    mo.observe(root, { childList: true, subtree: true });
+
+                    // Keep iframe/content sizing correct on viewport changes
+                    window.addEventListener('resize', function () {
+                      unscrollify();
+                    });
+                  })();
+                `}
+              </Script>
             </div>
           </div>
 
