@@ -11,45 +11,80 @@ import { callOpenaiChat } from "@/lib/openai";
 
 /**
  * AvidiaDescribe API route (OpenAI direct)
- *
- * Behavior:
- * - Calls OpenAI directly using OPENAI_API_KEY.
- * - Loads tenant custom GPT instructions and injects them into the system prompt.
- * - Enforces "Return ONLY valid JSON" and a fixed output schema.
- * - Removes ALL content fallbacks that would echo input (no more overview = shortDescription).
- *
- * Env:
- * - OPENAI_API_KEY (required)
- * - OPENAI_SEO_MODEL or OPENAI_MODEL (optional; default: gpt-4.1)
  */
 
 type AnyObj = Record<string, any>;
 
-function extractJsonFromText(raw: string): any | null {
+function safeSnippet(v: string, n = 8000) {
+  const s = String(v || "");
+  return s.length > n ? s.slice(0, n) + "…(truncated)" : s;
+}
+
+/**
+ * Extract first balanced JSON object from text.
+ * Handles:
+ * - leading commentary
+ * - ```json fences
+ * - trailing text
+ */
+function extractFirstJsonObject(raw: string): any | null {
   if (!raw || typeof raw !== "string") return null;
 
-  // Strip triple-backtick fences if present
-  let t = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
-  t = t.replace(/```(?:json)?/gi, "").replace(/```/g, "");
+  // remove common fences but keep content
+  let t = raw
+    .replace(/^\s*```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
-  // Try to locate first JSON object
-  const first = t.indexOf("{");
-  const last = t.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) {
-    const candidate = t.slice(first, last + 1);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // continue
+  // quick path: direct JSON
+  try {
+    if (t.startsWith("{") && t.endsWith("}")) return JSON.parse(t);
+  } catch {
+    // continue
+  }
+
+  // scan for first balanced {...}
+  const start = t.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < t.length; i++) {
+    const ch = t[i];
+
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === "\\") {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    } else {
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === "{") depth++;
+      if (ch === "}") depth--;
+
+      if (depth === 0) {
+        const candidate = t.slice(start, i + 1);
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          return null;
+        }
+      }
     }
   }
 
-  // Fallback: parse whole cleaned text
-  try {
-    return JSON.parse(t);
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function isNonEmptyString(v: any) {
@@ -72,9 +107,9 @@ function requireField(condition: boolean, message: string) {
 
 export async function POST(req: NextRequest) {
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const debugOut = process.env.DEBUG_DESCRIBE_MODEL_OUTPUT === "true";
 
   try {
-    // Auth (Clerk)
     const auth = safeGetAuth(req as any) as any;
     if (!auth || !auth.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,7 +117,6 @@ export async function POST(req: NextRequest) {
     const userId = auth.userId as string;
     const tenantId = ((auth.actor as any)?.tenantId as string) || null;
 
-    // Parse body
     const body = (await req.json().catch(() => null)) as DescribeRequest | null;
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 422 });
@@ -108,10 +142,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Quota exceeded" }, { status: 402 });
       }
     } catch {
-      // ignore: fail-open
+      // ignore
     }
 
-    // Load custom instructions (tenant override > local file > github raw)
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
@@ -120,36 +153,29 @@ export async function POST(req: NextRequest) {
       process.env.OPENAI_MODEL ||
       "gpt-4.1";
 
-    // System prompt: include your instructions + strict JSON schema
     const system = [
       "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
       "",
       "CRITICAL OUTPUT RULE:",
       "- Return ONLY a single valid JSON object (no markdown, no code fences, no commentary).",
       "",
-      "CRITICAL BEHAVIOR RULES:",
-      "- Do NOT echo or copy the input verbatim. Rewrite and improve it.",
-      "- Do NOT invent facts/specs. Only use what is provided in the input fields.",
-      "- Keep claims compliant and conservative. Avoid ungrounded medical claims.",
-      "- HTML allowed: <p>, <ul>, <li>, <strong>, <h2>, <h3>. No inline styles.",
+      "If you cannot comply, still return JSON with empty strings for missing fields.",
       "",
       "REQUIRED JSON SHAPE (exact keys):",
       "{",
       '  "descriptionHtml": "<p>...</p>",',
-      '  "sections": {',
-      '    "overview": "<p>...</p>"',
-      "  },",
+      '  "sections": { "overview": "<p>...</p>" },',
       '  "seo": { "h1": "...", "title": "...", "metaDescription": "..." },',
-      '  "features": ["...", "..."],',
-      '  "_debug": { "instruction_source": "..." }',
+      '  "features": ["...", "..."]',
       "}",
       "",
       isNonEmptyString(instructions)
         ? `CUSTOM GPT INSTRUCTIONS (MUST FOLLOW):\n${instructions.trim()}`
-        : "CUSTOM GPT INSTRUCTIONS: (none provided)",
-    ].join("\n");
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-    // User prompt: provide the structured input
     const user = [
       "INPUT:",
       `name: ${name}`,
@@ -163,7 +189,6 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n");
 
-    // Call OpenAI
     const openaiRes = await callOpenaiChat({
       model,
       messages: [
@@ -179,9 +204,9 @@ export async function POST(req: NextRequest) {
       openaiRes?.choices?.[0]?.text ??
       "";
 
-    const parsed = extractJsonFromText(String(rawText || ""));
+    const parsed = extractFirstJsonObject(String(rawText || ""));
+
     if (!parsed || typeof parsed !== "object") {
-      // Persist failure (best-effort)
       try {
         await saveIngestion({
           tenantId,
@@ -190,10 +215,16 @@ export async function POST(req: NextRequest) {
           status: "failed",
           rawPayload: {
             requestId,
-            request: { name, shortDescription, brand: body.brand ?? null, specs: body.specs ?? null },
+            request: {
+              name,
+              shortDescription,
+              brand: body.brand ?? null,
+              specs: body.specs ?? null,
+            },
             error: "invalid_openai_json",
             model,
-            raw: String(rawText || "").slice(0, 8000),
+            instruction_source: instructionsSource || null,
+            raw: safeSnippet(String(rawText || "")),
           },
         });
       } catch {
@@ -201,20 +232,22 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: "Describe model returned invalid JSON" },
+        {
+          error: "Describe model returned invalid JSON",
+          ...(debugOut
+            ? { debug: { requestId, model, raw_snippet: safeSnippet(String(rawText || ""), 2000) } }
+            : {}),
+        },
         { status: 502 }
       );
     }
 
-    // Enforce required fields: NO FALLBACKS that reuse input text
+    // enforce required fields (still no fallback to input)
     const descriptionHtml =
       parsed.descriptionHtml ?? parsed.description_html ?? null;
     requireField(isNonEmptyString(descriptionHtml), "missing_descriptionHtml");
 
-    const overview =
-      parsed?.sections?.overview ??
-      parsed?.sections?.Overview ??
-      null;
+    const overview = parsed?.sections?.overview ?? null;
     requireField(isNonEmptyString(overview), "missing_sections.overview");
 
     const seo = parsed.seo ?? null;
@@ -244,7 +277,6 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Persist success (best-effort)
     try {
       await saveIngestion({
         tenantId,
@@ -258,7 +290,6 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Increment usage counter (best-effort)
     try {
       await incrementUsageCounter({
         tenantId,
@@ -271,10 +302,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(normalized);
   } catch (err: any) {
-    // If we threw due to invalid model output, return a clear error
     if (err?.code === "describe_invalid_model_output") {
       return NextResponse.json(
-        { error: "describe_model_invalid_output", detail: err?.message || "invalid_output" },
+        {
+          error: "describe_model_invalid_output",
+          detail: err?.message || "invalid_output",
+          ...(debugOut ? { debug: { requestId } } : {}),
+        },
         { status: 502 }
       );
     }
