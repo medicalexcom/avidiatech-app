@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
-import {
-  saveIngestion,
-  incrementUsageCounter,
-  checkQuota,
-} from "@/lib/supabaseServer";
+import { saveIngestion, incrementUsageCounter, checkQuota } from "@/lib/supabaseServer";
 import type { DescribeRequest } from "@/components/describe/types";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import OpenAI from "openai";
 
 /**
- * AvidiaDescribe API route (OpenAI direct via Responses API + JSON Schema)
+ * AvidiaDescribe API route (OpenAI direct via Responses API)
  *
- * Goals:
- * - Remove Render dependency entirely.
- * - Remove content fallback that echoes input (no overview = shortDescription).
- * - Enforce valid JSON output using Responses API + json_schema.
- * - Include optional debug payload in non-prod or when DEBUG_DESCRIBE_MODEL_OUTPUT=true.
+ * Notes:
+ * - We intentionally pass `response_format` using `as any` because the installed
+ *   openai SDK typings (openai@^6.10.0 in this repo) do not include it in
+ *   ResponseCreateParams*, even though the API supports it.
  *
  * Env:
  * - OPENAI_API_KEY (required)
@@ -29,7 +24,7 @@ import OpenAI from "openai";
 type AnyObj = Record<string, any>;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL =
+const MODEL =
   process.env.OPENAI_DESCRIBE_MODEL ||
   process.env.OPENAI_SEO_MODEL ||
   process.env.OPENAI_MODEL ||
@@ -62,33 +57,27 @@ function requireField(condition: boolean, message: string) {
 
 /**
  * Extract a text body from an OpenAI Responses API response.
- * SDK output shapes can vary slightly across versions; this is defensive.
+ * SDK output shapes can vary; this is defensive.
  */
 function extractTextFromResponses(res: any): string {
   const out0 = res?.output?.at?.(0) ?? res?.output?.[0] ?? null;
   if (!out0) return "";
 
-  // Common: output[0].content = [{ type: "output_text", text: "..." }, ...]
   const content = out0?.content;
   if (typeof content === "string") return content;
 
   if (Array.isArray(content)) {
     let text = "";
     for (const part of content) {
-      if (typeof part === "string") {
-        text += part;
-      } else if (part?.text && typeof part.text === "string") {
-        text += part.text;
-      } else if (part?.content && typeof part.content === "string") {
-        text += part.content;
-      }
+      if (typeof part === "string") text += part;
+      else if (part?.text && typeof part.text === "string") text += part.text;
+      else if (part?.content && typeof part.content === "string") text += part.content;
     }
     return text;
   }
 
   if (typeof out0?.text === "string") return out0.text;
 
-  // Fallback: try stringifying (useful for debugging)
   try {
     return JSON.stringify(out0);
   } catch {
@@ -96,20 +85,27 @@ function extractTextFromResponses(res: any): string {
   }
 }
 
+/**
+ * Call the Describe model using Responses API.
+ * We use JSON schema enforcement via `response_format`, but we pass it using `as any`
+ * because the SDK typings in this repo don't yet include that property.
+ */
 async function callDescribeModel(opts: {
   system: string;
   user: string;
 }): Promise<{ json: AnyObj; rawText: string; model: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  const res = await client.responses.create({
-    model: OPENAI_MODEL,
+  const body: any = {
+    model: MODEL,
     input: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
     ],
     temperature: 0.2,
     max_output_tokens: 1600,
+
+    // Typings workaround:
     response_format: {
       type: "json_schema",
       json_schema: {
@@ -151,7 +147,9 @@ async function callDescribeModel(opts: {
         },
       },
     },
-  });
+  };
+
+  const res = await client.responses.create(body as any);
 
   const rawText = extractTextFromResponses(res);
   let json: AnyObj;
@@ -164,7 +162,7 @@ async function callDescribeModel(opts: {
     throw err;
   }
 
-  return { json, rawText, model: OPENAI_MODEL };
+  return { json, rawText, model: MODEL };
 }
 
 export async function POST(req: NextRequest) {
@@ -211,11 +209,10 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Load tenant custom instructions (if any)
+    // Load tenant instructions
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
-    // System prompt: include your instructions + strict output requirements
     const system = [
       "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
       "",
@@ -236,7 +233,6 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n");
 
-    // User prompt: provide structured input fields
     const user = [
       "INPUT:",
       `name: ${name}`,
@@ -248,18 +244,15 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n");
 
-    // Call OpenAI (Responses API)
+    // Call model
     let parsed: AnyObj;
     let rawText = "";
-    let modelUsed = OPENAI_MODEL;
-
     try {
       const result = await callDescribeModel({ system, user });
       parsed = result.json;
       rawText = result.rawText;
-      modelUsed = result.model;
     } catch (err: any) {
-      // Persist failure (best-effort)
+      // Persist failure
       try {
         await saveIngestion({
           tenantId,
@@ -268,7 +261,7 @@ export async function POST(req: NextRequest) {
           status: "failed",
           rawPayload: {
             requestId,
-            model: modelUsed,
+            model: MODEL,
             instruction_source: instructionsSource || null,
             request: {
               name,
@@ -293,7 +286,7 @@ export async function POST(req: NextRequest) {
                 detail: String(err?.message || err),
                 debug: {
                   requestId,
-                  model: modelUsed,
+                  model: MODEL,
                   raw_snippet: safeSnippet(String(err?.raw || rawText || "")),
                   instruction_source: instructionsSource || null,
                 },
@@ -337,12 +330,12 @@ export async function POST(req: NextRequest) {
         ...(parsed._debug || {}),
         mode: "openai_direct_responses_json_schema",
         requestId,
-        model: modelUsed,
+        model: MODEL,
         instruction_source: instructionsSource || null,
       },
     };
 
-    // Persist success (best-effort)
+    // Persist success
     try {
       await saveIngestion({
         tenantId,
@@ -356,7 +349,7 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Increment usage counter (best-effort)
+    // Increment usage counter
     try {
       await incrementUsageCounter({
         tenantId,
@@ -371,7 +364,10 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err?.code === "describe_invalid_model_output") {
       return NextResponse.json(
-        { error: "describe_model_invalid_output", detail: err?.message || "invalid_output" },
+        {
+          error: "describe_model_invalid_output",
+          detail: err?.message || "invalid_output",
+        },
         { status: 502 }
       );
     }
