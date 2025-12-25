@@ -175,7 +175,7 @@ export default function ExtractPage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO: headline + subcopy + launcher under it (LEFT), 2 stacked cards (RIGHT) */}
+        {/* HERO */}
         <section className="space-y-5">
           <div className="rounded-[28px] bg-gradient-to-r from-cyan-200/60 via-sky-200/40 to-emerald-200/60 p-[1px] shadow-2xl shadow-slate-200/70 dark:from-cyan-500/25 dark:via-sky-500/15 dark:to-emerald-500/25 dark:shadow-slate-950/70">
             <div className="rounded-[27px] border border-white/50 bg-white/75 p-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/55 lg:p-5">
@@ -212,7 +212,7 @@ export default function ExtractPage() {
 
               {/* Main hero row */}
               <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.15fr),minmax(0,0.85fr)] lg:items-start">
-                {/* LEFT: hero text + launcher directly under */}
+                {/* LEFT: hero text + launcher under it */}
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
@@ -230,7 +230,7 @@ export default function ExtractPage() {
                     </p>
                   </div>
 
-                  {/* Launcher under hero text */}
+                  {/* Launcher (steps removed; moved to right) */}
                   <div className="rounded-2xl border border-slate-200 bg-white/85 p-4 shadow-xl shadow-slate-200/60 dark:border-slate-700/70 dark:bg-slate-950/70 dark:shadow-slate-950/70">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -258,43 +258,58 @@ export default function ExtractPage() {
                       <ExtractHeader onJobCreated={onJobCreated} />
                     </div>
 
-                    <div className="mt-3 flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                          Extraction response is streamed into both the human view and the JSON viewer below.
-                        </p>
-                        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-300">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                          {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/60 bg-white/85 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-cyan-400/45 dark:bg-slate-950/60 dark:text-slate-300">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-200">
-                            Step 1
-                          </span>
-                          <span>
-                            Use the{" "}
-                            <span className="font-semibold text-cyan-700 dark:text-cyan-200">
-                              Extract launcher
-                            </span>{" "}
-                            below to submit a URL.
-                          </span>
-                        </div>
-                        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/85 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/60 dark:text-slate-300">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">
-                            Step 2
-                          </span>
-                          <span>Inspect the extraction canvas and JSON viewer in real time.</span>
-                        </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-500">
+                        Extraction response is streamed into both the human view and the JSON viewer below.
+                      </p>
+                      <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                        {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* RIGHT: 2 cards stacked on top of each other */}
-                <div className="space-y-3">
+                {/* RIGHT: 3 stacked cards (Quick start + Example + Feeds) */}
+                <div className="flex h-full flex-col gap-3">
+                  {/* NEW: Quick start card (moved from launcher) */}
+                  <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/55 dark:text-slate-100">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                      Quick start
+                    </p>
+
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2">
+                        <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-cyan-400/60 bg-cyan-500/10 text-[12px] font-semibold text-cyan-700 dark:border-cyan-400/45 dark:bg-cyan-500/15 dark:text-cyan-200">
+                          1
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-50">
+                            Step 1
+                          </p>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                            Use the Extract launcher below to submit a URL.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2">
+                        <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/60 bg-emerald-500/10 text-[12px] font-semibold text-emerald-700 dark:border-emerald-400/45 dark:bg-emerald-500/15 dark:text-emerald-200">
+                          2
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-50">
+                            Step 2
+                          </p>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                            Inspect the extraction canvas and JSON viewer in real time.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Example extraction */}
                   <div className="rounded-2xl border border-cyan-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/35 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">
                       Example extraction
@@ -305,6 +320,7 @@ export default function ExtractPage() {
                     </p>
                   </div>
 
+                  {/* Feeds the stack */}
                   <div className="rounded-2xl border border-emerald-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/35 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
                       Feeds the stack
