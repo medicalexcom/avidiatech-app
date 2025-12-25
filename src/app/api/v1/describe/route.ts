@@ -16,7 +16,7 @@ const MODEL =
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-function safeSnippet(v: string, n = 2500) {
+function safeSnippet(v: string, n = 12000) {
   const s = String(v || "");
   return s.length > n ? s.slice(0, n) + "…(truncated)" : s;
 }
@@ -71,16 +71,17 @@ async function callDescribeModel(opts: {
 }): Promise<{ json: AnyObj; rawText: string; model: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
+  // Increase output cap substantially to avoid mid-JSON truncation.
   const body: any = {
     model: MODEL,
     input: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
     ],
-    temperature: 0.2,
-    max_output_tokens: 1600,
+    temperature: 0.1,
+    // Increase from 1600 -> 8000 (adjust as needed)
+    max_output_tokens: 8000,
 
-    // Responses API (your account): supported types are json_object, text, json_schema
     text: {
       format: { type: "json_object" },
     },
@@ -146,32 +147,26 @@ export async function POST(req: NextRequest) {
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
+    // IMPORTANT: We no longer prescribe section templates here.
+    // The custom instructions should drive structure/format.
     const system = [
-      "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
+      "You are AvidiaDescribe.",
+      "Use the provided CUSTOM GPT INSTRUCTIONS as the primary source of formatting, structure, tone, and compliance rules.",
       "",
-      "OUTPUT RULES:",
+      "OUTPUT RULES (STRICT):",
       "- Return ONLY valid JSON (no markdown, no code fences, no commentary).",
+      "- Do NOT truncate mid-string. If content is too long, shorten gracefully while keeping valid JSON.",
       "",
-      "BEHAVIOR RULES:",
-      "- Do NOT echo or copy the input verbatim. Rewrite and improve it.",
-      "- Do NOT invent facts/specs. Only use what is provided in the input fields.",
-      "- Keep claims compliant and conservative. Avoid ungrounded medical claims.",
-      "- HTML allowed: <p>, <ul>, <li>, <strong>, <h2>, <h3>. No inline styles.",
-      "",
-      "REQUIRED JSON SHAPE (exact keys):",
-      "{",
-      '  "descriptionHtml": "<p>...</p>",',
-      '  "sections": { "overview": "<p>...</p>" },',
-      '  "seo": { "h1": "...", "title": "...", "metaDescription": "..." },',
-      '  "features": ["...", "..."]',
-      "}",
+      "REQUIRED JSON KEYS:",
+      "- descriptionHtml: string (final HTML description)",
+      "- sections.overview: string (can be same as descriptionHtml or a shorter excerpt, but must be valid HTML)",
+      "- seo: object with h1, title, metaDescription (strings)",
+      "- features: array of strings",
       "",
       isNonEmptyString(instructions)
-        ? `CUSTOM GPT INSTRUCTIONS (MUST FOLLOW):\n${instructions.trim()}`
-        : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+        ? `CUSTOM GPT INSTRUCTIONS:\n${instructions.trim()}`
+        : "CUSTOM GPT INSTRUCTIONS: (none found)",
+    ].join("\n");
 
     const user = [
       "INPUT:",
@@ -236,7 +231,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required fields (NO fallback-to-input behavior)
+    // Validate required fields (still no fallback-to-input)
     const descriptionHtml = parsed?.descriptionHtml ?? null;
     requireField(isNonEmptyString(descriptionHtml), "missing_descriptionHtml");
 
