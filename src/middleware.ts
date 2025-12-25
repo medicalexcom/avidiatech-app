@@ -162,26 +162,13 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 }
 
 /**
- * IMPORTANT CHANGE: bypass Clerk/session enforcement for internal endpoints
- * that are invoked by background workers/runners or by external services:
- * - /api/v1/pipeline/internal/*
- * - /api/v1/ingest/callback
- * - /api/v1/debug/*
- *
- * These endpoints perform their own auth (x-pipeline-secret or HMAC),
- * so they must not be blocked by Clerk middleware.
+ * IMPORTANT: We bypass Clerk for internal endpoints BEFORE invoking clerkMiddleware.
+ * This prevents Clerk from rejecting service-to-service calls that use x-pipeline-secret
+ * or HMAC signatures instead of user sessions.
  */
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  const pathname = req.nextUrl.pathname;
 
-  // Bypass auth for internal runner and callback endpoints
-  if (
-    pathname.startsWith("/api/v1/pipeline/internal") ||
-    pathname.startsWith("/api/v1/ingest/callback") ||
-    pathname.startsWith("/api/v1/debug")
-  ) {
-    return NextResponse.next();
-  }
+const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
+  const pathname = req.nextUrl.pathname;
 
   if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/settings") && !pathname.startsWith("/api")) {
     return NextResponse.next();
@@ -212,6 +199,22 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
   return NextResponse.next();
 });
+
+export default async function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
+
+  // Early bypass for internal worker callbacks and debug endpoints
+  if (
+    pathname.startsWith("/api/v1/pipeline/internal") ||
+    pathname.startsWith("/api/v1/ingest/callback") ||
+    pathname.startsWith("/api/v1/debug")
+  ) {
+    return NextResponse.next();
+  }
+
+  // Delegate to Clerk-wrapped handler for all other matched routes
+  return await clerkWrappedHandler(req);
+}
 
 export const config = {
   matcher: ["/dashboard/:path*", "/settings/:path*", "/api/:path*"],
