@@ -204,14 +204,14 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   return NextResponse.next();
-});
 
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Early bypass for internal worker callbacks and debug endpoints
+  // Early bypass for internal worker callbacks, output endpoints and debug endpoints
   if (
     pathname.startsWith("/api/v1/pipeline/internal") ||
+    pathname.startsWith("/api/v1/pipeline/run") ||            // ADDED: allow internal pipeline output fetches
     pathname.startsWith("/api/v1/ingest/callback") ||
     pathname.startsWith("/api/v1/debug")
   ) {
@@ -219,13 +219,6 @@ export default async function middleware(req: NextRequest) {
   }
 
   // Delegate to Clerk-wrapped handler for all other matched routes.
-  // clerkWrappedHandler expects two args; the second param (NextFetchEvent) is not needed here,
-  // so we pass undefined cast to any to satisfy the runtime call and TypeScript.
-  // This preserves Clerk behavior for public / dashboard routes.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return await clerkWrappedHandler(req as any, undefined as any);
 }
-
-export const config = {
-  matcher: ["/dashboard/:path*", "/settings/:path*", "/api/:path*"],
-};
