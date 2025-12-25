@@ -3,13 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { DescribeResponse } from "./types";
 
-/**
- * Right-side output preview.
- * - Reads last Describe result from sessionStorage (the hook writes it there)
- * - Provides tabs for Overview / Features / Specs / Included / Manuals / SEO
- * - Buttons: Copy HTML / Copy SEO / Download JSON / Send to Import
- */
-
 const STORAGE_KEY = "avidia:describe:lastResult";
 
 function useLastResult() {
@@ -31,24 +24,105 @@ function useLastResult() {
   return { result, setResult };
 }
 
+function htmlDoc(innerHtml: string) {
+  // Minimal HTML doc for iframe preview (like online HTML viewers)
+  // NOTE: We include basic styling to make headings/lists readable.
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding: 16px; line-height: 1.5; }
+  h1,h2,h3 { margin: 0.9em 0 0.4em; }
+  ul { margin: 0.4em 0 0.8em 1.2em; }
+  li { margin: 0.25em 0; }
+</style>
+</head>
+<body>
+${innerHtml || ""}
+</body>
+</html>`;
+}
+
 export default function DescribeOutput() {
   const { result } = useLastResult();
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState<
+    | "overview"
+    | "hook"
+    | "main"
+    | "features"
+    | "specs"
+    | "links"
+    | "why"
+    | "manuals"
+    | "faqs"
+    | "seo"
+    | "json"
+  >("overview");
+
+  const [viewMode, setViewMode] = useState<"styled" | "iframe">("styled");
 
   useEffect(() => {
-    // when result changes, reset tab to overview
     setTab("overview");
   }, [result]);
 
-  const html = result?.descriptionHtml ?? "";
+  const descriptionHtml = result?.descriptionHtml ?? "";
+  const sections = result?.sections ?? {};
   const seo = result?.seo ?? {};
 
-  function copyHTML() {
-    navigator.clipboard.writeText(html).then(() => alert("HTML copied to clipboard"));
+  const tabHtml = useMemo(() => {
+    switch (tab) {
+      case "overview":
+        // IMPORTANT: overview tab should show the FULL HTML (not sections.overview)
+        return descriptionHtml || sections.overview || "";
+      case "hook":
+        return sections.hook || "";
+      case "main":
+        return sections.mainDescription || "";
+      case "features":
+        return sections.featuresBenefits || "";
+      case "specs":
+        return sections.specifications || "";
+      case "links":
+        return sections.internalLinks || "";
+      case "why":
+        return sections.whyChoose || "";
+      case "manuals":
+        return sections.manuals || sections.manualsSectionHtml || "";
+      case "faqs":
+        return sections.faqs || "";
+      default:
+        return "";
+    }
+  }, [tab, descriptionHtml, sections]);
+
+  function copyCurrentHtml() {
+    const toCopy = tabHtml || "";
+    navigator.clipboard.writeText(toCopy).then(() => alert("Tab HTML copied to clipboard"));
   }
-  function copySEO() {
-    navigator.clipboard.writeText(JSON.stringify(seo, null, 2)).then(() => alert("SEO copied to clipboard"));
+
+  function copyFullHtml() {
+    navigator.clipboard.writeText(descriptionHtml || "").then(() => alert("Full HTML copied to clipboard"));
   }
+
+  function copySeoMeta() {
+    const h1 = seo.h1 ?? "";
+    const title = seo.pageTitle ?? seo.title ?? "";
+    const metaDescription = seo.metaDescription ?? "";
+    const keywords =
+      Array.isArray(seo.keywords) ? seo.keywords.join(", ") : (seo.keywords ?? "");
+
+    const text = [
+      `H1: ${h1}`,
+      `Page Title: ${title}`,
+      `Meta Description: ${metaDescription}`,
+      `Search Keywords: ${keywords}`,
+    ].join("\n");
+
+    navigator.clipboard.writeText(text).then(() => alert("SEO metadata copied to clipboard"));
+  }
+
   function downloadJSON() {
     const data = result ?? {};
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -59,12 +133,25 @@ export default function DescribeOutput() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
   function sendToImport() {
-    // Use sessionStorage to pass payload to import page (simple, robust)
     sessionStorage.setItem("avidia:import:payload", JSON.stringify(result ?? {}));
-    // navigate to import page
     window.location.href = "/dashboard/import";
   }
+
+  const tabs = [
+    { id: "overview", label: "Overview (Full)" },
+    { id: "hook", label: "Hook" },
+    { id: "main", label: "Main Description" },
+    { id: "features", label: "Features & Benefits" },
+    { id: "specs", label: "Product Specifications" },
+    { id: "links", label: "Internal Links" },
+    { id: "why", label: "Why Choose" },
+    { id: "manuals", label: "Manuals" },
+    { id: "faqs", label: "FAQs" },
+    { id: "seo", label: "SEO" },
+    { id: "json", label: "Raw JSON" },
+  ] as const;
 
   if (!result) {
     return (
@@ -76,67 +163,99 @@ export default function DescribeOutput() {
 
   return (
     <div className="bg-white dark:bg-slate-900 border rounded-lg p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Preview</h2>
-          <div className="text-xs text-slate-500">Generated from: {result?.normalizedPayload?.source ?? "Describe"}</div>
+          <div className="text-xs text-slate-500">
+            Source: {result?.normalizedPayload?.source ?? "Describe"}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={copyHTML} className="px-3 py-1 border rounded text-sm">Copy HTML</button>
-          <button onClick={copySEO} className="px-3 py-1 border rounded text-sm">Copy SEO</button>
-          <button onClick={downloadJSON} className="px-3 py-1 border rounded text-sm">Download JSON</button>
-          <button onClick={sendToImport} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Send to Import</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={copyCurrentHtml} className="px-3 py-1 border rounded text-sm">
+            Copy Tab HTML
+          </button>
+          <button onClick={copyFullHtml} className="px-3 py-1 border rounded text-sm">
+            Copy Full HTML
+          </button>
+          <button onClick={copySeoMeta} className="px-3 py-1 border rounded text-sm">
+            Copy SEO Meta
+          </button>
+          <button onClick={downloadJSON} className="px-3 py-1 border rounded text-sm">
+            Download JSON
+          </button>
+          <button onClick={sendToImport} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">
+            Send to Import
+          </button>
         </div>
       </div>
 
-      <div className="flex gap-4 border-b pb-3 mb-3">
-        <button onClick={() => setTab("overview")} className={`text-sm ${tab === "overview" ? "font-semibold" : "text-slate-500"}`}>Overview</button>
-        <button onClick={() => setTab("features")} className={`text-sm ${tab === "features" ? "font-semibold" : "text-slate-500"}`}>Features</button>
-        <button onClick={() => setTab("specs")} className={`text-sm ${tab === "specs" ? "font-semibold" : "text-slate-500"}`}>Specs</button>
-        <button onClick={() => setTab("included")} className={`text-sm ${tab === "included" ? "font-semibold" : "text-slate-500"}`}>Included</button>
-        <button onClick={() => setTab("manuals")} className={`text-sm ${tab === "manuals" ? "font-semibold" : "text-slate-500"}`}>Manuals</button>
-        <button onClick={() => setTab("seo")} className={`text-sm ${tab === "seo" ? "font-semibold" : "text-slate-500"}`}>SEO</button>
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-3 border-b pb-3 mb-3">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id as any)}
+            className={`text-sm ${
+              tab === t.id ? "font-semibold text-slate-900 dark:text-slate-50" : "text-slate-500"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-slate-500">View:</span>
+          <button
+            onClick={() => setViewMode("styled")}
+            className={`text-xs px-2 py-1 border rounded ${viewMode === "styled" ? "font-semibold" : ""}`}
+          >
+            Styled
+          </button>
+          <button
+            onClick={() => setViewMode("iframe")}
+            className={`text-xs px-2 py-1 border rounded ${viewMode === "iframe" ? "font-semibold" : ""}`}
+          >
+            HTML Viewer
+          </button>
+        </div>
       </div>
 
-      <div>
-        {tab === "overview" && (
-          <div dangerouslySetInnerHTML={{ __html: result.sections?.overview ?? html }} />
-        )}
-
-        {tab === "features" && (
-          <ul className="list-disc pl-5">
-            {(result.sections?.features ?? []).map((f, i) => (
-              <li key={i} className="mb-1">{f}</li>
-            ))}
-          </ul>
-        )}
-
-        {tab === "specs" && (
+      {/* Content */}
+      {tab === "seo" ? (
+        <div className="space-y-3 text-sm">
+          <div><strong>H1:</strong> {seo.h1 || <em className="text-slate-500">Not available</em>}</div>
+          <div><strong>Page Title:</strong> {(seo.pageTitle ?? seo.title) || <em className="text-slate-500">Not available</em>}</div>
           <div>
-            <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded">{JSON.stringify(result.sections?.specsSummary ?? {}, null, 2)}</pre>
+            <strong>Meta Description:</strong>
+            <div className="mt-1 text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+              {seo.metaDescription || <em className="text-slate-500">Not available</em>}
+            </div>
           </div>
-        )}
-
-        {tab === "included" && (
-          <ul className="list-disc pl-5">
-            {(result.sections?.includedItems ?? []).map((it, i) => <li key={i}>{it}</li>)}
-          </ul>
-        )}
-
-        {tab === "manuals" && (
-          <div dangerouslySetInnerHTML={{ __html: result.sections?.manualsSectionHtml ?? "<em>No manuals found</em>" }} />
-        )}
-
-        {tab === "seo" && (
-          <div className="space-y-2">
-            <div><strong>H1:</strong> {result.seo?.h1}</div>
-            <div><strong>Page title:</strong> {result.seo?.pageTitle}</div>
-            <div><strong>Meta description:</strong> <div className="text-sm text-slate-500">{result.seo?.metaDescription}</div></div>
-            <div><strong>Short SEO:</strong> <div className="text-sm text-slate-500">{result.seo?.seoShortDescription}</div></div>
+          <div>
+            <strong>Search Keywords:</strong>
+            <div className="mt-1 text-slate-600 dark:text-slate-300">
+              {Array.isArray(seo.keywords) ? seo.keywords.join(", ") : (seo.keywords ?? <em className="text-slate-500">Not available</em>)}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : tab === "json" ? (
+        <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded overflow-auto">
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      ) : viewMode === "iframe" ? (
+        <iframe
+          title="HTML Preview"
+          className="w-full min-h-[520px] rounded border bg-white"
+          sandbox=""
+          srcDoc={htmlDoc(tabHtml)}
+        />
+      ) : (
+        <div
+          className="prose prose-slate max-w-none dark:prose-invert prose-h2:mt-5 prose-h3:mt-4 prose-li:my-0.5"
+          dangerouslySetInnerHTML={{ __html: tabHtml || "<em>No content available for this tab yet.</em>" }}
+        />
+      )}
     </div>
   );
 }
