@@ -162,89 +162,119 @@ export default function ExtractPage() {
 
       {/* Wrapper aligned with Describe/Translate (starts higher) */}
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO: prioritize launcher (input) first */}
-        <section className="relative grid gap-6 lg:grid-cols-[minmax(0,460px),minmax(0,1fr)] lg:items-start">
-          {/* FIRST: ExtractHeader inside a "launcher" card (sticky on desktop) */}
-          <div className="order-1">
-            <div className="lg:sticky lg:top-6">
-              <div className="flex h-full flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-xl shadow-slate-200/60 dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_50px_rgba(15,23,42,0.95)]">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                      Extract launcher
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Submit a manufacturer URL; AvidiaExtract handles the rest.
-                    </p>
-                  </div>
-                  {jobId && (
-                    <div className="text-right">
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Current job
-                      </p>
-                      <p className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
-                        {jobId.slice(0, 10)}…
-                      </p>
-                    </div>
-                  )}
-                </div>
-                <div className="min-h-[220px] flex-1">
-                  <ExtractHeader onJobCreated={onJobCreated} />
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                    Extraction response is streamed into both the human view and
-                    the JSON viewer below.
+        {/* HERO: URL input first, hero heading immediately underneath, then the rest (no dead space) */}
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,520px),minmax(0,1fr)] lg:items-start">
+          {/* LEFT: Launcher FIRST, then hero story right under it */}
+          <div className="space-y-4">
+            {/* Extract launcher */}
+            <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-xl shadow-slate-200/60 dark:border-slate-700/80 dark:bg-slate-950/90 dark:shadow-[0_0_50px_rgba(15,23,42,0.95)]">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                    Extract launcher
                   </p>
-                  <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                    {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Submit a manufacturer URL; AvidiaExtract handles the rest.
+                  </p>
+                </div>
+                {jobId && (
+                  <div className="text-right">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Current job
+                    </p>
+                    <p className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
+                      {jobId.slice(0, 10)}…
+                    </p>
                   </div>
+                )}
+              </div>
+
+              {/* IMPORTANT: no forced min-height => no blank gaps */}
+              <div className="flex-1">
+                <ExtractHeader onJobCreated={onJobCreated} />
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] text-slate-500 dark:text-slate-500">
+                  Extraction response is streamed into both the human view and
+                  the JSON viewer below.
+                </p>
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                  {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
+                </div>
+              </div>
+            </div>
+
+            {/* Hero heading + narrative (directly under URL input) */}
+            <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 shadow-lg shadow-slate-200/50 dark:border-slate-700/70 dark:bg-slate-950/80 dark:shadow-slate-950/60">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-800 shadow-sm dark:border-cyan-500/60 dark:bg-slate-950/90 dark:text-cyan-100">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-400/70 bg-slate-100 dark:bg-slate-900">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400" />
+                  </span>
+                  AvidiaTech • AvidiaExtract
+                </div>
+
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+                  Ingest engine • JSON-first
+                </span>
+
+                {ingestionStatus && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
+                    Status:
+                    <span className="font-mono text-[10px] uppercase text-cyan-700 dark:text-cyan-200">
+                      {ingestionStatus}
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-3 space-y-2">
+                <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
+                  Extract everything from a{" "}
+                  <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
+                    single manufacturer URL
+                  </span>{" "}
+                  — as clean, normalized JSON.
+                </h1>
+                <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
+                  Paste any product URL. AvidiaExtract hits your ingest engine,
+                  strips noise, standardizes specs, and streams back a
+                  JSON-first view that plugs into SEO, Describe, and any
+                  ecommerce stack.
+                </p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-cyan-400/50 dark:bg-slate-950/90 dark:text-slate-300">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-200">
+                    Step 1
+                  </span>
+                  <span>
+                    Use the{" "}
+                    <span className="font-semibold text-cyan-700 dark:text-cyan-200">
+                      Extract launcher
+                    </span>{" "}
+                    below to submit a URL.
+                  </span>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">
+                    Step 2
+                  </span>
+                  <span>
+                    Inspect the extraction canvas and JSON viewer in real time.
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* SECOND: headline + story + status chips */}
-          <div className="order-2 min-w-[260px] flex-1 space-y-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-800 shadow-sm dark:border-cyan-500/60 dark:bg-slate-950/90 dark:text-cyan-100">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-400/70 bg-slate-100 dark:bg-slate-900">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400" />
-                </span>
-                AvidiaTech • AvidiaExtract
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                Ingest engine • JSON-first
-              </span>
-              {ingestionStatus && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/90 px-2.5 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  Status:
-                  <span className="font-mono text-[10px] uppercase text-cyan-700 dark:text-cyan-200">
-                    {ingestionStatus}
-                  </span>
-                </span>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
-                Extract everything from a{" "}
-                <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
-                  single manufacturer URL
-                </span>{" "}
-                — as clean, normalized JSON.
-              </h1>
-              <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
-                Paste any product URL. AvidiaExtract hits your ingest engine,
-                strips noise, standardizes specs, and streams back a
-                JSON-first view that plugs into SEO, Describe, and any
-                ecommerce stack.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
+          {/* RIGHT: supporting cards (no wasted space) */}
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
               <div className="rounded-xl border border-cyan-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/90 dark:text-slate-100">
                 <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-200">
                   Example extraction
@@ -254,6 +284,7 @@ export default function ExtractPage() {
                   images, and normalized specs — ready for any downstream module.
                 </p>
               </div>
+
               <div className="rounded-xl border border-emerald-200 bg-white/90 px-3 py-3 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/50 dark:bg-slate-950/90 dark:text-slate-100">
                 <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
                   Feeds the stack
@@ -266,8 +297,8 @@ export default function ExtractPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 text-[11px]">
-              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
                 <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-cyan-400/70 bg-cyan-500/10 text-[12px] text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-200">
                   1
                 </div>
@@ -280,7 +311,7 @@ export default function ExtractPage() {
                 </div>
               </div>
 
-              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
                 <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-sky-400/70 bg-sky-500/10 text-[12px] text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
                   2
                 </div>
@@ -293,7 +324,7 @@ export default function ExtractPage() {
                 </div>
               </div>
 
-              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/90 dark:text-slate-50">
                 <div className="mt-[2px] flex h-5 w-5 items-center justify-center rounded-lg border border-emerald-400/70 bg-emerald-500/10 text-[12px] text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
                   3
                 </div>
@@ -304,29 +335,6 @@ export default function ExtractPage() {
                     and any custom exporter.
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-cyan-400/50 dark:bg-slate-950/90 dark:text-slate-300">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:text-cyan-200">
-                  Step 1
-                </span>
-                <span>
-                  Use the{" "}
-                  <span className="font-semibold text-cyan-700 dark:text-cyan-200">
-                    Extract launcher
-                  </span>{" "}
-                  below to submit a URL.
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-200">
-                  Step 2
-                </span>
-                <span>
-                  Inspect the extraction canvas and JSON viewer in real time.
-                </span>
               </div>
             </div>
           </div>
