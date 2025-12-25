@@ -8,10 +8,9 @@ import OpenAI from "openai";
 /**
  * AvidiaDescribe API route (OpenAI direct via Responses API)
  *
- * Notes:
- * - We intentionally pass `response_format` using `as any` because the installed
- *   openai SDK typings (openai@^6.10.0 in this repo) do not include it in
- *   ResponseCreateParams*, even though the API supports it.
+ * IMPORTANT:
+ * - OpenAI Responses API no longer accepts `response_format`.
+ *   JSON enforcement moved to `text.format`.
  *
  * Env:
  * - OPENAI_API_KEY (required)
@@ -56,8 +55,8 @@ function requireField(condition: boolean, message: string) {
 }
 
 /**
- * Extract a text body from an OpenAI Responses API response.
- * SDK output shapes can vary; this is defensive.
+ * Extract text from Responses API output.
+ * Defensive against SDK output shape differences.
  */
 function extractTextFromResponses(res: any): string {
   const out0 = res?.output?.at?.(0) ?? res?.output?.[0] ?? null;
@@ -78,6 +77,7 @@ function extractTextFromResponses(res: any): string {
 
   if (typeof out0?.text === "string") return out0.text;
 
+  // Fallback (debug)
   try {
     return JSON.stringify(out0);
   } catch {
@@ -85,17 +85,14 @@ function extractTextFromResponses(res: any): string {
   }
 }
 
-/**
- * Call the Describe model using Responses API.
- * We use JSON schema enforcement via `response_format`, but we pass it using `as any`
- * because the SDK typings in this repo don't yet include that property.
- */
 async function callDescribeModel(opts: {
   system: string;
   user: string;
 }): Promise<{ json: AnyObj; rawText: string; model: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
+  // NOTE: Use `as any` to avoid SDK typing drift across versions.
+  // The OpenAI API error you saw confirms `text.format` is supported.
   const body: any = {
     model: MODEL,
     input: [
@@ -105,55 +102,16 @@ async function callDescribeModel(opts: {
     temperature: 0.2,
     max_output_tokens: 1600,
 
-    // Typings workaround:
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "AvidiaDescribeOutput",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: true,
-          required: ["descriptionHtml", "sections", "seo", "features"],
-          properties: {
-            descriptionHtml: { type: "string" },
-            sections: {
-              type: "object",
-              additionalProperties: true,
-              required: ["overview"],
-              properties: {
-                overview: { type: "string" },
-              },
-            },
-            seo: {
-              type: "object",
-              additionalProperties: true,
-              required: ["h1", "title", "metaDescription"],
-              properties: {
-                h1: { type: "string" },
-                title: { type: "string" },
-                metaDescription: { type: "string" },
-              },
-            },
-            features: {
-              type: "array",
-              items: { type: "string" },
-            },
-            _debug: {
-              type: "object",
-              additionalProperties: true,
-            },
-          },
-        },
-      },
+    // NEW: JSON output enforcement for Responses API
+    text: {
+      format: { type: "json" },
     },
   };
 
   const res = await client.responses.create(body as any);
-
   const rawText = extractTextFromResponses(res);
-  let json: AnyObj;
 
+  let json: AnyObj;
   try {
     json = JSON.parse(rawText);
   } catch (e: any) {
@@ -213,18 +171,27 @@ export async function POST(req: NextRequest) {
     const { text: instructions, source: instructionsSource } =
       await loadCustomGptInstructionsWithInfo(tenantId);
 
+    // System prompt: strict JSON-only + compliance
     const system = [
       "You are AvidiaDescribe. You generate SEO-optimized, compliant product descriptions from short inputs.",
       "",
-      "CRITICAL OUTPUT RULE:",
-      "- Output MUST be valid JSON matching the provided JSON schema.",
-      "- Do not output markdown, code fences, or commentary.",
+      "OUTPUT RULES:",
+      "- Return ONLY valid JSON (no markdown, no code fences, no commentary).",
+      "- The response must be parseable JSON (since the API requests JSON output).",
       "",
-      "CRITICAL BEHAVIOR RULES:",
+      "BEHAVIOR RULES:",
       "- Do NOT echo or copy the input verbatim. Rewrite and improve it.",
       "- Do NOT invent facts/specs. Only use what is provided in the input fields.",
       "- Keep claims compliant and conservative. Avoid ungrounded medical claims.",
       "- HTML allowed: <p>, <ul>, <li>, <strong>, <h2>, <h3>. No inline styles.",
+      "",
+      "REQUIRED JSON SHAPE (exact keys):",
+      "{",
+      '  "descriptionHtml": "<p>...</p>",',
+      '  "sections": { "overview": "<p>...</p>" },',
+      '  "seo": { "h1": "...", "title": "...", "metaDescription": "..." },',
+      '  "features": ["...", "..."]',
+      "}",
       "",
       isNonEmptyString(instructions)
         ? `CUSTOM GPT INSTRUCTIONS (MUST FOLLOW):\n${instructions.trim()}`
@@ -247,6 +214,7 @@ export async function POST(req: NextRequest) {
     // Call model
     let parsed: AnyObj;
     let rawText = "";
+
     try {
       const result = await callDescribeModel({ system, user });
       parsed = result.json;
@@ -308,10 +276,7 @@ export async function POST(req: NextRequest) {
     requireField(!!seo && typeof seo === "object", "missing_seo_object");
     requireField(isNonEmptyString((seo as any).h1), "missing_seo.h1");
     requireField(isNonEmptyString((seo as any).title), "missing_seo.title");
-    requireField(
-      isNonEmptyString((seo as any).metaDescription),
-      "missing_seo.metaDescription"
-    );
+    requireField(isNonEmptyString((seo as any).metaDescription), "missing_seo.metaDescription");
 
     const features = asStringArray(parsed?.features);
 
@@ -328,7 +293,7 @@ export async function POST(req: NextRequest) {
       features,
       _debug: {
         ...(parsed._debug || {}),
-        mode: "openai_direct_responses_json_schema",
+        mode: "openai_direct_responses_text_format_json",
         requestId,
         model: MODEL,
         instruction_source: instructionsSource || null,
@@ -364,17 +329,11 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     if (err?.code === "describe_invalid_model_output") {
       return NextResponse.json(
-        {
-          error: "describe_model_invalid_output",
-          detail: err?.message || "invalid_output",
-        },
+        { error: "describe_model_invalid_output", detail: err?.message || "invalid_output" },
         { status: 502 }
       );
     }
 
-    return NextResponse.json(
-      { error: err?.message || "Unknown error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
