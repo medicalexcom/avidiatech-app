@@ -65,7 +65,7 @@ async function callDescribeModel(opts: {
 }): Promise<{ json: AnyObj; rawText: string }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  // NOTE: Using `any` to avoid SDK typing drift.
+  // NOTE: use `any` to avoid SDK typing drift.
   const body: any = {
     model: MODEL,
     input: [
@@ -75,41 +75,39 @@ async function callDescribeModel(opts: {
     temperature: 0.1,
     max_output_tokens: 9000,
 
-    // Key change: enforce JSON SCHEMA via `text.format`
     text: {
+      // Correct format for your API: requires text.format.name at top-level of format.
       format: {
         type: "json_schema",
-        json_schema: {
-          name: "AvidiaDescribeSEO",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["descriptionHtml", "sections", "seo", "features"],
-            properties: {
-              descriptionHtml: { type: "string" },
-              sections: {
-                type: "object",
-                additionalProperties: false,
-                required: ["overview"],
-                properties: {
-                  overview: { type: "string" },
-                },
+        name: "AvidiaDescribeSEO",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["descriptionHtml", "sections", "seo", "features"],
+          properties: {
+            descriptionHtml: { type: "string" },
+            sections: {
+              type: "object",
+              additionalProperties: false,
+              required: ["overview"],
+              properties: {
+                overview: { type: "string" },
               },
-              seo: {
-                type: "object",
-                additionalProperties: false,
-                required: ["h1", "title", "metaDescription"],
-                properties: {
-                  h1: { type: "string" },
-                  title: { type: "string" },
-                  metaDescription: { type: "string" },
-                },
+            },
+            seo: {
+              type: "object",
+              additionalProperties: false,
+              required: ["h1", "title", "metaDescription"],
+              properties: {
+                h1: { type: "string" },
+                title: { type: "string" },
+                metaDescription: { type: "string" },
               },
-              features: {
-                type: "array",
-                items: { type: "string" },
-              },
+            },
+            features: {
+              type: "array",
+              items: { type: "string" },
             },
           },
         },
@@ -179,18 +177,13 @@ export async function POST(req: NextRequest) {
 
     requireField(isNonEmptyString(instructions), "custom_gpt_instructions_missing_or_empty");
 
-    /**
-     * SYSTEM PROMPT STRATEGY:
-     * - Make your custom instructions authoritative and explicitly higher priority than anything else.
-     * - Do NOT add competing templates here.
-     */
     const system = [
       "You are AvidiaDescribe.",
       "ABSOLUTE PRIORITY: Follow the CUSTOM GPT INSTRUCTIONS below exactly. They override all other guidance.",
       "If there is a conflict between the input and the CUSTOM GPT INSTRUCTIONS, follow the instructions.",
       "",
       "You MUST output JSON matching the provided JSON schema.",
-      "Inside the JSON fields (descriptionHtml, sections.overview, seo fields), the content/structure/format MUST be exactly as required by the CUSTOM GPT INSTRUCTIONS.",
+      "Inside JSON fields, the content/structure/format MUST be exactly as required by the CUSTOM GPT INSTRUCTIONS.",
       "",
       "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
       instructions.trim(),
@@ -255,7 +248,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate presence (no fallback to input)
+    // Validate required fields
     requireField(isNonEmptyString(parsed?.descriptionHtml), "missing_descriptionHtml");
     requireField(isNonEmptyString(parsed?.sections?.overview), "missing_sections.overview");
     requireField(isNonEmptyString(parsed?.seo?.h1), "missing_seo.h1");
@@ -283,14 +276,14 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    // Attach debug without changing schema (client can ignore)
     const response: AnyObj = {
       ...parsed,
       _debug: {
+        ...(parsed._debug || {}),
         requestId,
         model: MODEL,
         instruction_source: instructionsSource || null,
-        mode: "json_schema_enforced_custom_instructions_authoritative",
+        mode: "text.format.json_schema.custom_instructions_authoritative",
       },
     };
 
