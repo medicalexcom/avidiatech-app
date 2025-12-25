@@ -187,7 +187,6 @@ function StatCard({
 
 export default function DescribePage() {
   return (
-    // IMPORTANT: no overflow-hidden (prevents clipping / “stuck” feeling)
     <main className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* Background: premium glows + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
@@ -203,7 +202,7 @@ export default function DescribePage() {
       </div>
 
       <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO + INPUT (Import-style: input immediately accessible) */}
+        {/* HERO + INPUT */}
         <section className="rounded-[28px] bg-gradient-to-r from-fuchsia-200/60 via-pink-200/35 to-sky-200/55 p-[1px] shadow-[0_18px_55px_-35px_rgba(2,6,23,0.55)] dark:from-fuchsia-500/22 dark:via-pink-500/14 dark:to-sky-500/18 dark:shadow-[0_18px_55px_-35px_rgba(0,0,0,0.75)]">
           <div className="rounded-[27px] border border-white/50 bg-white/75 p-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/50 lg:p-5">
             {/* top strip */}
@@ -239,7 +238,7 @@ export default function DescribePage() {
 
             {/* main hero row */}
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.15fr),minmax(0,0.85fr)] lg:items-start">
-              {/* LEFT: hero text + form directly under it */}
+              {/* LEFT */}
               <div className="space-y-4">
                 <div className="space-y-2">
                   <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
@@ -250,13 +249,13 @@ export default function DescribePage() {
                     . We turn it into a store-ready page.
                   </h1>
                   <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-                    Start with a name, short context, and a few real constraints. AvidiaDescribe
-                    runs your custom instruction profile and returns SEO-ready copy that stays
-                    consistent across brands, categories, and channels.
+                    Start with a name, short context, and a few real constraints. AvidiaDescribe runs
+                    your custom instruction profile and returns SEO-ready copy that stays consistent
+                    across brands, categories, and channels.
                   </p>
                 </div>
 
-                {/* INPUTS: right here, always accessible */}
+                {/* INPUTS */}
                 <div
                   id="describe-input"
                   className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-30px_rgba(2,6,23,0.45)] dark:border-slate-800/60 dark:bg-slate-950/45"
@@ -276,7 +275,11 @@ export default function DescribePage() {
                       </p>
                     </div>
 
-                    <TinyChip tone="success" />
+                    {/* FIX: TinyChip must have children */}
+                    <TinyChip tone="success">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Ready for output
+                    </TinyChip>
                   </div>
 
                   <div className="mt-3">
@@ -285,7 +288,7 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* RIGHT: compact guidance stack (tight, aligned) */}
+              {/* RIGHT */}
               <div className="flex flex-col gap-3">
                 <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-950/45">
                   <div className="flex items-start justify-between gap-3">
@@ -374,7 +377,7 @@ export default function DescribePage() {
               </div>
             </div>
 
-            {/* compact “stats” row (fills hero real estate without gaps) */}
+            {/* compact “stats” row */}
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
               <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
@@ -384,9 +387,8 @@ export default function DescribePage() {
           </div>
         </section>
 
-        {/* WORKSPACE: Output (left) + Rail (right) */}
+        {/* WORKSPACE */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
-          {/* LEFT: output preview primary */}
           <div className="lg:col-span-8">
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_46px_-30px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
@@ -407,11 +409,7 @@ export default function DescribePage() {
                 </div>
 
                 <div className="hidden shrink-0 sm:flex">
-                  <SoftButton
-                    href="/dashboard/seo"
-                    variant="secondary"
-                    className="px-3 py-1.5 text-xs"
-                  >
+                  <SoftButton href="/dashboard/seo" variant="secondary" className="px-3 py-1.5 text-xs">
                     Send to SEO ↗
                   </SoftButton>
                 </div>
@@ -423,7 +421,6 @@ export default function DescribePage() {
             </div>
           </div>
 
-          {/* RIGHT: engine snapshot + compact checklist */}
           <aside className="space-y-4 lg:col-span-4">
             <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
