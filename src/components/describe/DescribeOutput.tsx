@@ -49,15 +49,19 @@ export default function DescribeOutput() {
   const { result } = useLastResult();
   const [tab, setTab] = useState<
     | "overview"
+    | "hook"
+    | "main"
     | "features"
     | "specs"
     | "links"
+    | "why"
     | "manuals"
+    | "faqs"
     | "seo"
     | "json"
   >("overview");
 
-  const [viewMode, setViewMode] = useState<"styled" | "iframe">("iframe");
+  const [viewMode, setViewMode] = useState<"styled" | "iframe">("styled");
 
   useEffect(() => {
     setTab("overview");
@@ -136,11 +140,15 @@ export default function DescribeOutput() {
   }
 
   const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "features", label: "Features" },
-    { id: "specs", label: "Specs" },
-    { id: "links", label: "Links" },
+    { id: "overview", label: "Overview (Full)" },
+    { id: "hook", label: "Hook" },
+    { id: "main", label: "Main Description" },
+    { id: "features", label: "Features & Benefits" },
+    { id: "specs", label: "Product Specifications" },
+    { id: "links", label: "Internal Links" },
+    { id: "why", label: "Why Choose" },
     { id: "manuals", label: "Manuals" },
+    { id: "faqs", label: "FAQs" },
     { id: "seo", label: "SEO" },
     { id: "json", label: "Raw JSON" },
   ] as const;
