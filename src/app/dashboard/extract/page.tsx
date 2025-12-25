@@ -73,7 +73,7 @@ export default function ExtractPage() {
     setPreview(null);
     setPreviewError(null);
 
-    // scroll to results area (after layout has painted)
+    // scroll to results area (offset handled by scroll-mt on target)
     setTimeout(() => {
       const el = document.getElementById("extract-results");
       if (!el) return;
@@ -217,9 +217,9 @@ export default function ExtractPage() {
               </div>
 
               {/* Main hero row */}
-              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.15fr),minmax(0,0.85fr)] lg:items-start">
+              <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.15fr),minmax(0,0.85fr)] lg:items-stretch">
                 {/* LEFT: hero text + launcher under it */}
-                <div className="space-y-4">
+                <div className="flex h-full flex-col gap-4">
                   <div className="space-y-2">
                     <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
                       Extract everything from a{" "}
@@ -280,9 +280,8 @@ export default function ExtractPage() {
                   </div>
                 </div>
 
-                {/* RIGHT: 3 stacked cards (Quick start + Example + Feeds) */}
+                {/* RIGHT: 3 stacked cards */}
                 <div className="flex h-full flex-col gap-3">
-                  {/* Quick start card */}
                   <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                       Quick start
@@ -320,7 +319,6 @@ export default function ExtractPage() {
                     </div>
                   </div>
 
-                  {/* Example extraction */}
                   <div className="rounded-2xl border border-cyan-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/35 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">
                       Example extraction
@@ -332,7 +330,6 @@ export default function ExtractPage() {
                     </p>
                   </div>
 
-                  {/* Feeds the stack */}
                   <div className="rounded-2xl border border-emerald-200 bg-white/80 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/35 dark:bg-slate-950/55 dark:text-slate-100">
                     <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
                       Feeds the stack
@@ -392,7 +389,7 @@ export default function ExtractPage() {
         </section>
 
         {/* MAIN: Extraction canvas + JSON viewer */}
-        <section className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)]">
+        <section className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)] lg:items-start">
           {/* LEFT: human extraction canvas */}
           <section className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/70 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/90 dark:shadow-slate-950/80">
             <div className="flex items-start justify-between gap-4">
@@ -470,7 +467,6 @@ export default function ExtractPage() {
                 </div>
               ) : payload ? (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/90">
-                  {/* SINGLE-COLUMN PREVIEW BLOCK, IMAGES BEFORE MANUALS */}
                   <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                     {name ?? "Untitled extraction"}
                   </h3>
@@ -521,7 +517,7 @@ export default function ExtractPage() {
                     )}
                   </div>
 
-                  {/* Images FIRST */}
+                  {/* Images */}
                   <div className="mt-4">
                     <p className="mb-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
                       Images
@@ -545,7 +541,7 @@ export default function ExtractPage() {
                     </div>
                   </div>
 
-                  {/* Manuals / PDFs AFTER images */}
+                  {/* Manuals / PDFs */}
                   <div className="mt-4">
                     <p className="mb-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
                       Manuals &amp; PDFs
@@ -581,11 +577,8 @@ export default function ExtractPage() {
               )}
             </div>
 
-            {/* TabsShell: anchored block for raw data */}
-            <div
-              className="mt-2 scroll-mt-24 lg:scroll-mt-28"
-              id="extract-results"
-            >
+            {/* TabsShell */}
+            <div className="mt-2 scroll-mt-24 lg:scroll-mt-28" id="extract-results">
               <div className="mb-2 flex items-center justify-between">
                 <div>
                   <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
@@ -606,9 +599,9 @@ export default function ExtractPage() {
             </div>
           </section>
 
-          {/* RIGHT: JSON viewer card (sticky, premium) */}
-          <aside className="lg:sticky lg:top-24">
-            <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80">
+          {/* RIGHT: JSON viewer card (NO internal scroll; page scrolls naturally) */}
+          <aside className="flex">
+            <div className="flex w-full flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
@@ -633,13 +626,11 @@ export default function ExtractPage() {
                       "No job yet"
                     )}
                   </div>
-                  <div className="mt-1">
-                    {row?.status ? `Status: ${row.status}` : ""}
-                  </div>
+                  <div className="mt-1">{row?.status ? `Status: ${row.status}` : ""}</div>
                 </div>
               </div>
 
-              <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90">
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90">
                 <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 text-[11px] dark:border-slate-800">
                   <span className="uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                     Payload explorer
@@ -653,11 +644,9 @@ export default function ExtractPage() {
                   </span>
                 </div>
 
-                <div className="h-full max-h-[560px] overflow-auto">
-                  <JsonViewer
-                    data={jsonViewerData}
-                    loading={!row && !!jobId && !preview}
-                  />
+                {/* No max-h / no overflow container: let the page do the scrolling */}
+                <div className="px-3 py-3">
+                  <JsonViewer data={jsonViewerData} loading={!row && !!jobId && !preview} />
                 </div>
               </div>
             </div>
