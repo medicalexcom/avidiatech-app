@@ -165,6 +165,12 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
  * IMPORTANT: We bypass Clerk for internal endpoints BEFORE invoking clerkMiddleware.
  * This prevents Clerk from rejecting service-to-service calls that use x-pipeline-secret
  * or HMAC signatures instead of user sessions.
+ *
+ * Implementation note:
+ * clerkMiddleware returns a handler that expects two arguments; to avoid
+ * TypeScript mismatch when delegating, we call the wrapped handler with `as any`
+ * for the second parameter (the NextFetchEvent) — that keeps the original behavior
+ * while allowing an early-return bypass for internal endpoints.
  */
 
 const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
@@ -212,8 +218,12 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Delegate to Clerk-wrapped handler for all other matched routes
-  return await clerkWrappedHandler(req);
+  // Delegate to Clerk-wrapped handler for all other matched routes.
+  // clerkWrappedHandler expects two args; the second param (NextFetchEvent) is not needed here,
+  // so we pass undefined cast to any to satisfy the runtime call and TypeScript.
+  // This preserves Clerk behavior for public / dashboard routes.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return await clerkWrappedHandler(req as any, undefined as any);
 }
 
 export const config = {
