@@ -1,662 +1,512 @@
-// src/app/dashboard/extract/page.tsx
-"use client";
+// src/app/dashboard/describe/page.tsx
 
-import React, { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import TabsShell from "@/components/TabsShell";
-import JsonViewer from "@/components/JsonViewer";
-import { useIngestRow } from "@/hooks/useIngestRow";
-import ExtractHeader from "@/components/ExtractHeader";
+import React from "react";
+import DescribeForm from "@/components/describe/DescribeForm";
+import DescribeOutput from "@/components/describe/DescribeOutput";
 
 /**
- * AvidiaExtract page (client)
+ * /dashboard/describe
  *
- * - ExtractHeader calls onJobCreated(jobId, url) after POST /api/v1/ingest.
- * - We track jobId so the status + SEO button can work.
- * - Preview comes from: GET /api/v1/ingest/{jobId}?url=<url>
- *   which proxies to medx-ingest-api when ?url is present.
- * - For display we:
- *   - Prefer preview JSON.
- *   - Fall back to DB row (normalized_payload if available).
+ * Goals:
+ * - Inputs immediately accessible at the top (Import-style)
+ * - Output preview lives below, left side (primary workspace)
+ * - Right rail carries guidance + engine snapshot (premium, compact, aligned)
+ * - No extra page-level scroll containers; rely on normal page scroll
  */
 
 export const dynamic = "force-dynamic";
 
-export default function ExtractPage() {
-  const router = useRouter();
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
-  // submission / job state
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [jobUrl, setJobUrl] = useState<string | null>(null);
-  const { row, loading: rowLoading, error: rowError } = useIngestRow(
-    jobId,
-    1500
-  );
+type StatTone = "fuchsia" | "sky" | "emerald" | "amber";
 
-  // preview state when the synchronous GET returns extraction immediately
-  const [preview, setPreview] = useState<any | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
-  function extractPayload(source: any | null | undefined) {
-    if (!source) return null;
-    const base = source.data ?? source;
-    return base.normalized_payload ?? base;
-  }
-
-  // derive payload for highlights preferring preview -> row
-  const payload = useMemo(() => {
-    if (preview) return extractPayload(preview);
-    if (row) return extractPayload(row);
-    return null;
-  }, [preview, row]);
-
-  const name = payload?.name_best ?? payload?.name_raw ?? payload?.name;
-
-  const featuresHtml =
-    payload?.features_html ??
-    payload?.features_structured ??
-    payload?.features_raw;
-
-  const pdfUrls =
-    payload?.pdf_manual_urls ?? payload?.pdfs ?? payload?.manuals ?? [];
-  const images = payload?.images ?? [];
-  const quality = payload?.quality_score;
-  const needsReview = payload?.needs_review;
-
-  function onJobCreated(id: string, url: string) {
-    setJobId(String(id));
-    setJobUrl(url);
-    setPreview(null);
-    setPreviewError(null);
-
-    // scroll to results area (offset handled by scroll-mt on target)
-    setTimeout(() => {
-      const el = document.getElementById("extract-results");
-      if (!el) return;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
-    }, 80);
-  }
-
-  // When jobId + jobUrl set, call:
-  //   GET /api/v1/ingest/{jobId}?url=<encoded>
-  useEffect(() => {
-    if (!jobId || !jobUrl) return;
-
-    let mounted = true;
-
-    (async () => {
-      setPreviewLoading(true);
-      setPreviewError(null);
-
-      try {
-        const target = `/api/v1/ingest/${encodeURIComponent(
-          jobId
-        )}?url=${encodeURIComponent(jobUrl)}`;
-
-        const res = await fetch(target, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
-
-        const text = await res.text().catch(() => "");
-
-        if (!mounted) return;
-
-        if (!res.ok) {
-          let message = `preview fetch failed (${res.status})`;
-          try {
-            const j = JSON.parse(text || "{}");
-            message = j?.error || message;
-          } catch {
-            // keep default message
-          }
-          setPreviewError(message);
-          setPreviewLoading(false);
-          return;
-        }
-
-        try {
-          const j = JSON.parse(text || "{}");
-          setPreview(j);
-        } catch {
-          setPreviewError("Preview returned non-JSON response");
-        }
-      } catch (err: any) {
-        if (!mounted) return;
-        setPreviewError(String(err?.message || err));
-      } finally {
-        if (mounted) setPreviewLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [jobId, jobUrl]);
-
-  const jsonViewerData = useMemo(() => {
-    if (preview) return extractPayload(preview) ?? preview;
-    if (row) return extractPayload(row) ?? row;
-    return {};
-  }, [preview, row]);
-
-  const ingestionStatus = row?.status ?? (preview ? "preview-only" : null);
-
-  const statusDot =
-    rowLoading || previewLoading
-      ? "bg-amber-400 animate-pulse"
-      : payload
-      ? "bg-emerald-500 dark:bg-emerald-400"
-      : "bg-slate-400";
-
-  const statusText =
-    rowLoading || previewLoading
-      ? "Fetching extraction preview…"
-      : payload
-      ? "Extraction ready"
-      : "Awaiting first URL";
-
-  const imageCount = Array.isArray(images) ? images.length : 0;
-  const pdfCount = Array.isArray(pdfUrls) ? pdfUrls.length : 0;
+function TinyChip({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "success" | "signal" | "brand";
+}) {
+  const tones =
+    tone === "brand"
+      ? "border-fuchsia-200/60 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-400/25 dark:bg-fuchsia-500/10 dark:text-fuchsia-100"
+      : tone === "signal"
+      ? "border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100"
+      : tone === "success"
+      ? "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
 
   return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm backdrop-blur",
+        tones
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SoftButton({
+  href,
+  children,
+  variant = "secondary",
+  className,
+}: {
+  href: string;
+  children: React.ReactNode;
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950";
+
+  if (variant === "primary") {
+    return (
+      <a
+        href={href}
+        className={cx(
+          base,
+          "text-slate-950 shadow-[0_16px_34px_-22px_rgba(2,6,23,0.55)]",
+          "bg-gradient-to-r from-fuchsia-400 via-pink-500 to-sky-500",
+          "hover:from-fuchsia-300 hover:via-pink-400 hover:to-sky-400",
+          "focus-visible:ring-fuchsia-400/70",
+          className
+        )}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      className={cx(
+        base,
+        "border border-slate-200/80 bg-white/70 text-slate-700 shadow-sm",
+        "hover:bg-white hover:text-slate-900",
+        "dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-950/65 dark:hover:text-slate-50",
+        "focus-visible:ring-slate-300/70 dark:focus-visible:ring-slate-700/70",
+        className
+      )}
+    >
+      {children}
+    </a>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  caption,
+  tone = "fuchsia",
+}: {
+  title: string;
+  value: React.ReactNode;
+  caption?: string;
+  tone?: StatTone;
+}) {
+  const toneMap: Record<
+    StatTone,
+    { border: string; wash: string; glowA: string; glowB: string; top: string }
+  > = {
+    fuchsia: {
+      border: "border-fuchsia-200/70 dark:border-fuchsia-500/20",
+      wash: "from-fuchsia-500/10 via-fuchsia-500/0 to-transparent dark:from-fuchsia-400/10 dark:via-fuchsia-400/0",
+      glowA: "bg-fuchsia-400/16 dark:bg-fuchsia-500/12",
+      glowB: "bg-pink-400/10 dark:bg-pink-500/10",
+      top: "from-fuchsia-400/55 via-fuchsia-300/20 to-transparent dark:from-fuchsia-300/35 dark:via-fuchsia-300/15",
+    },
+    sky: {
+      border: "border-sky-200/70 dark:border-sky-500/20",
+      wash: "from-sky-500/10 via-sky-500/0 to-transparent dark:from-sky-400/10 dark:via-sky-400/0",
+      glowA: "bg-sky-400/16 dark:bg-sky-500/12",
+      glowB: "bg-indigo-400/10 dark:bg-indigo-500/10",
+      top: "from-sky-400/55 via-sky-300/20 to-transparent dark:from-sky-300/35 dark:via-sky-300/15",
+    },
+    emerald: {
+      border: "border-emerald-200/70 dark:border-emerald-500/20",
+      wash: "from-emerald-500/10 via-emerald-500/0 to-transparent dark:from-emerald-400/10 dark:via-emerald-400/0",
+      glowA: "bg-emerald-400/14 dark:bg-emerald-500/12",
+      glowB: "bg-cyan-400/10 dark:bg-cyan-500/10",
+      top: "from-emerald-400/55 via-emerald-300/20 to-transparent dark:from-emerald-300/35 dark:via-emerald-300/15",
+    },
+    amber: {
+      border: "border-amber-200/70 dark:border-amber-500/20",
+      wash: "from-amber-500/12 via-amber-500/0 to-transparent dark:from-amber-400/10 dark:via-amber-400/0",
+      glowA: "bg-amber-400/16 dark:bg-amber-500/12",
+      glowB: "bg-orange-400/10 dark:bg-orange-500/10",
+      top: "from-amber-400/60 via-amber-300/20 to-transparent dark:from-amber-300/35 dark:via-amber-300/15",
+    },
+  };
+
+  const t = toneMap[tone];
+
+  return (
+    <div
+      className={cx(
+        "group relative overflow-hidden rounded-2xl border bg-white/88 p-4",
+        "shadow-[0_10px_30px_-20px_rgba(2,6,23,0.35)] backdrop-blur-xl",
+        "dark:bg-slate-950/45",
+        t.border
+      )}
+    >
+      <div
+        className={cx(
+          "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
+          t.top
+        )}
+      />
+      <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
+      <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
+      <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
+
+      <div className="relative">
+        <div className="text-[13px] font-semibold leading-none text-slate-900 dark:text-slate-50">
+          <span className="block truncate whitespace-nowrap">{title}</span>
+        </div>
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="text-[28px] font-semibold leading-none tracking-tight text-slate-900 dark:text-slate-50">
+            {value}
+          </div>
+        </div>
+        {caption ? (
+          <div className="mt-2 text-[11px] leading-none text-slate-500 dark:text-slate-400">
+            <span className="block truncate whitespace-nowrap">{caption}</span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default async function DescribePage() {
+  return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      {/* BACKGROUND: aligned with other module pages */}
+      {/* Background: premium glows + subtle grid (hybrid) */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/20" />
-        <div className="absolute -bottom-40 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-500/20" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.06]">
+        <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/14" />
+        <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/14" />
+        <div className="absolute top-24 right-10 h-56 w-56 rounded-full bg-amber-300/12 blur-3xl dark:bg-amber-500/10" />
+
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
+
+        <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 lg:px-8 lg:pt-6 lg:pb-10">
-        {/* HERO: input directly under headline + right-side info stack */}
-        <section className="relative flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
-          {/* LEFT */}
-          <div className="min-w-[260px] flex-1 space-y-4">
-            {/* Identity row */}
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-8 sm:px-6 lg:px-8 lg:pt-6 lg:pb-10">
+        {/* Header / Hero */}
+        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/70 bg-white/90 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-cyan-800 shadow-sm dark:border-cyan-500/60 dark:bg-slate-950/90 dark:text-cyan-100">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-cyan-400/70 bg-slate-100 dark:bg-slate-900">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500 dark:bg-cyan-400" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-fuchsia-700 shadow-sm backdrop-blur dark:border-fuchsia-400/30 dark:bg-slate-950/55 dark:text-fuchsia-100">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-fuchsia-400/60 bg-slate-100 dark:border-fuchsia-400/30 dark:bg-slate-900">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
                 </span>
-                AvidiaTech • AvidiaExtract
-              </div>
-
-              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                Ingest engine • JSON-first
+                Content • AvidiaDescribe
               </span>
 
-              {ingestionStatus && (
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  Status:
-                  <span className="font-mono text-[10px] uppercase text-cyan-700 dark:text-cyan-200">
-                    {ingestionStatus}
-                  </span>
-                </span>
-              )}
+              <TinyChip tone="success">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Render + GPT • Instructioned
+              </TinyChip>
 
-              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
-                {statusText}
-              </span>
+              <TinyChip tone="signal">✨ Notes → store-ready page</TinyChip>
             </div>
 
-            {/* Headline + paragraph */}
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold leading-tight text-slate-900 lg:text-3xl dark:text-slate-50">
-                Extract everything from a{" "}
-                <span className="bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-400 bg-clip-text text-transparent dark:from-cyan-300 dark:via-sky-400 dark:to-emerald-300">
-                  single manufacturer URL
-                </span>{" "}
-                — as clean, normalized JSON.
+                Describe the product in{" "}
+                <span className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-sky-500 bg-clip-text text-transparent dark:from-fuchsia-300 dark:via-pink-300 dark:to-sky-300">
+                  your own words
+                </span>
+                . We turn it into a store-ready page.
               </h1>
-              <p className="max-w-xl text-sm text-slate-600 dark:text-slate-300">
-                Paste any product URL. AvidiaExtract hits your ingest engine,
-                strips noise, standardizes specs, and streams back a JSON-first
-                view that plugs into SEO, Describe, and any ecommerce stack.
+              <p className="max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+                Start with a name, short context, and a few real constraints. AvidiaDescribe
+                runs your custom instruction profile and returns SEO-ready copy that stays
+                consistent across brands, categories, and channels.
               </p>
-            </div>
-
-            {/* INPUT: directly under hero copy */}
-            <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xl shadow-slate-200/70 dark:border-slate-700/70 dark:bg-slate-950/85 dark:shadow-slate-950/70">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                    Extract launcher
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Submit a manufacturer URL; preview and JSON update together.
-                  </p>
-                </div>
-
-                {jobId && (
-                  <div className="text-right">
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Job
-                    </p>
-                    <p className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
-                      {jobId.slice(0, 10)}…
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-3">
-                <ExtractHeader onJobCreated={onJobCreated} />
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                  Uses the same ingestionId downstream for SEO and export.
-                </p>
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300">
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
-                  {rowLoading || previewLoading ? "Pipeline running…" : "Idle"}
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* RIGHT: 3 stacked cards, aligned + no gaps */}
-          <div className="w-full lg:w-[420px] xl:w-[460px]">
-            <div className="flex h-full flex-col gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-slate-700/70 dark:bg-slate-950/85 dark:text-slate-100">
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                  Quick start
-                </p>
+          <div className="flex flex-wrap gap-3 lg:justify-end">
+            <SoftButton href="#describe-input" variant="primary">
+              Start describing
+            </SoftButton>
+            <SoftButton href="/dashboard/extract" variant="secondary">
+              Open Extract
+            </SoftButton>
+            <SoftButton href="/dashboard/seo" variant="secondary">
+              Open SEO
+            </SoftButton>
+          </div>
+        </header>
 
-                <div className="space-y-2">
-                  <div className="flex items-start gap-2">
-                    <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-cyan-400/60 bg-cyan-500/10 text-[12px] font-semibold text-cyan-700 dark:border-cyan-400/45 dark:bg-cyan-500/15 dark:text-cyan-200">
-                      1
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-slate-50">
-                        Step 1
-                      </p>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                        Paste a product URL in the launcher and run Extract.
-                      </p>
-                    </div>
-                  </div>
+        {/* Compact “stats” row (visual, not data-driven) */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard title="Input length" tone="fuchsia" value="Short" caption="Works from tiny prompts" />
+          <StatCard title="Output shape" tone="sky" value="Structured" caption="Headers, bullets, meta" />
+          <StatCard title="Rule fidelity" tone="emerald" value="Locked" caption="Custom instructions enforced" />
+          <StatCard title="Time to draft" tone="amber" value="Fast" caption="Designed for throughput" />
+        </section>
 
-                  <div className="flex items-start gap-2">
-                    <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/60 bg-emerald-500/10 text-[12px] font-semibold text-emerald-700 dark:border-emerald-400/45 dark:bg-emerald-500/15 dark:text-emerald-200">
-                      2
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-slate-50">
-                        Step 2
-                      </p>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                        Review the human preview and the JSON payload side-by-side.
-                      </p>
-                    </div>
-                  </div>
+        {/* INPUTS: always on top (Import-style) */}
+        <section
+          id="describe-input"
+          className={cx(
+            "rounded-[28px] bg-gradient-to-r from-fuchsia-200/60 via-pink-200/35 to-sky-200/55 p-[1px]",
+            "shadow-[0_18px_55px_-35px_rgba(2,6,23,0.55)] dark:shadow-[0_18px_55px_-35px_rgba(0,0,0,0.75)]",
+            "dark:from-fuchsia-500/22 dark:via-pink-500/14 dark:to-sky-500/18"
+          )}
+        >
+          <div className="rounded-[27px] border border-white/50 bg-white/75 p-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/50 lg:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <TinyChip tone="brand">
+                    <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
+                    Describe input
+                  </TinyChip>
+                  <TinyChip>Name • short context • constraints</TinyChip>
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-cyan-200 bg-white/95 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-cyan-500/35 dark:bg-slate-950/85 dark:text-slate-100">
-                <p className="mb-1 font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-200">
-                  Example extraction
-                </p>
-                <p className="leading-relaxed">
-                  Unified JSON with name, brand, attributes, features, manuals,
-                  images, and normalized specs — ready for any downstream module.
+                <h2 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  Input first. Output follows.
+                </h2>
+                <p className="mt-1 max-w-2xl text-[11px] text-slate-600 dark:text-slate-300">
+                  Fill in the fields (name, short description, notes, claims, disclaimers, audience).
+                  Keep it real — the best outputs come from specific constraints, not marketing fluff.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-emerald-200 bg-white/95 px-4 py-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-400/35 dark:bg-slate-950/85 dark:text-slate-100">
-                <p className="mb-1 font-semibold text-emerald-700 dark:text-emerald-300">
-                  Feeds the stack
-                </p>
-                <ul className="list-inside list-disc space-y-1">
-                  <li>AvidiaDescribe for copy-first flows</li>
-                  <li>AvidiaSEO for URL-first SEO pages</li>
-                  <li>Any external store / PIM as JSON</li>
-                </ul>
+              <div className="flex shrink-0 items-center gap-2">
+                <TinyChip tone="success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  Auto-structured output
+                </TinyChip>
               </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-30px_rgba(2,6,23,0.45)] dark:border-slate-800/60 dark:bg-slate-950/45">
+              <DescribeForm />
             </div>
           </div>
         </section>
 
-        {/* MAIN: results left + JSON right (tight, aligned, no internal scroll shells) */}
-        <section className="grid grid-cols-12 gap-6 lg:items-start">
-          {/* LEFT column */}
-          <div className="col-span-12 lg:col-span-7 space-y-6">
-            {/* Preview / canvas card */}
-            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/70 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/90 dark:shadow-slate-950/80">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Extraction preview
-                  </h2>
-                  <p className="mt-1 max-w-xl text-[11px] text-slate-600 dark:text-slate-400">
-                    Human-readable snapshot from the ingest engine. The JSON
-                    viewer uses the same payload.
-                  </p>
-                </div>
-
-                {jobId && (
-                  <div className="ml-auto flex flex-col items-end gap-1">
-                    <button
-                      onClick={() =>
-                        router.push(
-                          `/dashboard/seo?ingestionId=${encodeURIComponent(jobId)}`
-                        )
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-50 shadow-lg shadow-cyan-500/30 transition-transform hover:-translate-y-[1px] hover:bg-cyan-400 dark:text-slate-950"
-                    >
-                      <span>Send to AvidiaSEO</span>
-                      <span className="text-[13px]">↗</span>
-                    </button>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-500">
-                      Reuses this ingestionId downstream.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Status strip */}
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
-                  <span>{statusText}</span>
-                </div>
-
-                {rowError && (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-rose-300 bg-rose-50 px-3 py-1.5 text-rose-700 shadow-sm dark:border-rose-500/40 dark:bg-rose-950/80 dark:text-rose-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500 dark:bg-rose-400" />
-                    DB error: {String(rowError)}
-                  </span>
-                )}
-
-                {previewError && !previewLoading && (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-amber-700 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/80 dark:text-amber-100">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    Preview: {previewError}
-                  </span>
-                )}
-              </div>
-
-              {/* Preview body */}
-              <div className="mt-4">
-                {previewLoading ? (
-                  <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                    <div className="h-8 w-8 rounded-full border-2 border-cyan-400/50 border-t-transparent animate-spin" />
-                    <div>
-                      <p className="font-medium text-slate-900 dark:text-slate-100">
-                        Loading preview from ingest engine…
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        This hits the medx-ingest-api directly; results appear as
-                        soon as it returns.
-                      </p>
-                    </div>
-                  </div>
-                ) : previewError && !payload ? (
-                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm dark:border-amber-500/40 dark:bg-amber-950/70 dark:text-amber-50">
-                    Preview error: {previewError}
-                  </div>
-                ) : payload ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/90">
-                    <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-                      {name ?? "Untitled extraction"}
-                    </h3>
-
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                      {quality !== undefined && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-emerald-700 shadow-sm dark:border-emerald-400/40 dark:bg-slate-900/90 dark:text-emerald-100">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                          Quality: <span className="font-semibold">{quality}</span>
-                        </span>
-                      )}
-
-                      {needsReview !== undefined && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-700 shadow-sm dark:border-amber-400/40 dark:bg-slate-900/90 dark:text-amber-100">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                          Needs review:{" "}
-                          <span className="font-semibold">
-                            {String(Boolean(needsReview))}
-                          </span>
-                        </span>
-                      )}
-
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-                        Images: <span className="font-semibold">{imageCount}</span>
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-200">
-                        PDFs: <span className="font-semibold">{pdfCount}</span>
-                      </span>
-                    </div>
-
-                    {/* Features (no internal scroll) */}
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        Features (preview)
-                      </p>
-                      {Array.isArray(featuresHtml) ? (
-                        <ul className="mt-2 space-y-1 text-xs text-slate-700 dark:text-slate-200">
-                          {featuresHtml.slice(0, 6).map((f: any, i: number) => (
-                            <li key={i} className="list-disc list-inside">
-                              {typeof f === "string" ? f : JSON.stringify(f)}
-                            </li>
-                          ))}
-                          {featuresHtml.length > 6 && (
-                            <li className="text-slate-400">…truncated</li>
-                          )}
-                        </ul>
-                      ) : typeof featuresHtml === "string" ? (
-                        <p className="mt-2 line-clamp-5 text-xs text-slate-700 dark:text-slate-200">
-                          {featuresHtml}
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
-                          No features extracted yet.
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Images */}
-                    <div className="mt-4">
-                      <p className="mb-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        Images
-                      </p>
-                      <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                        {Array.isArray(images) && images.length > 0 ? (
-                          images.slice(0, 8).map((img: any, i: number) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              key={i}
-                              src={img?.url ?? img}
-                              alt={`img-${i}`}
-                              className="h-20 w-full rounded-lg border border-slate-200 bg-slate-100 object-cover dark:border-slate-700 dark:bg-slate-900"
-                            />
-                          ))
-                        ) : (
-                          <div className="col-span-full text-xs text-slate-400 dark:text-slate-500">
-                            No images detected.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Manuals */}
-                    <div className="mt-4">
-                      <p className="mb-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        Manuals &amp; PDFs
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {Array.isArray(pdfUrls) && pdfUrls.length > 0 ? (
-                          pdfUrls.slice(0, 8).map((u: string, i: number) => (
-                            <a
-                              key={i}
-                              href={u}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 rounded-full border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-[11px] text-cyan-800 shadow-sm hover:border-cyan-400 hover:text-cyan-900 dark:border-cyan-400/40 dark:bg-slate-900/90 dark:text-cyan-200 dark:hover:border-cyan-300"
-                            >
-                              <span className="text-[13px]">📄</span>
-                              <span>PDF {i + 1}</span>
-                            </a>
-                          ))
-                        ) : (
-                          <span className="ml-1 text-xs text-slate-400 dark:text-slate-500">
-                            No manuals or PDFs found.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-400">
-                    Submit a product URL using the Extract launcher above. Your
-                    preview will appear here and the JSON payload will appear on
-                    the right.
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Tabs / raw views card */}
-            <section
-              id="extract-results"
-              className="scroll-mt-32 rounded-3xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/90 dark:shadow-slate-950/80"
-            >
-              <div className="mb-3">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Ingest row &amp; raw views
-                </p>
-                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  Tabs expose different slices of the same ingest row (normalized,
-                  raw HTML, logs, etc) to help you debug.
-                </p>
-              </div>
-              <TabsShell
-                job={row}
-                loading={rowLoading}
-                error={rowError}
-                noDataMessage="Submit a URL to extract raw data"
-              />
-            </section>
-          </div>
-
-          {/* RIGHT column */}
-          <div className="col-span-12 lg:col-span-5 space-y-6">
-            {/* JSON viewer card */}
-            <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80">
+        {/* WORKSPACE: Output (left) + Guidance rail (right) */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+          {/* LEFT: output preview primary */}
+          <div className="lg:col-span-8">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_46px_-30px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    Normalized JSON viewer
-                  </h2>
-                  <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
-                    The exact payload your automations consume (preview first,
-                    then DB row fallback).
-                  </p>
-                </div>
-                <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
-                  {jobId ? (
-                    <div>
-                      Job:{" "}
-                      <span className="font-mono text-[10px] text-cyan-700 dark:text-cyan-200">
-                        {jobId.slice(0, 10)}…
-                      </span>
-                    </div>
-                  ) : (
-                    <div>No job yet</div>
-                  )}
-                  <div className="mt-1">{row?.status ? `Status: ${row.status}` : ""}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/90">
-                <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 text-[11px] dark:border-slate-800">
-                  <span className="uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Payload explorer
-                  </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-500">
-                    {preview
-                      ? "Preview • normalized"
-                      : row
-                      ? "DB row • normalized"
-                      : "Awaiting first extraction"}
-                  </span>
-                </div>
-
-                {/* No max-h / no forced overflow: page scrolls naturally */}
-                <div className="px-3 py-3">
-                  <JsonViewer
-                    data={jsonViewerData}
-                    loading={!row && !!jobId && !preview}
-                  />
-                </div>
-              </div>
-            </aside>
-
-            {/* Compact “at a glance” card (fills real estate, avoids dead space) */}
-            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/70 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/90 dark:shadow-slate-950/80">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    At a glance
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TinyChip tone="success">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      Live canvas
+                    </TinyChip>
+                    <TinyChip>HTML + structured payload</TinyChip>
+                  </div>
+                  <h3 className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-50">
+                    Preview results
                   </h3>
-                  <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
-                    Quick signals for extraction completeness.
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    This is what ships — headings, bullets, disclaimers, and SEO metadata behavior included.
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-300">
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
-                  {payload ? "Has payload" : "No payload"}
+
+                <div className="hidden shrink-0 sm:flex">
+                  <SoftButton href="/dashboard/seo" variant="secondary" className="px-3 py-1.5 text-xs">
+                    Send to SEO ↗
+                  </SoftButton>
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[11px] dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Images
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
-                    {imageCount}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[11px] dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    PDFs
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
-                    {pdfCount}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[11px] dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Quality
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
-                    {quality !== undefined ? String(quality) : "—"}
+              <div className="mt-4">
+                <DescribeOutput />
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: guidance rail */}
+          <aside className="space-y-4 lg:col-span-4">
+            {/* Quick steps (moved out of the form area) */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                    Quick flow
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Keep it fast, consistent, and usable downstream.
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[11px] dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    Needs review
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
-                    {needsReview !== undefined ? String(Boolean(needsReview)) : "—"}
-                  </p>
+                <TinyChip tone="brand">
+                  <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500 dark:bg-fuchsia-300" />
+                  Guide
+                </TinyChip>
+              </div>
+
+              <div className="mt-4 space-y-2 text-[11px]">
+                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-fuchsia-400/50 bg-white dark:bg-slate-950">
+                    <span className="text-[12px] font-semibold text-fuchsia-700 dark:text-fuchsia-200">
+                      1
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">
+                      Fill the input block
+                    </div>
+                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
+                      Name + short context + constraints you actually care about.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-sky-400/50 bg-white dark:bg-slate-950">
+                    <span className="text-[12px] font-semibold text-sky-700 dark:text-sky-200">
+                      2
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">
+                      Review the canvas
+                    </div>
+                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
+                      Make sure claims, disclaimers, and structure match your rules.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30">
+                  <div className="mt-[1px] flex h-6 w-6 items-center justify-center rounded-lg border border-emerald-400/50 bg-white dark:bg-slate-950">
+                    <span className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-200">
+                      3
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 dark:text-slate-50">
+                      Send downstream
+                    </div>
+                    <div className="mt-0.5 text-slate-600 dark:text-slate-300">
+                      Reuse the same structure in SEO, Import, or exports.
+                    </div>
+                  </div>
                 </div>
               </div>
-            </section>
-          </div>
+            </div>
+
+            {/* Engine snapshot (premium, compact) */}
+            <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4 shadow-[0_14px_40px_-28px_rgba(2,6,23,0.55)] backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/45">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                    Describe engine snapshot
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    How Describe turns notes into consistent, shippable output.
+                  </p>
+                </div>
+                <TinyChip>
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  Stack
+                </TinyChip>
+              </div>
+
+              <div className="mt-4 space-y-2 text-[11px]">
+                {[
+                  {
+                    dot: "bg-fuchsia-400",
+                    title: "Input channel",
+                    body: "Short notes, specs, selling points, constraints, compliance hints.",
+                  },
+                  {
+                    dot: "bg-sky-400",
+                    title: "Instruction profile",
+                    body: "Locks to your global rules: tone, sections, SEO meta, disclaimers.",
+                  },
+                  {
+                    dot: "bg-emerald-400",
+                    title: "Output canvas",
+                    body: "Structured HTML + payload you can export or feed into other modules.",
+                  },
+                ].map((x) => (
+                  <div
+                    key={x.title}
+                    className="flex items-start gap-3 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3 dark:border-slate-800/60 dark:bg-slate-900/30"
+                  >
+                    <div className="mt-[2px] flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                      <span className={cx("h-3 w-3 rounded-full", x.dot)} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 dark:text-slate-50">
+                        {x.title}
+                      </div>
+                      <div className="mt-0.5 text-slate-600 dark:text-slate-300">
+                        {x.body}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-[11px] shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Output includes
+                  </div>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700 dark:text-slate-200">
+                    <li>H1 + sections</li>
+                    <li>Bullets</li>
+                    <li>Meta behavior</li>
+                  </ul>
+                </div>
+
+                <div className="rounded-xl border border-slate-200/70 bg-white/75 p-3 text-[11px] shadow-sm dark:border-slate-800/60 dark:bg-slate-950/35">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    Designed for
+                  </div>
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-slate-700 dark:text-slate-200">
+                    <li>Product pages</li>
+                    <li>Imports</li>
+                    <li>Downstream SEO</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Example cards (tight, aligned) */}
+            <div className="grid grid-cols-1 gap-3">
+              <div className="rounded-2xl border border-sky-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-sky-500/25 dark:bg-slate-950/45 dark:text-slate-100">
+                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                  Example input
+                </div>
+                <div className="mt-2 leading-relaxed">
+                  “Lightweight aluminum walker with wheels, small apartments,
+                  highlight stability and safe use; include warranty + no medical claims.”
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200/70 bg-white/80 p-4 text-[11px] text-slate-700 shadow-sm dark:border-emerald-500/25 dark:bg-slate-950/45 dark:text-slate-100">
+                <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                  Typical output
+                </div>
+                <ul className="mt-2 list-inside list-disc space-y-1">
+                  <li>Clean H1 + scannable sections</li>
+                  <li>Benefit-first bullets (not fluff)</li>
+                  <li>Compliance-safe disclaimers</li>
+                </ul>
+              </div>
+            </div>
+          </aside>
         </section>
       </div>
     </main>
