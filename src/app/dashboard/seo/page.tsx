@@ -324,6 +324,28 @@ export default function AvidiaSeoPage() {
     throw new Error("Ingestion did not complete within timeout");
   }
 
+  // Synchronous preview GET used by Extract as a fallback — returns parsed JSON or null
+  async function trySynchronousPreview(jobId: string, url: string) {
+    try {
+      const target = `/api/v1/ingest/${encodeURIComponent(jobId)}?url=${encodeURIComponent(url)}`;
+      const res = await fetch(target, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return null;
+      const text = await res.text().catch(() => "");
+      try {
+        const j = JSON.parse(text || "{}");
+        return j;
+      } catch {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
   async function createIngestion(url: string) {
     if (!url) throw new Error("Please enter a URL");
 
@@ -353,9 +375,26 @@ export default function AvidiaSeoPage() {
     const possibleIngestionId =
       json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
 
+    // If the API returns a direct ingestion id (and the engine accepted the job), it may also
+    // provide a jobId for polling. When the engine supports synchronous preview, attempt that
+    // first before falling back to polling for the asynchronous callback.
     if (possibleIngestionId) {
+      const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
+
+      // Try synchronous preview (Extract-style) — if engine returns normalized payload, treat as done.
+      const preview = await trySynchronousPreview(jobId, url);
+      if (preview) {
+        // normalized payload might be at several places depending on engine shape
+        const normalized =
+          preview?.normalized_payload ?? preview?.data?.normalized_payload ?? preview?.data ?? preview;
+        const hasNormalized = normalized != null && typeof normalized === "object" && Object.keys(normalized).length > 0;
+        if (hasNormalized) {
+          // If preview contains normalized payload treat ingestion as ready
+          return preview?.id ?? possibleIngestionId;
+        }
+      }
+
       if (json?.status === "accepted" || res.status === 202) {
-        const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
         const pollResult = await pollForIngestion(jobId, 120_000, 3000);
         return pollResult?.ingestionId ?? possibleIngestionId;
       }
@@ -364,6 +403,16 @@ export default function AvidiaSeoPage() {
 
     const jobId = json?.jobId ?? json?.job?.id ?? null;
     if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug pane.");
+
+    // Try synchronous preview before polling
+    const preview = await trySynchronousPreview(jobId, url);
+    if (preview) {
+      const normalized = preview?.normalized_payload ?? preview?.data?.normalized_payload ?? preview?.data ?? preview;
+      const hasNormalized = normalized != null && typeof normalized === "object" && Object.keys(normalized).length > 0;
+      if (hasNormalized) {
+        return preview?.id ?? jobId;
+      }
+    }
 
     const pollResult = await pollForIngestion(jobId, 120_000, 3000);
     const newIngestionId = pollResult?.ingestionId ?? pollResult?.id ?? null;
@@ -655,7 +704,7 @@ export default function AvidiaSeoPage() {
         <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
 
@@ -665,7 +714,7 @@ export default function AvidiaSeoPage() {
           {/* Left: headline + command bar */}
           <div className="lg:col-span-7 space-y-4">
             {/* Module pill */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:bg-slate-950/70 dark:border-cyan-400/50">
               <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
               </span>
@@ -726,7 +775,7 @@ export default function AvidiaSeoPage() {
                         setPipelineSnapshot(null);
                       }}
                       placeholder="https://manufacturer.com/product..."
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm"
                       type="url"
                       inputMode="url"
                       autoCapitalize="none"
@@ -747,7 +796,7 @@ export default function AvidiaSeoPage() {
                           runMode("quick");
                         }}
                         disabled={generating}
-                        className="px-4 py-2.5 rounded-xl bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
+                        className="px-4 py-2.5 rounded-xl bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform"
                         title="Runs extract + seo"
                       >
                         {generating && lastMode === "quick" ? "Running…" : "Quick SEO"}
@@ -760,7 +809,7 @@ export default function AvidiaSeoPage() {
                           runMode("full");
                         }}
                         disabled={generating}
-                        className="px-4 py-2.5 rounded-xl bg-slate-900 text-slate-50 text-sm font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                        className="px-4 py-2.5 rounded-xl bg-slate-900 text-slate-50 text-sm font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:shadow-none transition-transform"
                         title="Runs extract + seo + audit + import + monitor + price"
                       >
                         {generating && lastMode === "full" ? "Running…" : "Full Pipeline"}
@@ -829,7 +878,7 @@ export default function AvidiaSeoPage() {
                           setPipelineRunId(null);
                           setPipelineSnapshot(null);
                         }}
-                        className="max-w-[260px] truncate rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] text-slate-700 hover:bg-white shadow-sm dark:bg-slate-950/60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-950"
+                        className="max-w-[260px] truncate rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] text-slate-700 hover:bg-white shadow-sm dark:bg-slate-950/60 dark:border-slate-700"
                         title={u}
                       >
                         {u}
@@ -1032,7 +1081,7 @@ export default function AvidiaSeoPage() {
                     type="button"
                     onClick={handleCopyDescription}
                     disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 disabled:opacity-40 dark:bg-white/5 dark:border-white/25 dark:text-white dark:hover:bg-white/10"
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 disabled:opacity-40 dark:bg-white/5 dark:border-white/25"
                   >
                     {copyState === "copied" ? "Copied!" : copyState === "error" ? "Copy failed" : "Copy description"}
                   </button>
@@ -1040,7 +1089,7 @@ export default function AvidiaSeoPage() {
                     type="button"
                     onClick={handleDownloadDescription}
                     disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow-sm hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none dark:bg-white dark:text-slate-900 dark:border-white/30"
+                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow-sm hover:-translate-y-[1px] transition disabled:opacity-40"
                   >
                     Download HTML
                   </button>
