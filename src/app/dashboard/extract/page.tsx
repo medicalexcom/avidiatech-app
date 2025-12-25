@@ -1,4 +1,3 @@
-// src/app/dashboard/extract/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -11,13 +10,14 @@ import ExtractHeader from "@/components/ExtractHeader";
 /**
  * AvidiaExtract page (client)
  *
- * - ExtractHeader calls onJobCreated(jobId, url) after POST /api/v1/ingest.
- * - We track jobId so the status + SEO button can work.
- * - Preview comes from: GET /api/v1/ingest/{jobId}?url=<url>
- *   which proxies to medx-ingest-api when ?url is present.
- * - For display we:
- *   - Prefer preview JSON.
- *   - Fall back to DB row (normalized_payload if available).
+ * Minor UX fixes in this version:
+ * - Avoid scrollIntoView('start') which can place the results underneath a fixed app header
+ *   — instead compute a scroll target that accounts for any fixed header height.
+ * - Remove `overflow-hidden` on the page root so content can expand naturally (prevents
+ *   clipping / awkward footer spacing).
+ * - Make the right-hand aside sticky + scrollable with a max-height that uses viewport
+ *   space minus the top offset so it doesn't force the page to stretch with a large
+ *   internal element.
  */
 
 export const dynamic = "force-dynamic";
@@ -73,10 +73,30 @@ export default function ExtractPage() {
     setPreview(null);
     setPreviewError(null);
 
-    // scroll to results area
+    // scroll to results area but account for a potential fixed header so the
+    // top of the results are not hidden underneath it.
     setTimeout(() => {
       const el = document.getElementById("extract-results");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!el) return;
+
+      // Try to detect a fixed header element (common selectors). If none found,
+      // fall back to 64px as a reasonable header height.
+      const headerEl =
+        document.querySelector("header") ||
+        document.querySelector(".site-header") ||
+        document.querySelector(".top-nav");
+      const headerHeight = headerEl
+        ? headerEl.getBoundingClientRect().height
+        : 64;
+
+      const extraPadding = 16; // a little breathing room
+      const targetY =
+        window.scrollY + el.getBoundingClientRect().top - headerHeight - extraPadding;
+
+      window.scrollTo({
+        top: Math.max(0, Math.floor(targetY)),
+        behavior: "smooth",
+      });
     }, 250);
   }
 
@@ -163,7 +183,8 @@ export default function ExtractPage() {
       : "Awaiting first URL";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    // removed `overflow-hidden` so the page can expand and not clip content
+    <main className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* BACKGROUND: layered gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/20" />
@@ -589,8 +610,11 @@ export default function ExtractPage() {
           </section>
 
           {/* RIGHT: JSON viewer card (sticky, premium) */}
-          <aside className="lg:sticky lg:top-6">
-            <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80">
+          <aside className="lg:relative lg:block">
+            <div
+              className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-200/80 lg:p-5 dark:border-slate-700/70 dark:bg-slate-900/95 dark:shadow-slate-950/80"
+              style={{ position: "sticky", top: "1.5rem", maxHeight: "calc(100vh - 6rem)" }}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
