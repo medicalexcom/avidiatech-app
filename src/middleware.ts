@@ -204,6 +204,7 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   return NextResponse.next();
+});
 
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
@@ -211,7 +212,7 @@ export default async function middleware(req: NextRequest) {
   // Early bypass for internal worker callbacks, output endpoints and debug endpoints
   if (
     pathname.startsWith("/api/v1/pipeline/internal") ||
-    pathname.startsWith("/api/v1/pipeline/run") ||            // ADDED: allow internal pipeline output fetches
+    pathname.startsWith("/api/v1/pipeline/run") || // allow internal pipeline output fetches
     pathname.startsWith("/api/v1/ingest/callback") ||
     pathname.startsWith("/api/v1/debug")
   ) {
@@ -222,3 +223,7 @@ export default async function middleware(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return await clerkWrappedHandler(req as any, undefined as any);
 }
+
+export const config = {
+  matcher: ["/dashboard/:path*", "/settings/:path*", "/api/:path*"],
+};
