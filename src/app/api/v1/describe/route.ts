@@ -59,14 +59,9 @@ function requireField(condition: boolean, message: string) {
   }
 }
 
-/**
- * Call Describe using Responses API with json_schema enforced.
- * IMPORTANT: Your API requires text.format.name for json_schema.
- */
 async function callDescribeModel(opts: { system: string; user: string }) {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  // use `any` to avoid SDK typing drift
   const body: any = {
     model: MODEL,
     input: [
@@ -74,9 +69,6 @@ async function callDescribeModel(opts: { system: string; user: string }) {
       { role: "user", content: opts.user },
     ],
     temperature: 0.1,
-
-    // High cap to prevent mid-JSON truncation.
-    // If your outputs are extremely large, raise further (or reduce section verbosity in instructions).
     max_output_tokens: 12000,
 
     text: {
@@ -85,20 +77,16 @@ async function callDescribeModel(opts: { system: string; user: string }) {
         name: "AvidiaDescribeFull",
         strict: true,
         schema: {
+          // IMPORTANT: OpenAI strict schema requires closed objects
           type: "object",
-          additionalProperties: true,
-
-          // REQUIRE: always include all sections/fields so output is never just 3 sentences.
+          additionalProperties: false,
           required: ["descriptionHtml", "sections", "seo", "features"],
-
           properties: {
-            // Primary HTML used by the Describe UI
             descriptionHtml: { type: "string" },
 
-            // Rich sections object: always present, even if some sections have "Not available"
             sections: {
               type: "object",
-              additionalProperties: true,
+              additionalProperties: false,
               required: [
                 "overview",
                 "hook",
@@ -111,22 +99,21 @@ async function callDescribeModel(opts: { system: string; user: string }) {
                 "faqs",
               ],
               properties: {
-                overview: { type: "string" },           // short summary HTML
-                hook: { type: "string" },               // hook HTML (intro + bullets)
-                mainDescription: { type: "string" },     // main body HTML
-                featuresBenefits: { type: "string" },    // grouped bullets HTML
-                specifications: { type: "string" },      // specs HTML (or "Not available")
-                internalLinks: { type: "string" },       // internal links HTML (or placeholders)
-                whyChoose: { type: "string" },           // why choose HTML
-                manuals: { type: "string" },             // manuals HTML (can be "Not available")
-                faqs: { type: "string" },                // FAQs HTML
+                overview: { type: "string" },
+                hook: { type: "string" },
+                mainDescription: { type: "string" },
+                featuresBenefits: { type: "string" },
+                specifications: { type: "string" },
+                internalLinks: { type: "string" },
+                whyChoose: { type: "string" },
+                manuals: { type: "string" },
+                faqs: { type: "string" },
               },
             },
 
-            // SEO payload: always required
             seo: {
               type: "object",
-              additionalProperties: true,
+              additionalProperties: false,
               required: ["h1", "title", "metaDescription"],
               properties: {
                 h1: { type: "string" },
@@ -135,13 +122,12 @@ async function callDescribeModel(opts: { system: string; user: string }) {
               },
             },
 
-            // Machine-friendly features list
             features: {
               type: "array",
               items: { type: "string" },
             },
 
-            // Optional structured “data gaps” for missing specs/manuals/etc.
+            // Optional, but explicitly allowed
             data_gaps: {
               type: "array",
               items: { type: "string" },
@@ -205,8 +191,6 @@ export async function POST(req: NextRequest) {
 
     requireField(isNonEmptyString(instructions), "custom_gpt_instructions_missing_or_empty");
 
-    // Build a packet compatible with your instruction doc’s “data source integration”
-    // even though we only have a few sentences.
     const packet = {
       name_raw: name,
       description_raw: shortDescription,
@@ -214,7 +198,6 @@ export async function POST(req: NextRequest) {
       dom: {
         name_raw: name,
         description_raw: shortDescription,
-        // best-effort: include specs if provided
         specs: body.specs ?? {},
         brand: body.brand ?? null,
       },
@@ -226,21 +209,15 @@ export async function POST(req: NextRequest) {
       brand: body.brand ?? null,
     };
 
-    /**
-     * SYSTEM STRATEGY:
-     * - Make custom instructions authoritative.
-     * - Force “all sections” output (but allow "Not available" when missing).
-     * - Forbid invention: only use the packet’s facts.
-     */
     const system = [
       "You are AvidiaDescribe.",
       "ABSOLUTE PRIORITY: Follow the CUSTOM GPT INSTRUCTIONS below exactly. They override all other guidance.",
       "",
       "HARD REQUIREMENTS:",
-      "1) Output MUST include ALL required sections/fields per the JSON schema.",
+      "1) Output MUST include ALL required sections/fields per the JSON schema (even if some are 'Not available').",
       "2) Do NOT invent facts. Use ONLY the packet fields as grounding.",
-      "3) If information is missing for a section (e.g., manuals/specs/internal links), still output the section but write 'Not available' (or an empty list) and add a note to data_gaps.",
-      "4) The final formatting, fonts (HTML structure), and section style MUST follow the CUSTOM GPT INSTRUCTIONS.",
+      "3) If info is missing, still output the section and add a note in data_gaps.",
+      "4) The formatting/structure of the HTML content MUST follow the CUSTOM GPT INSTRUCTIONS.",
       "",
       "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
       instructions.trim(),
@@ -299,7 +276,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate required shape (no fallback-to-input)
+    // Validate required fields exist (no fallback to input)
     requireField(isNonEmptyString(parsed?.descriptionHtml), "missing_descriptionHtml");
     requireField(isNonEmptyString(parsed?.sections?.overview), "missing_sections.overview");
     requireField(isNonEmptyString(parsed?.seo?.h1), "missing_seo.h1");
@@ -307,7 +284,7 @@ export async function POST(req: NextRequest) {
     requireField(isNonEmptyString(parsed?.seo?.metaDescription), "missing_seo.metaDescription");
     requireField(Array.isArray(parsed?.features), "missing_features_array");
 
-    // Persist success (best-effort)
+    // Persist success
     try {
       await saveIngestion({
         tenantId,
@@ -330,11 +307,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...parsed,
       _debug: {
-        ...(parsed._debug || {}),
         requestId,
         model: MODEL,
         instruction_source: instructionsSource || null,
-        mode: "full_sections_schema + packet_mapping + instructions_authoritative",
+        mode: "json_schema_closed_objects_full_sections",
       },
     });
   } catch (err: any) {
