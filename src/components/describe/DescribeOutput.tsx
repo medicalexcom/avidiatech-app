@@ -33,7 +33,7 @@ function stripScripts(html: string) {
 }
 
 function htmlDoc(innerHtml: string, token: string) {
-  // iframe doc that reports its height to parent (postMessage).
+  // iframe doc that reports its *content* height to parent (postMessage).
   // Parent sizes iframe so ONLY ONE vertical scroll exists: the outer content area.
   const safe = stripScripts(innerHtml || "");
 
@@ -45,13 +45,13 @@ function htmlDoc(innerHtml: string, token: string) {
 <meta name="color-scheme" content="light dark" />
 <style>
   html, body { margin:0; padding:0; }
-  /* Hide iframe-internal scrollbars even during initial sizing (prevents "2 scrolls") */
+  /* Hide iframe-internal scrollbars (prevents "2 scrolls") */
   html, body { overflow: hidden; }
 
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     padding: 16px;
-    padding-bottom: 72px; /* ✅ prevents last lines from clipping */
+    padding-bottom: 40px; /* small safety so last line never kisses the edge */
     line-height: 1.5;
     background: transparent;
     color: #0f172a;
@@ -61,7 +61,7 @@ function htmlDoc(innerHtml: string, token: string) {
   .page {
     max-width: 920px;
     margin: 0 auto;
-    padding-bottom: 24px; /* ✅ extra safety (margin collapse, etc.) */
+    padding-bottom: 16px; /* extra safety for margin-collapse / final elements */
   }
 
   h1,h2,h3 { margin: 0.9em 0 0.4em; }
@@ -90,47 +90,56 @@ function htmlDoc(innerHtml: string, token: string) {
 (function(){
   var TOKEN = ${JSON.stringify(token)};
 
-  function computeHeight(){
+  function computeContentHeight(){
+    // ✅ Measure only the actual content wrapper.
+    // Avoid documentElement/body scrollHeight unless page is missing,
+    // because those can "floor" to viewport height and cause blank space.
     var page = document.querySelector('.page');
-    var h = 0;
-
     if (page) {
+      var h = 0;
       try {
-        var rect = page.getBoundingClientRect();
-        h = Math.max(h, rect ? rect.height : 0);
+        h = Math.max(h, page.scrollHeight || 0);
+        h = Math.max(h, page.offsetHeight || 0);
+        var rect = page.getBoundingClientRect ? page.getBoundingClientRect() : null;
+        if (rect && rect.height) h = Math.max(h, rect.height);
       } catch(e) {}
-      h = Math.max(h, page.scrollHeight || 0, page.offsetHeight || 0);
+
+      // buffer for rounding + fonts + last margin
+      h = Math.ceil(h) + 24;
+      return Math.max(120, h);
     }
 
-    // Fallback
-    h = Math.max(
-      h,
-      document.documentElement ? document.documentElement.scrollHeight : 0,
-      document.body ? document.body.scrollHeight : 0
-    );
-
-    // ✅ buffer for rounding, fonts, margins
-    return Math.ceil(h) + 24;
+    // Fallback (only if .page missing)
+    var fb = 0;
+    try {
+      fb = Math.max(
+        document.body ? document.body.scrollHeight : 0,
+        document.body ? document.body.offsetHeight : 0
+      );
+    } catch(e) {}
+    fb = Math.ceil(fb) + 24;
+    return Math.max(120, fb);
   }
 
   function postHeight(){
     try {
       parent.postMessage(
-        { type: "avidia:describe:iframeHeight", token: TOKEN, height: computeHeight() },
+        { type: "avidia:describe:iframeHeight", token: TOKEN, height: computeContentHeight() },
         "*"
       );
     } catch(e) {}
   }
 
-  // Post multiple times as layout settles
-  window.addEventListener("load", function(){
+  function burst(){
     postHeight();
     requestAnimationFrame(postHeight);
     setTimeout(postHeight, 60);
-    setTimeout(postHeight, 220);
-    setTimeout(postHeight, 500);
-    setTimeout(postHeight, 900);
-  });
+    setTimeout(postHeight, 180);
+    setTimeout(postHeight, 360);
+    setTimeout(postHeight, 700);
+  }
+
+  window.addEventListener("load", function(){ burst(); });
 
   // Observe DOM changes to keep height accurate
   try {
@@ -138,7 +147,7 @@ function htmlDoc(innerHtml: string, token: string) {
     mo.observe(document.body, { childList:true, subtree:true, characterData:true });
   } catch(e) {}
 
-  // Catch font/layout reflow better than mutation alone
+  // ResizeObserver catches font reflow / images etc.
   try {
     var ro = new ResizeObserver(function(){ postHeight(); });
     ro.observe(document.body);
@@ -148,7 +157,7 @@ function htmlDoc(innerHtml: string, token: string) {
   window.addEventListener("resize", postHeight);
 
   // Kick once ASAP
-  postHeight();
+  burst();
 })();
 </script>
 </body>
@@ -180,7 +189,7 @@ export default function DescribeOutput() {
     `t_${Math.random().toString(36).slice(2)}_${Date.now()}`
   );
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [iframeHeight, setIframeHeight] = useState<number>(720);
+  const [iframeHeight, setIframeHeight] = useState<number>(520);
 
   useEffect(() => {
     setTab("overview");
@@ -216,11 +225,11 @@ export default function DescribeOutput() {
     }
   }, [tab, descriptionHtml, sections]);
 
-  // When HTML content changes, reset height briefly to avoid “giant” leftover height,
-  // then let iframe report the correct height.
+  // When HTML content changes, reset height small so it can shrink immediately,
+  // then let iframe report the correct content height.
   useEffect(() => {
     if (viewMode !== "iframe") return;
-    setIframeHeight(720);
+    setIframeHeight(520);
   }, [viewMode, tab, tabHtml]);
 
   function copyCurrentHtml() {
@@ -294,12 +303,12 @@ export default function DescribeOutput() {
       const next = Number(d.height);
       if (!Number.isFinite(next) || next <= 0) return;
 
-      // ✅ bigger buffer so the bottom never clips
-      const buffered = Math.max(240, Math.ceil(next) + 28);
+      // ✅ Keep it tight (no blank), but still safe from clipping
+      const buffered = Math.max(120, Math.ceil(next));
 
       setIframeHeight((prev) => {
         // avoid jitter
-        if (Math.abs(prev - buffered) < 10) return prev;
+        if (Math.abs(prev - buffered) < 6) return prev;
         return buffered;
       });
     }
@@ -427,7 +436,6 @@ export default function DescribeOutput() {
             </div>
           </div>
         ) : tab === "json" ? (
-          // ✅ keep Raw JSON contained; no extra vertical scroll container inside
           <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded overflow-x-auto">
             {JSON.stringify(result, null, 2)}
           </pre>
@@ -435,12 +443,9 @@ export default function DescribeOutput() {
           <iframe
             ref={iframeRef}
             title="HTML Preview"
-            // ✅ frameless (document-like) — card provides the window styling
             className="w-full block border-0 shadow-none rounded-none bg-transparent"
             style={{ height: iframeHeight }}
-            // allow scripts so the iframe can postMessage its height to parent
             sandbox="allow-scripts"
-            // extra hints to suppress internal iframe scrolling
             scrolling="no"
             srcDoc={htmlDoc(tabHtml, iframeTokenRef.current)}
           />
