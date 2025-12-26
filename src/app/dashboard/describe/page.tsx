@@ -425,16 +425,15 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* Single-scroll + sticky controls:
-                  - We DO NOT move DescribeOutput DOM (prevents HTML Viewer from breaking)
-                  - One fixed-height shell
-                  - One scroller (only content scrolls)
-                  - Tabs/copy options become sticky inside the scroller
+              {/* Revamp preview: HTML default + Styled/HTML behave the same.
+                  One visible vertical scrollbar only:
+                  - Prefer OUTER scroll for both modes when possible.
+                  - If HTML viewer uses a cross-origin iframe that can't expand, we switch to INNER scroll (iframe) and disable outer.
+                  Tabs + copy options are kept "fixed" via sticky band (same look in both views).
                */}
               <style>{`
-                /* --- layout: fixed-height preview card with ONE scroller --- */
-                [data-describe-preview] [data-preview-shell]{
-                  height: clamp(560px, 78vh, 920px);
+                [data-describe-preview] [data-preview-shell] {
+                  height: clamp(600px, 80vh, 980px);
                   overflow: hidden;
                   display: flex;
                   flex-direction: column;
@@ -442,23 +441,31 @@ export default function DescribePage() {
                   border: 1px solid rgba(226,232,240,0.75);
                   background: rgba(255,255,255,0.6);
                 }
-                .dark [data-describe-preview] [data-preview-shell]{
+                .dark [data-describe-preview] [data-preview-shell] {
                   border-color: rgba(30,41,59,0.75);
                   background: rgba(2,6,23,0.25);
                 }
 
-                /* The ONLY scrollbar lives here */
-                [data-describe-preview] [data-preview-scroller]{
+                /* Outer scroll container (when it is the single scroll owner) */
+                [data-describe-preview][data-scroll-owner="outer"] [data-preview-scroller] {
                   flex: 1 1 auto;
-                  min-height: 0; /* prevents flex overflow "paralyzed" behavior */
+                  min-height: 0;
                   overflow-y: auto;
                   overflow-x: hidden;
                   padding: 12px;
                   overscroll-behavior: contain;
                 }
 
-                /* Sticky band: tabs + copy options (applied via JS attribute) */
-                [data-describe-preview] [data-preview-toolbar="1"]{
+                /* Inner scroll owner (HTML iframe cross-origin fallback): kill outer scroll */
+                [data-describe-preview][data-scroll-owner="inner"] [data-preview-scroller] {
+                  flex: 1 1 auto;
+                  min-height: 0;
+                  overflow: hidden;
+                  padding: 12px;
+                }
+
+                /* Sticky toolbar band (tabs + copy options) */
+                [data-describe-preview] [data-preview-toolbar="1"] {
                   position: sticky;
                   top: 0;
                   z-index: 40;
@@ -469,59 +476,61 @@ export default function DescribePage() {
                   -webkit-backdrop-filter: blur(10px);
                   border-bottom: 1px solid rgba(226,232,240,0.9);
                 }
-                .dark [data-describe-preview] [data-preview-toolbar="1"]{
+                .dark [data-describe-preview] [data-preview-toolbar="1"] {
                   background: rgba(2,6,23,0.62);
                   border-bottom-color: rgba(30,41,59,0.85);
                 }
 
-                /* Prevent "stuck header / stretched footer" feel caused by nested min-heights */
-                [data-describe-preview] [data-preview-scroller] > *{
+                /* Prevent "paralyzed" flex min-height issues inside preview */
+                [data-describe-preview] [data-preview-scroller] > * {
                   min-height: 0 !important;
                 }
 
-                /* --- Single-scroll rule (Styled + HTML): remove nested vertical scrollers --- */
-                [data-describe-preview][data-preview-mode="html"] [data-preview-scroller] .overflow-auto,
-                [data-describe-preview][data-preview-mode="html"] [data-preview-scroller] .overflow-y-auto,
-                [data-describe-preview][data-preview-mode="html"] [data-preview-scroller] [data-radix-scroll-area-viewport],
-                [data-describe-preview][data-preview-mode="styled"] [data-preview-scroller] .overflow-auto,
-                [data-describe-preview][data-preview-mode="styled"] [data-preview-scroller] .overflow-y-auto,
-                [data-describe-preview][data-preview-mode="styled"] [data-preview-scroller] [data-radix-scroll-area-viewport]{
-                  overflow-y: visible !important;
-                  max-height: none !important;
-                  height: auto !important;
-                }
-
-                /* Remove extra “frame” look in Styled/HTML */
+                /* Remove extra frame look (all modes) */
                 [data-describe-preview] [data-preview-scroller] pre,
                 [data-describe-preview] [data-preview-scroller] textarea,
                 [data-describe-preview] [data-preview-scroller] code,
-                [data-describe-preview] [data-preview-scroller] iframe{
+                [data-describe-preview] [data-preview-scroller] iframe {
                   border: 0 !important;
                   box-shadow: none !important;
                   outline: none !important;
                 }
 
-                /* HTML Viewer iframes:
-                   - ensure not blank
-                   - JS will expand height if same-origin (so no inner scrolling) */
-                [data-describe-preview][data-preview-mode="html"] [data-preview-scroller] iframe{
+                /* Styled + HTML: attempt to remove nested scrollbars when OUTER owns scroll */
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="html"] [data-preview-scroller] .overflow-auto,
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="html"] [data-preview-scroller] .overflow-y-auto,
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="html"] [data-preview-scroller] [data-radix-scroll-area-viewport],
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="styled"] [data-preview-scroller] .overflow-auto,
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="styled"] [data-preview-scroller] .overflow-y-auto,
+                [data-describe-preview][data-scroll-owner="outer"][data-preview-mode="styled"] [data-preview-scroller] [data-radix-scroll-area-viewport] {
+                  overflow-y: visible !important;
+                  max-height: none !important;
+                  height: auto !important;
+                }
+
+                /* HTML viewer iframe:
+                   - Outer owner: JS expands height (same-origin) so no inner scroll
+                   - Inner owner: JS sets fixed height so iframe is the ONLY scroll */
+                [data-describe-preview][data-preview-mode="html"] [data-preview-scroller] iframe {
                   display: block !important;
                   width: 100% !important;
                   min-height: 520px;
-                  overflow: hidden !important;
                 }
 
-                /* Raw JSON stays contained: allow its inner code block to scroll INSIDE the one scroller */
+                /* Raw JSON stays contained: allow internal code block scroll if needed */
                 [data-describe-preview][data-preview-mode="raw"] [data-preview-scroller] pre,
-                [data-describe-preview][data-preview-mode="raw"] [data-preview-scroller] textarea{
+                [data-describe-preview][data-preview-mode="raw"] [data-preview-scroller] textarea {
                   max-width: 100%;
                   overflow: auto !important;
-                  border: 0 !important;
-                  box-shadow: none !important;
                 }
               `}</style>
 
-              <div className="mt-4" data-describe-preview data-preview-mode="html">
+              <div
+                className="mt-4"
+                data-describe-preview
+                data-preview-mode="html"
+                data-scroll-owner="outer"
+              >
                 <div data-preview-shell>
                   <div data-preview-scroller>
                     <DescribeOutput />
@@ -529,7 +538,7 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              <Script id="describe-preview-one-scroll-sticky-default-html" strategy="afterInteractive">
+              <Script id="describe-preview-html-default-one-scroll" strategy="afterInteractive">
                 {`
                   (function () {
                     var root = document.querySelector('[data-describe-preview]');
@@ -544,11 +553,12 @@ export default function DescribePage() {
                     function scroller() {
                       return root.querySelector('[data-preview-scroller]') || null;
                     }
-
+                    function shell() {
+                      return root.querySelector('[data-preview-shell]') || null;
+                    }
                     function textOf(el) {
                       return ((el && (el.textContent || el.innerText)) || '').trim();
                     }
-
                     function isActiveTab(el) {
                       if (!el) return false;
                       var aria = el.getAttribute && el.getAttribute('aria-selected');
@@ -556,10 +566,13 @@ export default function DescribePage() {
                       var cls = (el.className || '').toString();
                       return /active|selected|current/i.test(cls);
                     }
+                    function setAttr(name, val) {
+                      try { root.setAttribute(name, val); } catch (e) {}
+                    }
 
                     function findTabs() {
                       var s = scroller();
-                      if (!s) return { candidates: [], htmlTab: null, active: null, tablist: null };
+                      if (!s) return { candidates: [], htmlTab: null, styledTab: null, rawTab: null, active: null, tablist: null };
 
                       var tablist = s.querySelector('[role="tablist"]') || null;
                       var candidates = Array.prototype.slice.call(
@@ -573,9 +586,17 @@ export default function DescribePage() {
                           return /\\bhtml\\b/i.test(t) && !/styled/i.test(t) && !/json/i.test(t);
                         });
 
+                      var styledTab =
+                        candidates.find(function (b) { return /^\\s*styled\\s*$/i.test(textOf(b)) || /\\bstyled\\b/i.test(textOf(b)); });
+
+                      var rawTab =
+                        candidates.find(function (b) { return /raw\\s*json/i.test(textOf(b)); }) ||
+                        candidates.find(function (b) { return (/\\bjson\\b/i.test(textOf(b)) && /raw/i.test(textOf(b))); }) ||
+                        candidates.find(function (b) { return /^\\s*json\\s*$/i.test(textOf(b)); });
+
                       var active = candidates.find(function (b) { return isActiveTab(b); });
 
-                      return { candidates: candidates, htmlTab: htmlTab, active: active, tablist: tablist };
+                      return { candidates: candidates, htmlTab: htmlTab, styledTab: styledTab, rawTab: rawTab, active: active, tablist: tablist };
                     }
 
                     function inferMode(activeTabText) {
@@ -598,17 +619,14 @@ export default function DescribePage() {
                       });
                     }
 
-                    function setAttr(name, val) {
-                      try { root.setAttribute(name, val); } catch (e) {}
-                    }
-
                     function setDefaultToHtmlIfNeeded(tabInfo) {
                       // Reset default logic when tablist changes
                       if (tabInfo.tablist && tabInfo.tablist !== state.lastTablist) {
                         state.lastTablist = tabInfo.tablist;
                         state.userToggled = false;
                       }
-                      // Default view: HTML Viewer (unless user has toggled)
+
+                      // Default: HTML Viewer unless user explicitly toggled away
                       if (!state.userToggled && tabInfo.htmlTab && !isActiveTab(tabInfo.htmlTab)) {
                         try { tabInfo.htmlTab.click(); } catch (e) {}
                       }
@@ -623,7 +641,7 @@ export default function DescribePage() {
                         try { el.removeAttribute('data-preview-toolbar'); } catch (e) {}
                       });
 
-                      // Choose a wrapper likely containing tabs + copy options
+                      // Walk up from tablist to find a wrapper that includes controls (tabs + buttons)
                       var cur = tablist.parentElement;
                       var best = cur || tablist;
 
@@ -641,7 +659,7 @@ export default function DescribePage() {
                     }
 
                     function killNestedScrollbars(mode) {
-                      // Only for Styled + HTML. Raw JSON can keep its internal code scrolling if needed.
+                      // Only for Styled + HTML when outer is the scroll owner.
                       if (!(mode === 'html' || mode === 'styled')) return;
 
                       var s = scroller();
@@ -652,18 +670,17 @@ export default function DescribePage() {
                         var el = nodes[i];
                         if (!el || el === s) continue;
 
-                        // Do not touch the sticky toolbar wrapper
+                        // Don't touch toolbar wrapper
                         if (el.getAttribute && el.getAttribute('data-preview-toolbar') === '1') continue;
 
+                        // iframe is handled separately
+                        if (el.tagName === 'IFRAME') continue;
+
                         try {
-                          // Skip tiny elements
                           if (el.clientHeight < 90) continue;
 
                           var st = window.getComputedStyle(el);
                           var oy = st.overflowY;
-
-                          // iframe handled separately
-                          if (el.tagName === 'IFRAME') continue;
 
                           if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 2) {
                             el.style.overflowY = 'visible';
@@ -674,49 +691,131 @@ export default function DescribePage() {
                       }
                     }
 
-                    function resizeSameOriginIframes() {
+                    function measureToolbarHeight() {
                       var s = scroller();
-                      if (!s) return;
+                      if (!s) return 0;
+                      var toolbar = s.querySelector('[data-preview-toolbar="1"]');
+                      if (!toolbar) return 0;
+                      try {
+                        return Math.ceil(toolbar.getBoundingClientRect().height || 0);
+                      } catch (e) {}
+                      return 0;
+                    }
 
-                      var iframes = s.querySelectorAll('iframe');
-                      iframes.forEach(function (ifr) {
-                        // Best-effort: no iframe scrollbars
-                        try { ifr.setAttribute('scrolling', 'no'); } catch (e) {}
-                        try { ifr.style.overflow = 'hidden'; } catch (e) {}
+                    function findPrimaryIframe() {
+                      var s = scroller();
+                      if (!s) return null;
+                      // Prefer a large iframe (likely the HTML viewer)
+                      var iframes = Array.prototype.slice.call(s.querySelectorAll('iframe'));
+                      if (!iframes.length) return null;
 
-                        // Bind load once so toggles don't leave it short/blank
-                        if (ifr.dataset.__avidiaIframeBound !== '1') {
-                          ifr.dataset.__avidiaIframeBound = '1';
-                          ifr.addEventListener('load', function () {
-                            tryResize(ifr);
-                            setTimeout(function(){ tryResize(ifr); }, 120);
-                            setTimeout(function(){ tryResize(ifr); }, 350);
-                          });
-                        }
+                      var best = iframes[0];
+                      var bestArea = 0;
 
-                        tryResize(ifr);
-                      });
-
-                      function tryResize(ifr) {
+                      for (var i = 0; i < iframes.length; i++) {
+                        var f = iframes[i];
                         try {
-                          var doc = ifr.contentDocument;
-                          if (!doc) return;
+                          var r = f.getBoundingClientRect();
+                          var area = (r.width || 0) * (r.height || 0);
+                          if (area > bestArea) { bestArea = area; best = f; }
+                        } catch (e) {}
+                      }
 
-                          var h = Math.max(
-                            doc.documentElement ? doc.documentElement.scrollHeight : 0,
-                            doc.body ? doc.body.scrollHeight : 0
-                          );
+                      return best;
+                    }
 
-                          if (h && isFinite(h)) {
-                            ifr.style.height = h + 'px';
-                            ifr.style.maxHeight = 'none';
-                            ifr.style.overflow = 'hidden';
-                            ifr.style.border = '0';
-                            ifr.style.boxShadow = 'none';
-                          }
-                        } catch (e) {
-                          // Cross-origin iframes can't be resized; keep min-height so it isn't blank.
+                    function resizeIframeSameOrigin(ifr) {
+                      // returns true if resized (same-origin), false if not accessible
+                      try {
+                        var doc = ifr.contentDocument;
+                        if (!doc) return false;
+
+                        var h = Math.max(
+                          doc.documentElement ? doc.documentElement.scrollHeight : 0,
+                          doc.body ? doc.body.scrollHeight : 0
+                        );
+
+                        if (h && isFinite(h)) {
+                          ifr.style.height = h + 'px';
+                          ifr.style.maxHeight = 'none';
+                          ifr.style.overflow = 'hidden';
+                          ifr.style.border = '0';
+                          ifr.style.boxShadow = 'none';
+                          try { ifr.setAttribute('scrolling', 'no'); } catch (e) {}
+                          return true;
                         }
+                      } catch (e) {
+                        return false;
+                      }
+                      return false;
+                    }
+
+                    function setIframeAsOnlyScroller(ifr) {
+                      // Outer scroll OFF, iframe scroll ON; still only one visible scrollbar.
+                      var s = scroller();
+                      var sh = shell();
+                      if (!s || !sh || !ifr) return;
+
+                      setAttr('data-scroll-owner', 'inner');
+
+                      // Compute available height for iframe: preview shell minus scroller padding minus toolbar
+                      var toolbarH = measureToolbarHeight();
+                      var paddingY = 24; // scroller padding top+bottom (12+12)
+                      var available = Math.max(320, (sh.clientHeight || 0) - paddingY - toolbarH - 8);
+
+                      // Ensure iframe is the only scroll surface and fills the body area
+                      ifr.style.display = 'block';
+                      ifr.style.width = '100%';
+                      ifr.style.height = available + 'px';
+                      ifr.style.maxHeight = available + 'px';
+                      ifr.style.overflow = 'auto';
+                      ifr.style.border = '0';
+                      ifr.style.boxShadow = 'none';
+                      try { ifr.setAttribute('scrolling', 'yes'); } catch (e) {}
+                    }
+
+                    function enforceOneScroll(mode) {
+                      // Default: outer owns scroll for ALL modes.
+                      setAttr('data-scroll-owner', 'outer');
+
+                      if (mode === 'raw') {
+                        // Raw JSON can keep code block scroll if needed, but still only one visible outer scroll.
+                        return;
+                      }
+
+                      // Try to remove nested scrollbars (Styled + HTML)
+                      killNestedScrollbars(mode);
+
+                      if (mode !== 'html') return;
+
+                      var ifr = findPrimaryIframe();
+                      if (!ifr) return;
+
+                      // Keep iframe from being "short" or blank on tab toggles
+                      if (ifr.dataset.__avidiaIframeBound !== '1') {
+                        ifr.dataset.__avidiaIframeBound = '1';
+                        ifr.addEventListener('load', function () {
+                          // try same-origin expansion; if not possible, ensure iframe is the only scroller
+                          var ok = resizeIframeSameOrigin(ifr);
+                          if (!ok) setIframeAsOnlyScroller(ifr);
+                          // retry after render settles
+                          setTimeout(function(){ 
+                            var ok2 = resizeIframeSameOrigin(ifr);
+                            if (!ok2) setIframeAsOnlyScroller(ifr);
+                          }, 160);
+                          setTimeout(function(){ 
+                            var ok3 = resizeIframeSameOrigin(ifr);
+                            if (!ok3) setIframeAsOnlyScroller(ifr);
+                          }, 420);
+                        });
+                      }
+
+                      // First attempt: same-origin resize (best: outer-only scroll, full preview visible)
+                      var resized = resizeIframeSameOrigin(ifr);
+
+                      if (!resized) {
+                        // Fallback: cross-origin iframe. Make iframe the only scroll (no second scrollbar)
+                        setIframeAsOnlyScroller(ifr);
                       }
                     }
 
@@ -724,20 +823,19 @@ export default function DescribePage() {
                       var t = findTabs();
                       bindUserToggleHandlers(t.candidates);
 
-                      // Default to HTML Viewer unless user has explicitly toggled
+                      // Default to HTML Viewer unless user explicitly toggled away
                       setDefaultToHtmlIfNeeded(t);
 
-                      // Recompute after potential click
+                      // Recompute after possible click
                       t = findTabs();
                       var mode = inferMode(textOf(t.active));
                       setAttr('data-preview-mode', mode);
 
-                      // Sticky band (tabs + copy options)
+                      // Sticky band: tabs + copy options
                       if (t.tablist) markToolbarSticky(t.tablist);
 
-                      // Enforce one vertical scroll for Styled + HTML
-                      killNestedScrollbars(mode);
-                      resizeSameOriginIframes();
+                      // Enforce: one scrollbar total + HTML fully visible (resize if possible)
+                      enforceOneScroll(mode);
                     }
 
                     run();
