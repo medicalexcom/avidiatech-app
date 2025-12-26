@@ -425,44 +425,50 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* One-scroll rule:
-                  - By default, viewport owns the single scroll.
-                  - If HTML viewer insists on an inner scroll (e.g., iframe), we flip so ONLY the inner scroll remains.
-               */}
+              {/* Preview viewport + sticky toolbar (tabs/copy/actions) + single scroll area */}
               <style>{`
-                /* Small fixed window */
+                /* Bigger preview window (was 60vh). ~1.25x */
                 [data-describe-preview] [data-preview-viewport] {
-                  max-height: 60vh;
-                }
-
-                /* Who owns the ONE scrollbar? */
-                [data-describe-preview][data-preview-scroll="viewport"] [data-preview-viewport] {
-                  overflow-y: auto;
+                  max-height: 75vh;
+                  overflow-y: auto;   /* the ONE vertical scroll */
                   overflow-x: hidden;
-                }
-                [data-describe-preview][data-preview-scroll="inner"] [data-preview-viewport] {
-                  overflow: hidden; /* kill the outside scrollbar */
+                  position: relative;
                 }
 
-                /* Styled + HTML (when viewport owns scroll): remove nested scrollbars */
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] .overflow-auto,
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] .overflow-y-auto,
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] .overflow-x-auto,
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] pre,
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] textarea,
-                [data-describe-preview][data-preview-mode="styled"][data-preview-scroll="viewport"] iframe,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] .overflow-auto,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] .overflow-y-auto,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] .overflow-x-auto,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] pre,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] textarea,
-                [data-describe-preview][data-preview-mode="html"][data-preview-scroll="viewport"] iframe {
+                /* Sticky “commands” area (tabs + copy/options) inside the viewport */
+                [data-describe-preview] [data-preview-sticky="1"] {
+                  position: sticky;
+                  top: 0;
+                  z-index: 30;
+                  background: rgba(255,255,255,0.88);
+                  backdrop-filter: blur(10px);
+                  -webkit-backdrop-filter: blur(10px);
+                  border-bottom: 1px solid rgba(226,232,240,0.9);
+                }
+                .dark [data-describe-preview] [data-preview-sticky="1"] {
+                  background: rgba(2,6,23,0.55);
+                  border-bottom: 1px solid rgba(30,41,59,0.8);
+                }
+
+                /* Styled + HTML: prevent nested vertical scrollbars (viewport owns the only scroll) */
+                [data-describe-preview][data-preview-mode="styled"] .overflow-auto,
+                [data-describe-preview][data-preview-mode="styled"] .overflow-y-auto,
+                [data-describe-preview][data-preview-mode="styled"] .overflow-x-auto,
+                [data-describe-preview][data-preview-mode="styled"] pre,
+                [data-describe-preview][data-preview-mode="styled"] textarea,
+                [data-describe-preview][data-preview-mode="styled"] iframe,
+                [data-describe-preview][data-preview-mode="html"] .overflow-auto,
+                [data-describe-preview][data-preview-mode="html"] .overflow-y-auto,
+                [data-describe-preview][data-preview-mode="html"] .overflow-x-auto,
+                [data-describe-preview][data-preview-mode="html"] pre,
+                [data-describe-preview][data-preview-mode="html"] textarea,
+                [data-describe-preview][data-preview-mode="html"] iframe {
                   overflow: visible !important;
                   max-height: none !important;
                   height: auto !important;
                 }
 
-                /* Remove “extra frame” look in Styled/HTML */
+                /* Remove “extra frame” look */
                 [data-describe-preview][data-preview-mode="styled"] pre,
                 [data-describe-preview][data-preview-mode="styled"] textarea,
                 [data-describe-preview][data-preview-mode="styled"] code,
@@ -476,28 +482,25 @@ export default function DescribePage() {
                   outline: none !important;
                 }
 
-                /* Raw JSON: contained; allow internal code block scroll if needed */
-                [data-describe-preview][data-preview-mode="raw"][data-preview-scroll="viewport"] pre,
-                [data-describe-preview][data-preview-mode="raw"][data-preview-scroll="viewport"] textarea {
-                  overflow: auto !important;
+                /* Raw JSON: keep it inside the same viewport; still single scroll (viewport) */
+                [data-describe-preview][data-preview-mode="raw"] pre,
+                [data-describe-preview][data-preview-mode="raw"] textarea {
+                  overflow: visible !important;
+                  max-height: none !important;
+                  height: auto !important;
                   border: 0 !important;
                   box-shadow: none !important;
                   outline: none !important;
                 }
               `}</style>
 
-              <div
-                className="mt-4"
-                data-describe-preview
-                data-preview-mode="html"
-                data-preview-scroll="viewport"
-              >
+              <div className="mt-4" data-describe-preview data-preview-mode="html">
                 <div data-preview-viewport>
                   <DescribeOutput />
                 </div>
               </div>
 
-              <Script id="describe-preview-single-scroll-html" strategy="afterInteractive">
+              <Script id="describe-preview-default-html-sticky-single-scroll" strategy="afterInteractive">
                 {`
                   (function () {
                     var root = document.querySelector('[data-describe-preview]');
@@ -523,6 +526,10 @@ export default function DescribePage() {
                       if (aria === 'true') return true;
                       var cls = (el.className || '').toString();
                       return /active|selected|current/i.test(cls);
+                    }
+
+                    function getTablistEl() {
+                      return root.querySelector('[role="tablist"]') || null;
                     }
 
                     function findTabs() {
@@ -570,10 +577,6 @@ export default function DescribePage() {
                       });
                     }
 
-                    function getTablistEl() {
-                      return root.querySelector('[role="tablist"]') || null;
-                    }
-
                     function setAttr(name, val) {
                       try { root.setAttribute(name, val); } catch (e) {}
                     }
@@ -607,122 +610,60 @@ export default function DescribePage() {
                             ifr.style.boxShadow = 'none';
                           }
                         } catch (e) {
-                          // cross-origin: cannot measure; ignore
+                          // cross-origin: ignore
                         }
                       });
                     }
 
-                    function stripNestedScrollForViewportOwner(mode) {
-                      // When viewport owns scroll, remove nested scrolling so only ONE scrollbar remains.
-                      if (!(mode === 'styled' || mode === 'html')) return;
-
-                      var nodes = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe,[style*="overflow"]');
-                      nodes.forEach(function (el) {
-                        try {
-                          // If it's clearly a scrolling container, neutralize it.
-                          var st = window.getComputedStyle(el);
-                          var oy = st.overflowY;
-                          var ox = st.overflowX;
-                          var isScrollableY = (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
-                          var isScrollableX = (ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 1;
-
-                          if (isScrollableY) {
-                            el.style.overflowY = 'visible';
-                            el.style.maxHeight = 'none';
-                            el.style.height = 'auto';
-                          }
-                          if (isScrollableX) {
-                            el.style.overflowX = 'visible';
-                          }
-
-                          el.style.border = '0';
-                          el.style.boxShadow = 'none';
-                          el.style.outline = 'none';
-                        } catch (e) {}
+                    function clearStickyMarkers(vp) {
+                      if (!vp) return;
+                      vp.querySelectorAll('[data-preview-sticky="1"]').forEach(function (el) {
+                        try { el.removeAttribute('data-preview-sticky'); } catch (e) {}
                       });
-
-                      // Best-effort: make same-origin iframes expand so they don't scroll internally
-                      resizeSameOriginIframes();
                     }
 
-                    function detectAnyRemainingInnerScroll() {
-                      // If any inner element still has a vertical scrollbar, we switch ownership to "inner"
-                      // so the viewport itself doesn't add a second scrollbar.
+                    function applyStickyToolbar() {
+                      var vp = viewportEl();
+                      if (!vp) return;
+
+                      clearStickyMarkers(vp);
+
+                      // Find the tablist inside the viewport and make its "toolbar row" sticky.
+                      var tablist = vp.querySelector('[role="tablist"]');
+                      if (!tablist) return;
+
+                      // Heuristic: pick a wrapper that likely contains tabs + copy/options.
+                      var sticky = tablist.parentElement || tablist;
+                      // If parent is too small (just the tabs), step up one level to include copy buttons/options.
                       try {
-                        var vp = viewportEl();
-                        if (!vp) return false;
-
-                        // Consider likely scroll hosts inside the viewport.
-                        var candidates = vp.querySelectorAll('iframe,pre,textarea,code,div,section,article');
-                        for (var i = 0; i < candidates.length; i++) {
-                          var el = candidates[i];
-                          if (!el || el === vp) continue;
-
-                          // Skip tiny elements to avoid noise.
-                          if (el.clientHeight < 80) continue;
-
-                          var st = window.getComputedStyle(el);
-                          var oy = st.overflowY;
-
-                          // iframe: even if computed overflow isn't "auto", it can still scroll internally.
-                          if (el.tagName === 'IFRAME') {
-                            // If iframe height is constrained relative to its box, assume it can scroll.
-                            // (We cannot reliably detect cross-origin iframe scrollbars.)
-                            if (el.clientHeight >= 120) return true;
-                            continue;
-                          }
-
-                          if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
-                            return true;
-                          }
+                        var p = sticky && sticky.parentElement;
+                        if (p && p !== vp) {
+                          var hasTabs = !!p.querySelector('[role="tablist"]');
+                          var hasManyButtons = (p.querySelectorAll('button').length >= 2);
+                          if (hasTabs && hasManyButtons) sticky = p;
                         }
                       } catch (e) {}
-                      return false;
-                    }
 
-                    function applySingleScroll(mode) {
-                      // Default: viewport owns the single scrollbar.
-                      setAttr('data-preview-scroll', 'viewport');
-
-                      // Raw JSON: keep viewport scroll and allow code block to scroll if needed.
-                      if (mode === 'raw') {
-                        setAttr('data-preview-scroll', 'viewport');
-                        return;
-                      }
-
-                      // Styled: always viewport-owned (your Styled is already perfect).
-                      if (mode === 'styled') {
-                        setAttr('data-preview-scroll', 'viewport');
-                        stripNestedScrollForViewportOwner(mode);
-                        return;
-                      }
-
-                      // HTML:
-                      // 1) Try to remove inner scrollbars so viewport is the only one.
-                      // 2) If an inner scrollbar still exists (often due to iframe), switch ownership to inner.
-                      if (mode === 'html') {
-                        setAttr('data-preview-scroll', 'viewport');
-                        stripNestedScrollForViewportOwner(mode);
-
-                        var hasInner = detectAnyRemainingInnerScroll();
-                        if (hasInner) {
-                          // Kill outer scroll so ONLY the inner scroll remains.
-                          setAttr('data-preview-scroll', 'inner');
-                        }
-                      }
+                      try { sticky.setAttribute('data-preview-sticky', '1'); } catch (e) {}
                     }
 
                     function run() {
                       var t = findTabs();
                       bindUserToggleHandlers(t.candidates);
 
+                      // Default view = HTML Viewer (but allow user to toggle freely)
                       setDefaultToHtmlIfNeeded(t);
 
+                      // Re-read active after default selection
                       t = findTabs();
                       var mode = inferMode(textOf(t.active));
                       setAttr('data-preview-mode', mode);
 
-                      applySingleScroll(mode);
+                      // Ensure HTML doesn't create inner scroll frames when possible
+                      if (mode === 'html') resizeSameOriginIframes();
+
+                      // Make tabs/copy/options sticky so only the content scrolls
+                      applyStickyToolbar();
                     }
 
                     run();
