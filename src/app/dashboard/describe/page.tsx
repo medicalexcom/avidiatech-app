@@ -425,56 +425,57 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* REVAMP: One scroll ALWAYS (the preview viewport). Sticky toolbar (tabs/copy) stays fixed. */}
+              {/* FIX: stop “paralyzed” layout + enforce ONE scroll for BOTH HTML + Styled.
+                  - The viewport is the ONLY scroll container.
+                  - The DescribeOutput toolbar (tabs/copy) becomes sticky INSIDE the viewport (so it never “hides”).
+                  - We DO NOT force random elements to height:auto anymore (that was causing weird bottom space / “stuck” look).
+               */}
               <style>{`
                 /* The ONE scroll container */
                 [data-describe-preview] [data-preview-viewport]{
-                  max-height: 78vh; /* ~1.3x vs old 60vh */
+                  max-height: 78vh;
                   overflow-y: auto;
                   overflow-x: hidden;
                   position: relative;
+                  border-radius: 16px;
                 }
 
-                /* Sticky toolbar inside the viewport */
+                /* Sticky toolbar (tabs + copy/options) */
                 [data-describe-preview] [data-preview-sticky="1"]{
                   position: sticky;
                   top: 0;
                   z-index: 30;
-                  background: rgba(255,255,255,0.88);
+                  background: rgba(255,255,255,0.92);
                   backdrop-filter: blur(10px);
                   -webkit-backdrop-filter: blur(10px);
                   border-bottom: 1px solid rgba(226,232,240,0.9);
                 }
                 .dark [data-describe-preview] [data-preview-sticky="1"]{
-                  background: rgba(2,6,23,0.55);
+                  background: rgba(2,6,23,0.65);
                   border-bottom: 1px solid rgba(30,41,59,0.8);
                 }
 
-                /* Kill nested scrollbars inside the preview (THIS is the core fix) */
-                [data-describe-preview] .overflow-auto,
-                [data-describe-preview] .overflow-y-auto,
-                [data-describe-preview] .overflow-x-auto,
-                [data-describe-preview] pre,
-                [data-describe-preview] textarea,
-                [data-describe-preview] code,
-                [data-describe-preview] iframe,
-                [data-describe-preview] [style*="overflow"]{
-                  overflow: visible !important;
+                /* One-scroll guarantee: if DescribeOutput has its own scrolling container(s),
+                   disable their vertical scrolling so only the viewport scrolls. */
+                [data-describe-preview] [data-preview-viewport] [data-preview-sticky="1"] ~ * .overflow-y-auto,
+                [data-describe-preview] [data-preview-viewport] [data-preview-sticky="1"] ~ * .overflow-auto,
+                [data-describe-preview] [data-preview-viewport] [data-preview-sticky="1"] ~ * [style*="overflow-y"],
+                [data-describe-preview] [data-preview-viewport] [data-preview-sticky="1"] ~ * pre,
+                [data-describe-preview] [data-preview-viewport] [data-preview-sticky="1"] ~ * textarea{
+                  overflow-y: visible !important;
                   max-height: none !important;
-                  height: auto !important;
                 }
 
-                /* No extra “inner frame” borders/shadows */
+                /* Remove “extra frame” look but do not change sizing/flow */
                 [data-describe-preview] pre,
                 [data-describe-preview] textarea,
-                [data-describe-preview] code,
                 [data-describe-preview] iframe{
                   border: 0 !important;
                   box-shadow: none !important;
                   outline: none !important;
                 }
 
-                /* If an iframe is used for HTML viewer render, make it behave like a normal block */
+                /* If HTML viewer uses an iframe, ensure it doesn’t introduce its own visible border/frame */
                 [data-describe-preview] iframe{
                   display: block !important;
                   width: 100% !important;
@@ -487,7 +488,7 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              <Script id="describe-preview-one-scroll-always" strategy="afterInteractive">
+              <Script id="describe-preview-one-scroll-no-paralysis" strategy="afterInteractive">
                 {`
                   (function () {
                     var root = document.querySelector('[data-describe-preview]');
@@ -549,9 +550,7 @@ export default function DescribePage() {
                         try {
                           if (!b || b.dataset.__avidiaBound) return;
                           b.dataset.__avidiaBound = "1";
-                          b.addEventListener('click', function () {
-                            state.userToggled = true;
-                          }, { passive: true });
+                          b.addEventListener('click', function () { state.userToggled = true; }, { passive: true });
                         } catch (e) {}
                       });
                     }
@@ -578,6 +577,36 @@ export default function DescribePage() {
                       });
                     }
 
+                    function pickStickyContainer(tablist, vp) {
+                      if (!tablist || !vp) return null;
+
+                      var best = null;
+                      var el = tablist;
+
+                      // climb a few levels to include "Copy" / actions without grabbing the whole page
+                      for (var i = 0; i < 6 && el && el !== vp; i++) {
+                        var parent = el.parentElement;
+                        if (!parent || parent === vp) break;
+
+                        var hasTabs = !!parent.querySelector('[role="tablist"]');
+                        var btns = Array.prototype.slice.call(parent.querySelectorAll('button,a'));
+                        var hasActions = btns.some(function (b) {
+                          var t = textOf(b).toLowerCase();
+                          return t.includes('copy') || t.includes('download') || t.includes('export');
+                        });
+
+                        // Prefer a compact header row (tabs + actions). Avoid massive wrappers.
+                        var rect = parent.getBoundingClientRect ? parent.getBoundingClientRect() : null;
+                        var looksCompact = !rect || rect.height < 140;
+
+                        if (hasTabs && hasActions && looksCompact) best = parent;
+
+                        el = parent;
+                      }
+
+                      return best || tablist.parentElement || tablist;
+                    }
+
                     function applyStickyToolbar() {
                       var vp = viewportEl();
                       if (!vp) return;
@@ -587,17 +616,8 @@ export default function DescribePage() {
                       var tablist = vp.querySelector('[role="tablist"]');
                       if (!tablist) return;
 
-                      var sticky = tablist.parentElement || tablist;
-
-                      // Step up one level when it includes copy/options too
-                      try {
-                        var p = sticky && sticky.parentElement;
-                        if (p && p !== vp) {
-                          var hasTabs = !!p.querySelector('[role="tablist"]');
-                          var hasManyButtons = (p.querySelectorAll('button').length >= 2);
-                          if (hasTabs && hasManyButtons) sticky = p;
-                        }
-                      } catch (e) {}
+                      var sticky = pickStickyContainer(tablist, vp);
+                      if (!sticky) return;
 
                       try { sticky.setAttribute('data-preview-sticky', '1'); } catch (e) {}
                     }
@@ -610,58 +630,24 @@ export default function DescribePage() {
                           doc.documentElement ? doc.documentElement.scrollHeight : 0,
                           doc.body ? doc.body.scrollHeight : 0
                         );
-                        if (h && isFinite(h)) {
+                        if (h && isFinite(h) && h > 0) {
                           ifr.setAttribute('scrolling', 'no');
                           ifr.style.overflow = 'hidden';
                           ifr.style.height = h + 'px';
                           ifr.style.maxHeight = 'none';
-                          ifr.style.border = '0';
-                          ifr.style.boxShadow = 'none';
                           return true;
                         }
                       } catch (e) {}
                       return false;
                     }
 
-                    function forceOneScrollInsideViewport() {
+                    function killInnerScrollbarsButDontBreakLayout() {
                       var vp = viewportEl();
                       if (!vp) return;
 
-                      // Ensure viewport is the only scroll host
+                      // Viewport is the ONLY vertical scroll host
                       vp.style.overflowY = 'auto';
                       vp.style.overflowX = 'hidden';
-
-                      // Aggressively neutralize nested scroll containers inside viewport (except sticky header)
-                      var nodes = vp.querySelectorAll('*');
-                      for (var i = 0; i < nodes.length; i++) {
-                        var el = nodes[i];
-                        if (!el) continue;
-
-                        // keep sticky toolbar untouched
-                        if (el.closest && el.closest('[data-preview-sticky="1"]')) continue;
-
-                        try {
-                          var st = window.getComputedStyle(el);
-                          var oy = st.overflowY;
-                          var ox = st.overflowX;
-
-                          if (oy === 'auto' || oy === 'scroll') {
-                            el.style.overflowY = 'visible';
-                            el.style.maxHeight = 'none';
-                            el.style.height = 'auto';
-                          }
-                          if (ox === 'auto' || ox === 'scroll') {
-                            el.style.overflowX = 'visible';
-                          }
-
-                          // remove frame look
-                          if (el.tagName === 'PRE' || el.tagName === 'TEXTAREA' || el.tagName === 'IFRAME') {
-                            el.style.border = '0';
-                            el.style.boxShadow = 'none';
-                            el.style.outline = 'none';
-                          }
-                        } catch (e) {}
-                      }
 
                       // If HTML viewer uses iframes, expand them so they don't scroll internally
                       var iframes = vp.querySelectorAll('iframe');
@@ -670,15 +656,28 @@ export default function DescribePage() {
                           if (ifr.dataset.__avidiaIframeBound !== '1') {
                             ifr.dataset.__avidiaIframeBound = '1';
                             ifr.addEventListener('load', function () {
-                              // Resize on load too
                               resizeSameOriginIframe(ifr);
-                              // And again shortly after (fonts/layout)
-                              setTimeout(function(){ resizeSameOriginIframe(ifr); }, 120);
-                              setTimeout(function(){ resizeSameOriginIframe(ifr); }, 350);
+                              setTimeout(function(){ resizeSameOriginIframe(ifr); }, 150);
+                              setTimeout(function(){ resizeSameOriginIframe(ifr); }, 450);
                             });
                           }
-                          // Best effort now
                           resizeSameOriginIframe(ifr);
+                        } catch (e) {}
+                      });
+
+                      // Disable inner vertical scrolling ONLY (don’t touch heights broadly).
+                      // Apply to likely scroll hosts inside the viewport, excluding sticky toolbar.
+                      var candidates = vp.querySelectorAll('.overflow-auto,.overflow-y-auto,pre,textarea,[style*="overflow-y"]');
+                      candidates.forEach(function (el) {
+                        try {
+                          if (el.closest && el.closest('[data-preview-sticky="1"]')) return;
+
+                          var st = window.getComputedStyle(el);
+                          var oy = st.overflowY;
+                          if (oy === 'auto' || oy === 'scroll') {
+                            el.style.overflowY = 'visible';
+                            el.style.maxHeight = 'none';
+                          }
                         } catch (e) {}
                       });
                     }
@@ -687,17 +686,15 @@ export default function DescribePage() {
                       var t = findTabs();
                       bindUserToggleHandlers(t.candidates);
 
-                      // Default view = HTML Viewer (user can still toggle)
+                      // Default to HTML viewer, user can toggle freely
                       setDefaultToHtmlIfNeeded(t);
 
-                      // mode tracking (for styling hooks)
                       t = findTabs();
                       var mode = inferMode(textOf(t.active));
                       setAttr('data-preview-mode', mode);
 
-                      // Make toolbar sticky and ensure ONE scrollbar always
                       applyStickyToolbar();
-                      forceOneScrollInsideViewport();
+                      killInnerScrollbarsButDontBreakLayout();
                     }
 
                     run();
