@@ -117,8 +117,7 @@ export default function AvidiaSeoPage() {
       const raw = localStorage.getItem("avidia:seo:recentUrls");
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed))
-        setRecentUrls(parsed.filter((x) => typeof x === "string").slice(0, 6));
+      if (Array.isArray(parsed)) setRecentUrls(parsed.filter((x) => typeof x === "string").slice(0, 6));
     } catch {
       // ignore
     }
@@ -231,9 +230,7 @@ export default function AvidiaSeoPage() {
     setLastUpdatedAt(Date.now());
 
     router.push(
-      `/dashboard/seo?ingestionId=${encodeURIComponent(
-        ingestionIdToUse
-      )}&pipelineRunId=${encodeURIComponent(newRunId)}`
+      `/dashboard/seo?ingestionId=${encodeURIComponent(ingestionIdToUse)}&pipelineRunId=${encodeURIComponent(newRunId)}`
     );
 
     return newRunId;
@@ -378,18 +375,21 @@ export default function AvidiaSeoPage() {
     const possibleIngestionId =
       json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
 
+    // If the API returns a direct ingestion id (and the engine accepted the job), it may also
+    // provide a jobId for polling. When the engine supports synchronous preview, attempt that
+    // first before falling back to polling for the asynchronous callback.
     if (possibleIngestionId) {
       const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
 
+      // Try synchronous preview (Extract-style) — if engine returns normalized payload, treat as done.
       const preview = await trySynchronousPreview(jobId, url);
       if (preview) {
+        // normalized payload might be at several places depending on engine shape
         const normalized =
           preview?.normalized_payload ?? preview?.data?.normalized_payload ?? preview?.data ?? preview;
-        const hasNormalized =
-          normalized != null &&
-          typeof normalized === "object" &&
-          Object.keys(normalized).length > 0;
+        const hasNormalized = normalized != null && typeof normalized === "object" && Object.keys(normalized).length > 0;
         if (hasNormalized) {
+          // If preview contains normalized payload treat ingestion as ready
           return preview?.id ?? possibleIngestionId;
         }
       }
@@ -404,13 +404,11 @@ export default function AvidiaSeoPage() {
     const jobId = json?.jobId ?? json?.job?.id ?? null;
     if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug pane.");
 
+    // Try synchronous preview before polling
     const preview = await trySynchronousPreview(jobId, url);
     if (preview) {
       const normalized = preview?.normalized_payload ?? preview?.data?.normalized_payload ?? preview?.data ?? preview;
-      const hasNormalized =
-        normalized != null &&
-        typeof normalized === "object" &&
-        Object.keys(normalized).length > 0;
+      const hasNormalized = normalized != null && typeof normalized === "object" && Object.keys(normalized).length > 0;
       if (hasNormalized) {
         return preview?.id ?? jobId;
       }
@@ -506,18 +504,7 @@ export default function AvidiaSeoPage() {
     }
   }, [descriptionHtml, searchTerm]);
 
-  const knownSeoKeys = [
-    "h1",
-    "pageTitle",
-    "title",
-    "metaDescription",
-    "meta_description",
-    "seoShortDescription",
-    "seo_short_description",
-    "keywords",
-    "slug",
-    "name_best",
-  ];
+  const knownSeoKeys = ["h1", "pageTitle", "title", "metaDescription", "meta_description", "seoShortDescription", "seo_short_description", "keywords", "slug", "name_best"];
 
   const parkedExtras = useMemo(() => {
     if (!seoPayload || typeof seoPayload !== "object") return [] as [string, any][];
@@ -579,7 +566,7 @@ export default function AvidiaSeoPage() {
     if (available.size > 0) {
       const out: string[] = [];
       for (const name of FULL_STEPS) if (available.has(name)) out.push(name);
-      return out.length ? out : lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS];
+      return out.length ? out : (lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS]);
     }
     return lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS];
   }, [lastMode, pipelineSnapshot]);
@@ -647,9 +634,7 @@ export default function AvidiaSeoPage() {
   }, [statusPills]);
 
   const runStartedAtMs = useMemo(() => {
-    const fromApi =
-      safeDateMs((pipelineSnapshot?.run as any)?.started_at) ??
-      safeDateMs((pipelineSnapshot?.run as any)?.created_at);
+    const fromApi = safeDateMs((pipelineSnapshot?.run as any)?.started_at) ?? safeDateMs((pipelineSnapshot?.run as any)?.created_at);
     return fromApi ?? localRunStartMs;
   }, [localRunStartMs, pipelineSnapshot]);
 
@@ -713,22 +698,27 @@ export default function AvidiaSeoPage() {
         }
       `}</style>
 
-      {/* Background treatment (ONLY this block changed) */}
+      {/* Background treatment */}
       <div className="pointer-events-none absolute inset-0">
-        {/* premium corner glows (Extract/Describe style) */}
-        <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/18" />
-        <div className="absolute -bottom-44 right-[-10rem] h-[28rem] w-[28rem] rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-500/16" />
-        <div className="absolute top-24 right-10 h-56 w-56 rounded-full bg-amber-300/12 blur-3xl dark:bg-amber-500/10" />
-
+        {/* existing top-left glow */}
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/15" />
+      
+        {/* existing bottom-right glow */}
+        <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
+      
         {/* wash */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
-
-        {/* subtle grid */}
-        <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+        <div className='absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]' />
+      
+        {/* TOP-RIGHT corner glows (match Describe/Extract “premium corners” look) */}
+        <div className="absolute -top-44 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-amber-300/16 blur-3xl dark:bg-amber-500/12" />
+        <div className="absolute top-16 right-12 h-56 w-56 rounded-full bg-sky-300/12 blur-3xl dark:bg-sky-500/10" />
+      
+        {/* keep the rest identical */}
+        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
         </div>
       </div>
-
+      
       <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-10 lg:px-8 lg:pt-6">
         {/* HERO + COMMAND BAR (above the fold) */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-stretch">
@@ -757,7 +747,12 @@ export default function AvidiaSeoPage() {
             <div className="space-y-2">
               <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
                 Turn any manufacturer URL into a{" "}
-                <span className={["bg-clip-text text-transparent hero-gradient hero-glow", headlineAccent].join(" ")}>
+                <span
+                  className={[
+                    "bg-clip-text text-transparent hero-gradient hero-glow",
+                    headlineAccent,
+                  ].join(" ")}
+                >
                   production-ready SEO page
                 </span>
                 .
@@ -1017,9 +1012,7 @@ export default function AvidiaSeoPage() {
                           <span
                             key={m.key}
                             className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${tone}`}
-                            title={
-                              m.output_ref ? `output_ref: ${m.output_ref}` : m.error ? JSON.stringify(m.error) : m.status
-                            }
+                            title={m.output_ref ? `output_ref: ${m.output_ref}` : m.error ? JSON.stringify(m.error) : m.status}
                           >
                             <span className="font-medium">{m.key}</span>
                             <span className="text-[10px] opacity-80">{m.duration}</span>
@@ -1052,19 +1045,12 @@ export default function AvidiaSeoPage() {
                   const isDone = pill.state === "done";
                   const isActive = pill.state === "active";
                   return (
-                    <li
-                      key={pill.key}
-                      className="flex items-center justify-between rounded-xl border px-3 py-2 dark:border-slate-700"
-                    >
+                    <li key={pill.key} className="flex items-center justify-between rounded-xl border px-3 py-2 dark:border-slate-700">
                       <div className="flex items-center gap-2">
                         <span
                           className={[
                             "h-2 w-2 rounded-full",
-                            isDone
-                              ? "bg-emerald-400"
-                              : isActive
-                              ? "bg-amber-400 animate-pulse"
-                              : "bg-slate-400 dark:bg-slate-500",
+                            isDone ? "bg-emerald-400" : isActive ? "bg-amber-400 animate-pulse" : "bg-slate-400 dark:bg-slate-500",
                           ].join(" ")}
                         />
                         <span className="text-[11px] font-medium text-slate-800 dark:text-slate-100">{pill.label}</span>
