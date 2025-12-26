@@ -51,6 +51,7 @@ function htmlDoc(innerHtml: string, token: string) {
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     padding: 16px;
+    padding-bottom: 72px; /* ✅ prevents last lines from clipping */
     line-height: 1.5;
     background: transparent;
     color: #0f172a;
@@ -60,6 +61,7 @@ function htmlDoc(innerHtml: string, token: string) {
   .page {
     max-width: 920px;
     margin: 0 auto;
+    padding-bottom: 24px; /* ✅ extra safety (margin collapse, etc.) */
   }
 
   h1,h2,h3 { margin: 0.9em 0 0.4em; }
@@ -88,31 +90,46 @@ function htmlDoc(innerHtml: string, token: string) {
 (function(){
   var TOKEN = ${JSON.stringify(token)};
 
+  function computeHeight(){
+    var page = document.querySelector('.page');
+    var h = 0;
+
+    if (page) {
+      try {
+        var rect = page.getBoundingClientRect();
+        h = Math.max(h, rect ? rect.height : 0);
+      } catch(e) {}
+      h = Math.max(h, page.scrollHeight || 0, page.offsetHeight || 0);
+    }
+
+    // Fallback
+    h = Math.max(
+      h,
+      document.documentElement ? document.documentElement.scrollHeight : 0,
+      document.body ? document.body.scrollHeight : 0
+    );
+
+    // ✅ buffer for rounding, fonts, margins
+    return Math.ceil(h) + 24;
+  }
+
   function postHeight(){
     try {
-      // Measure the full content height (page wrapper)
-      var page = document.querySelector('.page');
-      var h = 0;
-      if (page) {
-        h = Math.max(page.scrollHeight || 0, page.offsetHeight || 0);
-      }
-      // Fallback
-      if (!h) {
-        h = Math.max(
-          document.documentElement ? document.documentElement.scrollHeight : 0,
-          document.body ? document.body.scrollHeight : 0
-        );
-      }
-      parent.postMessage({ type: "avidia:describe:iframeHeight", token: TOKEN, height: h }, "*");
+      parent.postMessage(
+        { type: "avidia:describe:iframeHeight", token: TOKEN, height: computeHeight() },
+        "*"
+      );
     } catch(e) {}
   }
 
   // Post multiple times as layout settles
   window.addEventListener("load", function(){
     postHeight();
+    requestAnimationFrame(postHeight);
     setTimeout(postHeight, 60);
     setTimeout(postHeight, 220);
     setTimeout(postHeight, 500);
+    setTimeout(postHeight, 900);
   });
 
   // Observe DOM changes to keep height accurate
@@ -121,9 +138,16 @@ function htmlDoc(innerHtml: string, token: string) {
     mo.observe(document.body, { childList:true, subtree:true, characterData:true });
   } catch(e) {}
 
+  // Catch font/layout reflow better than mutation alone
+  try {
+    var ro = new ResizeObserver(function(){ postHeight(); });
+    ro.observe(document.body);
+    ro.observe(document.documentElement);
+  } catch(e) {}
+
   window.addEventListener("resize", postHeight);
 
-  // Also kick once ASAP
+  // Kick once ASAP
   postHeight();
 })();
 </script>
@@ -270,8 +294,8 @@ export default function DescribeOutput() {
       const next = Number(d.height);
       if (!Number.isFinite(next) || next <= 0) return;
 
-      // Add a small buffer so the bottom isn't clipped
-      const buffered = Math.max(240, Math.ceil(next) + 12);
+      // ✅ bigger buffer so the bottom never clips
+      const buffered = Math.max(240, Math.ceil(next) + 28);
 
       setIframeHeight((prev) => {
         // avoid jitter
