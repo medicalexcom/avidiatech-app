@@ -425,9 +425,16 @@ export default function DescribePage() {
                 </div>
               </div>
 
-              {/* Scoped overrides driven by data-preview-mode set by the script below */}
+              {/* Both Styled + HTML: same fixed viewport + vertical scroll (no stretching down the page). */}
               <style>{`
-                /* Styled + HTML: expand fully (no nested frame/scroll) */
+                /* The scroll viewport (the small fixed window) */
+                [data-describe-preview] [data-preview-viewport] {
+                  max-height: 60vh;
+                  overflow-y: auto;
+                  overflow-x: hidden;
+                }
+
+                /* HTML + Styled: prevent inner nested scroll containers (single scrollbar only on viewport) */
                 [data-describe-preview][data-preview-mode="styled"] .overflow-auto,
                 [data-describe-preview][data-preview-mode="styled"] .overflow-y-auto,
                 [data-describe-preview][data-preview-mode="styled"] .overflow-x-auto,
@@ -445,7 +452,7 @@ export default function DescribePage() {
                   height: auto !important;
                 }
 
-                /* Remove the “extra frame” feel inside the preview surface for Styled/HTML */
+                /* Remove “extra frame” look inside the viewport (keep the viewport scroll) */
                 [data-describe-preview][data-preview-mode="styled"] pre,
                 [data-describe-preview][data-preview-mode="styled"] textarea,
                 [data-describe-preview][data-preview-mode="styled"] code,
@@ -459,39 +466,42 @@ export default function DescribePage() {
                   outline: none !important;
                 }
 
-                /* Raw JSON: keep it inside the card (contained scroll), don’t spill under other cards */
+                /* Raw JSON: also contained inside the viewport; allow pre/textarea to scroll if needed */
+                [data-describe-preview][data-preview-mode="raw"] [data-preview-viewport] {
+                  max-height: 60vh;
+                  overflow: auto;
+                }
                 [data-describe-preview][data-preview-mode="raw"] pre,
                 [data-describe-preview][data-preview-mode="raw"] textarea {
-                  max-height: 60vh !important;
+                  max-height: none !important;
                   overflow: auto !important;
                   border: 0 !important;
                   box-shadow: none !important;
                   outline: none !important;
                 }
-
-                /* If the Raw JSON viewer is inside a wrapper that sets overflow hidden/auto weirdly, normalize it */
-                [data-describe-preview][data-preview-mode="raw"] .overflow-hidden {
-                  overflow: visible !important;
-                }
               `}</style>
 
               <div className="mt-4" data-describe-preview data-preview-mode="html">
-                <DescribeOutput />
+                <div data-preview-viewport>
+                  <DescribeOutput />
+                </div>
               </div>
 
-              <Script id="describe-preview-default-html-and-containment" strategy="afterInteractive">
+              <Script id="describe-preview-default-html-and-viewport-scroll" strategy="afterInteractive">
                 {`
                   (function () {
                     var root = document.querySelector('[data-describe-preview]');
                     if (!root) return;
 
-                    // Allow user to toggle freely; we only force HTML as default on initial load
-                    // and when the tablist gets replaced (typical after a new generation render).
                     var state = window.__AVIDIA_DESCRIBE_PREVIEW_STATE || {
                       userToggled: false,
                       lastTablist: null
                     };
                     window.__AVIDIA_DESCRIBE_PREVIEW_STATE = state;
+
+                    function viewportEl() {
+                      return root.querySelector('[data-preview-viewport]') || null;
+                    }
 
                     function textOf(el) {
                       return ((el && (el.textContent || el.innerText)) || '').trim();
@@ -510,16 +520,20 @@ export default function DescribePage() {
                         root.querySelectorAll('button,[role="tab"],a')
                       );
 
-                      // Prefer explicit tabs
-                      var htmlTab = candidates.find(function (b) { return /html\\s*viewer/i.test(textOf(b)); })
-                        || candidates.find(function (b) {
+                      var htmlTab =
+                        candidates.find(function (b) { return /html\\s*viewer/i.test(textOf(b)); }) ||
+                        candidates.find(function (b) {
                           var t = textOf(b);
                           return /\\bhtml\\b/i.test(t) && !/styled/i.test(t) && !/json/i.test(t);
                         });
 
-                      var styledTab = candidates.find(function (b) { return /^\\s*styled\\s*$/i.test(textOf(b)) || /\\bstyled\\b/i.test(textOf(b)); });
-                      var rawTab = candidates.find(function (b) { return /raw\\s*json/i.test(textOf(b)) || (/\\bjson\\b/i.test(textOf(b)) && /raw/i.test(textOf(b))); })
-                        || candidates.find(function (b) { return /^\\s*json\\s*$/i.test(textOf(b)); });
+                      var styledTab =
+                        candidates.find(function (b) { return /^\\s*styled\\s*$/i.test(textOf(b)) || /\\bstyled\\b/i.test(textOf(b)); });
+
+                      var rawTab =
+                        candidates.find(function (b) { return /raw\\s*json/i.test(textOf(b)); }) ||
+                        candidates.find(function (b) { return (/\\bjson\\b/i.test(textOf(b)) && /raw/i.test(textOf(b))); }) ||
+                        candidates.find(function (b) { return /^\\s*json\\s*$/i.test(textOf(b)); });
 
                       var active = candidates.find(function (b) { return isActiveTab(b); });
 
@@ -531,7 +545,6 @@ export default function DescribePage() {
                       if (t.includes('raw') || t.includes('json')) return 'raw';
                       if (t.includes('styled')) return 'styled';
                       if (t.includes('html')) return 'html';
-                      // fallback: default to html
                       return 'html';
                     }
 
@@ -555,39 +568,34 @@ export default function DescribePage() {
                       try { root.setAttribute('data-preview-mode', mode); } catch (e) {}
                     }
 
-                    function resizeIframesIfPossible() {
-                      var iframes = root.querySelectorAll('iframe');
-                      iframes.forEach(function (ifr) {
-                        try {
-                          var doc = ifr.contentDocument;
-                          if (!doc) return;
-                          var h = Math.max(
-                            doc.documentElement ? doc.documentElement.scrollHeight : 0,
-                            doc.body ? doc.body.scrollHeight : 0
-                          );
-                          if (h && isFinite(h)) {
-                            ifr.style.height = h + 'px';
-                            ifr.style.maxHeight = 'none';
-                            ifr.style.overflow = 'visible';
-                            ifr.style.border = '0';
-                            ifr.style.boxShadow = 'none';
-                          }
-                        } catch (e) {
-                          // cross-origin: ignore safely
-                        }
-                      });
+                    function setDefaultToHtmlIfNeeded(tabInfo) {
+                      var tablist = getTablistEl();
+                      if (tablist && tablist !== state.lastTablist) {
+                        state.lastTablist = tablist;
+                        state.userToggled = false;
+                      }
+                      if (!state.userToggled && tabInfo.htmlTab && !isActiveTab(tabInfo.htmlTab)) {
+                        try { tabInfo.htmlTab.click(); } catch (e) {}
+                      }
                     }
 
-                    function applyLayoutForMode(mode) {
-                      setModeAttr(mode);
+                    function normalizeInnerScroll(mode) {
+                      var vp = viewportEl();
+                      if (vp) {
+                        // keep the viewport the only scrollbar for Styled/HTML
+                        vp.style.maxHeight = '60vh';
+                        vp.style.overflowY = 'auto';
+                        vp.style.overflowX = 'hidden';
+                      }
 
-                      if (mode === 'raw') {
-                        // Contain Raw JSON inside this card
-                        var nodes = root.querySelectorAll('pre,textarea');
+                      // Styled/HTML: remove nested scroll containers & inner frames; viewport scroll stays.
+                      if (mode === 'styled' || mode === 'html') {
+                        var nodes = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe');
                         nodes.forEach(function (el) {
                           try {
-                            el.style.maxHeight = '60vh';
-                            el.style.overflow = 'auto';
+                            el.style.overflow = 'visible';
+                            el.style.maxHeight = 'none';
+                            el.style.height = 'auto';
                             el.style.border = '0';
                             el.style.boxShadow = 'none';
                             el.style.outline = 'none';
@@ -596,33 +604,17 @@ export default function DescribePage() {
                         return;
                       }
 
-                      // Styled / HTML: expand (no nested scroll/frame)
-                      var nodes2 = root.querySelectorAll('.overflow-auto,.overflow-y-auto,.overflow-x-auto,pre,textarea,iframe');
-                      nodes2.forEach(function (el) {
-                        try {
-                          el.style.overflow = 'visible';
-                          el.style.maxHeight = 'none';
-                          el.style.height = 'auto';
-                          el.style.border = '0';
-                          el.style.boxShadow = 'none';
-                          el.style.outline = 'none';
-                        } catch (e) {}
-                      });
-
-                      resizeIframesIfPossible();
-                    }
-
-                    function setDefaultToHtmlIfNeeded(tabInfo) {
-                      // Reset userToggled when tablist gets replaced (commonly happens after new generation)
-                      var tablist = getTablistEl();
-                      if (tablist && tablist !== state.lastTablist) {
-                        state.lastTablist = tablist;
-                        state.userToggled = false;
-                      }
-
-                      // Default behavior: show HTML Viewer unless user already toggled
-                      if (!state.userToggled && tabInfo.htmlTab && !isActiveTab(tabInfo.htmlTab)) {
-                        try { tabInfo.htmlTab.click(); } catch (e) {}
+                      // Raw JSON: keep it contained; allow code blocks to scroll as needed
+                      if (mode === 'raw') {
+                        var nodes2 = root.querySelectorAll('pre,textarea');
+                        nodes2.forEach(function (el) {
+                          try {
+                            el.style.overflow = 'auto';
+                            el.style.border = '0';
+                            el.style.boxShadow = 'none';
+                            el.style.outline = 'none';
+                          } catch (e) {}
+                        });
                       }
                     }
 
@@ -630,29 +622,21 @@ export default function DescribePage() {
                       var t = findTabs();
                       bindUserToggleHandlers(t.candidates);
 
-                      // Ensure HTML is the default view on load / fresh render
                       setDefaultToHtmlIfNeeded(t);
 
-                      // After potential click, re-evaluate active mode
                       t = findTabs();
                       var mode = inferMode(textOf(t.active));
 
-                      applyLayoutForMode(mode);
+                      setModeAttr(mode);
+                      normalizeInnerScroll(mode);
                     }
 
-                    // Initial run
                     run();
 
-                    // Re-run on DescribeOutput changes, but do NOT lock the user out of toggling.
                     var mo = new MutationObserver(function () { run(); });
                     mo.observe(root, { childList: true, subtree: true });
 
-                    window.addEventListener('resize', function () {
-                      // Keep iframe sizing healthy in HTML mode
-                      var t = findTabs();
-                      var mode = inferMode(textOf(t.active));
-                      applyLayoutForMode(mode);
-                    });
+                    window.addEventListener('resize', function () { run(); });
                   })();
                 `}
               </Script>
