@@ -8,6 +8,7 @@ const STORAGE_KEY = "avidia:describe:lastResult";
 
 function useLastResult() {
   const [result, setResult] = useState<DescribeResponse | null>(null);
+
   useEffect(() => {
     function load() {
       try {
@@ -22,6 +23,7 @@ function useLastResult() {
     window.addEventListener("storage", load);
     return () => window.removeEventListener("storage", load);
   }, []);
+
   return { result, setResult };
 }
 
@@ -31,8 +33,8 @@ function stripScripts(html: string) {
 }
 
 function htmlDoc(innerHtml: string, token: string) {
-  // iframe doc that reports its height to parent so the parent can size iframe
-  // and keep ONLY ONE vertical scroll (the content area in DescribeOutput).
+  // iframe doc that reports its height to parent (postMessage).
+  // Parent sizes iframe so ONLY ONE vertical scroll exists: the outer content area.
   const safe = stripScripts(innerHtml || "");
 
   return `<!doctype html>
@@ -40,29 +42,67 @@ function htmlDoc(innerHtml: string, token: string) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
 <style>
   html, body { margin:0; padding:0; }
+  /* Hide iframe-internal scrollbars even during initial sizing (prevents "2 scrolls") */
+  html, body { overflow: hidden; }
+
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
     padding: 16px;
     line-height: 1.5;
+    background: transparent;
+    color: #0f172a;
   }
+
+  /* Document-like layout (no visible frame) */
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+  }
+
   h1,h2,h3 { margin: 0.9em 0 0.4em; }
-  ul { margin: 0.4em 0 0.8em 1.2em; }
+  p { margin: 0.55em 0; }
+  ul,ol { margin: 0.4em 0 0.8em 1.2em; padding: 0; }
   li { margin: 0.25em 0; }
+  hr { border: 0; border-top: 1px solid rgba(226,232,240,0.9); margin: 1.25em 0; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid rgba(226,232,240,0.9); padding: 8px; vertical-align: top; }
+  a { color: #0ea5e9; text-decoration: underline; }
+
+  @media (prefers-color-scheme: dark) {
+    body { color: #e2e8f0; }
+    hr { border-top-color: rgba(51,65,85,0.9); }
+    td, th { border-color: rgba(51,65,85,0.9); }
+    a { color: #38bdf8; }
+  }
 </style>
 </head>
 <body>
-${safe}
+  <div class="page">
+    ${safe}
+  </div>
+
 <script>
 (function(){
   var TOKEN = ${JSON.stringify(token)};
+
   function postHeight(){
     try {
-      var h = Math.max(
-        document.documentElement ? document.documentElement.scrollHeight : 0,
-        document.body ? document.body.scrollHeight : 0
-      );
+      // Measure the full content height (page wrapper)
+      var page = document.querySelector('.page');
+      var h = 0;
+      if (page) {
+        h = Math.max(page.scrollHeight || 0, page.offsetHeight || 0);
+      }
+      // Fallback
+      if (!h) {
+        h = Math.max(
+          document.documentElement ? document.documentElement.scrollHeight : 0,
+          document.body ? document.body.scrollHeight : 0
+        );
+      }
       parent.postMessage({ type: "avidia:describe:iframeHeight", token: TOKEN, height: h }, "*");
     } catch(e) {}
   }
@@ -75,13 +115,16 @@ ${safe}
     setTimeout(postHeight, 500);
   });
 
-  // Observe DOM changes to keep height accurate for long/complex HTML
+  // Observe DOM changes to keep height accurate
   try {
     var mo = new MutationObserver(function(){ postHeight(); });
     mo.observe(document.body, { childList:true, subtree:true, characterData:true });
   } catch(e) {}
 
   window.addEventListener("resize", postHeight);
+
+  // Also kick once ASAP
+  postHeight();
 })();
 </script>
 </body>
@@ -126,6 +169,7 @@ export default function DescribeOutput() {
   const tabHtml = useMemo(() => {
     switch (tab) {
       case "overview":
+        // IMPORTANT: overview tab should show the FULL HTML (not sections.overview)
         return descriptionHtml || sections.overview || "";
       case "hook":
         return sections.hook || "";
@@ -147,6 +191,13 @@ export default function DescribeOutput() {
         return "";
     }
   }, [tab, descriptionHtml, sections]);
+
+  // When HTML content changes, reset height briefly to avoid “giant” leftover height,
+  // then let iframe report the correct height.
+  useEffect(() => {
+    if (viewMode !== "iframe") return;
+    setIframeHeight(720);
+  }, [viewMode, tab, tabHtml]);
 
   function copyCurrentHtml() {
     const toCopy = tabHtml || "";
@@ -219,12 +270,12 @@ export default function DescribeOutput() {
       const next = Number(d.height);
       if (!Number.isFinite(next) || next <= 0) return;
 
-      // add a tiny buffer so bottom isn't clipped
-      const buffered = Math.max(200, Math.ceil(next) + 8);
+      // Add a small buffer so the bottom isn't clipped
+      const buffered = Math.max(240, Math.ceil(next) + 12);
 
       setIframeHeight((prev) => {
         // avoid jitter
-        if (Math.abs(prev - buffered) < 8) return prev;
+        if (Math.abs(prev - buffered) < 10) return prev;
         return buffered;
       });
     }
@@ -249,11 +300,11 @@ export default function DescribeOutput() {
       style={{ height: "clamp(600px, 80vh, 980px)" }}
     >
       {/* ✅ BAND (never scrolls) */}
-      <div className="shrink-0 p-4 border-b">
+      <div className="shrink-0 p-4 border-b bg-white/90 dark:bg-slate-900/70 backdrop-blur">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <h2 className="text-lg font-semibold">Preview</h2>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-slate-500 truncate">
               Source: {result?.normalizedPayload?.source ?? "Describe"}
             </div>
           </div>
@@ -352,7 +403,7 @@ export default function DescribeOutput() {
             </div>
           </div>
         ) : tab === "json" ? (
-          // ✅ one vertical scroll only: this pre does NOT add overflow-y auto
+          // ✅ keep Raw JSON contained; no extra vertical scroll container inside
           <pre className="text-xs bg-slate-50 dark:bg-slate-800 p-3 rounded overflow-x-auto">
             {JSON.stringify(result, null, 2)}
           </pre>
@@ -360,10 +411,13 @@ export default function DescribeOutput() {
           <iframe
             ref={iframeRef}
             title="HTML Preview"
-            className="w-full rounded border bg-white"
+            // ✅ frameless (document-like) — card provides the window styling
+            className="w-full block border-0 shadow-none rounded-none bg-transparent"
             style={{ height: iframeHeight }}
-            // allow-scripts is needed for the internal height reporter
+            // allow scripts so the iframe can postMessage its height to parent
             sandbox="allow-scripts"
+            // extra hints to suppress internal iframe scrolling
+            scrolling="no"
             srcDoc={htmlDoc(tabHtml, iframeTokenRef.current)}
           />
         ) : (
