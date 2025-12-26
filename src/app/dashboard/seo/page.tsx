@@ -700,8 +700,17 @@ export default function AvidiaSeoPage() {
 
       {/* Background treatment */}
       <div className="pointer-events-none absolute inset-0">
+        {/* existing top-left glow */}
         <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/15" />
+      
+        {/* NEW: top-right layered glows (matches Describe/Extract “premium corners” look) */}
+        <div className="absolute -top-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/16 blur-3xl dark:bg-amber-500/12" />
+        <div className="absolute top-20 right-10 h-56 w-56 rounded-full bg-sky-300/12 blur-3xl dark:bg-sky-500/10" />
+      
+        {/* existing bottom-right glow */}
         <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-500/10" />
+      
+        {/* keep the rest identical */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.9)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.9)_55%,_rgba(15,23,42,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
