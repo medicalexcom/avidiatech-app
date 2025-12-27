@@ -244,7 +244,29 @@ Deno.serve(async (req) => {
           });
 
           if (!resp.ok) {
-            throw new Error(`seo_internal_http_${resp.status}`);
+            await supabase
+              .from("module_runs")
+              .update({
+                status: "failed" satisfies ModuleStatus,
+                finished_at: new Date().toISOString(),
+                output_ref: key,
+                error: {
+                  message: `seo_internal_http_${resp.status}`,
+                  http_status: resp.status,
+                  body: json,
+                },
+              })
+              .eq("id", moduleId);
+          
+            await supabase
+              .from("pipeline_runs")
+              .update({ status: "failed", finished_at: new Date().toISOString() })
+              .eq("id", pipelineRunId);
+          
+            return new Response(JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
           }
 
           await supabase
