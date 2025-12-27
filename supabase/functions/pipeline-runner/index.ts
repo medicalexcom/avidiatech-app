@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const BUCKET = "pipeline-outputs";
 type ModuleStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 
 async function uploadJson(supabase: any, key: string, payload: any) {
   const { error } = await supabase.storage
@@ -23,6 +24,16 @@ function skipReasonPayload(reason: string, details?: any) {
     reason,
     details: details ?? null,
   };
+}
+
+function safeStringify(v: any) {
+  try {
+    if (typeof v === "string") return v;
+    if (v instanceof Error) return v.message;
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -115,10 +126,16 @@ Deno.serve(async (req) => {
       const moduleName = m.module_name as string;
       const moduleIndex = m.module_index as number;
 
+      const key = `${pipelineRunId}/${moduleIndex}-${moduleName}.json`;
+
       if (!stepSet.has(moduleName)) {
         await supabase
           .from("module_runs")
-          .update({ status: "skipped" satisfies ModuleStatus, finished_at: new Date().toISOString() })
+          .update({
+            status: "skipped" satisfies ModuleStatus,
+            finished_at: new Date().toISOString(),
+            // NOTE: keep output_ref null for "not requested" skips (cleaner)
+          })
           .eq("id", moduleId);
         continue;
       }
@@ -129,8 +146,6 @@ Deno.serve(async (req) => {
         auditPassedOrNotRun === false && ["import", "monitor", "price"].includes(moduleName);
 
       if (shouldSkipDueToAudit) {
-        const key = `${pipelineRunId}/${moduleIndex}-${moduleName}.json`;
-
         await uploadJson(supabase, key, {
           pipelineRunId,
           ingestionId: ingestionId ?? null,
@@ -164,8 +179,6 @@ Deno.serve(async (req) => {
         .eq("id", moduleId);
 
       try {
-        const key = `${pipelineRunId}/${moduleIndex}-${moduleName}.json`;
-
         if (moduleName === "extract") {
           if (!ingestionId) throw new Error("missing_ingestionId_for_extract");
 
@@ -370,52 +383,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-                if (moduleName === "import") {
-          if (!ingestionId) throw new Error("missing_ingestionId_for_import");
-
-          const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/import`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "x-pipeline-secret": internalSecret,
-            },
-            body: JSON.stringify({ ingestionId, options: options?.import ?? null }),
-          });
-
-          const text = await resp.text().catch(() => "");
-          let json: any;
-          try {
-            json = text ? JSON.parse(text) : null;
-          } catch {
-            json = { raw: text };
-          }
-
-          await uploadJson(supabase, key, {
-            pipelineRunId,
-            ingestionId,
-            module: { name: moduleName, index: moduleIndex },
-            generatedAt: new Date().toISOString(),
-            http: { status: resp.status },
-            import: json,
-          });
-
-          if (!resp.ok) {
-            throw new Error(`import_internal_http_${resp.status}`);
-          }
-
-          await supabase
-            .from("module_runs")
-            .update({
-              status: "succeeded" satisfies ModuleStatus,
-              finished_at: new Date().toISOString(),
-              output_ref: key,
-              error: null,
-            })
-            .eq("id", moduleId);
-
-          continue;
-        }
-        
         // Other modules not implemented yet: still write a durable artifact
         await uploadJson(supabase, key, {
           pipelineRunId,
@@ -436,29 +403,70 @@ Deno.serve(async (req) => {
           })
           .eq("id", moduleId);
       } catch (e) {
-        await supabase
-          .from("module_runs")
-          .update({
-            status: "failed" satisfies ModuleStatus,
-            finished_at: new Date().toISOString(),
-            error: { message: String(e), module: moduleName },
-          })
-          .eq("id", moduleId);
+        // IMPORTANT: Always write an artifact for failed modules so output_ref is not null.
+        const errMessage = safeStringify(e);
+        const errStack = e instanceof Error ? e.stack : null;
+
+        const failureArtifact = {
+          ok: false,
+          pipelineRunId,
+          ingestionId: ingestionId ?? null,
+          module: { name: moduleName, index: moduleIndex },
+          generatedAt: new Date().toISOString(),
+          error: {
+            message: errMessage,
+            stack: errStack,
+          },
+        };
+
+        // Best-effort upload; still record error even if upload fails
+        try {
+          await uploadJson(supabase, key, failureArtifact);
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "failed" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              output_ref: key,
+              error: { message: errMessage, module: moduleName },
+            })
+            .eq("id", moduleId);
+        } catch (uploadErr) {
+          const uploadMessage = safeStringify(uploadErr);
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "failed" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              // output_ref omitted because upload failed
+              error: {
+                message: errMessage,
+                module: moduleName,
+                artifact_upload_failed: uploadMessage,
+              },
+            })
+            .eq("id", moduleId);
+        }
 
         await supabase
           .from("pipeline_runs")
           .update({ status: "failed", finished_at: new Date().toISOString() })
           .eq("id", pipelineRunId);
 
-        return new Response(JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        );
       }
     }
 
     // Final pipeline status:
-    // - if audit failed (soft gate), mark pipeline as failed (but runner execution is "ok")
+    // - if audit failed (soft gate), mark pipeline as failed
     // - otherwise succeeded
     const finalStatus: PipelineRunStatus = auditPassedOrNotRun ? "succeeded" : "failed";
 
@@ -471,7 +479,7 @@ Deno.serve(async (req) => {
       headers: { "content-type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: "unexpected", details: String(e) }), {
+    return new Response(JSON.stringify({ error: "unexpected", details: safeStringify(e) }), {
       status: 500,
       headers: { "content-type": "application/json" },
     });
