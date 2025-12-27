@@ -162,16 +162,25 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 }
 
 /**
- * Keep clerkMiddleware behavior for app routes; but early-bypass exact internal endpoints
- * that must be callable by background workers (they validate their own secrets).
+ * Keep clerkMiddleware behavior for app routes.
  *
- * NOTE: do NOT bypass the user-facing /api/v1/pipeline/run route — it must run Clerk auth.
+ * IMPORTANT CHANGE:
+ * - We NO LONGER bypass /api/v1/pipeline/run/**/output/** because the dashboard needs
+ *   Clerk session on those routes (otherwise auth() throws and/or org cannot be resolved).
+ *
+ * We still bypass ONLY true internal endpoints that validate their own secrets:
+ * - /api/v1/pipeline/internal/**
+ * - /api/v1/ingest/callback
+ * - /api/v1/debug/**
  */
-
 const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
-  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/settings") && !pathname.startsWith("/api")) {
+  if (
+    !pathname.startsWith("/dashboard") &&
+    !pathname.startsWith("/settings") &&
+    !pathname.startsWith("/api")
+  ) {
     return NextResponse.next();
   }
 
@@ -204,16 +213,10 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Early bypass ONLY for the internal endpoints we expect to be called without Clerk session:
-  // - internal pipeline runner endpoints
-  // - output fetch endpoint for a pipeline run (only when URL contains "/output/")
-  // - ingest callback
-  // - debug endpoints
-  const isPipelineOutputFetch =
-    pathname.startsWith("/api/v1/pipeline/run/") && pathname.includes("/output/");
+  // Early bypass ONLY for internal endpoints expected to be called without Clerk session.
+  // NOTE: We intentionally do NOT bypass pipeline run output/log endpoints anymore.
   if (
     pathname.startsWith("/api/v1/pipeline/internal") ||
-    isPipelineOutputFetch ||
     pathname.startsWith("/api/v1/ingest/callback") ||
     pathname.startsWith("/api/v1/debug")
   ) {
