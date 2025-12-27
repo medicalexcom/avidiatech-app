@@ -74,7 +74,8 @@ function buildNormalizedFromExtractArtifact(extract: any) {
   // Cleanup empty arrays/objects for cleanliness
   if (Array.isArray(normalized.images) && normalized.images.length === 0) delete normalized.images;
   if (Array.isArray(normalized.features_raw) && normalized.features_raw.length === 0) delete normalized.features_raw;
-  if (Array.isArray(normalized.pdf_manual_urls) && normalized.pdf_manual_urls.length === 0) delete normalized.pdf_manual_urls;
+  if (Array.isArray(normalized.pdf_manual_urls) && normalized.pdf_manual_urls.length === 0)
+    delete normalized.pdf_manual_urls;
   if (normalized.specs && Object.keys(normalized.specs).length === 0) delete normalized.specs;
 
   // Ensure we return at least one usable field
@@ -85,18 +86,24 @@ function buildNormalizedFromExtractArtifact(extract: any) {
 /**
  * runSeoForIngestion
  *
- * - Loads product_ingestions row for ingestionId.
- * - If normalized_payload missing, tries to fallback to the extractor artifact:
- *   - looks up module_runs (input_ref = ingestionId, module_name = 'extract') for an output_ref
- *   - if found, fetches the artifact via internal output endpoint (using PIPELINE_INTERNAL_SECRET)
- *   - attempts to build a normalized payload from the artifact and persists it
- * - Calls callSeoModel with a normalized payload and persists seo results.
+ * Canonical return naming (Describe-style):
+ * - seo
+ * - descriptionHtml
+ * - features
+ *
+ * DB persistence remains snake_case columns:
+ * - seo_payload
+ * - description_html
  */
 export async function runSeoForIngestion(ingestionId: string): Promise<{
   ingestionId: string;
+  seo: any;
+  descriptionHtml: string | null;
+  features: string[] | null;
+
+  // legacy aliases (convenience for older code paths)
   seo_payload: any;
   description_html: string | null;
-  features: string[] | null;
 }> {
   const supabase = getServiceSupabaseClient();
 
@@ -136,89 +143,96 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       if (extractErr) {
         console.warn("[runSeoForIngestion] module_runs query failed:", extractErr);
       } else if (extractRow && extractRow.output_ref) {
-        // Try to fetch the artifact via internal output endpoint
         const pipelineRunId = extractRow.pipeline_run_id;
         const moduleIndex = extractRow.module_index;
 
-        const internalUrl = `${process.env.APP_URL?.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(
-          String(pipelineRunId)
-        )}/output/${encodeURIComponent(String(moduleIndex))}`;
+        const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
+        if (!appUrl) {
+          console.warn("[runSeoForIngestion] APP_URL not configured; cannot fetch extract artifact fallback");
+        } else {
+          const internalUrl = `${appUrl}/api/v1/pipeline/run/${encodeURIComponent(
+            String(pipelineRunId)
+          )}/output/${encodeURIComponent(String(moduleIndex))}`;
 
-        try {
-          const res = await fetch(internalUrl, {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              "x-pipeline-secret": process.env.PIPELINE_INTERNAL_SECRET || "",
-            },
-          });
+          try {
+            const res = await fetch(internalUrl, {
+              method: "GET",
+              headers: {
+                Accept: "application/json",
+                "x-pipeline-secret": process.env.PIPELINE_INTERNAL_SECRET || "",
+              },
+            });
 
-          if (res.ok) {
-            const body = await res.json().catch(() => null);
+            if (res.ok) {
+              const body = await res.json().catch(() => null);
 
-            // Candidate shapes:
-            // - artifact may be returned as body.output.extract
-            // - artifact may embed normalized_payload at various places
-            let candidate =
-              body?.normalized_payload ?? body?.data?.normalized_payload ?? body?.data ?? body ?? null;
+              // Candidate shapes:
+              let candidate =
+                body?.normalized_payload ?? body?.data?.normalized_payload ?? body?.data ?? body ?? null;
 
-            // If API returns wrapper { output: { extract: { ... } } }
-            if (!candidate && body?.output?.extract) {
-              candidate = body.output.extract;
-            } else if (!candidate && body?.output) {
-              candidate = body.output;
-            }
-
-            // Now try to build normalized payload from candidate if needed
-            let maybeNormalized: any = null;
-            if (candidate && typeof candidate === "object") {
-              // If candidate already looks normalized (has keys we expect), use it
-              if (candidate.name || candidate.name_best || candidate.features_raw || candidate.specs) {
-                maybeNormalized = candidate;
-              } else if (candidate.extract) {
-                maybeNormalized = buildNormalizedFromExtractArtifact(candidate.extract);
-              } else {
-                maybeNormalized = buildNormalizedFromExtractArtifact(candidate);
+              // If API returns wrapper { output: { extract: { ... } } }
+              if (!candidate && body?.output?.extract) {
+                candidate = body.output.extract;
+              } else if (!candidate && body?.output) {
+                candidate = body.output;
               }
-            }
 
-            if (maybeNormalized) {
-              normalized = maybeNormalized;
-              // persist normalized_payload back into product_ingestions so future runs don't need fallback
-              try {
-                const { error: updErr } = await supabase
-                  .from("product_ingestions")
-                  .update({
-                    normalized_payload: normalized,
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq("id", ingestionId);
-
-                if (updErr) {
-                  console.warn("[runSeoForIngestion] failed to persist normalized_payload from artifact:", updErr);
+              let maybeNormalized: any = null;
+              if (candidate && typeof candidate === "object") {
+                if (candidate.name || candidate.name_best || candidate.features_raw || candidate.specs) {
+                  maybeNormalized = candidate;
+                } else if (candidate.extract) {
+                  maybeNormalized = buildNormalizedFromExtractArtifact(candidate.extract);
                 } else {
-                  console.log("[runSeoForIngestion] persisted normalized_payload from extract artifact for", ingestionId);
+                  maybeNormalized = buildNormalizedFromExtractArtifact(candidate);
                 }
-              } catch (err) {
-                console.warn("[runSeoForIngestion] error persisting normalized_payload:", err);
+              }
+
+              if (maybeNormalized) {
+                normalized = maybeNormalized;
+
+                // persist normalized_payload back into product_ingestions so future runs don't need fallback
+                try {
+                  const { error: updErr } = await supabase
+                    .from("product_ingestions")
+                    .update({
+                      normalized_payload: normalized,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq("id", ingestionId);
+
+                  if (updErr) {
+                    console.warn(
+                      "[runSeoForIngestion] failed to persist normalized_payload from artifact:",
+                      updErr
+                    );
+                  } else {
+                    console.log(
+                      "[runSeoForIngestion] persisted normalized_payload from extract artifact for",
+                      ingestionId
+                    );
+                  }
+                } catch (err) {
+                  console.warn("[runSeoForIngestion] error persisting normalized_payload:", err);
+                }
+              } else {
+                console.warn("[runSeoForIngestion] artifact fetch returned no usable normalized payload", {
+                  pipelineRunId,
+                  moduleIndex,
+                  output_ref: extractRow.output_ref,
+                });
               }
             } else {
-              console.warn("[runSeoForIngestion] artifact fetch returned no usable normalized payload", {
-                pipelineRunId,
-                moduleIndex,
-                output_ref: extractRow.output_ref,
+              const txt = await res.text().catch(() => "");
+              console.warn("[runSeoForIngestion] failed to fetch artifact via internal output endpoint", {
+                internalUrl,
+                status: res.status,
+                body: txt,
               });
             }
-          } else {
-            const txt = await res.text().catch(() => "");
-            console.warn("[runSeoForIngestion] failed to fetch artifact via internal output endpoint", {
-              internalUrl,
-              status: res.status,
-              body: txt,
-            });
+          } catch (err) {
+            console.warn("[runSeoForIngestion] error fetching artifact via internal output endpoint", err);
           }
-        } catch (err) {
-          console.warn("[runSeoForIngestion] error fetching artifact via internal output endpoint", err);
         }
       } else {
         console.info("[runSeoForIngestion] no extract artifact output_ref found for ingestion", ingestionId);
@@ -228,14 +242,13 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     }
   }
 
-  // If still missing, abort
   if (!normalized) {
     throw new Error("ingestion_not_ready");
   }
 
   const startedAt = new Date().toISOString();
 
-  // 3) Call central GPT
+  // 3) Call central GPT (returns canonical keys)
   const seoResult = await callSeoModel(
     normalized,
     (ingestion as any).correlation_id || null,
@@ -258,12 +271,12 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     seo: seoDiagnostics,
   };
 
-  // 5) Persist SEO into product_ingestions
+  // 5) Persist SEO into product_ingestions (snake_case columns)
   const { data: updatedRows, error: updErr } = await supabase
     .from("product_ingestions")
     .update({
-      seo_payload: seoResult.seo_payload,
-      description_html: seoResult.description_html,
+      seo_payload: seoResult.seo,
+      description_html: seoResult.descriptionHtml,
       features: seoResult.features,
       seo_generated_at: finishedAt,
       diagnostics: updatedDiagnostics,
@@ -277,18 +290,26 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     throw new Error(`seo_persist_failed: ${updErr.message || String(updErr)}`);
   }
 
+  const finalSeo = updatedRows?.seo_payload ?? seoResult.seo;
+  const finalDescriptionHtml = updatedRows?.description_html ?? seoResult.descriptionHtml;
+  const finalFeatures = (updatedRows?.features as any) ?? seoResult.features;
+
   console.log("[api/v1/seo] SEO persisted", {
     ingestionId,
-    hasSeo: !!updatedRows?.seo_payload,
-    hasDescription: !!updatedRows?.description_html,
-    featuresCount: Array.isArray(updatedRows?.features) ? updatedRows?.features.length : null,
+    hasSeo: !!finalSeo,
+    hasDescription: !!finalDescriptionHtml,
+    featuresCount: Array.isArray(finalFeatures) ? finalFeatures.length : null,
   });
 
-  // 6) Return SEO to caller
+  // 6) Return canonical + legacy aliases
   return {
     ingestionId,
-    seo_payload: updatedRows?.seo_payload ?? seoResult.seo_payload,
-    description_html: updatedRows?.description_html ?? seoResult.description_html,
-    features: updatedRows?.features ?? seoResult.features,
+    seo: finalSeo,
+    descriptionHtml: finalDescriptionHtml,
+    features: finalFeatures,
+
+    // legacy aliases
+    seo_payload: finalSeo,
+    description_html: finalDescriptionHtml,
   };
 }
