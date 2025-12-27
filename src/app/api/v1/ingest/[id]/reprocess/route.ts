@@ -3,8 +3,8 @@
 // This endpoint updates job.flags and options and asks the ingestion engine to run modules
 //
 // Auth:
-// - Primary: Clerk user session (UI)
-// - Secondary: pipeline secret (service-to-service), header: x-pipeline-secret
+// - Clerk user session (UI)
+// - OR pipeline secret (service-to-service), header: x-pipeline-secret
 //
 // Policy:
 // - If includeSeo=true then includeSpecs MUST be true (strict downstream compliance)
@@ -48,7 +48,6 @@ export async function POST(req: NextRequest, context: { params?: any }) {
   try {
     const pipelineAuthed = hasPipelineAuth(req);
 
-    // Clerk auth (UI) if pipeline is not used
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
     const clerkAuthed = !!userId;
 
@@ -60,15 +59,11 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
     if (!INGEST_ENGINE_URL || !INGEST_SECRET) {
-      return NextResponse.json(
-        { error: "ingest_engine_not_configured" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "ingest_engine_not_configured" }, { status: 500 });
     }
 
     const body = await req.json().catch(() => ({}));
     const requestedOptions = enforceOptionsInvariants(body?.options || {});
-
     const runNowFlags = {
       includeSeo: !!requestedOptions.includeSeo,
       includeSpecs: !!requestedOptions.includeSpecs,
@@ -76,29 +71,18 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       includeVariants: !!requestedOptions.includeVariants,
     };
 
-    // must request at least one module
-    if (
-      !runNowFlags.includeSeo &&
-      !runNowFlags.includeSpecs &&
-      !runNowFlags.includeDocs &&
-      !runNowFlags.includeVariants
-    ) {
+    if (!runNowFlags.includeSeo && !runNowFlags.includeSpecs && !runNowFlags.includeDocs && !runNowFlags.includeVariants) {
       return NextResponse.json({ error: "no_modules_requested" }, { status: 400 });
     }
 
-    // Create supabase client
     let supabase;
     try {
       supabase = getServiceSupabaseClient();
     } catch (err: any) {
       console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json(
-        { error: "server_misconfigured_supabase" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "server_misconfigured_supabase" }, { status: 500 });
     }
 
-    // Fetch job
     const { data: job, error: fetchErr } = await supabase
       .from("product_ingestions")
       .select("*")
@@ -110,30 +94,22 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
-    // Ensure raw_payload exists so we can reprocess without re-scraping.
-    // If raw_payload absent, fall back to source_url and instruct engine to fetch again.
+    // NOTE: this table currently doesn't have raw_payload; keep this logic for forward compat.
     const hasRaw = !!(job as any).raw_payload;
 
-    // Merge flags (preserve previous flags and update)
     const newFlags = {
       ...((job as any).flags || {}),
       ...runNowFlags,
-      full_extract: false, // reprocessing specific modules disables the job-level full_extract flag
+      full_extract: false,
     };
 
     const nowIso = new Date().toISOString();
 
-    // Update DB with new flags/options so audit/billing reflects reprocessing request
     await supabase
       .from("product_ingestions")
-      .update({
-        flags: newFlags,
-        options: { ...((job as any).options || {}), ...runNowFlags },
-        updated_at: nowIso,
-      })
+      .update({ flags: newFlags, options: { ...((job as any).options || {}), ...runNowFlags }, updated_at: nowIso })
       .eq("id", id);
 
-    // Build payload for engine
     const payload: any = {
       action: "reprocess",
       job_id: id,
@@ -143,20 +119,16 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       correlation_id: (job as any).correlation_id || null,
     };
 
-    // Prefer attaching raw_payload to avoid re-scrape; engine can use provided raw if supported
     if (hasRaw) {
       payload.raw_payload = (job as any).raw_payload;
     } else {
-      // fall back to asking engine to fetch URL again
       payload.url = (job as any).source_url;
     }
 
-    // Engine endpoint: append /reprocess
     const reprocessUrl = INGEST_ENGINE_URL.replace(/\/$/, "") + "/reprocess";
 
     const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
 
-    // Optional: write a small diagnostic marker (no secrets)
     try {
       const existingDiagnostics = (job as any).diagnostics || {};
       await supabase
@@ -175,7 +147,6 @@ export async function POST(req: NextRequest, context: { params?: any }) {
         })
         .eq("id", id);
     } catch (e) {
-      // best-effort; do not fail the request
       console.warn("[reprocess] failed to persist reprocess_request diagnostics", e);
     }
 
@@ -193,14 +164,8 @@ export async function POST(req: NextRequest, context: { params?: any }) {
 
       if (!res.ok) {
         console.warn("ingest engine reprocess responded non-OK", res.status, text);
-        // Return accepted but include engine reply
         return NextResponse.json(
-          {
-            jobId: id,
-            status: "reprocess_failed",
-            engineStatus: res.status,
-            engineBody: text,
-          },
+          { jobId: id, status: "reprocess_failed", engineStatus: res.status, engineBody: text },
           { status: 202 }
         );
       }
@@ -208,10 +173,7 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       return NextResponse.json({ jobId: id, status: "reprocess_started" }, { status: 202 });
     } catch (err) {
       console.error("failed to call ingest engine for reprocess", err);
-      return NextResponse.json(
-        { jobId: id, status: "reprocess_failed", error: String(err) },
-        { status: 500 }
-      );
+      return NextResponse.json({ jobId: id, status: "reprocess_failed", error: String(err) }, { status: 500 });
     }
   } catch (err: any) {
     console.error("POST /api/v1/ingest/:id/reprocess error:", err);
