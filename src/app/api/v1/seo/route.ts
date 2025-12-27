@@ -2,6 +2,21 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
 
+/**
+ * POST /api/v1/seo
+ *
+ * Canonical (Describe-style) response:
+ * - ingestionId
+ * - descriptionHtml
+ * - sections
+ * - seo
+ * - features
+ * - data_gaps
+ *
+ * No dummy/fallback:
+ * - If ingestion lacks normalized_payload => 400 missing_required_ingestion_payload
+ * - If model output invalid => 500 seo_invalid_model_output
+ */
 export async function POST(req: NextRequest) {
   try {
     const auth = safeGetAuth(req as any) as { userId?: string | null } | null;
@@ -17,11 +32,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ingestionId: result.ingestionId,
-        seo: result.seo,
         descriptionHtml: result.descriptionHtml,
+        sections: result.sections,
+        seo: result.seo,
         features: result.features,
+        data_gaps: result.data_gaps,
 
-        // legacy aliases
+        // legacy aliases (optional)
         seo_payload: result.seo,
         description_html: result.descriptionHtml,
       },
@@ -39,16 +56,24 @@ export async function POST(req: NextRequest) {
     if (msg.startsWith("ingestion_load_failed:"))
       return NextResponse.json({ error: "ingestion_load_failed", detail: msg }, { status: 500 });
 
-    if (msg === "central_gpt_invalid_json" || msg.startsWith("central_gpt_not_configured:") || msg.startsWith("central_gpt_seo_error:"))
-      return NextResponse.json({ error: "seo_model_failed", detail: msg }, { status: 500 });
-
-    // Strict validation errors
-    if (code === "seo_invalid_model_output" || msg.startsWith("seo_invalid_model_output:") || msg.startsWith("seo_missing_custom_instructions:")) {
-      return NextResponse.json({ error: "seo_invalid_model_output", detail: msg }, { status: 500 });
-    }
-
     if (msg.startsWith("seo_persist_failed:"))
       return NextResponse.json({ error: "seo_persist_failed", detail: msg }, { status: 500 });
+
+    // Strict schema / output errors (mirror Describe behavior style)
+    if (
+      code === "seo_invalid_model_output" ||
+      msg.startsWith("seo_invalid_model_output:") ||
+      msg.startsWith("seo_missing_custom_instructions:")
+    ) {
+      return NextResponse.json(
+        { error: "seo_invalid_model_output", detail: msg, debug: err?.debug ?? null },
+        { status: 500 }
+      );
+    }
+
+    if (msg === "OPENAI_API_KEY not configured") {
+      return NextResponse.json({ error: "openai_not_configured" }, { status: 500 });
+    }
 
     return NextResponse.json({ error: msg }, { status: 500 });
   }
