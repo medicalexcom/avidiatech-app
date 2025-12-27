@@ -165,13 +165,13 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
  * Keep clerkMiddleware behavior for app routes.
  *
  * IMPORTANT CHANGE:
- * - We NO LONGER bypass /api/v1/pipeline/run/**/output/** because the dashboard needs
- *   Clerk session on those routes (otherwise auth() throws and/or org cannot be resolved).
+ * - We NO LONGER bypass the pipeline output endpoints (pipeline run output route)
+ *   because the dashboard needs Clerk session on those routes.
  *
  * We still bypass ONLY true internal endpoints that validate their own secrets:
- * - /api/v1/pipeline/internal/**
+ * - /api/v1/pipeline/internal/*
  * - /api/v1/ingest/callback
- * - /api/v1/debug/**
+ * - /api/v1/debug/*
  */
 const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
@@ -214,7 +214,7 @@ export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   // Early bypass ONLY for internal endpoints expected to be called without Clerk session.
-  // NOTE: We intentionally do NOT bypass pipeline run output/log endpoints anymore.
+  // NOTE: We intentionally do NOT bypass pipeline output/log endpoints anymore.
   if (
     pathname.startsWith("/api/v1/pipeline/internal") ||
     pathname.startsWith("/api/v1/ingest/callback") ||
