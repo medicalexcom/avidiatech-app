@@ -6,14 +6,30 @@ import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 const CENTRAL_GPT_URL = process.env.CENTRAL_GPT_URL || "";
 const CENTRAL_GPT_KEY = process.env.CENTRAL_GPT_KEY || "";
 
+/**
+ * callSeoModel
+ *
+ * Canonical output naming (Describe-style):
+ * - seo
+ * - descriptionHtml
+ * - features
+ *
+ * Notes:
+ * - The central GPT service may return different shapes depending on version:
+ *   - { seo, descriptionHtml, features }
+ *   - { seo, description_html, features }
+ *   - { seo_payload, description_html, features }  (legacy)
+ *
+ * We normalize here so the rest of the app can rely on the canonical keys.
+ */
 export async function callSeoModel(
   normalizedPayload: any,
   correlationId?: string | null,
   sourceUrl?: string | null,
   tenantId?: string | null
 ): Promise<{
-  seo_payload: any;
-  description_html: string | null;
+  seo: any;
+  descriptionHtml: string | null;
   features: string[] | null;
 }> {
   if (!CENTRAL_GPT_URL || !CENTRAL_GPT_KEY) {
@@ -113,27 +129,52 @@ export async function callSeoModel(
   try {
     json = JSON.parse(text);
   } catch (err: any) {
-    console.error("[api/v1/seo] central GPT returned non-JSON", err?.message || err, "raw=", text?.slice(0, 500));
+    console.error(
+      "[api/v1/seo] central GPT returned non-JSON",
+      err?.message || err,
+      "raw=",
+      text?.slice(0, 500)
+    );
     throw new Error("central_gpt_invalid_json");
   }
 
+  // Normalize output (canonical Describe-style)
   const normalized = normalizedPayload || {};
-  const seoPayload = json?.seo || normalized?.seo || {};
+
+  // SEO object candidates
+  const seo =
+    json?.seo ??
+    json?.seoPayload ??
+    json?.seo_payload ??
+    normalized?.seo ??
+    normalized?.seoPayload ??
+    normalized?.seo_payload ??
+    {};
+
+  // Description HTML candidates
   const descriptionHtml =
-    json?.description_html || json?.description || normalized?.description_html || null;
-  const features = Array.isArray(json?.features) ? json.features : normalized?.features ?? null;
+    json?.descriptionHtml ??
+    json?.description_html ??
+    json?.description ??
+    normalized?.descriptionHtml ??
+    normalized?.description_html ??
+    null;
+
+  // Features candidates
+  const features =
+    Array.isArray(json?.features)
+      ? json.features
+      : Array.isArray(normalized?.features)
+      ? normalized.features
+      : null;
 
   console.log("[api/v1/seo] central GPT SEO summary", {
-    hasSeo: !!seoPayload,
+    hasSeo: !!seo,
     hasDescription: !!descriptionHtml,
     featuresCount: Array.isArray(features) ? features.length : null,
     sourceUrl: sourceUrl || null,
     instructionsSource: instructionsSource || null,
   });
 
-  return {
-    seo_payload: seoPayload,
-    description_html: descriptionHtml,
-    features,
-  };
+  return { seo, descriptionHtml, features };
 }
