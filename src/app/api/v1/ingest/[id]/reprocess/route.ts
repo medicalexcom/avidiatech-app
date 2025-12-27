@@ -9,7 +9,30 @@ import { signPayload } from "@/lib/ingest/signature";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
-const APP_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL =
+  process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+function normalizeBool(v: any): boolean {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
+/**
+ * HARD OPTION INVARIANT:
+ * - If SEO is requested, specs MUST be requested.
+ * This prevents downstream SEO/Describe placeholder failures and url-derived naming.
+ */
+function enforceOptionsInvariants(opts: any) {
+  const o = { ...(opts || {}) };
+
+  o.includeSeo = normalizeBool(o.includeSeo);
+  o.includeSpecs = normalizeBool(o.includeSpecs);
+  o.includeDocs = normalizeBool(o.includeDocs);
+  o.includeVariants = normalizeBool(o.includeVariants);
+
+  if (o.includeSeo) o.includeSpecs = true;
+
+  return o;
+}
 
 export async function POST(req: NextRequest, context: { params?: any }) {
   try {
@@ -20,8 +43,16 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     const id = context?.params?.id;
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
+    if (!INGEST_ENGINE_URL || !INGEST_SECRET) {
+      return NextResponse.json(
+        { error: "ingest_engine_not_configured" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
-    const requestedOptions = body?.options || {};
+    const requestedOptions = enforceOptionsInvariants(body?.options || {});
+
     const runNowFlags = {
       includeSeo: !!requestedOptions.includeSeo,
       includeSpecs: !!requestedOptions.includeSpecs,
@@ -30,7 +61,12 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     };
 
     // must request at least one module
-    if (!runNowFlags.includeSeo && !runNowFlags.includeSpecs && !runNowFlags.includeDocs && !runNowFlags.includeVariants) {
+    if (
+      !runNowFlags.includeSeo &&
+      !runNowFlags.includeSpecs &&
+      !runNowFlags.includeDocs &&
+      !runNowFlags.includeVariants
+    ) {
       return NextResponse.json({ error: "no_modules_requested" }, { status: 400 });
     }
 
@@ -40,11 +76,19 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       supabase = getServiceSupabaseClient();
     } catch (err: any) {
       console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json({ error: "server misconfigured: missing Supabase envs" }, { status: 500 });
+      return NextResponse.json(
+        { error: "server_misconfigured_supabase" },
+        { status: 500 }
+      );
     }
 
     // Fetch job
-    const { data: job, error: fetchErr } = await supabase.from("product_ingestions").select("*").eq("id", id).single();
+    const { data: job, error: fetchErr } = await supabase
+      .from("product_ingestions")
+      .select("*")
+      .eq("id", id)
+      .single();
+
     if (fetchErr || !job) {
       console.warn("job not found", { id, fetchErr });
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -52,11 +96,11 @@ export async function POST(req: NextRequest, context: { params?: any }) {
 
     // Ensure raw_payload exists so we can reprocess without re-scraping.
     // If raw_payload absent, fall back to source_url and instruct engine to fetch again.
-    const hasRaw = !!job.raw_payload;
+    const hasRaw = !!(job as any).raw_payload;
 
     // Merge flags (preserve previous flags and update)
     const newFlags = {
-      ...(job.flags || {}),
+      ...((job as any).flags || {}),
       ...runNowFlags,
       full_extract: false, // reprocessing specific modules disables the job-level full_extract flag
     };
@@ -64,25 +108,29 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     // Update DB with new flags/options so audit/billing reflects reprocessing request
     await supabase
       .from("product_ingestions")
-      .update({ flags: newFlags, options: { ...(job.options || {}), ...(runNowFlags) } })
+      .update({
+        flags: newFlags,
+        options: { ...((job as any).options || {}), ...runNowFlags },
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
     // Build payload for engine
     const payload: any = {
       action: "reprocess",
       job_id: id,
-      tenant_id: job.tenant_id || null,
+      tenant_id: (job as any).tenant_id || null,
       options: runNowFlags,
       callback_url: `${APP_URL}/api/v1/ingest/callback`,
-      correlation_id: job.correlation_id || null,
+      correlation_id: (job as any).correlation_id || null,
     };
 
     // Prefer attaching raw_payload to avoid re-scrape; engine can use provided raw if supported
     if (hasRaw) {
-      payload.raw_payload = job.raw_payload;
+      payload.raw_payload = (job as any).raw_payload;
     } else {
       // fall back to asking engine to fetch URL again
-      payload.url = job.source_url;
+      payload.url = (job as any).source_url;
     }
 
     // The engine endpoint: try to POST to INGEST_ENGINE_URL + '/reprocess' if available.
@@ -90,11 +138,6 @@ export async function POST(req: NextRequest, context: { params?: any }) {
     const reprocessUrl = INGEST_ENGINE_URL.replace(/\/$/, "") + "/reprocess";
 
     const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
-
-    if (!INGEST_ENGINE_URL) {
-      console.warn("INGEST_ENGINE_URL not configured; reprocess request enqueued but engine not called");
-      return NextResponse.json({ jobId: id, status: "reprocess_enqueued" }, { status: 202 });
-    }
 
     try {
       const res = await fetch(reprocessUrl, {
@@ -106,17 +149,29 @@ export async function POST(req: NextRequest, context: { params?: any }) {
         body: JSON.stringify(payload),
       });
 
+      const text = await res.text().catch(() => "");
+
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
         console.warn("ingest engine reprocess responded non-OK", res.status, text);
         // Return accepted but include engine reply
-        return NextResponse.json({ jobId: id, status: "reprocess_failed", engineStatus: res.status, engineBody: text }, { status: 202 });
+        return NextResponse.json(
+          {
+            jobId: id,
+            status: "reprocess_failed",
+            engineStatus: res.status,
+            engineBody: text,
+          },
+          { status: 202 }
+        );
       }
 
       return NextResponse.json({ jobId: id, status: "reprocess_started" }, { status: 202 });
     } catch (err) {
       console.error("failed to call ingest engine for reprocess", err);
-      return NextResponse.json({ jobId: id, status: "reprocess_failed", error: String(err) }, { status: 500 });
+      return NextResponse.json(
+        { jobId: id, status: "reprocess_failed", error: String(err) },
+        { status: 500 }
+      );
     }
   } catch (err: any) {
     console.error("POST /api/v1/ingest/:id/reprocess error:", err);
