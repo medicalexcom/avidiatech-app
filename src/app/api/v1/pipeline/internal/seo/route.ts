@@ -5,11 +5,15 @@ import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
  * POST /api/v1/pipeline/internal/seo
  *
  * Internal pipeline endpoint (service-to-service).
- * Returns the same canonical Describe-style keys as /api/v1/seo:
+ *
+ * Canonical output (Describe-style):
  * - ingestionId
  * - seo
  * - descriptionHtml
+ * - sections
  * - features
+ * - data_gaps
+ * - _meta (optional)
  *
  * Also includes legacy aliases for compatibility.
  */
@@ -29,17 +33,19 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await runSeoForIngestion(ingestionId);
+    const result: any = await runSeoForIngestion(ingestionId);
 
-    // Ensure canonical keys are top-level for pipeline artifacts
     return NextResponse.json(
       {
         ingestionId: result.ingestionId,
 
-        // canonical
+        // canonical (pipeline consumers should prefer these)
         seo: result.seo,
         descriptionHtml: result.descriptionHtml,
-        features: result.features,
+        sections: result.sections ?? null,
+        features: result.features ?? [],
+        data_gaps: result.data_gaps ?? [],
+        _meta: result._meta ?? null,
 
         // legacy aliases
         seo_payload: result.seo,
