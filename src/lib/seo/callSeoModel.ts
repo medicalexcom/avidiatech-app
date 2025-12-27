@@ -65,12 +65,13 @@ function extractTextFromResponses(res: any): string {
  * - Custom instructions REQUIRED (no fallback)
  * - JSON schema strict REQUIRED
  * - sections.overview MUST equal descriptionHtml exactly
- * - No empty section strings (except optional sections)
+ * - No empty section strings (except manuals which may be null)
  *
- * Manuals policy:
- * - manuals are OPTIONAL
- * - if evidence exists, they should be included (non-empty HTML)
- * - if no evidence, manuals may be omitted or empty without failing the run
+ * Manuals policy (strict-compatible):
+ * - sections.manuals is REQUIRED BY SCHEMA (OpenAI strict requirement),
+ *   but it is allowed to be null.
+ * - If evidence exists, manuals should be a non-empty HTML string.
+ * - If no evidence exists, manuals MUST be null (preferred) instead of placeholder text.
  */
 export async function callSeoModel(
   normalizedPayload: any,
@@ -108,10 +109,10 @@ CRITICAL OUTPUT RULE:
 - sections.overview MUST equal descriptionHtml exactly (same string).
 - Other required sections.* must be meaningful non-empty HTML fragments (not placeholders).
 
-MANUALS POLICY:
-- sections.manuals is OPTIONAL.
-- Only include manuals content if there is evidence in the input payload (e.g. manual URLs, PDF/manual text).
-- If there is no evidence, you may omit sections.manuals entirely (preferred) OR set it to an empty string.
+MANUALS POLICY (IMPORTANT):
+- sections.manuals MUST ALWAYS be present as a key.
+- If there is evidence of manuals in the input (manual URLs / PDFs / manuals text), sections.manuals MUST be non-empty HTML.
+- If there is NO evidence, sections.manuals MUST be null (NOT an empty string, NOT "N/A", NOT "No manuals available").
 
 If required factual inputs are missing, you must:
 - omit unsupported claims
@@ -163,7 +164,9 @@ ${JSON.stringify(
             sections: {
               type: "object",
               additionalProperties: false,
-              // manuals is OPTIONAL per policy; do not require it
+
+              // IMPORTANT (OpenAI strict rule):
+              // required must include EVERY key in properties when additionalProperties:false
               required: [
                 "overview",
                 "hook",
@@ -184,7 +187,7 @@ ${JSON.stringify(
                 internalLinks: { type: "string" },
                 whyChoose: { type: "string" },
 
-                // manuals required but nullable
+                // manuals: REQUIRED but nullable
                 manuals: { type: ["string", "null"] },
 
                 faqs: { type: "string" },
@@ -238,7 +241,7 @@ ${JSON.stringify(
 
   const sections = json?.sections || {};
 
-  // REQUIRED sections must be non-empty
+  // Required sections must be non-empty, except manuals which may be null.
   for (const k of [
     "overview",
     "hook",
@@ -247,18 +250,19 @@ ${JSON.stringify(
     "specifications",
     "internalLinks",
     "whyChoose",
+    "manuals",
     "faqs",
   ]) {
-    requireField(isNonEmptyString(sections?.[k]), `seo_invalid_model_output: sections.${k} empty`);
-  }
+    if (k === "manuals") {
+      const v = sections?.manuals;
+      requireField(
+        v === null || isNonEmptyString(v),
+        "seo_invalid_model_output: sections.manuals must be null or non-empty"
+      );
+      continue;
+    }
 
-  // OPTIONAL: manuals can be omitted or empty.
-  // If present, it should be non-empty.
-  if (Object.prototype.hasOwnProperty.call(sections, "manuals")) {
-    requireField(
-      isNonEmptyString(sections?.manuals),
-      "seo_invalid_model_output: sections.manuals empty"
-    );
+    requireField(isNonEmptyString(sections?.[k]), `seo_invalid_model_output: sections.${k} empty`);
   }
 
   // Enforce overview === full descriptionHtml
