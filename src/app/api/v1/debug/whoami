@@ -1,0 +1,7 @@
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+
+export async function GET() {
+  const { userId } = (await auth()) as any;
+  return NextResponse.json({ ok: true, clerkUserId: userId || null });
+}
