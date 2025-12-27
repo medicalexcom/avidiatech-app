@@ -1,10 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifySignature } from "@/lib/ingest/signature";
+import {
+  normalizeToAvidiaStandardFromCallback,
+  type IngestCallbackBody,
+} from "@/lib/ingest/avidiaStandard";
 
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Use service role for callback so it can always update product_ingestions regardless of RLS.
@@ -15,60 +20,20 @@ function getCallbackSupabase() {
   });
 }
 
-function isNonEmptyString(v: any) {
-  return typeof v === "string" && v.trim().length > 0;
-}
-
-function looksUrlDerivedName(name: string) {
-  const s = name.toLowerCase();
-  return s.includes("http://") || s.includes("https://") || s.includes("www.") || s.includes("product for ");
-}
-
-function hasNonEmptySpecs(specs: any): boolean {
-  if (!specs) return false;
-  if (Array.isArray(specs)) return specs.length > 0;
-  if (typeof specs === "object") return Object.keys(specs).length > 0;
-  return false;
-}
-
-/**
- * Validate normalized_payload for strict downstream compliance.
- *
- * We do NOT invent missing values here.
- * If payload is incomplete (url-derived name or empty specs), we mark job as not-ready/failed
- * and persist diagnostics so operators (or auto-reprocess) can correct extraction.
- */
-function validateNormalizedPayload(normalized: any): {
-  ok: boolean;
-  issues: Array<{ field: string; issue: string; fix_hint?: string }>;
-} {
-  const issues: Array<{ field: string; issue: string; fix_hint?: string }> = [];
-
-  const name = normalized?.name ?? normalized?.name_raw ?? normalized?.product_name ?? null;
-  if (!isNonEmptyString(name)) {
-    issues.push({
-      field: "normalized_payload.name",
-      issue: "missing",
-      fix_hint: "Ensure ingestion extracts a grounded product name from dom/json-ld/meta and passes it in normalized_payload.",
-    });
-  } else if (looksUrlDerivedName(String(name))) {
-    issues.push({
-      field: "normalized_payload.name",
-      issue: "url_derived_or_placeholder",
-      fix_hint: "Ensure ingestion does not set name to 'Product for <url>' and instead uses a grounded product title.",
-    });
+function safeKeys(obj: any): string[] {
+  if (!obj || typeof obj !== "object") return [];
+  try {
+    return Object.keys(obj);
+  } catch {
+    return [];
   }
+}
 
-  const specs = normalized?.specs ?? null;
-  if (!hasNonEmptySpecs(specs)) {
-    issues.push({
-      field: "normalized_payload.specs",
-      issue: "empty",
-      fix_hint: "Ensure ingestion extracts specs (table/specs JSON-LD) and includes them in normalized_payload.specs.",
-    });
-  }
-
-  return { ok: issues.length === 0, issues };
+function capAnyText(v: any, maxLen: number) {
+  if (v === null || v === undefined) return null;
+  const s = String(v);
+  if (!s.trim()) return null;
+  return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
 export async function GET() {
@@ -103,13 +68,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
     }
 
-    let body: {
-      job_id: string;
-      status?: string;
-      normalized_payload?: any;
-      error?: string | null;
-      diagnostics?: any;
-    };
+    let body: IngestCallbackBody;
 
     try {
       body = JSON.parse(rawBody || "{}");
@@ -137,14 +96,20 @@ export async function POST(req: NextRequest) {
     // Load existing row for diagnostics merging
     const { data: existing, error: loadErr } = await supabase
       .from("product_ingestions")
-      .select("id, status, diagnostics, attempts_count, last_error, created_at, job_id")
+      .select("id, status, diagnostics, attempts_count, last_error, created_at, job_id, source_url")
       .or(`id.eq.${jobId},job_id.eq.${jobId}`)
       .limit(1)
       .maybeSingle();
 
     if (loadErr) {
-      console.error("ingest callback: failed to load product_ingestions", loadErr.message || loadErr);
-      return NextResponse.json({ error: "db_error", detail: loadErr.message || String(loadErr) }, { status: 500 });
+      console.error(
+        "ingest callback: failed to load product_ingestions",
+        loadErr.message || loadErr
+      );
+      return NextResponse.json(
+        { error: "db_error", detail: loadErr.message || String(loadErr) },
+        { status: 500 }
+      );
     }
 
     if (!existing) {
@@ -152,23 +117,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
+    const nowIso = new Date().toISOString();
     const currentAttempts = (existing as any).attempts_count || 0;
     const existingDiagnostics = (existing.diagnostics as any) || {};
 
-    const nowIso = new Date().toISOString();
-
-    const callbackDiagnostics = {
+    // Always record that callback was received (even if normalized payload is missing/invalid)
+    const callbackDiagnosticsBase: any = {
       ...(existingDiagnostics.ingest_callback || {}),
       last_callback_at: nowIso,
       status: body.status || "completed",
       error: body.error || null,
       raw_diagnostics: body.diagnostics || null,
+      callback_top_level_keys: safeKeys(body),
+      payload_bucket_keys: {
+        normalized_payload: safeKeys(body.normalized_payload),
+        specs_payload: safeKeys(body.specs_payload),
+        manuals_payload: safeKeys(body.manuals_payload),
+        variants_payload: safeKeys(body.variants_payload),
+        raw_payload: safeKeys(body.raw_payload),
+      },
+      // small previews for debugging (avoid huge diagnostics)
+      payload_previews: {
+        normalized_payload: capAnyText(JSON.stringify(body.normalized_payload ?? null), 4000),
+        specs_payload: capAnyText(JSON.stringify(body.specs_payload ?? null), 4000),
+      },
     };
 
     const updatedDiagnostics: any = {
       ...existingDiagnostics,
-      ingest_callback: callbackDiagnostics,
+      ingest_callback: callbackDiagnosticsBase,
     };
+
+    const nextStatus = body.status || "completed";
 
     const updatePatch: any = {
       diagnostics: updatedDiagnostics,
@@ -177,62 +157,38 @@ export async function POST(req: NextRequest) {
       updated_at: nowIso,
     };
 
-    const nextStatus = body.status || "completed";
+    // Normalize from ANY bucket into canonical avidia_standard
+    const normalization = normalizeToAvidiaStandardFromCallback({
+      sourceUrl: (existing as any).source_url || null,
+      callbackBody: body,
+    });
 
-    // If engine provided normalized_payload, validate it before accepting.
-    if (body.normalized_payload) {
-      const validation = validateNormalizedPayload(body.normalized_payload);
+    updatedDiagnostics.ingest_callback.normalized_validation = {
+      ok: normalization.issues.length === 0,
+      issues: normalization.issues,
+      extracted: normalization.extracted,
+      validated_at: nowIso,
+    };
 
-      updatedDiagnostics.ingest_callback = {
-        ...(updatedDiagnostics.ingest_callback || {}),
-        normalized_validation: {
-          ok: validation.ok,
-          issues: validation.issues,
-          validated_at: nowIso,
-        },
-      };
-
-      if (!validation.ok) {
-        // Do NOT overwrite normalized_payload with invalid placeholder data.
-        // Mark ingestion as error so downstream modules (seo/audit/import) can treat it as not ready.
-        updatePatch.status = "error";
-        updatePatch.completed_at = nowIso;
-        updatePatch.last_error = "ingest_invalid_normalized_payload";
-
-        updatePatch.error = {
-          code: "ingest_invalid_normalized_payload",
-          message: "Callback provided normalized_payload missing grounded name/specs; refusing to persist invalid placeholders.",
-          issues: validation.issues,
-        };
-
-        updatePatch.diagnostics = updatedDiagnostics;
-
-        const { error: updErr } = await supabase
-          .from("product_ingestions")
-          .update(updatePatch)
-          .eq("id", existing.id);
-
-        if (updErr) {
-          console.error("ingest callback: failed to update product_ingestions", updErr.message || updErr);
-          return NextResponse.json({ error: "db_update_failed", detail: updErr.message || String(updErr) }, { status: 500 });
-        }
-
-        // Return 200 to avoid engine retry loops unless you explicitly want retries.
-        return NextResponse.json(
-          { ok: true, accepted: false, error: "ingest_invalid_normalized_payload", issues: validation.issues },
-          { status: 200 }
-        );
-      }
-
-      // Valid payload: accept and persist.
-      updatePatch.normalized_payload = body.normalized_payload;
+    if (normalization.normalized) {
+      // Persist canonical normalized payload
+      updatePatch.normalized_payload = normalization.normalized;
       updatePatch.status = nextStatus;
       updatePatch.completed_at = nowIso;
-      updatePatch.diagnostics = updatedDiagnostics;
     } else {
-      // No payload provided; just update status if it isn't completed
-      if (nextStatus !== "completed") updatePatch.status = nextStatus;
-      updatePatch.diagnostics = updatedDiagnostics;
+      // Do NOT overwrite normalized_payload with unusable placeholder data.
+      // Mark as error to prevent SEO/Describe from hallucinating.
+      updatePatch.status = "error";
+      updatePatch.completed_at = nowIso;
+      updatePatch.last_error = "ingest_invalid_normalized_payload";
+
+      updatePatch.error = {
+        code: "ingest_invalid_normalized_payload",
+        message:
+          "Callback payload lacked grounded name/specs in any recognized field blocks; refusing to persist invalid normalized_payload.",
+        issues: normalization.issues,
+        extracted: normalization.extracted,
+      };
     }
 
     const { error: updErr } = await supabase
@@ -241,13 +197,22 @@ export async function POST(req: NextRequest) {
       .eq("id", existing.id);
 
     if (updErr) {
-      console.error("ingest callback: failed to update product_ingestions", updErr.message || updErr);
-      return NextResponse.json({ error: "db_update_failed", detail: updErr.message || String(updErr) }, { status: 500 });
+      console.error(
+        "ingest callback: failed to update product_ingestions",
+        updErr.message || updErr
+      );
+      return NextResponse.json(
+        { error: "db_update_failed", detail: updErr.message || String(updErr) },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {
     console.error("POST /api/v1/ingest/callback error:", err);
-    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "internal_error" },
+      { status: 500 }
+    );
   }
 }
