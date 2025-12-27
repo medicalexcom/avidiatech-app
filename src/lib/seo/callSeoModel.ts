@@ -179,7 +179,7 @@ ${JSON.stringify(
 
             seo: {
               type: "object",
-              additionalProperties: true,
+              additionalProperties: false,
               required: ["h1", "title", "metaDescription", "shortDescription"],
               properties: {
                 h1: { type: "string" },
