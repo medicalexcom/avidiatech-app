@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
 
 /**
  * GET /api/v1/pipeline/run/:id/output/:moduleIndex
  *
- * Internal calls: x-pipeline-secret === PIPELINE_INTERNAL_SECRET
- * User calls: Clerk auth + org access (pipeline_runs.org_id must match).
+ * IMPORTANT:
+ * - This route is bypassed by middleware (see src/middleware.ts), so we MUST NOT call Clerk auth().
  *
- * Always returns JSON (never throws a raw 500 page).
+ * Access:
+ * - Internal calls: x-pipeline-secret === PIPELINE_INTERNAL_SECRET
+ * - User calls: require orgId from request (getOrgFromRequest) and enforce pipeline_runs.org_id match
+ *
+ * Always returns JSON (never throws HTML 500 pages).
  */
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -32,7 +35,6 @@ export async function GET(req: Request, context: any) {
       );
     }
 
-    // Next params can be promise or object depending on runtime/build
     const params = context?.params && typeof context.params.then === "function" ? await context.params : context?.params;
     const pipelineRunId = params?.id;
     const moduleIndexRaw = params?.moduleIndex;
@@ -46,12 +48,9 @@ export async function GET(req: Request, context: any) {
       return NextResponse.json({ ok: false, error: "invalid_module_index" }, { status: 400 });
     }
 
-    // Access control
+    // Access control for non-internal callers: org-scoped
     if (!isInternalCall) {
-      const { userId } = (await auth()) as any;
-      if (!userId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-
-      const orgId = await getOrgFromRequest(req).catch((e: any) => null);
+      const orgId = await getOrgFromRequest(req).catch(() => null);
       if (!orgId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
       const { data: runRow, error: runErr } = await supabase
@@ -67,19 +66,17 @@ export async function GET(req: Request, context: any) {
         return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
       }
     } else {
-      // internal call: just ensure run exists
+      // Internal call: ensure run exists
       const { data: runCheck, error: runErr } = await supabase
         .from("pipeline_runs")
         .select("id")
         .eq("id", pipelineRunId)
         .maybeSingle();
-      if (runErr) {
-        return NextResponse.json({ ok: false, error: "run_query_failed", detail: runErr.message }, { status: 500 });
-      }
+
+      if (runErr) return NextResponse.json({ ok: false, error: "run_query_failed", detail: runErr.message }, { status: 500 });
       if (!runCheck) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
     }
 
-    // Find module run row
     const { data: mod, error: modErr } = await supabase
       .from("module_runs")
       .select("id, module_index, module_name, status, output_ref")
@@ -114,20 +111,13 @@ export async function GET(req: Request, context: any) {
     const { data, error: dlErr } = dl || {};
     if (dlErr || !data) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "output_download_failed",
-          detail: String(dlErr?.message ?? dlErr ?? "unknown"),
-          output_ref: mod.output_ref,
-          bucket,
-        },
+        { ok: false, error: "output_download_failed", detail: String(dlErr?.message ?? dlErr ?? "unknown"), output_ref: mod.output_ref, bucket },
         { status: 500 }
       );
     }
 
     const text = await data.text();
 
-    // Parse JSON
     try {
       const json = JSON.parse(text);
       return NextResponse.json(
@@ -154,7 +144,6 @@ export async function GET(req: Request, context: any) {
       );
     }
   } catch (err: any) {
-    // Absolute last-resort catch to avoid browser generic 500 page
     return NextResponse.json(
       { ok: false, error: "internal_error", detail: String(err?.message || err) },
       { status: 500 }
