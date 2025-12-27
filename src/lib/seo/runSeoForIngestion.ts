@@ -1,6 +1,22 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
+function isNonEmptyString(v: any) {
+  return typeof v === "string" && v.trim().length > 0;
+}
+
+function looksUrlDerivedName(name: string) {
+  const s = name.toLowerCase();
+  return s.includes("http://") || s.includes("https://") || s.includes("www.") || s.includes("product for ");
+}
+
+function hasNonEmptySpecs(specs: any): boolean {
+  if (!specs) return false;
+  if (Array.isArray(specs)) return specs.length > 0;
+  if (typeof specs === "object") return Object.keys(specs).length > 0;
+  return false;
+}
+
 export async function runSeoForIngestion(ingestionId: string): Promise<{
   ingestionId: string;
   descriptionHtml: string;
@@ -28,6 +44,18 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   const normalized = (ingestion as any).normalized_payload;
   if (!normalized) throw new Error("missing_required_ingestion_payload");
 
+  // HARD INPUT GATES (no hallucination, no placeholders):
+  // - must have a grounded name
+  // - must have specs evidence (since Product Specifications section is required)
+  const name = normalized?.name;
+  if (!isNonEmptyString(name) || looksUrlDerivedName(String(name))) {
+    throw new Error("ingestion_not_ready: normalized_payload.name is missing or url-derived (re-ingest with proper name extraction)");
+  }
+
+  if (!hasNonEmptySpecs(normalized?.specs)) {
+    throw new Error("ingestion_not_ready: normalized_payload.specs empty (re-ingest with includeSpecs=true)");
+  }
+
   const startedAt = new Date().toISOString();
 
   const seoResult = await callSeoModel(
@@ -49,9 +77,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       last_run_at: finishedAt,
       instruction_source: seoResult?._meta?.instructionsSource ?? null,
       model: seoResult?._meta?.model ?? null,
-
-      // Persist these so we always have the full canonical output available for debugging/UI,
-      // even if the product_ingestions table doesn't have dedicated columns.
       data_gaps: seoResult.data_gaps ?? [],
       sections: seoResult.sections ?? null,
     },
