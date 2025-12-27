@@ -11,21 +11,51 @@ const APP_URL =
   "http://localhost:3000";
 
 /**
- * Note: this route includes a safe fallback for profile lookup failures caused by
- * a missing `public.profiles` table (PostgREST error PGRST205). The fallback will
- * construct a temporary profile object so ingestion can continue while you run
- * the DB migration to create `profiles`.
+ * Ingest route
  *
- * This update improves the profile lookup to be resilient to different column
- * names. Historically the code queried `profiles.user_id` which may not exist;
- * now we attempt `clerk_user_id` first (recommended), and if that column is not
- * present we fall back to `user_id`. If both columns are missing the existing
- * missing-table handling remains in place.
+ * Policy updates (2025-12):
+ * - Deprecate module toggles from the client. They were part of an older UI.
+ * - Always run a full extract with specs enabled to support strict SEO/Describe compliance.
+ * - If the request provides options, we will accept them ONLY for docs/variants/export_type,
+ *   but we will FORCE includeSpecs=true whenever includeSeo=true (and in practice always).
  *
- * Control fallback behavior using the env var:
- * - ALLOW_PROFILE_FALLBACK=true  -> use a temporary profile when DB lookup fails
- * - ALLOW_PROFILE_FALLBACK=false -> return a 500 profile_lookup_failed (default)
+ * Why:
+ * - The SEO/Describe instruction contract forbids placeholders and hallucination.
+ * - If specs are not extracted upstream, the model cannot legally generate Product Specifications.
+ * - Previously, includeSeo=true with includeSpecs=false caused url-derived product names and
+ *   "Not specified" spec placeholders (invalid).
  */
+
+function normalizeBool(v: any): boolean {
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
+function buildEffectiveOptions(body: any) {
+  const export_type = body?.export_type || "JSON";
+
+  // Keep fullExtract for backwards compatibility, but default true and treat toggles as deprecated.
+  const fullExtract = body?.fullExtract === undefined ? true : normalizeBool(body?.fullExtract);
+
+  const clientOptions = body?.options || {};
+
+  // We no longer honor turning off SEO/specs via client toggles.
+  // Always include SEO + Specs to match strict requirements downstream.
+  const includeSeo = true;
+  const includeSpecs = true;
+
+  // Docs/Variants may remain optional because they can be expensive.
+  const includeDocs = fullExtract ? true : normalizeBool(clientOptions.includeDocs);
+  const includeVariants = fullExtract ? true : normalizeBool(clientOptions.includeVariants);
+
+  const effectiveOptions = {
+    includeSeo,
+    includeSpecs,
+    includeDocs,
+    includeVariants,
+  };
+
+  return { effectiveOptions, fullExtract, export_type };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,8 +85,6 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as any;
     const url = (body?.url || "").toString();
-    const clientOptions = body?.options || {};
-    const fullExtract = !!body?.fullExtract;
     const export_type = body?.export_type || "JSON";
     const correlation_id =
       body?.correlationId || `corr_${Date.now().toString()}`;
@@ -126,17 +154,24 @@ export async function POST(req: NextRequest) {
       if (profileData) {
         tenant_id = profileData.tenant_id ?? null;
         role = profileData.role ?? "user";
-        console.info("[ingest] profile found", { correlation_id, profileId: profileData.id });
+        console.info("[ingest] profile found", {
+          correlation_id,
+          profileId: profileData.id,
+        });
       } else {
         // No matching profile row
-        console.warn("[ingest] profile not found for user", { correlation_id, userId });
+        console.warn("[ingest] profile not found for user", {
+          correlation_id,
+          userId,
+        });
       }
     } catch (err: any) {
       // Detect PostgREST schema/cache error (missing table) or column issues
       const isPgrstMissingTable =
         err &&
         (err.code === "PGRST205" ||
-          (typeof err.message === "string" && err.message.includes("Could not find the table")));
+          (typeof err.message === "string" &&
+            err.message.includes("Could not find the table")));
 
       const isColumnMissing =
         err &&
@@ -146,13 +181,22 @@ export async function POST(req: NextRequest) {
       console.error("[ingest] profile lookup failed", { correlation_id, err });
 
       if (isPgrstMissingTable || isColumnMissing) {
-        const allowFallback = String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() === "true";
+        const allowFallback =
+          String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() ===
+          "true";
 
         if (!allowFallback) {
           // Do not attempt fallback — return clear error so ops can run migrations
-          console.warn("[ingest] profiles table/column missing and fallback disabled. Aborting.");
+          console.warn(
+            "[ingest] profiles table/column missing and fallback disabled. Aborting."
+          );
           return NextResponse.json(
-            { error: "profile_lookup_failed", detail: isPgrstMissingTable ? "profiles table missing in DB (PGRST205)" : "profiles table missing expected column" },
+            {
+              error: "profile_lookup_failed",
+              detail: isPgrstMissingTable
+                ? "profiles table missing in DB (PGRST205)"
+                : "profiles table missing expected column",
+            },
             { status: 500 }
           );
         }
@@ -169,23 +213,23 @@ export async function POST(req: NextRequest) {
         profileData = tempProfile;
         tenant_id = null;
         role = tempProfile.role;
-        console.warn("[ingest] using temporary fallback profile due to missing table/column", { correlation_id, tempProfileId: tempProfile.id });
+        console.warn(
+          "[ingest] using temporary fallback profile due to missing table/column",
+          { correlation_id, tempProfileId: tempProfile.id }
+        );
       } else {
         // Other DB error — surface generic profile lookup failure
-        return NextResponse.json(
-          { error: "profile_lookup_failed" },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
       }
     }
 
     // If profileData still null (no row found and no fallback), return error
     if (!profileData) {
-      console.warn("[ingest] profile not found and no fallback available", { correlation_id, userId });
-      return NextResponse.json(
-        { error: "profile_lookup_failed" },
-        { status: 500 }
-      );
+      console.warn("[ingest] profile not found and no fallback available", {
+        correlation_id,
+        userId,
+      });
+      return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
     }
 
     // Quota check (if applicable)
@@ -203,27 +247,12 @@ export async function POST(req: NextRequest) {
           : 1000;
 
         if (counters.ingest_calls >= monthlyLimit) {
-          return NextResponse.json(
-            { error: "quota_exceeded" },
-            { status: 402 }
-          );
+          return NextResponse.json({ error: "quota_exceeded" }, { status: 402 });
         }
       }
     }
 
-    const effectiveOptions = fullExtract
-      ? {
-          includeSeo: true,
-          includeSpecs: true,
-          includeDocs: true,
-          includeVariants: true,
-        }
-      : {
-          includeSeo: !!clientOptions.includeSeo,
-          includeSpecs: !!clientOptions.includeSpecs,
-          includeDocs: !!clientOptions.includeDocs,
-          includeVariants: !!clientOptions.includeVariants,
-        };
+    const { effectiveOptions, fullExtract } = buildEffectiveOptions(body);
 
     const flags = {
       full_extract: fullExtract,
@@ -261,10 +290,7 @@ export async function POST(req: NextRequest) {
 
     if (insertError || !created) {
       console.error("failed to create ingestion record", insertError);
-      return NextResponse.json(
-        { error: "db_insert_failed" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
     }
 
     const ingestionId = created.id;
@@ -335,11 +361,7 @@ export async function POST(req: NextRequest) {
       };
 
       if (!res.ok) {
-        console.warn(
-          "ingest engine responded non-OK",
-          res.status,
-          text || "<empty>"
-        );
+        console.warn("ingest engine responded non-OK", res.status, text || "<empty>");
       } else {
         // mark as processing if engine accepted the job
         const { error: statusErr } = await supabase
@@ -352,10 +374,7 @@ export async function POST(req: NextRequest) {
           .eq("id", ingestionId);
 
         if (statusErr) {
-          console.warn(
-            "failed to update status to processing",
-            statusErr.message || statusErr
-          );
+          console.warn("failed to update status to processing", statusErr.message || statusErr);
         }
       }
     } catch (err) {
@@ -392,15 +411,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { ingestionId, jobId, status: "accepted" },
-      { status: 202 }
-    );
+    return NextResponse.json({ ingestionId, jobId, status: "accepted" }, { status: 202 });
   } catch (err: any) {
     console.error("POST /api/v1/ingest error:", err);
-    return NextResponse.json(
-      { error: err?.message || "internal_error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
   }
 }
