@@ -1,32 +1,15 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
-/**
- * Strict SEO runner.
- *
- * Rules:
- * - Requires product_ingestions.normalized_payload (no artifact fallback).
- * - Requires OpenAI strict schema output (callSeoModel throws otherwise).
- * - Persists only after strict validation passes.
- *
- * Canonical return keys (Describe-style):
- * - descriptionHtml
- * - sections
- * - seo
- * - features
- * - data_gaps
- */
 export async function runSeoForIngestion(ingestionId: string): Promise<{
   ingestionId: string;
-
-  // canonical
   descriptionHtml: string;
   sections: Record<string, any>;
   seo: any;
   features: string[];
   data_gaps: string[];
 
-  // legacy aliases for DB / old clients
+  // legacy aliases
   seo_payload: any;
   description_html: string;
 }> {
@@ -42,10 +25,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   if (!ingestion) throw new Error("ingestion_not_found");
 
   const normalized = (ingestion as any).normalized_payload;
-  if (!normalized) {
-    // Strict requirement: no fallback
-    throw new Error("missing_required_ingestion_payload");
-  }
+  if (!normalized) throw new Error("missing_required_ingestion_payload");
 
   const startedAt = new Date().toISOString();
 
@@ -58,7 +38,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   const finishedAt = new Date().toISOString();
 
-  // Persist: DB uses snake_case columns; keep them stable
   const diagnostics = (ingestion as any).diagnostics || {};
   const updatedDiagnostics = {
     ...diagnostics,
@@ -67,9 +46,8 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       status: "completed",
       started_at: startedAt,
       last_run_at: finishedAt,
-      // keep a small snapshot for debugging (non-sensitive)
-      model: seoResult?._meta?.model ?? null,
       instruction_source: seoResult?._meta?.instructionsSource ?? null,
+      model: seoResult?._meta?.model ?? null,
       data_gaps: seoResult.data_gaps ?? [],
     },
   };
