@@ -52,19 +52,20 @@ function extractTextFromResponses(res: any): string {
 }
 
 /**
- * callSeoModelStrict
+ * callSeoModel (STRICT, Describe-style)
  *
- * Returns Describe-style canonical output:
- * - descriptionHtml (full assembled HTML)
- * - sections (structured HTML fragments)
- * - seo (h1, title/pageTitle, metaDescription, shortDescription)
- * - features (string[])
- * - data_gaps (string[])
+ * Returns:
+ * - descriptionHtml: full store-ready HTML
+ * - sections: structured HTML fragments
+ * - seo: metadata payload
+ * - features: list
+ * - data_gaps: list of missing facts
  *
- * NO FALLBACK:
- * - custom instructions required
- * - schema strict required
- * - missing fields throws
+ * Strict enforcement:
+ * - Custom instructions REQUIRED (no fallback)
+ * - JSON schema strict REQUIRED
+ * - sections.overview MUST equal descriptionHtml exactly
+ * - No empty section strings
  */
 export async function callSeoModel(
   normalizedPayload: any,
@@ -90,10 +91,6 @@ export async function callSeoModel(
     "seo_missing_custom_instructions: custom_gpt_instructions are required"
   );
 
-  /**
-   * System prompt: bind the model to your instructions + strict output rules.
-   * We explicitly forbid filler/dummy output.
-   */
   const system = `
 You are AvidiaSEO.
 
@@ -101,9 +98,14 @@ You MUST follow the provided CUSTOM GPT INSTRUCTIONS exactly (binding).
 You MUST return ONLY valid JSON that matches the provided JSON Schema (strict).
 No markdown. No commentary. No placeholders. No dummy/demo text. No hard-coded content.
 
+CRITICAL OUTPUT RULE:
+- descriptionHtml MUST be the FULL store-ready HTML (the product page description to display in the store).
+- sections.overview MUST equal descriptionHtml exactly (same string).
+- Other sections.* must be meaningful non-empty HTML fragments (not placeholders).
+
 If required factual inputs are missing, you must:
 - omit unsupported claims
-- and list the missing items in data_gaps (string array)
+- and list missing items in data_gaps (string array)
 But you must STILL output all required keys and valid HTML in each section (grounded and compliant).
 `.trim();
 
@@ -163,7 +165,7 @@ ${JSON.stringify(
                 "faqs",
               ],
               properties: {
-                overview: { type: "string" }, // should contain full page HTML (same as Describe "overview tab" behavior)
+                overview: { type: "string" },
                 hook: { type: "string" },
                 mainDescription: { type: "string" },
                 featuresBenefits: { type: "string" },
@@ -202,7 +204,6 @@ ${JSON.stringify(
     },
   });
 
-  // The SDK returns structured output, but we still extract defensively.
   const textOut = extractTextFromResponses(res);
 
   let json: any = null;
@@ -232,6 +233,12 @@ ${JSON.stringify(
   ]) {
     requireField(isNonEmptyString(sections?.[k]), `seo_invalid_model_output: sections.${k} empty`);
   }
+
+  // Enforce overview === full descriptionHtml
+  requireField(
+    String(sections.overview).trim() === String(json.descriptionHtml).trim(),
+    "seo_invalid_model_output: sections.overview must equal descriptionHtml"
+  );
 
   const seo = json?.seo || {};
   requireField(isNonEmptyString(seo?.h1), "seo_invalid_model_output: seo.h1 empty");
