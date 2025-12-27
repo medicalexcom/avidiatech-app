@@ -172,6 +172,7 @@ ${JSON.stringify(
                 "specifications",
                 "internalLinks",
                 "whyChoose",
+                "manuals",
                 "faqs",
               ],
               properties: {
@@ -183,8 +184,8 @@ ${JSON.stringify(
                 internalLinks: { type: "string" },
                 whyChoose: { type: "string" },
 
-                // OPTIONAL
-                manuals: { type: "string" },
+                // manuals required but nullable
+                manuals: { type: ["string", "null"] },
 
                 faqs: { type: "string" },
               },
