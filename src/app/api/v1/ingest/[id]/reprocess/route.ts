@@ -1,6 +1,13 @@
 // POST /api/v1/ingest/:id/reprocess
 // Allows running selected modules on an existing job using saved raw_payload (no re-scrape)
 // This endpoint updates job.flags and options and asks the ingestion engine to run modules
+//
+// Auth:
+// - Primary: Clerk user session (UI)
+// - Secondary: pipeline secret (service-to-service), header: x-pipeline-secret
+//
+// Policy:
+// - If includeSeo=true then includeSpecs MUST be true (strict downstream compliance)
 
 import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
@@ -11,16 +18,12 @@ const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL =
   process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const PIPELINE_INTERNAL_SECRET = process.env.PIPELINE_INTERNAL_SECRET || "";
 
 function normalizeBool(v: any): boolean {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
-/**
- * HARD OPTION INVARIANT:
- * - If SEO is requested, specs MUST be requested.
- * This prevents downstream SEO/Describe placeholder failures and url-derived naming.
- */
 function enforceOptionsInvariants(opts: any) {
   const o = { ...(opts || {}) };
 
@@ -29,16 +32,29 @@ function enforceOptionsInvariants(opts: any) {
   o.includeDocs = normalizeBool(o.includeDocs);
   o.includeVariants = normalizeBool(o.includeVariants);
 
+  // HARD RULE: SEO requires specs
   if (o.includeSeo) o.includeSpecs = true;
 
   return o;
 }
 
+function hasPipelineAuth(req: NextRequest): boolean {
+  const secret = req.headers.get("x-pipeline-secret") || "";
+  if (!PIPELINE_INTERNAL_SECRET) return false;
+  return secret === PIPELINE_INTERNAL_SECRET;
+}
+
 export async function POST(req: NextRequest, context: { params?: any }) {
   try {
-    // Authenticate using safeGetAuth inside handler scope
+    const pipelineAuthed = hasPipelineAuth(req);
+
+    // Clerk auth (UI) if pipeline is not used
     const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-    if (!userId) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    const clerkAuthed = !!userId;
+
+    if (!pipelineAuthed && !clerkAuthed) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
 
     const id = context?.params?.id;
     if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
@@ -105,13 +121,15 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       full_extract: false, // reprocessing specific modules disables the job-level full_extract flag
     };
 
+    const nowIso = new Date().toISOString();
+
     // Update DB with new flags/options so audit/billing reflects reprocessing request
     await supabase
       .from("product_ingestions")
       .update({
         flags: newFlags,
         options: { ...((job as any).options || {}), ...runNowFlags },
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq("id", id);
 
@@ -133,11 +151,33 @@ export async function POST(req: NextRequest, context: { params?: any }) {
       payload.url = (job as any).source_url;
     }
 
-    // The engine endpoint: try to POST to INGEST_ENGINE_URL + '/reprocess' if available.
-    // If INGEST_ENGINE_URL already ends with /ingest, we'll append /reprocess to it (ingest/reprocess)
+    // Engine endpoint: append /reprocess
     const reprocessUrl = INGEST_ENGINE_URL.replace(/\/$/, "") + "/reprocess";
 
     const signature = signPayload(JSON.stringify(payload), INGEST_SECRET);
+
+    // Optional: write a small diagnostic marker (no secrets)
+    try {
+      const existingDiagnostics = (job as any).diagnostics || {};
+      await supabase
+        .from("product_ingestions")
+        .update({
+          diagnostics: {
+            ...existingDiagnostics,
+            reprocess_request: {
+              requested_at: nowIso,
+              requested_by: pipelineAuthed ? "pipeline" : "user",
+              user_id: pipelineAuthed ? null : userId,
+              options: runNowFlags,
+            },
+          },
+          updated_at: nowIso,
+        })
+        .eq("id", id);
+    } catch (e) {
+      // best-effort; do not fail the request
+      console.warn("[reprocess] failed to persist reprocess_request diagnostics", e);
+    }
 
     try {
       const res = await fetch(reprocessUrl, {
