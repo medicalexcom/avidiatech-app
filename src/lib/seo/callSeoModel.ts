@@ -65,7 +65,12 @@ function extractTextFromResponses(res: any): string {
  * - Custom instructions REQUIRED (no fallback)
  * - JSON schema strict REQUIRED
  * - sections.overview MUST equal descriptionHtml exactly
- * - No empty section strings
+ * - No empty section strings (except optional sections)
+ *
+ * Manuals policy:
+ * - manuals are OPTIONAL
+ * - if evidence exists, they should be included (non-empty HTML)
+ * - if no evidence, manuals may be omitted or empty without failing the run
  */
 export async function callSeoModel(
   normalizedPayload: any,
@@ -101,12 +106,17 @@ No markdown. No commentary. No placeholders. No dummy/demo text. No hard-coded c
 CRITICAL OUTPUT RULE:
 - descriptionHtml MUST be the FULL store-ready HTML (the product page description to display in the store).
 - sections.overview MUST equal descriptionHtml exactly (same string).
-- Other sections.* must be meaningful non-empty HTML fragments (not placeholders).
+- Other required sections.* must be meaningful non-empty HTML fragments (not placeholders).
+
+MANUALS POLICY:
+- sections.manuals is OPTIONAL.
+- Only include manuals content if there is evidence in the input payload (e.g. manual URLs, PDF/manual text).
+- If there is no evidence, you may omit sections.manuals entirely (preferred) OR set it to an empty string.
 
 If required factual inputs are missing, you must:
 - omit unsupported claims
 - and list missing items in data_gaps (string array)
-But you must STILL output all required keys and valid HTML in each section (grounded and compliant).
+But you must STILL output all required keys and valid HTML in each required section (grounded and compliant).
 `.trim();
 
   const user = `
@@ -153,6 +163,7 @@ ${JSON.stringify(
             sections: {
               type: "object",
               additionalProperties: false,
+              // manuals is OPTIONAL per policy; do not require it
               required: [
                 "overview",
                 "hook",
@@ -171,7 +182,10 @@ ${JSON.stringify(
                 specifications: { type: "string" },
                 internalLinks: { type: "string" },
                 whyChoose: { type: "string" },
+
+                // OPTIONAL
                 manuals: { type: "string" },
+
                 faqs: { type: "string" },
               },
             },
@@ -216,9 +230,14 @@ ${JSON.stringify(
   }
 
   // Additional hard checks (beyond schema) to prevent empty/dummy sections
-  requireField(isNonEmptyString(json?.descriptionHtml), "seo_invalid_model_output: descriptionHtml empty");
+  requireField(
+    isNonEmptyString(json?.descriptionHtml),
+    "seo_invalid_model_output: descriptionHtml empty"
+  );
 
   const sections = json?.sections || {};
+
+  // REQUIRED sections must be non-empty
   for (const k of [
     "overview",
     "hook",
@@ -227,10 +246,18 @@ ${JSON.stringify(
     "specifications",
     "internalLinks",
     "whyChoose",
-    "manuals",
     "faqs",
   ]) {
     requireField(isNonEmptyString(sections?.[k]), `seo_invalid_model_output: sections.${k} empty`);
+  }
+
+  // OPTIONAL: manuals can be omitted or empty.
+  // If present, it should be non-empty.
+  if (Object.prototype.hasOwnProperty.call(sections, "manuals")) {
+    requireField(
+      isNonEmptyString(sections?.manuals),
+      "seo_invalid_model_output: sections.manuals empty"
+    );
   }
 
   // Enforce overview === full descriptionHtml
@@ -242,8 +269,14 @@ ${JSON.stringify(
   const seo = json?.seo || {};
   requireField(isNonEmptyString(seo?.h1), "seo_invalid_model_output: seo.h1 empty");
   requireField(isNonEmptyString(seo?.title), "seo_invalid_model_output: seo.title empty");
-  requireField(isNonEmptyString(seo?.metaDescription), "seo_invalid_model_output: seo.metaDescription empty");
-  requireField(isNonEmptyString(seo?.shortDescription), "seo_invalid_model_output: seo.shortDescription empty");
+  requireField(
+    isNonEmptyString(seo?.metaDescription),
+    "seo_invalid_model_output: seo.metaDescription empty"
+  );
+  requireField(
+    isNonEmptyString(seo?.shortDescription),
+    "seo_invalid_model_output: seo.shortDescription empty"
+  );
 
   requireField(Array.isArray(json?.features), "seo_invalid_model_output: features must be array");
   requireField(Array.isArray(json?.data_gaps), "seo_invalid_model_output: data_gaps must be array");
