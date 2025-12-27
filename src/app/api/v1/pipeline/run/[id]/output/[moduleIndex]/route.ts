@@ -4,113 +4,160 @@ import { createClient } from "@supabase/supabase-js";
 import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
 
 /**
- * Pipeline output fetch endpoint (user + internal)
+ * GET /api/v1/pipeline/run/:id/output/:moduleIndex
  *
- * - Internal calls: x-pipeline-secret === PIPELINE_INTERNAL_SECRET
- * - User calls: requires Clerk auth AND org access to the pipeline run (run.org_id)
+ * Internal calls: x-pipeline-secret === PIPELINE_INTERNAL_SECRET
+ * User calls: Clerk auth + org access (pipeline_runs.org_id must match).
  *
- * Returns:
- * {
- *   pipelineRunId,
- *   module: { index, name, status },
- *   output_ref,
- *   output: any
- * }
+ * Always returns JSON (never throws a raw 500 page).
  */
-
 function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string; moduleIndex: string }> }) {
-  const req = _req as Request;
+export async function GET(req: Request, context: any) {
+  try {
+    const providedSecret = String(req.headers.get("x-pipeline-secret") || "");
+    const expectedSecret = String(process.env.PIPELINE_INTERNAL_SECRET || "");
+    const isInternalCall = Boolean(expectedSecret && providedSecret && providedSecret === expectedSecret);
 
-  const providedSecret = (req.headers.get("x-pipeline-secret") || "").toString();
-  const expectedSecret = process.env.PIPELINE_INTERNAL_SECRET || "";
-  const isInternalCall = Boolean(expectedSecret && providedSecret && providedSecret === expectedSecret);
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return NextResponse.json(
+        { ok: false, error: "supabase_not_configured", detail: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" },
+        { status: 503 }
+      );
+    }
 
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return NextResponse.json(
-      { error: "supabase_not_configured", message: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" },
-      { status: 503 }
-    );
-  }
+    // Next params can be promise or object depending on runtime/build
+    const params = context?.params && typeof context.params.then === "function" ? await context.params : context?.params;
+    const pipelineRunId = params?.id;
+    const moduleIndexRaw = params?.moduleIndex;
 
-  const { id, moduleIndex } = await ctx.params;
-  const idx = Number(moduleIndex);
-  if (!Number.isInteger(idx) || idx < 0 || idx > 1000) {
-    return NextResponse.json({ error: "invalid_module_index" }, { status: 400 });
-  }
+    if (!pipelineRunId) {
+      return NextResponse.json({ ok: false, error: "pipelineRunId required" }, { status: 400 });
+    }
 
-  // Access control
-  if (!isInternalCall) {
-    const { userId } = (await auth()) as any;
-    if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const idx = Number(moduleIndexRaw);
+    if (!Number.isInteger(idx) || idx < 0 || idx > 1000) {
+      return NextResponse.json({ ok: false, error: "invalid_module_index" }, { status: 400 });
+    }
 
-    const orgId = await getOrgFromRequest(req);
-    if (!orgId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Access control
+    if (!isInternalCall) {
+      const { userId } = (await auth()) as any;
+      if (!userId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
-    const { data: runRow, error: runErr } = await supabase
-      .from("pipeline_runs")
-      .select("id, org_id")
-      .eq("id", id)
+      const orgId = await getOrgFromRequest(req).catch((e: any) => null);
+      if (!orgId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+
+      const { data: runRow, error: runErr } = await supabase
+        .from("pipeline_runs")
+        .select("id, org_id")
+        .eq("id", pipelineRunId)
+        .maybeSingle();
+
+      if (runErr) {
+        return NextResponse.json({ ok: false, error: "run_query_failed", detail: runErr.message }, { status: 500 });
+      }
+      if (!runRow || runRow.org_id !== orgId) {
+        return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+      }
+    } else {
+      // internal call: just ensure run exists
+      const { data: runCheck, error: runErr } = await supabase
+        .from("pipeline_runs")
+        .select("id")
+        .eq("id", pipelineRunId)
+        .maybeSingle();
+      if (runErr) {
+        return NextResponse.json({ ok: false, error: "run_query_failed", detail: runErr.message }, { status: 500 });
+      }
+      if (!runCheck) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
+    }
+
+    // Find module run row
+    const { data: mod, error: modErr } = await supabase
+      .from("module_runs")
+      .select("id, module_index, module_name, status, output_ref")
+      .eq("pipeline_run_id", pipelineRunId)
+      .eq("module_index", idx)
       .maybeSingle();
 
-    if (runErr) return NextResponse.json({ error: "run_query_failed", detail: runErr.message }, { status: 500 });
-    if (!runRow || runRow.org_id !== orgId) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  } else {
-    const { data: runCheck, error: runErr } = await supabase.from("pipeline_runs").select("id").eq("id", id).maybeSingle();
-    if (runErr) return NextResponse.json({ error: "run_query_failed", detail: runErr.message }, { status: 500 });
-    if (!runCheck) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
+    if (modErr) {
+      return NextResponse.json({ ok: false, error: "module_query_failed", detail: modErr.message }, { status: 500 });
+    }
+    if (!mod) return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
 
-  const { data: mod, error: modErr } = await supabase
-    .from("module_runs")
-    .select("id, module_index, module_name, status, output_ref")
-    .eq("pipeline_run_id", id)
-    .eq("module_index", idx)
-    .maybeSingle();
+    if (!mod.output_ref) {
+      return NextResponse.json(
+        { ok: false, error: "output_not_ready", status: mod.status, message: "Module has no output_ref yet." },
+        { status: 409 }
+      );
+    }
 
-  if (modErr) return NextResponse.json({ error: "module_query_failed", detail: modErr.message }, { status: 500 });
-  if (!mod) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const bucket = process.env.PIPELINE_OUTPUTS_BUCKET || "pipeline-outputs";
 
-  if (!mod.output_ref) {
-    return NextResponse.json({ error: "output_not_ready", status: mod.status, message: "Module has no output_ref yet." }, { status: 409 });
-  }
+    let dl: any;
+    try {
+      dl = await supabase.storage.from(bucket).download(mod.output_ref);
+    } catch (e: any) {
+      return NextResponse.json(
+        { ok: false, error: "output_download_threw", detail: String(e?.message || e), output_ref: mod.output_ref, bucket },
+        { status: 500 }
+      );
+    }
 
-  const bucket = process.env.PIPELINE_OUTPUTS_BUCKET || "pipeline-outputs";
-  const { data, error: dlErr } = await supabase.storage.from(bucket).download(mod.output_ref);
+    const { data, error: dlErr } = dl || {};
+    if (dlErr || !data) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "output_download_failed",
+          detail: String(dlErr?.message ?? dlErr ?? "unknown"),
+          output_ref: mod.output_ref,
+          bucket,
+        },
+        { status: 500 }
+      );
+    }
 
-  if (dlErr || !data) {
-    return NextResponse.json({ error: "output_download_failed", detail: dlErr?.message ?? String(dlErr), output_ref: mod.output_ref }, { status: 500 });
-  }
+    const text = await data.text();
 
-  const text = await data.text();
-  try {
-    const json = JSON.parse(text);
+    // Parse JSON
+    try {
+      const json = JSON.parse(text);
+      return NextResponse.json(
+        {
+          ok: true,
+          pipelineRunId,
+          module: { index: mod.module_index, name: mod.module_name, status: mod.status },
+          output_ref: mod.output_ref,
+          output: json,
+        },
+        { status: 200 }
+      );
+    } catch {
+      return NextResponse.json(
+        {
+          ok: true,
+          pipelineRunId,
+          module: { index: mod.module_index, name: mod.module_name, status: mod.status },
+          output_ref: mod.output_ref,
+          error: "output_not_json",
+          raw: text,
+        },
+        { status: 200 }
+      );
+    }
+  } catch (err: any) {
+    // Absolute last-resort catch to avoid browser generic 500 page
     return NextResponse.json(
-      {
-        pipelineRunId: id,
-        module: { index: mod.module_index, name: mod.module_name, status: mod.status },
-        output_ref: mod.output_ref,
-        output: json,
-      },
-      { status: 200 }
-    );
-  } catch {
-    return NextResponse.json(
-      {
-        pipelineRunId: id,
-        module: { index: mod.module_index, name: mod.module_name, status: mod.status },
-        output_ref: mod.output_ref,
-        error: "output_not_json",
-        raw: text,
-      },
-      { status: 200 }
+      { ok: false, error: "internal_error", detail: String(err?.message || err) },
+      { status: 500 }
     );
   }
 }
