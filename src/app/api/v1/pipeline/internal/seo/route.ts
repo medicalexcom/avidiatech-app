@@ -1,22 +1,6 @@
 import { NextResponse } from "next/server";
 import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
 
-/**
- * POST /api/v1/pipeline/internal/seo
- *
- * Internal pipeline endpoint (service-to-service).
- *
- * Canonical output (Describe-style):
- * - ingestionId
- * - seo
- * - descriptionHtml
- * - sections
- * - features
- * - data_gaps
- * - _meta (optional)
- *
- * Also includes legacy aliases for compatibility.
- */
 export async function POST(req: Request) {
   const secret = req.headers.get("x-pipeline-secret") || "";
   const expected = process.env.PIPELINE_INTERNAL_SECRET || "";
@@ -38,16 +22,12 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ingestionId: result.ingestionId,
-
-        // canonical (pipeline consumers should prefer these)
         seo: result.seo,
         descriptionHtml: result.descriptionHtml,
         sections: result.sections ?? null,
         features: result.features ?? [],
         data_gaps: result.data_gaps ?? [],
         _meta: result._meta ?? null,
-
-        // legacy aliases
         seo_payload: result.seo,
         description_html: result.descriptionHtml,
       },
@@ -58,8 +38,11 @@ export async function POST(req: Request) {
 
     if (msg === "ingestion_not_found")
       return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
-    if (msg === "ingestion_not_ready")
-      return NextResponse.json({ error: "ingestion_not_ready" }, { status: 409 });
+
+    // FIX: treat prefixed ingestion_not_ready as 409 as well
+    if (msg === "ingestion_not_ready" || msg.startsWith("ingestion_not_ready:"))
+      return NextResponse.json({ error: "ingestion_not_ready", detail: msg }, { status: 409 });
+
     if (msg.startsWith("ingestion_load_failed:"))
       return NextResponse.json({ error: "ingestion_load_failed", detail: msg }, { status: 500 });
 
