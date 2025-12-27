@@ -1,5 +1,6 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
+import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
 
 function isNonEmptyString(v: any) {
   return typeof v === "string" && v.trim().length > 0;
@@ -41,12 +42,10 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   if (loadErr) throw new Error(`ingestion_load_failed: ${loadErr.message || String(loadErr)}`);
   if (!ingestion) throw new Error("ingestion_not_found");
 
-  const normalized = (ingestion as any).normalized_payload;
+  const normalized = (ingestion as any).normalized_payload as AvidiaStandardNormalizedPayload | any;
   if (!normalized) throw new Error("missing_required_ingestion_payload");
 
-  // HARD INPUT GATES (no hallucination, no placeholders):
-  // - must have a grounded name
-  // - must have specs evidence (since Product Specifications section is required)
+  // HARD INPUT GATES (strict compliance: no hallucination)
   const name = normalized?.name;
   if (!isNonEmptyString(name) || looksUrlDerivedName(String(name))) {
     throw new Error("ingestion_not_ready: normalized_payload.name is missing or url-derived (re-ingest with proper name extraction)");
