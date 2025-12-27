@@ -2,9 +2,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
 
+/**
+ * POST /api/v1/seo
+ *
+ * Canonical (Describe-style) response:
+ * - ingestionId
+ * - seo
+ * - descriptionHtml
+ * - features
+ *
+ * Backwards-compatible aliases:
+ * - seo_payload
+ * - description_html
+ */
 export async function POST(req: NextRequest) {
   try {
     console.log("[api/v1/seo] POST called");
+
     // 1) Auth (Clerk)
     const auth = safeGetAuth(req as any) as { userId?: string | null } | null;
     const userId = auth?.userId ?? null;
@@ -21,21 +35,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "missing_ingestionId" }, { status: 400 });
     }
 
-    // 3-7 moved to shared helper; output is identical shape
+    // 3-7 moved to shared helper
     const result = await runSeoForIngestion(ingestionId);
 
     return NextResponse.json(
       {
         ingestionId: result.ingestionId,
-        seo_payload: result.seo_payload,
-        description_html: result.description_html,
+
+        // canonical
+        seo: result.seo,
+        descriptionHtml: result.descriptionHtml,
         features: result.features,
+
+        // legacy aliases (keep for older callers)
+        seo_payload: result.seo,
+        description_html: result.descriptionHtml,
       },
       { status: 200 }
     );
   } catch (err: any) {
-    // Match prior behavior: if we throw, it was internal_error.
-    // Shared helper throws explicit messages that we map below.
     const msg = err?.message || "internal_error";
 
     if (msg === "ingestion_not_found") {
@@ -48,7 +66,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "ingestion_load_failed" }, { status: 500 });
     }
 
-    // Central GPT failures previously returned `{ error: "seo_model_failed", detail }`
     if (
       msg === "central_gpt_invalid_json" ||
       msg.startsWith("central_gpt_not_configured:") ||
