@@ -64,7 +64,7 @@ function extractTextFromResponses(res: any): string {
  * Strict enforcement:
  * - Custom instructions REQUIRED (no fallback)
  * - JSON schema strict REQUIRED
- * - sections.overview MUST equal descriptionHtml exactly
+ * - sections.overview MUST equal descriptionHtml exactly (enforced via repair)
  * - No empty section strings (except manuals which may be null)
  *
  * Manuals policy (strict-compatible):
@@ -265,11 +265,18 @@ ${JSON.stringify(
     requireField(isNonEmptyString(sections?.[k]), `seo_invalid_model_output: sections.${k} empty`);
   }
 
-  // Enforce overview === full descriptionHtml
-  requireField(
-    String(sections.overview).trim() === String(json.descriptionHtml).trim(),
-    "seo_invalid_model_output: sections.overview must equal descriptionHtml"
-  );
+  // Enforce overview === full descriptionHtml (repair instead of fail for stability)
+  // The model can occasionally produce minor differences; we normalize deterministically.
+  const desc = String(json.descriptionHtml ?? "").trim();
+  const ov0 = String(sections.overview ?? "").trim();
+
+  requireField(isNonEmptyString(desc), "seo_invalid_model_output: descriptionHtml empty");
+  requireField(isNonEmptyString(ov0), "seo_invalid_model_output: sections.overview empty");
+
+  if (ov0 !== desc) {
+    sections.overview = json.descriptionHtml;
+    json.sections = sections;
+  }
 
   const seo = json?.seo || {};
   requireField(isNonEmptyString(seo?.h1), "seo_invalid_model_output: seo.h1 empty");
