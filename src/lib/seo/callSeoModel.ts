@@ -161,7 +161,6 @@ ${JSON.stringify(
                 "specifications",
                 "internalLinks",
                 "whyChoose",
-                "manuals",
                 "faqs",
               ],
               properties: {
