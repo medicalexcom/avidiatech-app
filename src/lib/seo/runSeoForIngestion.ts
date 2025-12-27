@@ -8,6 +8,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   seo: any;
   features: string[];
   data_gaps: string[];
+  _meta?: any;
 
   // legacy aliases
   seo_payload: any;
@@ -48,7 +49,11 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       last_run_at: finishedAt,
       instruction_source: seoResult?._meta?.instructionsSource ?? null,
       model: seoResult?._meta?.model ?? null,
+
+      // Persist these so we always have the full canonical output available for debugging/UI,
+      // even if the product_ingestions table doesn't have dedicated columns.
       data_gaps: seoResult.data_gaps ?? [],
+      sections: seoResult.sections ?? null,
     },
   };
 
@@ -79,6 +84,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     seo,
     features,
     data_gaps: seoResult.data_gaps,
+    _meta: seoResult._meta,
 
     // legacy aliases
     seo_payload: seo,
