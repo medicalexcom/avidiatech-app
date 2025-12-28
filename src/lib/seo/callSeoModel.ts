@@ -1,7 +1,5 @@
 // src/lib/seo/callSeoModel.ts
-// Updated: stricter Responses API schema, robust banned-token detection, improved HTML normalization,
-// and relaxed "overview equals descriptionHtml" check using normalized text + token similarity auto-fix.
-//
+// Adjusted: lower similarity threshold and record auto-fix in _meta.
 // Ready to drop into repository.
 
 import OpenAI from "openai";
@@ -218,7 +216,7 @@ function tokenJaccardSimilarity(a: string, b: string): number {
  * to avoid false positives due to minor formatting differences. If normalized text exactly matches,
  * or token similarity >= SIMILARITY_THRESHOLD, we consider them equal.
  */
-function validateSeoJsonOrThrow(json: any) {
+function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
 
   // required top-level fields
@@ -260,14 +258,11 @@ function validateSeoJsonOrThrow(json: any) {
   const normOverview = htmlToNormalizedText(json.sections.overview);
   const normDesc = htmlToNormalizedText(json.descriptionHtml);
 
-  const SIMILARITY_THRESHOLD = 0.9; // 90% token overlap required to accept as equal
-
   const exactEqual = normOverview === normDesc;
   const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
 
-  // Accept if exact normalized equality OR high token similarity
   requireField(
-    exactEqual || tokenSim >= SIMILARITY_THRESHOLD,
+    exactEqual || tokenSim >= similarityThreshold,
     "central_gpt_seo_error: sections.overview_must_equal_descriptionHtml"
   );
 
@@ -431,6 +426,7 @@ export async function callSeoModel(
   let lockedNameBest: string | null = null;
   let lastViolation: string | null = null;
   let lastRaw: string = "";
+  let autoFixedOverviewFlag = false;
 
   for (let i = 1; i <= maxIterations; i++) {
     const revisionAddendum =
@@ -514,24 +510,26 @@ export async function callSeoModel(
         const normOverview = htmlToNormalizedText(json.sections?.overview ?? "");
         const normDesc = htmlToNormalizedText(json.descriptionHtml ?? "");
 
-        // If normalized exact match, set canonical
-        if (normOverview && normDesc && normOverview === normDesc) {
+        const SIMILARITY_THRESHOLD = 0.75; // lowered threshold to reduce false negatives
+        const exactEqual = normOverview === normDesc;
+        const sim = tokenJaccardSimilarity(normOverview, normDesc);
+
+        if (exactEqual) {
           json.sections.overview = json.descriptionHtml;
+          autoFixedOverviewFlag = true;
+        } else if (sim >= SIMILARITY_THRESHOLD) {
+          console.info(`[seo] overview ~ descriptionHtml (sim=${sim.toFixed(3)}), auto-fixing overview`);
+          json.sections.overview = json.descriptionHtml;
+          autoFixedOverviewFlag = true;
         } else {
-          // Otherwise compute token similarity and auto-fix when very similar
-          const sim = tokenJaccardSimilarity(normOverview, normDesc);
-          // Auto-fix threshold: 90% token overlap
-          if (sim >= 0.9) {
-            console.info("[seo] overview ~= descriptionHtml (sim=", sim.toFixed(3), "), auto-fixing overview");
-            json.sections.overview = json.descriptionHtml;
-          }
+          // don't auto-fix if not similar enough; let validator catch it
         }
       } catch (nfErr) {
         console.warn("normalizeHtmlForCompare failed:", nfErr);
       }
 
       // Enforce required output constraints (placeholders, specs bullets, overview match, desc_audit present)
-      validateSeoJsonOrThrow(json);
+      validateSeoJsonOrThrow(json, 0.75);
 
       // Compatibility: ensure top-level data_gaps matches desc_audit.data_gaps (prefer desc_audit)
       if (!Array.isArray(json.data_gaps)) json.data_gaps = [];
@@ -548,6 +546,7 @@ export async function callSeoModel(
           model: MODEL,
           instructionsSource,
           iterations: i,
+          autoFixedOverview: autoFixedOverviewFlag,
         },
       };
     } catch (e: any) {
