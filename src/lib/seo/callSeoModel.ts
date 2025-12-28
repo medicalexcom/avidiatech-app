@@ -1,4 +1,4 @@
-import { loadCustomGptInstructionsWithInfo } from "@/lib/centralGpt";
+import { loadSeoInstructions } from "@/lib/seo/loadSeoInstructions";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
 
 type SeoResult = {
@@ -16,6 +16,7 @@ type SeoResult = {
   _meta?: {
     model?: string | null;
     instructionsSource?: string | null;
+    instructionsPath?: string | null;
     iterations?: number;
   };
 };
@@ -45,7 +46,6 @@ function looksUrlDerivedName(name: string) {
 }
 
 function countSpecBullets(html: string): number {
-  // simple heuristic: count <li> occurrences inside specs section html
   const matches = html.match(/<li\b/gi);
   return matches ? matches.length : 0;
 }
@@ -71,26 +71,18 @@ function slugify(input: string): string {
 }
 
 function validateOutputOrThrow(out: any) {
-  // Top-level required
-  if (!out || typeof out !== "object") {
-    throw new Error("central_gpt_invalid_json");
-  }
-
-  if (!out.seo || typeof out.seo !== "object") {
-    throw new Error("central_gpt_seo_error: missing seo object");
-  }
+  if (!out || typeof out !== "object") throw new Error("central_gpt_invalid_json");
+  if (!out.seo || typeof out.seo !== "object") throw new Error("central_gpt_seo_error: missing seo object");
 
   requireNonEmptyString(out.seo.h1, "seo.h1");
   requireNonEmptyString(out.seo.title, "seo.title");
   requireNonEmptyString(out.seo.metaDescription, "seo.metaDescription");
   requireNonEmptyString(out.descriptionHtml, "descriptionHtml");
 
-  // H1 must not be url-derived
   if (looksUrlDerivedName(out.seo.h1)) {
     throw new Error("central_gpt_seo_error: invalid_h1_contains_url_or_placeholder");
   }
 
-  // placeholders forbidden anywhere in customer-facing HTML
   const htmlAggregate =
     String(out.descriptionHtml || "") +
     "\n" +
@@ -99,11 +91,8 @@ function validateOutputOrThrow(out: any) {
     JSON.stringify(out.seo || {});
 
   const bad = containsBannedTokens(htmlAggregate);
-  if (bad) {
-    throw new Error(`central_gpt_seo_error: banned_placeholder_token:${bad}`);
-  }
+  if (bad) throw new Error(`central_gpt_seo_error: banned_placeholder_token:${bad}`);
 
-  // specs section required and must include bullets
   if (!out.sections || typeof out.sections !== "object") {
     throw new Error("central_gpt_seo_error: missing sections object");
   }
@@ -112,12 +101,11 @@ function validateOutputOrThrow(out: any) {
   if (typeof specsHtml !== "string" || !specsHtml.trim()) {
     throw new Error("central_gpt_seo_error: missing_required_section:specifications");
   }
-
   if (countSpecBullets(specsHtml) < 1) {
     throw new Error("central_gpt_seo_error: specifications_has_no_bullets");
   }
 
-  // overview must equal full html (your existing contract)
+  // Contract: overview must match descriptionHtml
   if (typeof out.sections.overview === "string" && out.sections.overview.trim()) {
     if (out.sections.overview.trim() !== String(out.descriptionHtml || "").trim()) {
       throw new Error("central_gpt_seo_error: sections.overview_must_equal_descriptionHtml");
@@ -128,11 +116,10 @@ function validateOutputOrThrow(out: any) {
 /**
  * callSeoModel
  *
- * Implements the custom_gpt_instructions contract at the enforcement layer:
- * - No placeholder tokens
- * - No url-derived names
- * - Product Specifications section required and must have real bullets
- * - 1 draft + up to 2 auto-revise passes (max 3 iterations)
+ * Enforces key parts of tools/render-engine/prompts/custom_gpt_instructions.md:
+ * - no placeholders, no url-derived names
+ * - Product Specifications required and non-empty (derived from input specs only)
+ * - 1 draft + up to 2 auto-revise passes (max 3 total)
  */
 export async function callSeoModel(
   normalized: AvidiaStandardNormalizedPayload,
@@ -140,31 +127,23 @@ export async function callSeoModel(
   sourceUrl: string | null,
   tenantId: string | null
 ): Promise<SeoResult> {
-  // Minimal config check
   const apiKey =
     process.env.OPENAI_API_KEY ||
     process.env.OPENAI_KEY ||
     process.env.CENTRAL_GPT_API_KEY ||
     "";
 
-  if (!apiKey) {
-    throw new Error("central_gpt_not_configured: missing OPENAI_API_KEY");
-  }
+  if (!apiKey) throw new Error("central_gpt_not_configured: missing OPENAI_API_KEY");
 
-  // Load instruction file (priority)
-  const { instructions, source } = await loadCustomGptInstructionsWithInfo();
+  const { instructions, source: instructionsSource, resolvedPath } = await loadSeoInstructions();
 
-  // Build factual packet (strict grounding)
   const productName = normalized.name;
   const brand = normalized.brand || null;
   const specs = normalized.specs || {};
   const features = normalized.features_raw || [];
-
-  // Additional grounding (optional, capped already in normalization)
   const pdfText = normalized.pdf_text || null;
   const descriptionRaw = normalized.description_raw || null;
 
-  // This is what the GPT sees as the "truth"
   const factsPacket = {
     format: normalized.format,
     name: productName,
@@ -181,11 +160,8 @@ export async function callSeoModel(
     correlation_id: correlationId || null,
   };
 
-  // Model + endpoint
   const model = process.env.SEO_MODEL || process.env.OPENAI_MODEL || "gpt-4.1";
 
-  // ---- prompt wrapper ----
-  // We keep your instruction doc as the primary rules, but we add hard constraints to avoid regressions.
   const hardConstraints = `
 HARD CONSTRAINTS (must never violate):
 - Never use the source URL (or any URL fragment) in the Product Name (H1), meta title, or body.
@@ -194,9 +170,8 @@ HARD CONSTRAINTS (must never violate):
 - Do NOT invent specs. Use only the specs provided in the input packet.
 - The Product Name (H1) must be returned in seo.h1 and must NOT appear as an <h1> inside descriptionHtml.
 - sections.overview must equal descriptionHtml exactly.
-`;
+`.trim();
 
-  // We use a strict JSON-only response to keep current pipeline stable.
   const schemaHint = `
 Return ONLY valid JSON with the following shape:
 {
@@ -216,9 +191,8 @@ Return ONLY valid JSON with the following shape:
   "features": string[],
   "data_gaps": string[]
 }
-`;
+`.trim();
 
-  // ---- iterative draft -> audit -> revise loop ----
   const maxIterations = 3;
   let lockedH1: string | null = null;
   let lastError: string | null = null;
@@ -233,14 +207,14 @@ REVISION MODE:
 - Fix ONLY the violations listed below.
 - Do not introduce new claims or new specs.
 Violations to fix: ${JSON.stringify(lastError)}
-`;
+`.trim();
 
     const userPrompt = `
 ${hardConstraints}
 
 ${schemaHint}
 
-PRIMARY INSTRUCTIONS:
+PRIMARY INSTRUCTIONS (authoritative):
 ${instructions}
 
 INPUT FACTS PACKET (ground truth; do not output this as-is):
@@ -249,7 +223,6 @@ ${JSON.stringify(factsPacket, null, 2)}
 ${revisionContext}
 `.trim();
 
-    // call OpenAI chat completions
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -262,8 +235,7 @@ ${revisionContext}
         messages: [
           {
             role: "system",
-            content:
-              "You are a strict JSON generator for product SEO content. Output must be valid JSON only.",
+            content: "You are a strict JSON generator for product SEO content. Output must be valid JSON only.",
           },
           { role: "user", content: userPrompt },
         ],
@@ -277,49 +249,41 @@ ${revisionContext}
 
     let parsed: any = null;
     try {
-      const jsonText = (() => {
-        // tolerate accidental markdown fences
-        const t = rawText.trim();
-        const fenceMatch = t.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-        return fenceMatch ? fenceMatch[1].trim() : t;
-      })();
-
+      const t = rawText.trim();
+      const fenceMatch = t.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      const jsonText = fenceMatch ? fenceMatch[1].trim() : t;
       parsed = JSON.parse(jsonText);
-    } catch (e) {
+    } catch {
       throw new Error("central_gpt_invalid_json");
     }
 
     try {
-      // Lock H1 on first successful parse
+      // Lock H1 on first pass
       if (!lockedH1) {
         const h1 = parsed?.seo?.h1;
         if (typeof h1 === "string" && h1.trim() && !looksUrlDerivedName(h1)) {
           lockedH1 = h1.trim();
         }
       } else {
-        // enforce lock (also causes revision if model changed it)
         if (parsed?.seo?.h1?.trim() !== lockedH1) {
           throw new Error("central_gpt_seo_error: h1_changed_in_revision");
         }
       }
 
-      // Ensure url field is present and reasonable; if missing, compute from H1 (safe)
+      // Ensure url exists
       if (!parsed?.seo?.url || typeof parsed.seo.url !== "string" || !parsed.seo.url.trim()) {
         parsed.seo.url = `/${slugify(lockedH1 || parsed.seo.h1)}/`;
       } else {
-        // normalize url formatting
         const u = String(parsed.seo.url).trim();
         parsed.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
-      // Clamp lengths (hard caps; still prefer model compliance)
+      // Clamp (hard caps)
       parsed.seo.title = clampString(parsed.seo.title, 70);
       parsed.seo.metaDescription = clampString(parsed.seo.metaDescription, 160);
 
-      // Validate strict requirements
       validateOutputOrThrow(parsed);
 
-      // return in your canonical structure
       return {
         seo: parsed.seo,
         descriptionHtml: parsed.descriptionHtml,
@@ -328,19 +292,18 @@ ${revisionContext}
         data_gaps: Array.isArray(parsed.data_gaps) ? parsed.data_gaps : [],
         _meta: {
           model,
-          instructionsSource: source,
+          instructionsSource,
+          instructionsPath: resolvedPath,
           iterations: iteration,
         },
       };
     } catch (validationErr: any) {
       lastError = validationErr?.message || String(validationErr);
 
-      // If we're at final iteration, throw
       if (iteration === maxIterations) {
         throw new Error(lastError.startsWith("central_gpt_") ? lastError : `central_gpt_seo_error: ${lastError}`);
       }
 
-      // Otherwise retry revision pass
       continue;
     }
   }
