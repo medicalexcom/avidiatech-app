@@ -95,13 +95,10 @@ function shortId(id?: string | null, keep = 6) {
 
 function statusPillTone(status?: string | null) {
   const s = String(status || "").toLowerCase();
-  if (s === "succeeded" || s === "success")
-    return "bg-emerald-50 text-emerald-800 border-emerald-200";
-  if (s === "failed" || s === "error")
-    return "bg-rose-50 text-rose-800 border-rose-200";
+  if (s === "succeeded" || s === "success") return "bg-emerald-50 text-emerald-800 border-emerald-200";
+  if (s === "failed" || s === "error") return "bg-rose-50 text-rose-800 border-rose-200";
   if (s === "running") return "bg-sky-50 text-sky-800 border-sky-200";
-  if (s === "queued" || s === "pending")
-    return "bg-amber-50 text-amber-800 border-amber-200";
+  if (s === "queued" || s === "pending") return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -113,19 +110,14 @@ export default function AvidiaSeoPage() {
   const urlParam = params?.get("url") || "";
   const pipelineRunIdParam = params?.get("pipelineRunId") || "";
 
-  const [sourceMode, setSourceMode] = useState<SourceMode>(
-    urlParam ? "url" : ingestionIdParam ? "ingestion" : "url"
-  );
+  const [sourceMode, setSourceMode] = useState<SourceMode>(urlParam ? "url" : ingestionIdParam ? "ingestion" : "url");
   const [runMode, setRunMode] = useState<RunMode>(urlParam ? "full" : "seo");
 
   const [urlInput, setUrlInput] = useState<string>(urlParam || "");
-  const [ingestionIdInput, setIngestionIdInput] = useState<string>(
-    ingestionIdParam || ""
-  );
+  const [ingestionIdInput, setIngestionIdInput] = useState<string>(ingestionIdParam || "");
 
   // If a URL equals the current page urlParam and we already have an ingestionId, we can re-run without creating a new ingestion.
-  const [reuseExistingWhenSameUrl, setReuseExistingWhenSameUrl] =
-    useState<boolean>(true);
+  const [reuseExistingWhenSameUrl, setReuseExistingWhenSameUrl] = useState<boolean>(true);
 
   const [job, setJob] = useState<AnyObj | null>(null);
   const [loading, setLoading] = useState(false);
@@ -134,20 +126,15 @@ export default function AvidiaSeoPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
-    "idle"
-  );
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   // Debug / polling state
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
   const [pollingState, setPollingState] = useState<string | null>(null);
 
   // Pipeline state
-  const [pipelineRunId, setPipelineRunId] = useState<string | null>(
-    pipelineRunIdParam || null
-  );
-  const [pipelineSnapshot, setPipelineSnapshot] =
-    useState<PipelineSnapshot | null>(null);
+  const [pipelineRunId, setPipelineRunId] = useState<string | null>(pipelineRunIdParam || null);
+  const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
 
   useEffect(() => {
     if (pipelineRunIdParam) setPipelineRunId(pipelineRunIdParam);
@@ -180,10 +167,7 @@ export default function AvidiaSeoPage() {
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
       const json = await res.json().catch(() => null);
-      if (!res.ok)
-        throw new Error(
-          json?.error?.message || json?.error || `Fetch failed: ${res.status}`
-        );
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Fetch failed: ${res.status}`);
       const row = json?.data ?? json;
       setJob(row);
       return row;
@@ -195,20 +179,11 @@ export default function AvidiaSeoPage() {
   async function fetchPipelineSnapshot(runId: string) {
     const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
     const json = await res.json().catch(() => null);
-    if (!res.ok)
-      throw new Error(
-        json?.error?.message ||
-          json?.error ||
-          `Pipeline fetch failed: ${res.status}`
-      );
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
     return json as PipelineSnapshot;
   }
 
-  async function pollPipeline(
-    runId: string,
-    timeoutMs = 180_000,
-    intervalMs = 2000
-  ) {
+  async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const snap = await fetchPipelineSnapshot(runId);
@@ -226,11 +201,7 @@ export default function AvidiaSeoPage() {
    * - 409 => throws terminal error (stop polling)
    * - 202 => continues polling
    */
-  async function pollForIngestion(
-    jobId: string,
-    timeoutMs = 120_000,
-    intervalMs = 3000
-  ) {
+  async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
     const start = Date.now();
     setPollingState(`polling job ${jobId}`);
     setStatusMessage("Scraping & normalizing");
@@ -288,17 +259,11 @@ export default function AvidiaSeoPage() {
     setRawIngestResponse({ status: res.status, body: json });
 
     if (!res.ok) {
-      throw new Error(
-        json?.error?.message || json?.error || `Ingest failed: ${res.status}`
-      );
+      throw new Error(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
     }
 
     const possibleIngestionId =
-      json?.ingestionId ??
-      json?.id ??
-      json?.data?.id ??
-      json?.data?.ingestionId ??
-      null;
+      json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
 
     if (possibleIngestionId) {
       if (json?.status === "accepted" || res.status === 202) {
@@ -310,8 +275,7 @@ export default function AvidiaSeoPage() {
     }
 
     const jobId = json?.jobId ?? json?.job?.id ?? null;
-    if (!jobId)
-      throw new Error("Ingest did not return an ingestionId or jobId. See debug.");
+    if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug.");
     const pollResult = await pollForIngestion(jobId, 120_000, 3000);
     const newId = pollResult?.ingestionId ?? pollResult?.id ?? null;
     if (!newId) throw new Error("Polling returned no ingestionId.");
@@ -334,12 +298,7 @@ export default function AvidiaSeoPage() {
     });
 
     const json = await res.json().catch(() => null);
-    if (!res.ok)
-      throw new Error(
-        json?.error?.message ||
-          json?.error ||
-          `Pipeline start failed: ${res.status}`
-      );
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
 
     const runId = String(json?.pipelineRunId ?? "");
     if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
@@ -374,14 +333,11 @@ export default function AvidiaSeoPage() {
       };
 
       // Primary attempt: POST to diagnostics endpoint (preferred)
-      const res = await fetch(
-        `/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}/diagnostics`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}/diagnostics`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
       if (res.ok) {
         await fetchIngestionData(ingestionIdToMark);
@@ -389,14 +345,11 @@ export default function AvidiaSeoPage() {
       }
 
       // Fallback: try PATCH-ing the ingestion record (best-effort)
-      const fallback = await fetch(
-        `/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ diagnostics: { ...(job as any)?.diagnostics, ui_rerun: payload } }),
-        }
-      );
+      const fallback = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ diagnostics: { ...(job as any)?.diagnostics, ui_rerun: payload } }),
+      });
 
       if (fallback.ok) {
         await fetchIngestionData(ingestionIdToMark);
@@ -434,7 +387,8 @@ export default function AvidiaSeoPage() {
         idToUse = trimmedIngestion;
       } else {
         if (!trimmedUrl) throw new Error("Please enter a URL");
-
+        // If operator keeps the same url as the one in query params AND we already have an ingestion id,
+        // allow replay without creating a new ingestion (optional toggle).
         const isSameAsInitial = Boolean(urlParam && trimmedUrl && urlParam === trimmedUrl);
         if (reuseExistingWhenSameUrl && isSameAsInitial && ingestionIdParam) {
           idToUse = ingestionIdParam;
@@ -456,12 +410,14 @@ export default function AvidiaSeoPage() {
         await markIngestionRerun(idToUse, runMode);
       }
 
+      // fetch current ingestion row before starting pipeline (improves telemetry)
       await fetchIngestionData(idToUse);
 
       const runId = await startPipelineRun(idToUse, runMode);
 
       const snap = await pollPipeline(runId, runMode === "seo" ? 180_000 : 300_000, 2000);
 
+      // Always refresh ingestion after pipeline stops (success or failure)
       await fetchIngestionData(idToUse);
 
       const finalStatus = snap?.run?.status;
@@ -497,10 +453,7 @@ export default function AvidiaSeoPage() {
   }, [jobData]);
 
   const rawDescriptionHtml =
-    (jobData as any)?.descriptionHtml ??
-    (jobData as any)?.description_html ??
-    (jobData as any)?._debug?.description_html ??
-    null;
+    (jobData as any)?.descriptionHtml ?? (jobData as any)?.description_html ?? (jobData as any)?._debug?.description_html ?? null;
 
   const descriptionHtml =
     typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
@@ -565,10 +518,7 @@ export default function AvidiaSeoPage() {
     return mods.map((m) => {
       const start = safeDateMs(m.started_at ?? null);
       const end = safeDateMs(m.finished_at ?? null);
-      const duration =
-        start != null && end != null
-          ? clamp(end - start, 0, 24 * 60 * 60 * 1000)
-          : null;
+      const duration = start != null && end != null ? clamp(end - start, 0, 24 * 60 * 60 * 1000) : null;
       return { ...m, duration_ms: duration };
     });
   }, [pipelineSnapshot]);
@@ -589,253 +539,320 @@ export default function AvidiaSeoPage() {
 
   const canRun =
     !generating &&
-    ((sourceMode === "url" && urlInput.trim().length > 0) ||
-      (sourceMode === "ingestion" && ingestionIdInput.trim().length > 0));
+    ((sourceMode === "url" && urlInput.trim().length > 0) || (sourceMode === "ingestion" && ingestionIdInput.trim().length > 0));
 
   return (
     <main className="relative min-h-[calc(100vh-64px)]">
-      {/* Background treatment (premium, subtle) */}
+      
+      {/* Background treatment (artsy, module-gradients) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950" />
-        <div className="absolute -top-24 left-1/2 h-72 w-[70rem] -translate-x-1/2 rounded-full bg-sky-200/30 blur-3xl dark:bg-sky-900/20" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(14,165,233,0.22),transparent_45%),radial-gradient(circle_at_80%_18%,rgba(16,185,129,0.18),transparent_48%),radial-gradient(circle_at_52%_82%,rgba(245,158,11,0.14),transparent_52%)]" />
+        <div className="absolute inset-0 opacity-[0.38] dark:opacity-[0.22] bg-[linear-gradient(to_right,rgba(148,163,184,0.18)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.18)_1px,transparent_1px)] bg-[size:36px_36px] [mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_72%)]" />
+        <div className="absolute -top-24 left-1/2 h-72 w-[70rem] -translate-x-1/2 rounded-full bg-sky-200/35 blur-3xl dark:bg-sky-900/20" />
         <div className="absolute top-56 -left-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl dark:bg-emerald-900/15" />
-        <div className="absolute bottom-0 -right-24 h-72 w-72 rounded-full bg-violet-200/25 blur-3xl dark:bg-violet-900/15" />
+        <div className="absolute bottom-0 -right-24 h-72 w-72 rounded-full bg-amber-200/25 blur-3xl dark:bg-amber-900/15" />
       </div>
 
       <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
         {/* Hero + Launcher */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:bg-slate-900/60 dark:text-slate-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              AvidiaSEO
-              <span className="text-slate-400">•</span>
-              <span className="text-slate-500 dark:text-slate-400">Extract → SEO → HTML</span>
-            </div>
-
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-3xl">
-              SEO-ready fields + description HTML, with full run telemetry
-            </h1>
-
-            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-              Run SEO from a URL or replay a stored ingestion. You always keep the diagnostic trail: module statuses,
-              per-module outputs, and the raw ingestion JSON.
-            </p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <div className={cx("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs", statusPillTone(pipelineStatus))}>
-                <span className="font-medium">Pipeline</span>
-                <span className="text-slate-400">•</span>
-                <span>{pipelineStatus || "—"}</span>
-              </div>
-
-              {ingestionIdInput.trim() ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
-                  <span className="font-medium">Ingestion</span>
+        <section className="relative overflow-hidden rounded-3xl">
+          {/* Gradient stroke */}
+          <div className="rounded-3xl bg-gradient-to-r from-sky-500/40 via-emerald-500/30 to-amber-500/35 p-[1px]">
+            <div className="rounded-3xl border border-white/40 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800/70 dark:bg-slate-900/60 md:p-6">
+              {/* Top chip row */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                  <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500" />
+                  AvidiaSEO
                   <span className="text-slate-400">•</span>
-                  <span className="font-mono">{shortId(ingestionIdInput.trim())}</span>
+                  <span className="text-slate-500 dark:text-slate-400">Extract → SEO → HTML</span>
                 </div>
-              ) : null}
 
-              {pipelineRunId ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
-                  <span className="font-medium">Run</span>
-                  <span className="text-slate-400">•</span>
-                  <span className="font-mono">{shortId(pipelineRunId)}</span>
-                </div>
-              ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={cx(
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs shadow-sm backdrop-blur",
+                      statusPillTone(pipelineStatus)
+                    )}
+                  >
+                    <span className="font-medium">Pipeline</span>
+                    <span className="text-slate-400">•</span>
+                    <span>{pipelineStatus || "—"}</span>
+                  </div>
 
-              {rerunInfo ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
-                  <span className="font-medium">Re-run</span>
-                  <span className="text-amber-500">•</span>
-                  <span>{rerunInfo?.rerun_mode || "—"}</span>
-                  {rerunInfo?.rerun_at ? (
-                    <span className="text-amber-700/80 dark:text-amber-200/80">
-                      {new Date(rerunInfo.rerun_at).toLocaleString()}
-                    </span>
+                  {ingestionIdInput.trim() ? (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                      <span className="font-medium">Ingestion</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="font-mono">{shortId(ingestionIdInput.trim())}</span>
+                    </div>
+                  ) : null}
+
+                  {pipelineRunId ? (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                      <span className="font-medium">Run</span>
+                      <span className="text-slate-400">•</span>
+                      <span className="font-mono">{shortId(pipelineRunId)}</span>
+                    </div>
+                  ) : null}
+
+                  {rerunInfo ? (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-900 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200">
+                      <span className="font-medium">Re-run</span>
+                      <span className="text-amber-500">•</span>
+                      <span>{rerunInfo?.rerun_mode || "—"}</span>
+                      {rerunInfo?.rerun_at ? (
+                        <span className="text-amber-700/80 dark:text-amber-200/80">
+                          {new Date(rerunInfo.rerun_at).toLocaleString()}
+                        </span>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
-              ) : null}
+              </div>
 
-              {statusMessage ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
-                  <span className="font-medium">Status</span>
-                  <span className="text-slate-400">•</span>
-                  <span>{statusMessage}</span>
-                </div>
-              ) : null}
+              {/* Headline */}
+              <div className="mt-4 max-w-3xl">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-3xl">
+                  SEO-ready fields + description HTML, with full run telemetry
+                </h1>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                  Run SEO from a URL or replay a stored ingestion. You always keep the diagnostic trail: module statuses,
+                  per-module outputs, and the raw ingestion JSON.
+                </p>
+              </div>
 
-              {pollingState ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
-                  <span className="font-medium">Ingest</span>
-                  <span className="text-slate-400">•</span>
-                  <span>{pollingState}</span>
-                </div>
-              ) : null}
-            </div>
-          </div>
+              {/* Launcher (moved under hero text) */}
+              <div className="mt-5 rounded-2xl bg-gradient-to-r from-sky-500/25 via-emerald-500/20 to-amber-500/20 p-[1px]">
+                <div className="rounded-2xl border border-white/30 bg-white/85 p-4 shadow-sm backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/35">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Run SEO
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Choose input + run mode. No hidden assumptions.
+                      </div>
 
-          {/* Launcher card */}
-          <div className="w-full lg:w-[420px]">
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Run SEO</div>
-                  <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Choose input + run mode. No hidden assumptions.
+                      <div className="mt-3 inline-flex rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
+                        <button
+                          className={cx(
+                            "rounded-lg px-3 py-2 text-left",
+                            sourceMode === "url"
+                              ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                              : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                          )}
+                          onClick={() => setSourceMode("url")}
+                          disabled={generating}
+                        >
+                          From URL
+                        </button>
+                        <button
+                          className={cx(
+                            "rounded-lg px-3 py-2 text-left",
+                            sourceMode === "ingestion"
+                              ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                              : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                          )}
+                          onClick={() => setSourceMode("ingestion")}
+                          disabled={generating}
+                        >
+                          From ingestionId
+                        </button>
+                      </div>
+
+                      {sourceMode === "url" ? (
+                        <div className="mt-3">
+                          <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Source URL</label>
+                          <input
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
+                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                            placeholder="https://example.com/product/..."
+                            disabled={generating}
+                          />
+
+                          {ingestionIdParam && urlParam ? (
+                            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={reuseExistingWhenSameUrl}
+                                onChange={(e) => setReuseExistingWhenSameUrl(e.target.checked)}
+                                disabled={generating}
+                              />
+                              Re-use existing ingestionId when URL matches this page
+                            </label>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-3">
+                          <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Ingestion ID</label>
+                          <input
+                            value={ingestionIdInput}
+                            onChange={(e) => setIngestionIdInput(e.target.value)}
+                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                            placeholder="ing_..."
+                            disabled={generating}
+                          />
+                          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                            Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-full lg:w-[360px]">
+                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Run mode</div>
+                            <div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {runMode === "seo" ? "SEO only" : "Full pipeline"}
+                            </div>
+                          </div>
+
+                          {ingestionIdInput.trim() ? (
+                            <a
+                              className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                              href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                            >
+                              Open Monitor
+                            </a>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              runMode === "seo"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setRunMode("seo")}
+                            disabled={generating}
+                          >
+                            SEO only
+                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → seo</div>
+                          </button>
+
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              runMode === "full"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setRunMode("full")}
+                            disabled={generating}
+                          >
+                            Full pipeline
+                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → … → price</div>
+                          </button>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            className={cx(
+                              "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
+                              canRun
+                                ? "bg-gradient-to-r from-sky-600 via-emerald-600 to-amber-600 hover:from-sky-500 hover:via-emerald-500 hover:to-amber-500"
+                                : "bg-slate-300 dark:bg-slate-700"
+                            )}
+                            onClick={runNow}
+                            disabled={!canRun}
+                          >
+                            {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
+                          </button>
+
+                          {ingestionIdInput.trim() ? (
+                            <button
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+                              onClick={() => fetchIngestionData(ingestionIdInput.trim())}
+                              disabled={generating}
+                              title="Refresh ingestion row"
+                            >
+                              Refresh
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {statusMessage ? (
+                          <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                            <span className="font-medium">Status</span>
+                            <span className="text-slate-400"> • </span>
+                            <span>{statusMessage}</span>
+                          </div>
+                        ) : null}
+
+                        {pollingState ? (
+                          <div className="mt-2 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                            <span className="font-medium">Ingest</span>
+                            <span className="text-slate-400"> • </span>
+                            <span>{pollingState}</span>
+                          </div>
+                        ) : null}
+
+                        {error ? (
+                          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                            {error}
+                          </div>
+                        ) : null}
+
+                        {rawIngestResponse ? (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">Ingest debug</summary>
+                            <pre className="mt-2 max-h-[220px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
+                              {JSON.stringify(rawIngestResponse, null, 2)}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Quick action row */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {ingestionIdInput.trim() ? (
+                  <a
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur hover:bg-white dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-900"
+                    href={`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                  >
+                    Open Extract
+                  </a>
+                ) : null}
 
                 {ingestionIdInput.trim() ? (
                   <a
-                    className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur hover:bg-white dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-900"
+                    href={`/dashboard/describe?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                  >
+                    Open Describe
+                  </a>
+                ) : null}
+
+                {ingestionIdInput.trim() ? (
+                  <a
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur hover:bg-white dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-900"
                     href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
                   >
                     Open Monitor
                   </a>
                 ) : null}
               </div>
-
-              {/* Source selector */}
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    sourceMode === "url"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setSourceMode("url")}
-                  disabled={generating}
-                >
-                  From URL
-                </button>
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    sourceMode === "ingestion"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setSourceMode("ingestion")}
-                  disabled={generating}
-                >
-                  From ingestionId
-                </button>
-              </div>
-
-              {sourceMode === "url" ? (
-                <div className="mt-3">
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Source URL</label>
-                  <input
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    placeholder="https://example.com/product/..."
-                    disabled={generating}
-                  />
-
-                  {ingestionIdParam && urlParam ? (
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={reuseExistingWhenSameUrl}
-                        onChange={(e) => setReuseExistingWhenSameUrl(e.target.checked)}
-                        disabled={generating}
-                      />
-                      Re-use existing ingestionId when URL matches this page
-                    </label>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mt-3">
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Ingestion ID</label>
-                  <input
-                    value={ingestionIdInput}
-                    onChange={(e) => setIngestionIdInput(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    placeholder="ing_..."
-                    disabled={generating}
-                  />
-                  <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
-                  </div>
-                </div>
-              )}
-
-              {/* Run mode selector */}
-              <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    runMode === "seo"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setRunMode("seo")}
-                  disabled={generating}
-                >
-                  SEO only
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → seo</div>
-                </button>
-
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    runMode === "full"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setRunMode("full")}
-                  disabled={generating}
-                >
-                  Full pipeline
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → … → price</div>
-                </button>
-              </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  className={cx(
-                    "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
-                    canRun ? "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white" : "bg-slate-300 dark:bg-slate-700"
-                  )}
-                  onClick={runNow}
-                  disabled={!canRun}
-                >
-                  {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
-                </button>
-
-                {ingestionIdInput.trim() ? (
-                  <button
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-                    onClick={() => fetchIngestionData(ingestionIdInput.trim())}
-                    disabled={generating}
-                    title="Refresh ingestion row"
-                  >
-                    Refresh
-                  </button>
-                ) : null}
-              </div>
-
-              {error ? (
-                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
-                  {error}
-                </div>
-              ) : null}
-
-              {rawIngestResponse ? (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">Ingest debug</summary>
-                  <pre className="mt-2 max-h-[220px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
-                    {JSON.stringify(rawIngestResponse, null, 2)}
-                  </pre>
-                </details>
-              ) : null}
             </div>
           </div>
-        </div>
+
+          {/* Ambient art */}
+          <div className="pointer-events-none absolute -z-10 inset-0">
+            <div className="absolute -top-24 right-6 h-56 w-56 rounded-full bg-sky-300/25 blur-3xl dark:bg-sky-900/20" />
+            <div className="absolute top-10 left-10 h-44 w-44 rounded-full bg-emerald-300/20 blur-3xl dark:bg-emerald-900/15" />
+            <div className="absolute bottom-0 left-1/2 h-64 w-[36rem] -translate-x-1/2 rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-900/15" />
+          </div>
+        </section>
 
         {/* Body */}
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
