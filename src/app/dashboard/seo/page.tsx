@@ -6,13 +6,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 /**
  * /dashboard/seo
  *
+ * Notes:
+ * - This page runs pipeline runs and then refreshes ingestion data.
+ * - Canonical naming for SEO results is now Describe-style:
+ *   - seo
+ *   - descriptionHtml
+ *   - features
+ *
  * IMPORTANT (2025-12-28):
- * - /api/v1/ingest/job/:jobId now returns:
- *   - 202 while waiting for callback
- *   - 409 if callback received but engine error (e.g. invalid normalized payload)
- *   - 200 if callback received and engine ok
- * - This page MUST stop polling on 409 (terminal) and surface the engine error,
- *   otherwise it will keep polling and eventually throw a misleading timeout.
+ * - Do NOT report "completed" if the pipeline run status is "failed".
+ * - Ingestion polling must treat terminal errors as terminal (server returns 409).
  */
 
 type AnyObj = Record<string, any>;
@@ -152,9 +155,9 @@ export default function AvidiaSeoPage() {
 
   /**
    * Polls /api/v1/ingest/job/:jobId until:
-   * - 200 => returns ingestionId
-   * - 409 => throws terminal engine error (STOP polling)
-   * - 202 => continue polling
+   * - 200 => returns payload
+   * - 409 => throws terminal error (stop polling)
+   * - 202 => continues polling
    */
   async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
     const start = Date.now();
@@ -172,7 +175,6 @@ export default function AvidiaSeoPage() {
       }
 
       if (res.status === 409) {
-        // TERMINAL: engine returned error; stop polling and surface it.
         const msg = extractEngineErrorMessage(payload);
         setPollingState(`failed: ${msg}`);
         setStatusMessage(null);
@@ -182,7 +184,6 @@ export default function AvidiaSeoPage() {
         throw err;
       }
 
-      // 202 or other non-terminal statuses
       const elapsed = Math.floor((Date.now() - start) / 1000);
       setPollingState(`waiting... ${elapsed}s`);
       await sleep(intervalMs);
@@ -278,7 +279,6 @@ export default function AvidiaSeoPage() {
     try {
       let idToUse: string | null = null;
       const trimmed = (urlInput || "").trim();
-
       const isSameAsInitial = Boolean(urlParam && trimmed && urlParam === trimmed);
 
       if (ingestionId && modeToRun === "quick") {
@@ -303,15 +303,26 @@ export default function AvidiaSeoPage() {
 
       const runId = await startPipelineRun(idToUse, modeToRun);
 
-      await pollPipeline(runId, modeToRun === "quick" ? 180_000 : 300_000, 2000);
+      const snap = await pollPipeline(runId, modeToRun === "quick" ? 180_000 : 300_000, 2000);
 
+      // Always refresh ingestion after pipeline stops (success or failure)
       await fetchIngestionData(idToUse);
 
-      setStatusMessage(modeToRun === "quick" ? "Quick SEO completed" : "Full pipeline completed");
+      const finalStatus = snap?.run?.status;
+
+      if (finalStatus === "succeeded") {
+        setStatusMessage(modeToRun === "quick" ? "Quick SEO succeeded" : "Full pipeline succeeded");
+      } else if (finalStatus === "failed") {
+        setStatusMessage(null);
+        throw new Error("Pipeline failed (see pipeline telemetry + module output).");
+      } else {
+        // shouldn't happen but avoid lying to the user
+        setStatusMessage(null);
+        throw new Error(`Pipeline ended in unexpected status: ${String(finalStatus)}`);
+      }
     } catch (e: any) {
-      // If we got a terminal ingest engine error, include the payload for debugging
       if (e?.payload) {
-        console.warn("Ingestion terminal error payload:", e.payload);
+        console.warn("Terminal ingest error payload:", e.payload);
       }
       setError(String(e?.message || e));
       setStatusMessage(null);
@@ -411,15 +422,9 @@ export default function AvidiaSeoPage() {
     });
   }, [pipelineSnapshot]);
 
-  // --- UI below unchanged from your existing file ---
   return (
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-4">
-        {/* (the rest of your existing UI remains unchanged) */}
-        {/* To keep this drop-in, we do not reformat the large JSX structure here. */}
-
-        {/* Minimal rendering to avoid truncation: reuse your existing file's JSX below */}
-        {/* NOTE: If you prefer, we can apply this patch as a small diff instead of whole-file. */}
         <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -520,10 +525,7 @@ export default function AvidiaSeoPage() {
             </div>
 
             <div className="mt-3 rounded border p-3">
-              <div
-                className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: highlightedDescription }}
-              />
+              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
             </div>
           </div>
 
@@ -574,7 +576,8 @@ export default function AvidiaSeoPage() {
           <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
             <h2 className="text-sm font-semibold">Pipeline telemetry</h2>
             <div className="mt-2 text-sm text-slate-600">
-              Run: {pipelineSnapshot?.run?.id ?? pipelineRunId ?? "—"} • Status: {pipelineSnapshot?.run?.status ?? "—"}
+              Run: {pipelineSnapshot?.run?.id ?? pipelineRunId ?? "—"} • Status:{" "}
+              {pipelineSnapshot?.run?.status ?? "—"}
             </div>
             <div className="mt-3 overflow-auto">
               <table className="min-w-[640px] w-full text-sm">
@@ -621,11 +624,7 @@ export default function AvidiaSeoPage() {
               </table>
             </div>
 
-            {isPreviewResult && (
-              <div className="mt-2 text-xs text-amber-700">
-                Preview-only mode.
-              </div>
-            )}
+            {isPreviewResult && <div className="mt-2 text-xs text-amber-700">Preview-only mode.</div>}
           </div>
         )}
 
