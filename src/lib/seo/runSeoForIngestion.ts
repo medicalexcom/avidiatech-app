@@ -8,7 +8,12 @@ function isNonEmptyString(v: any) {
 
 function looksUrlDerivedName(name: string) {
   const s = name.toLowerCase();
-  return s.includes("http://") || s.includes("https://") || s.includes("www.") || s.includes("product for ");
+  return (
+    s.includes("http://") ||
+    s.includes("https://") ||
+    s.includes("www.") ||
+    s.includes("product for ")
+  );
 }
 
 function hasNonEmptySpecs(specs: any): boolean {
@@ -18,13 +23,28 @@ function hasNonEmptySpecs(specs: any): boolean {
   return false;
 }
 
+/**
+ * runSeoForIngestion
+ *
+ * Strict pipeline module:
+ * - Loads normalized_payload (must be canonical avidia_standard after callback normalization)
+ * - Hard gates: grounded name + non-empty specs
+ * - Calls callSeoModel which enforces custom_gpt_instructions.md + auto-revision + no placeholders
+ * - Persists BOTH:
+ *    - seo_payload: full model output (including desc_audit) [recommended]
+ *    - description_html, features, seo_generated_at
+ * - Also persists diagnostics.seo metadata (model/instruction source + audit summary)
+ */
 export async function runSeoForIngestion(ingestionId: string): Promise<{
   ingestionId: string;
+
+  // canonical
   descriptionHtml: string;
   sections: Record<string, any>;
   seo: any;
   features: string[];
   data_gaps: string[];
+  desc_audit: any;
   _meta?: any;
 
   // legacy aliases
@@ -48,17 +68,21 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   // HARD INPUT GATES (strict compliance: no hallucination)
   const name = normalized?.name;
   if (!isNonEmptyString(name) || looksUrlDerivedName(String(name))) {
-    throw new Error("ingestion_not_ready: normalized_payload.name is missing or url-derived (re-ingest with proper name extraction)");
+    throw new Error(
+      "ingestion_not_ready: normalized_payload.name is missing or url-derived (re-ingest with proper name extraction)"
+    );
   }
 
   if (!hasNonEmptySpecs(normalized?.specs)) {
-    throw new Error("ingestion_not_ready: normalized_payload.specs empty (re-ingest with includeSpecs=true)");
+    throw new Error(
+      "ingestion_not_ready: normalized_payload.specs empty (re-ingest with includeSpecs=true)"
+    );
   }
 
   const startedAt = new Date().toISOString();
 
   const seoResult = await callSeoModel(
-    normalized,
+    normalized as AvidiaStandardNormalizedPayload,
     (ingestion as any).correlation_id || null,
     (ingestion as any).source_url || null,
     (ingestion as any).tenant_id || null
@@ -66,6 +90,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   const finishedAt = new Date().toISOString();
 
+  // Persist richer diagnostics for observability without schema changes
   const diagnostics = (ingestion as any).diagnostics || {};
   const updatedDiagnostics = {
     ...diagnostics,
@@ -76,15 +101,31 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       last_run_at: finishedAt,
       instruction_source: seoResult?._meta?.instructionsSource ?? null,
       model: seoResult?._meta?.model ?? null,
+      iterations: seoResult?._meta?.iterations ?? null,
+
+      // helpful operational summaries
       data_gaps: seoResult.data_gaps ?? [],
-      sections: seoResult.sections ?? null,
+      audit_score: typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
+      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts) ? seoResult.desc_audit.conflicts : [],
     },
+  };
+
+  /**
+   * Store full seo payload (recommended):
+   * This keeps desc_audit and all structured outputs together.
+   * Existing consumers that expect seo_payload to only be meta may need to be updated,
+   * but the pipeline/internal/seo endpoint already returns canonical fields.
+   */
+  const seo_payload_to_store = {
+    ...seoResult,
+    // ensure _meta is included for debugging
+    _meta: seoResult._meta ?? null,
   };
 
   const { data: updated, error: updErr } = await supabase
     .from("product_ingestions")
     .update({
-      seo_payload: seoResult.seo,
+      seo_payload: seo_payload_to_store,
       description_html: seoResult.descriptionHtml,
       features: seoResult.features,
       seo_generated_at: finishedAt,
@@ -97,21 +138,25 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   if (updErr) throw new Error(`seo_persist_failed: ${updErr.message || String(updErr)}`);
 
-  const seo = updated?.seo_payload ?? seoResult.seo;
-  const descriptionHtml = updated?.description_html ?? seoResult.descriptionHtml;
-  const features = (updated?.features as any) ?? seoResult.features;
+  // Prefer DB values (truth) but fall back to computed if needed
+  const persistedSeoPayload = (updated as any)?.seo_payload ?? seo_payload_to_store;
+  const persistedHtml = (updated as any)?.description_html ?? seoResult.descriptionHtml;
+  const persistedFeatures = (updated as any)?.features ?? seoResult.features;
 
+  // Canonical return shape for pipeline consumers
   return {
     ingestionId,
-    descriptionHtml,
-    sections: seoResult.sections,
-    seo,
-    features,
-    data_gaps: seoResult.data_gaps,
-    _meta: seoResult._meta,
+
+    descriptionHtml: persistedHtml,
+    sections: seoResult.sections ?? null,
+    seo: seoResult.seo ?? null,
+    features: persistedFeatures ?? [],
+    data_gaps: seoResult.data_gaps ?? [],
+    desc_audit: seoResult.desc_audit ?? null,
+    _meta: seoResult._meta ?? null,
 
     // legacy aliases
-    seo_payload: seo,
-    description_html: descriptionHtml,
+    seo_payload: persistedSeoPayload,
+    description_html: persistedHtml,
   };
 }
