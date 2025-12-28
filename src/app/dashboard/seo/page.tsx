@@ -1,635 +1,452 @@
+// src/app/dashboard/seo/page.tsx
+// Premium overhaul of the SEO dashboard — hybrid of Monitor / Extract / Describe.
+// - No "Run Quick SEO" button (removed as requested).
+// - Inputs visible in hero: ingestionId / paste URL / pick a job
+// - Live preview canvas (left) shows DescribeOutput (HTML + structured payload preview).
+// - Right rail provides JSON viewer, pipeline snapshot, quick links to Monitor/Extract/Describe.
+// - Pipeline run control is deliberate (Run SEO) and requires an ingestionId to avoid accidental runs.
+// - Reuses existing components where available (DescribeOutput, JsonViewer, TabsShell).
+//
+// Drop this file into src/app/dashboard/seo/page.tsx to replace the existing SEO dashboard.
+
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import DescribeOutput from "@/components/describe/DescribeOutput";
+import JsonViewer from "@/components/JsonViewer";
+import TabsShell from "@/components/TabsShell";
+import { useIngestRow } from "@/hooks/useIngestRow";
+import { useToast } from "@/components/ui/toast";
+import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 
-/**
- * /dashboard/seo
- *
- * Notes:
- * - This page runs pipeline runs and then refreshes ingestion data.
- * - Canonical naming for SEO results is now Describe-style:
- *   - seo
- *   - descriptionHtml
- *   - features
- *
- * IMPORTANT (2025-12-28):
- * - Do NOT report "completed" if the pipeline run status is "failed".
- * - Ingestion polling must treat terminal errors as terminal (server returns 409).
- */
+export const dynamic = "force-dynamic";
 
-type AnyObj = Record<string, any>;
-
-type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
-type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
-
-type PipelineModule = {
-  id?: string;
-  module_index: number;
-  module_name: string;
-  status: ModuleRunStatus;
-  started_at?: string | null;
-  finished_at?: string | null;
-  output_ref?: string | null;
-  error?: any;
-};
-
-type PipelineSnapshot = {
-  run?: { id: string; status: PipelineRunStatus } & Record<string, any>;
-  modules?: PipelineModule[];
-};
-
-type Mode = "quick" | "full";
-
-const QUICK_STEPS = ["extract", "seo"] as const;
-const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
 }
 
-function safeDateMs(v?: string | null) {
-  if (!v) return null;
-  const ms = Date.parse(v);
-  return Number.isFinite(ms) ? ms : null;
+/* Small shared UI bits (kept in-file to avoid extra imports) */
+function TinyChip({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "success" | "signal" | "brand";
+}) {
+  const tones =
+    tone === "brand"
+      ? "border-fuchsia-200/60 bg-fuchsia-50 text-fuchsia-700"
+      : tone === "signal"
+      ? "border-amber-200/60 bg-amber-50 text-amber-700"
+      : tone === "success"
+      ? "border-emerald-200/60 bg-emerald-50 text-emerald-700"
+      : "border-slate-200/70 bg-white/75 text-slate-600";
+
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] shadow-sm",
+        tones
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
-function formatDuration(ms: number) {
-  if (!Number.isFinite(ms) || ms < 0) return "—";
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}m ${r}s`;
-}
+function SoftButton({
+  onClick,
+  href,
+  children,
+  variant = "secondary",
+  className,
+}: {
+  onClick?: () => void;
+  href?: string;
+  children: React.ReactNode;
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2";
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function extractEngineErrorMessage(payload: any): string {
-  const e = payload?.error;
-  if (typeof e === "string" && e.trim()) return e;
-  if (e && typeof e === "object") {
-    return String(e.message || e.detail || e.code || "ingest_engine_error");
+  if (variant === "primary") {
+    const node = (
+      <button onClick={onClick} className={cx(base, "bg-gradient-to-r from-fuchsia-400 via-pink-500 to-sky-500 text-white", className)}>
+        {children}
+      </button>
+    );
+    if (href) return <a href={href}>{node}</a>;
+    return node;
   }
-  return String(payload?.last_error || "ingest_engine_error");
+
+  const node = (
+    <button onClick={onClick} className={cx(base, "border border-slate-200/80 bg-white/70 text-slate-700", className)}>
+      {children}
+    </button>
+  );
+  if (href) return <a href={href}>{node}</a>;
+  return node;
 }
 
-export default function AvidiaSeoPage() {
-  const params = useSearchParams();
+function StatCard({
+  title,
+  value,
+  caption,
+}: {
+  title: string;
+  value: React.ReactNode;
+  caption?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+      <div className="text-xs font-semibold text-slate-700">{title}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+      {caption ? <div className="mt-1 text-[11px] text-slate-500">{caption}</div> : null}
+    </div>
+  );
+}
+
+/* Page component */
+export default function SeoDashboardPage() {
   const router = useRouter();
-  const ingestionIdParam = params?.get("ingestionId") || null;
-  const urlParam = params?.get("url") || null;
-  const pipelineRunIdParam = params?.get("pipelineRunId") || null;
+  const params = useSearchParams();
+  const toast = useToast();
 
-  const ingestionId = ingestionIdParam;
+  const ingestionIdParam = params?.get("ingestionId") ?? "";
+  const [ingestionIdInput, setIngestionIdInput] = useState<string>(ingestionIdParam || "");
+  const [pipelineRunId, setPipelineRunId] = useState<string | null>(null);
+  const [pipelineSnapshot, setPipelineSnapshot] = useState<any | null>(null);
+  const [running, setRunning] = useState(false);
+  const [moduleLogsOpen, setModuleLogsOpen] = useState(false);
+  const [moduleLogsParams, setModuleLogsParams] = useState<{ runId: string; index: number } | null>(null);
 
-  const [urlInput, setUrlInput] = useState<string>(urlParam || "");
-  const [job, setJob] = useState<AnyObj | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
-  const [showRawExtras, setShowRawExtras] = useState(false);
+  // ingest row hook fetches ingestion / preview row
+  const { row, loading: rowLoading, error: rowError } = useIngestRow(ingestionIdInput || null, 1500);
 
-  // Debug / polling state
-  const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
-  const [pollingState, setPollingState] = useState<string | null>(null);
+  const jobData = useMemo(() => {
+    if (!row) return null;
+    if ((row as any)?.data?.data) return (row as any).data.data;
+    if ((row as any)?.data) return (row as any).data;
+    return row;
+  }, [row]);
 
-  const [isPreviewResult] = useState(false);
-
-  // Pipeline state
-  const [pipelineRunId, setPipelineRunId] = useState<string | null>(pipelineRunIdParam);
-  const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
-
-  const [mode, setMode] = useState<Mode>("quick");
-
-  useEffect(() => {
-    if (pipelineRunIdParam) setPipelineRunId(pipelineRunIdParam);
-  }, [pipelineRunIdParam]);
-
-  useEffect(() => {
-    if (urlParam && urlParam.length > 0) {
-      setMode("full");
-      setUrlInput(urlParam);
-    } else if (ingestionIdParam) {
-      setMode("quick");
-    }
-  }, [urlParam, ingestionIdParam]);
-
-  async function fetchIngestionData(id: string) {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
-      const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Fetch failed: ${res.status}`);
-      const row = json?.data ?? json;
-      setJob(row);
-      return row;
-    } finally {
-      setLoading(false);
-    }
-  }
+  const descriptionHtml = jobData?.description_html ?? jobData?.descriptionHtml ?? "";
+  const seoPayload = jobData?.seo_payload ?? jobData?.seo ?? null;
+  const features = jobData?.features ?? seoPayload?.features ?? [];
 
   async function fetchPipelineSnapshot(runId: string) {
-    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
-    const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
-    return json as PipelineSnapshot;
+    try {
+      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || `Failed to load pipeline ${res.status}`);
+      setPipelineSnapshot(json);
+      return json;
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+      return null;
+    }
   }
 
-  async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2000) {
+  async function runSeoPipeline() {
+    if (!ingestionIdInput) {
+      toast.error("Enter an ingestionId first.");
+      return;
+    }
+    setRunning(true);
+    try {
+      setPipelineSnapshot(null);
+      toast.info("Starting SEO pipeline…");
+
+      const res = await fetch("/api/v1/pipeline/run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ingestionId: ingestionIdInput,
+          triggerModule: "seo",
+          steps: ["seo", "audit", "import"],
+          options: {},
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.pipelineRunId) throw new Error(json?.error || "Failed to start pipeline");
+      const runId = String(json.pipelineRunId);
+      setPipelineRunId(runId);
+      router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(ingestionIdInput)}&pipelineRunId=${encodeURIComponent(runId)}`);
+      toast.info("Pipeline started — polling status");
+      await pollPipeline(runId);
+      toast.success("Pipeline finished (see modules)");
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function pollPipeline(runId: string, timeoutMs = 300_000, intervalMs = 2000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const snap = await fetchPipelineSnapshot(runId);
-      setPipelineSnapshot(snap);
-      const s = snap?.run?.status;
-      if (s === "succeeded" || s === "failed") return snap;
-      await sleep(intervalMs);
+      const status = snap?.run?.status;
+      if (status === "succeeded" || status === "failed") return snap;
+      await new Promise((r) => setTimeout(r, intervalMs));
     }
-    throw new Error("Pipeline did not complete within timeout");
+    toast.error("Pipeline did not complete within timeout");
+    throw new Error("timeout");
   }
 
-  /**
-   * Polls /api/v1/ingest/job/:jobId until:
-   * - 200 => returns payload
-   * - 409 => throws terminal error (stop polling)
-   * - 202 => continues polling
-   */
-  async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
-    const start = Date.now();
-    setPollingState(`polling job ${jobId}`);
-    setStatusMessage("Scraping & normalizing");
-
-    while (Date.now() - start < timeoutMs) {
-      const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
-      const payload = await res.json().catch(() => null);
-
-      if (res.status === 200) {
-        setPollingState(`completed: ingestionId=${payload?.ingestionId}`);
-        setStatusMessage("Ingestion callback received");
-        return payload;
-      }
-
-      if (res.status === 409) {
-        const msg = extractEngineErrorMessage(payload);
-        setPollingState(`failed: ${msg}`);
-        setStatusMessage(null);
-        const err: any = new Error(msg);
-        err.code = payload?.error?.code || "ingest_engine_error";
-        err.payload = payload;
-        throw err;
-      }
-
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      setPollingState(`waiting... ${elapsed}s`);
-      await sleep(intervalMs);
+  useEffect(() => {
+    if (!pipelineRunId) {
+      const p = params?.get("pipelineRunId");
+      if (p) setPipelineRunId(p);
+      return;
     }
+    // fetch snapshot once when pipelineRunId becomes available
+    fetchPipelineSnapshot(pipelineRunId).catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineRunId]);
 
-    setPollingState("timeout");
-    setStatusMessage(null);
-    throw new Error("Ingestion did not complete within timeout");
+  function openModuleLogs(index: number) {
+    if (!pipelineRunId) {
+      toast.error("No pipeline run selected");
+      return;
+    }
+    setModuleLogsParams({ runId: pipelineRunId, index });
+    setModuleLogsOpen(true);
   }
-
-  async function createIngestion(url: string) {
-    if (!url) throw new Error("Please enter a URL");
-
-    setError(null);
-    setRawIngestResponse(null);
-    setPollingState(null);
-    setStatusMessage("Submitting ingestion");
-
-    const res = await fetch("/api/v1/ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url,
-        persist: true,
-        options: { includeSeo: true },
-      }),
-    });
-
-    const json = await res.json().catch(() => null);
-    console.debug("POST /api/v1/ingest response:", res.status, json);
-    setRawIngestResponse({ status: res.status, body: json });
-
-    if (!res.ok) {
-      throw new Error(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
-    }
-
-    const possibleIngestionId =
-      json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
-
-    if (possibleIngestionId) {
-      if (json?.status === "accepted" || res.status === 202) {
-        const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
-        const pollResult = await pollForIngestion(jobId, 120_000, 3000);
-        return pollResult?.ingestionId ?? possibleIngestionId;
-      }
-      return possibleIngestionId;
-    }
-
-    const jobId = json?.jobId ?? json?.job?.id ?? null;
-    if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug.");
-    const pollResult = await pollForIngestion(jobId, 120_000, 3000);
-    const newId = pollResult?.ingestionId ?? pollResult?.id ?? null;
-    if (!newId) throw new Error("Polling returned no ingestionId.");
-    return newId;
-  }
-
-  async function startPipelineRun(forIngestionId: string, m: Mode) {
-    const steps = m === "quick" ? QUICK_STEPS : FULL_STEPS;
-
-    setStatusMessage("Starting pipeline");
-    const res = await fetch("/api/v1/pipeline/run", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ingestionId: forIngestionId,
-        triggerModule: "seo",
-        steps,
-        options: {},
-      }),
-    });
-
-    const json = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
-
-    const runId = String(json?.pipelineRunId ?? "");
-    if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
-
-    setPipelineRunId(runId);
-    router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(forIngestionId)}&pipelineRunId=${encodeURIComponent(runId)}`);
-
-    setStatusMessage("Pipeline running");
-    return runId;
-  }
-
-  async function run(modeToRun: Mode) {
-    if (generating) return;
-
-    setGenerating(true);
-    setError(null);
-    setStatusMessage(null);
-    setPipelineSnapshot(null);
-
-    try {
-      let idToUse: string | null = null;
-      const trimmed = (urlInput || "").trim();
-      const isSameAsInitial = Boolean(urlParam && trimmed && urlParam === trimmed);
-
-      if (ingestionId && modeToRun === "quick") {
-        idToUse = ingestionId;
-      } else if (modeToRun === "full") {
-        if (trimmed && isSameAsInitial && ingestionId) {
-          idToUse = ingestionId;
-        } else {
-          setJob(null);
-          setRawIngestResponse(null);
-          setPollingState(null);
-          setStatusMessage(null);
-
-          idToUse = await createIngestion(trimmed);
-          router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(idToUse)}`);
-        }
-      }
-
-      if (!idToUse) throw new Error("No ingestionId available to run pipeline");
-
-      await fetchIngestionData(idToUse);
-
-      const runId = await startPipelineRun(idToUse, modeToRun);
-
-      const snap = await pollPipeline(runId, modeToRun === "quick" ? 180_000 : 300_000, 2000);
-
-      // Always refresh ingestion after pipeline stops (success or failure)
-      await fetchIngestionData(idToUse);
-
-      const finalStatus = snap?.run?.status;
-
-      if (finalStatus === "succeeded") {
-        setStatusMessage(modeToRun === "quick" ? "Quick SEO succeeded" : "Full pipeline succeeded");
-      } else if (finalStatus === "failed") {
-        setStatusMessage(null);
-        throw new Error("Pipeline failed (see pipeline telemetry + module output).");
-      } else {
-        // shouldn't happen but avoid lying to the user
-        setStatusMessage(null);
-        throw new Error(`Pipeline ended in unexpected status: ${String(finalStatus)}`);
-      }
-    } catch (e: any) {
-      if (e?.payload) {
-        console.warn("Terminal ingest error payload:", e.payload);
-      }
-      setError(String(e?.message || e));
-      setStatusMessage(null);
-    } finally {
-      setGenerating(false);
-      setPollingState(null);
-    }
-  }
-
-  const jobData = useMemo(() => {
-    if (!job) return null;
-    if ((job as any)?.data?.data) return (job as any).data.data;
-    if ((job as any)?.data) return (job as any).data;
-    return job;
-  }, [job]);
-
-  const seo = useMemo(() => {
-    return (
-      (jobData as any)?.seo ??
-      (jobData as any)?.seoPayload ??
-      (jobData as any)?.seo_payload ??
-      null
-    );
-  }, [jobData]);
-
-  const rawDescriptionHtml =
-    (jobData as any)?.descriptionHtml ??
-    (jobData as any)?.description_html ??
-    (jobData as any)?._debug?.description_html ??
-    null;
-
-  const descriptionHtml =
-    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
-
-  const features = useMemo(() => {
-    if (Array.isArray((jobData as any)?.features)) return (jobData as any).features;
-    if (Array.isArray((jobData as any)?.seo_payload?.features)) return (jobData as any).seo_payload.features;
-    return null;
-  }, [jobData]);
-
-  const highlightedDescription = useMemo(() => {
-    if (!descriptionHtml) return "<em>No description generated yet</em>";
-    if (!searchTerm) return descriptionHtml;
-    try {
-      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(${escaped})`, "gi");
-      return descriptionHtml.replace(
-        regex,
-        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
-      );
-    } catch (err) {
-      console.warn("Unable to highlight search term", err);
-      return descriptionHtml;
-    }
-  }, [descriptionHtml, searchTerm]);
-
-  const knownSeoKeys = [
-    "h1",
-    "pageTitle",
-    "title",
-    "metaDescription",
-    "meta_description",
-    "seoShortDescription",
-    "seo_short_description",
-    "shortDescription",
-    "short_description",
-    "keywords",
-    "slug",
-    "name_best",
-  ];
-
-  const parkedExtras = useMemo(() => {
-    if (!seo || typeof seo !== "object") return [] as [string, any][];
-    return Object.entries(seo).filter(([key]) => !knownSeoKeys.includes(key));
-  }, [seo]);
-
-  const handleCopyDescription = async () => {
-    if (!descriptionHtml) return;
-    try {
-      await navigator.clipboard.writeText(descriptionHtml);
-      setCopyState("copied");
-      setTimeout(() => setCopyState("idle"), 1500);
-    } catch (err) {
-      console.warn("clipboard copy failed", err);
-      setCopyState("error");
-      setTimeout(() => setCopyState("idle"), 1500);
-    }
-  };
-
-  const moduleDurations = useMemo(() => {
-    const mods = pipelineSnapshot?.modules ?? [];
-    return mods.map((m) => {
-      const start = safeDateMs(m.started_at ?? null);
-      const end = safeDateMs(m.finished_at ?? null);
-      const duration = start != null && end != null ? clamp(end - start, 0, 24 * 60 * 60 * 1000) : null;
-      return { ...m, duration_ms: duration };
-    });
-  }, [pipelineSnapshot]);
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col gap-4">
-        <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-lg font-semibold">AvidiaSEO</h1>
-              <p className="text-sm text-slate-500">
-                Canonical naming aligned with Describe: <code>seo</code>, <code>descriptionHtml</code>, <code>features</code>
-              </p>
+    <main className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Background decorative */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-fuchsia-300/18 blur-3xl dark:bg-fuchsia-500/12" />
+        <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-sky-300/18 blur-3xl dark:bg-sky-500/12" />
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 pt-6 pb-10 lg:px-8 space-y-6">
+        {/* HERO */}
+        <section className="rounded-2xl bg-gradient-to-r from-fuchsia-200/50 via-pink-100 to-sky-100 p-[1px] shadow-xl">
+          <div className="rounded-[20px] bg-white/90 p-5 dark:bg-slate-950/50 dark:border-slate-800 border">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h1 className="text-2xl font-semibold">
+                  SEO Studio — premium pipeline control & preview
+                </h1>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300 max-w-2xl">
+                  Produce store-ready product pages with consistent SEO metadata, structured sections,
+                  and compliance-safe content. Start with an ingestionId (from Extract/Import) or paste a URL.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2 items-center">
+                  <TinyChip tone="brand">
+                    <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-500" />
+                    SEO • Instructioned
+                  </TinyChip>
+                  <TinyChip tone="success">Audit integrated</TinyChip>
+                  <TinyChip tone="signal">Preview + JSON</TinyChip>
+                </div>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                {/* Links to other dashboards */}
+                <SoftButton href="/dashboard/monitor" variant="secondary" className="text-xs">
+                  Open Monitor
+                </SoftButton>
+                <SoftButton href="/dashboard/extract" variant="secondary" className="text-xs">
+                  Open Extract
+                </SoftButton>
+                <SoftButton href="/dashboard/describe" variant="secondary" className="text-xs">
+                  Open Describe
+                </SoftButton>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                className={`rounded px-3 py-2 text-sm border ${mode === "quick" ? "bg-slate-900 text-white" : "bg-white"}`}
-                onClick={() => setMode("quick")}
-                disabled={generating}
-              >
-                Quick SEO
-              </button>
-              <button
-                className={`rounded px-3 py-2 text-sm border ${mode === "full" ? "bg-slate-900 text-white" : "bg-white"}`}
-                onClick={() => setMode("full")}
-                disabled={generating}
-              >
-                Full Pipeline
-              </button>
-            </div>
-          </div>
-
-          {mode === "full" && (
-            <div className="mt-3 flex flex-col gap-2">
-              <label className="text-sm font-medium">Source URL</label>
-              <input
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="https://example.com/product/..."
-                disabled={generating}
-              />
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              onClick={() => run(mode)}
-              disabled={generating || (mode === "full" && !urlInput.trim())}
-            >
-              {generating ? "Running..." : mode === "quick" ? "Run Quick SEO" : "Run Full Pipeline"}
-            </button>
-
-            {ingestionId && (
-              <a
-                className="text-sm underline text-slate-600"
-                href={`/dashboard/seo?ingestionId=${encodeURIComponent(ingestionId)}`}
-              >
-                Refresh
-              </a>
-            )}
-          </div>
-
-          {(statusMessage || pollingState) && (
-            <div className="mt-3 text-sm text-slate-600">
-              {statusMessage ? <div>Status: {statusMessage}</div> : null}
-              {pollingState ? <div>Polling: {pollingState}</div> : null}
-            </div>
-          )}
-
-          {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
-
-          {rawIngestResponse && (
-            <details className="mt-3">
-              <summary className="cursor-pointer text-sm text-slate-600">Ingest debug</summary>
-              <pre className="mt-2 max-h-[260px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
-                {JSON.stringify(rawIngestResponse, null, 2)}
-              </pre>
-            </details>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2 rounded-lg border bg-white p-4 dark:bg-slate-950">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold">Description HTML</h2>
-              <div className="flex items-center gap-2">
+            {/* Inputs */}
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-12">
+              <div className="sm:col-span-7">
+                <label className="text-xs font-medium uppercase text-slate-600">Ingestion ID</label>
                 <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="rounded border px-2 py-1 text-sm"
-                  placeholder="Search in HTML..."
+                  value={ingestionIdInput}
+                  onChange={(e) => setIngestionIdInput(e.target.value)}
+                  placeholder="Paste ingestionId (from Extract/Import) or leave blank to browse"
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-300 bg-white/80 px-3 text-sm focus:ring-2 focus:ring-fuchsia-300"
                 />
+                <div className="mt-2 text-xs text-slate-500">
+                  Tip: extraction yields the normalized payload the SEO pipeline consumes.
+                </div>
+              </div>
+
+              <div className="sm:col-span-5 flex gap-2 items-end justify-end">
+                {/* Removed 'Run Quick SEO' button as requested */}
+                <SoftButton onClick={async () => {
+                  // Navigate to extract page for users who don't have an ingestion id yet
+                  router.push("/dashboard/extract");
+                }} variant="secondary">
+                  Browse extractions
+                </SoftButton>
+
+                <SoftButton onClick={runSeoPipeline} variant="primary" className="ml-1" >
+                  {running ? "Running…" : "Run SEO pipeline"}
+                </SoftButton>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* WORKSPACE */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+          {/* LEFT: Live preview canvas */}
+          <div className="lg:col-span-8">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <TinyChip tone="success">Live canvas</TinyChip>
+                    <h2 className="text-lg font-semibold">Preview — what ships</h2>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Structured HTML + sections, identical to what AvidiaSEO will persist.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-slate-500">Ingestion:</div>
+                  <div className="font-mono text-xs">{ingestionIdInput || "—"}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 min-h-[260px]">
+                {/* DescribeOutput includes the preview canvas (HTML styled viewer) */}
+                <DescribeOutput />
+              </div>
+
+              {/* compact stats row */}
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard title="SEO generated" value={jobData ? "Yes" : "—"} caption="Has seo_payload" />
+                <StatCard title="Audit score" value={jobData?.diagnostics?.seo?.audit_score ?? "—"} caption="From desc_audit" />
+                <StatCard title="Sections" value={jobData ? Object.keys(jobData?.sections ?? {}).length : "—"} caption="Rendered sections" />
+                <StatCard title="Feature bullets" value={Array.isArray(features) ? features.length : "—"} caption="Count" />
+              </div>
+            </div>
+
+            {/* Canvas bottom area: tabs with raw / normalized */}
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Extraction & SEO artifacts</h3>
+                <div className="text-xs text-slate-500">{rowLoading ? "Loading…" : row ? "Row loaded" : "No row"}</div>
+              </div>
+
+              <div className="mt-3">
+                <TabsShell job={row} loading={rowLoading} error={rowError} noDataMessage="Load an ingestion to inspect artifacts" />
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: JSON viewer, pipeline, quick controls */}
+          <aside className="lg:col-span-4 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Normalized JSON</h3>
+                  <p className="mt-1 text-xs text-slate-500">Exact payload consumed by SEO & downstream modules</p>
+                </div>
+                <TinyChip>Payload</TinyChip>
+              </div>
+
+              <div className="mt-3">
+                <JsonViewer data={jobData ?? {}} loading={!row && !!ingestionIdInput && rowLoading} />
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <SoftButton href="/dashboard/extract" variant="secondary" className="text-xs">Open Extract</SoftButton>
+                <SoftButton href="/dashboard/describe" variant="secondary" className="text-xs">Open Describe</SoftButton>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Pipeline snapshot</h3>
+                  <p className="mt-1 text-xs text-slate-500">Recent run status & module outputs</p>
+                </div>
+                <div className="text-xs text-slate-500">{pipelineSnapshot?.run?.status ?? "—"}</div>
+              </div>
+
+              <div className="mt-3">
+                {pipelineSnapshot?.modules?.length ? (
+                  <div className="space-y-2">
+                    {pipelineSnapshot.modules.map((m: any) => (
+                      <div key={`${m.module_index}-${m.module_name}`} className="rounded-lg border border-slate-100 p-2 flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-sm">{m.module_index}. {m.module_name}</div>
+                          <div className="text-xs text-slate-500">status: {m.status} • output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span></div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className={cx("text-xs rounded-full px-2 py-0.5", m.status === "succeeded" ? "bg-emerald-50 text-emerald-700" : m.status === "failed" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}>
+                            {m.status}
+                          </div>
+                          <button onClick={() => openModuleLogs(m.module_index)} className="text-xs text-slate-600 hover:underline">View logs</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500">No pipeline run selected — run the pipeline to view modules.</div>
+                )}
+              </div>
+
+              <div className="mt-3 flex gap-2">
                 <button
-                  className="rounded border px-2 py-1 text-sm"
-                  onClick={handleCopyDescription}
-                  disabled={!descriptionHtml}
+                  onClick={() => {
+                    if (!pipelineRunId) return toast.error("No run selected");
+                    fetchPipelineSnapshot(pipelineRunId).then(() => toast.info("Snapshot refreshed")).catch(() => null);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs bg-white"
                 >
-                  {copyState === "copied" ? "Copied" : "Copy"}
+                  Refresh snapshot
+                </button>
+                <button
+                  onClick={() => {
+                    if (!pipelineRunId) return toast.error("No run selected");
+                    router.push(`/dashboard/import?pipelineRunId=${encodeURIComponent(pipelineRunId)}`);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-3 py-1 text-xs"
+                >
+                  Open run
                 </button>
               </div>
             </div>
 
-            <div className="mt-3 rounded border p-3">
-              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
+            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Quality checklist</h3>
+                </div>
+                <TinyChip tone="signal">Audit</TinyChip>
+              </div>
+
+              <ul className="mt-3 text-xs space-y-2 text-slate-600">
+                <li>H1 present & human readable</li>
+                <li>Page title & meta description within sensible lengths</li>
+                <li>Overview matches description HTML</li>
+                <li>Specifications include at least one bullet</li>
+                <li>No placeholder tokens present</li>
+              </ul>
             </div>
-          </div>
-
-          <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
-            <h2 className="text-sm font-semibold">SEO</h2>
-            <div className="mt-2 text-sm">
-              <div><span className="font-medium">H1:</span> {seo?.h1 ?? "—"}</div>
-              <div><span className="font-medium">Title:</span> {seo?.pageTitle ?? seo?.title ?? "—"}</div>
-              <div><span className="font-medium">Meta:</span> {seo?.metaDescription ?? seo?.meta_description ?? "—"}</div>
-              <div><span className="font-medium">Short:</span> {seo?.shortDescription ?? seo?.seoShortDescription ?? seo?.seo_short_description ?? "—"}</div>
-            </div>
-
-            {Array.isArray(features) && features.length > 0 && (
-              <>
-                <h3 className="mt-4 text-sm font-semibold">Features</h3>
-                <ul className="mt-2 list-disc pl-5 text-sm">
-                  {features.map((f, i) => (
-                    <li key={i}>{String(f)}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {parkedExtras.length > 0 && (
-              <details className="mt-4">
-                <summary className="cursor-pointer text-sm text-slate-600">Extra SEO keys</summary>
-                <pre className="mt-2 max-h-[260px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
-                  {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
-                </pre>
-              </details>
-            )}
-
-            <details className="mt-4">
-              <summary
-                className="cursor-pointer text-sm text-slate-600"
-                onClick={() => setShowRawExtras((v) => !v)}
-              >
-                Raw ingestion JSON
-              </summary>
-              <pre className="mt-2 max-h-[360px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
-                {JSON.stringify(jobData ?? null, null, 2)}
-              </pre>
-            </details>
-          </div>
-        </div>
-
-        {pipelineSnapshot && (
-          <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
-            <h2 className="text-sm font-semibold">Pipeline telemetry</h2>
-            <div className="mt-2 text-sm text-slate-600">
-              Run: {pipelineSnapshot?.run?.id ?? pipelineRunId ?? "—"} • Status:{" "}
-              {pipelineSnapshot?.run?.status ?? "—"}
-            </div>
-            <div className="mt-3 overflow-auto">
-              <table className="min-w-[640px] w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b">
-                    <th className="py-2 pr-3">Module</th>
-                    <th className="py-2 pr-3">Status</th>
-                    <th className="py-2 pr-3">Duration</th>
-                    <th className="py-2 pr-3">Output</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {moduleDurations.map((m) => (
-                    <tr key={`${m.module_name}-${m.module_index}`} className="border-b">
-                      <td className="py-2 pr-3">{m.module_name} (#{m.module_index})</td>
-                      <td className="py-2 pr-3">{m.status}</td>
-                      <td className="py-2 pr-3">
-                        {m.duration_ms != null ? formatDuration(m.duration_ms) : "—"}
-                      </td>
-                      <td className="py-2 pr-3">
-                        {pipelineRunId && (
-                          <a
-                            className="underline"
-                            href={`/api/v1/pipeline/run/${encodeURIComponent(
-                              pipelineRunId
-                            )}/output/${encodeURIComponent(String(m.module_index))}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View output
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!moduleDurations.length && (
-                    <tr>
-                      <td className="py-2" colSpan={4}>
-                        No module telemetry available.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {isPreviewResult && <div className="mt-2 text-xs text-amber-700">Preview-only mode.</div>}
-          </div>
-        )}
-
-        {loading && <div className="text-sm text-slate-600">Loading ingestion…</div>}
+          </aside>
+        </section>
       </div>
-    </div>
+
+      {/* Module logs modal */}
+      {moduleLogsParams && (
+        <ModuleLogsModal
+          open={moduleLogsOpen}
+          runId={moduleLogsParams.runId}
+          moduleIndex={moduleLogsParams.index}
+          onClose={() => setModuleLogsOpen(false)}
+        />
+      )}
+    </main>
   );
 }
