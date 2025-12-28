@@ -40,14 +40,6 @@ function makeRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function supabaseHost() {
-  try {
-    return SUPABASE_URL ? new URL(SUPABASE_URL).host : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET() {
   return NextResponse.json(
     {
@@ -55,8 +47,6 @@ export async function GET() {
       route: "ingest_callback",
       ingest_secret_configured: Boolean(INGEST_SECRET),
       supabase_configured: Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY),
-      supabase_url_host: supabaseHost(),
-      vercel_env: process.env.VERCEL_ENV ?? null,
       timestamp: new Date().toISOString(),
     },
     { status: 200 }
@@ -71,7 +61,7 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get("x-avidiatech-signature") || "";
 
     if (!INGEST_SECRET) {
-      console.error("[ingest_callback] INGEST_SECRET not configured", { requestId });
+      console.error("INGEST_SECRET not configured on callback");
       return NextResponse.json(
         { error: "server_misconfigured", detail: "INGEST_SECRET missing" },
         { status: 500 }
@@ -80,11 +70,12 @@ export async function POST(req: NextRequest) {
 
     const valid = verifySignature(rawBody, signature, INGEST_SECRET);
     if (!valid) {
-      console.warn("[ingest_callback] invalid signature", { requestId });
+      console.warn("ingest callback invalid signature");
       return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
     }
 
     let body: IngestCallbackBody;
+
     try {
       body = JSON.parse(rawBody || "{}");
     } catch (e: any) {
@@ -111,16 +102,18 @@ export async function POST(req: NextRequest) {
     // Load existing row for diagnostics merging
     const { data: existing, error: loadErr } = await supabase
       .from("product_ingestions")
-      .select("id, status, diagnostics, attempts_count, last_error, created_at, job_id, source_url")
+      .select(
+        "id, status, diagnostics, attempts_count, last_error, created_at, job_id, source_url, ingest_callback_at, ingest_engine_status, ingest_callback_request_id"
+      )
       .or(`id.eq.${jobId},job_id.eq.${jobId}`)
       .limit(1)
       .maybeSingle();
 
     if (loadErr) {
-      console.error("[ingest_callback] failed to load product_ingestions", {
-        requestId,
-        message: loadErr.message || String(loadErr),
-      });
+      console.error(
+        "ingest callback: failed to load product_ingestions",
+        loadErr.message || loadErr
+      );
       return NextResponse.json(
         { error: "db_error", detail: loadErr.message || String(loadErr) },
         { status: 500 }
@@ -128,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!existing) {
-      console.warn("[ingest_callback] no product_ingestions row found for job_id", { requestId, jobId });
+      console.warn("ingest callback: no product_ingestions row found for job_id=", jobId);
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
 
@@ -142,13 +135,14 @@ export async function POST(req: NextRequest) {
       callbackBody: body,
     });
 
-    // Build trimmed payload snapshot for DB column (stable, small, easy to query)
-    const trimmedPayloadSnapshot: any = {
+    // Always record that callback was received (even if normalized payload is missing/invalid)
+    const callbackDiagnosticsBase: any = {
+      ...(existingDiagnostics.ingest_callback || {}),
       request_id: requestId,
-      job_id: jobId,
-      received_at: nowIso,
+      last_callback_at: nowIso,
       status: body.status || "completed",
       error: body.error || null,
+      raw_diagnostics: body.diagnostics || null,
       callback_top_level_keys: safeKeys(body),
       payload_bucket_keys: {
         normalized_payload: safeKeys(body.normalized_payload),
@@ -157,9 +151,11 @@ export async function POST(req: NextRequest) {
         variants_payload: safeKeys(body.variants_payload),
         raw_payload: safeKeys(body.raw_payload),
       },
+      // small previews for debugging (avoid huge diagnostics)
       payload_previews: {
         normalized_payload: capAnyText(JSON.stringify(body.normalized_payload ?? null), 4000),
         specs_payload: capAnyText(JSON.stringify(body.specs_payload ?? null), 4000),
+        raw_payload: capAnyText(JSON.stringify(body.raw_payload ?? null), 4000),
       },
       normalized_validation: {
         ok: normalization.issues.length === 0,
@@ -169,37 +165,50 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Also keep JSON diagnostics for humans (but pipeline gating will use ingest_callback_at)
     const updatedDiagnostics: any = {
       ...existingDiagnostics,
-      ingest_callback: {
-        ...(existingDiagnostics.ingest_callback || {}),
-        ...trimmedPayloadSnapshot,
-        last_callback_at: nowIso,
-      },
+      ingest_callback: callbackDiagnosticsBase,
     };
 
-    const nextStatus = body.status || "completed";
+    const engineReportedStatus = body.status || "completed";
+    const inferredEngineStatus = normalization.normalized ? engineReportedStatus : "error";
 
     const updatePatch: any = {
       diagnostics: updatedDiagnostics,
+
+      // Durable callback markers (preferred by polling / pipeline gating)
       ingest_callback_at: nowIso,
       ingest_callback_request_id: requestId,
-      ingest_callback_payload: trimmedPayloadSnapshot,
-      ingest_engine_status: normalization.normalized ? nextStatus : "error",
+      ingest_engine_status: inferredEngineStatus,
+      ingest_callback_payload: {
+        request_id: requestId,
+        received_at: nowIso,
+        status: engineReportedStatus,
+        error: body.error || null,
+        callback_top_level_keys: safeKeys(body),
+        payload_bucket_keys: callbackDiagnosticsBase.payload_bucket_keys,
+        payload_previews: callbackDiagnosticsBase.payload_previews,
+        normalized_validation: callbackDiagnosticsBase.normalized_validation,
+      },
+
       attempts_count: currentAttempts + 1,
       updated_at: nowIso,
       completed_at: nowIso,
+      last_error: body.error || null,
     };
 
     if (normalization.normalized) {
+      // Persist canonical normalized payload
       updatePatch.normalized_payload = normalization.normalized;
-      updatePatch.status = nextStatus;
-      updatePatch.last_error = body.error || null;
-      updatePatch.error = body.error ? { message: body.error } : null;
+
+      // Keep legacy status updated (even if some other process uses it)
+      updatePatch.status = engineReportedStatus;
     } else {
+      // Do NOT overwrite normalized_payload with unusable placeholder data.
+      // Mark as error to prevent SEO/Describe from hallucinating.
       updatePatch.status = "error";
       updatePatch.last_error = "ingest_invalid_normalized_payload";
+
       updatePatch.error = {
         code: "ingest_invalid_normalized_payload",
         message:
@@ -215,10 +224,10 @@ export async function POST(req: NextRequest) {
       .eq("id", existing.id);
 
     if (updErr) {
-      console.error("[ingest_callback] failed to update product_ingestions", {
-        requestId,
-        message: updErr.message || String(updErr),
-      });
+      console.error(
+        "ingest callback: failed to update product_ingestions",
+        updErr.message || updErr
+      );
       return NextResponse.json(
         { error: "db_update_failed", detail: updErr.message || String(updErr) },
         { status: 500 }
