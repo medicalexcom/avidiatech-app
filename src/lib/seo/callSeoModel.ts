@@ -1,3 +1,4 @@
+// (only changed: top-level schema.additionalProperties set to false)
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
@@ -240,7 +241,7 @@ export async function callSeoModel(
 
   const schema = {
     type: "object",
-    additionalProperties: true,
+    additionalProperties: false, // <- STRICT: Responses API requires explicit false for strict json_schema
     required: ["seo", "descriptionHtml", "sections", "features", "data_gaps", "desc_audit"],
     properties: {
       seo: {
