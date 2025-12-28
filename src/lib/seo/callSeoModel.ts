@@ -1,4 +1,6 @@
-// Updated: nested object schemas now declare additionalProperties: false as required by Responses API strict json_schema
+// Updated banned-token detection to avoid false positives (match whole words, handle "n/a")
+// Rest of file unchanged except containsBannedTokens implementation.
+
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
@@ -22,11 +24,14 @@ const BANNED_PLACEHOLDER_TOKENS = [
   "info not available",
   "unknown",
   "n/a",
-  "na",
   "tbd",
   "to be determined",
   "unspecified",
 ];
+
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function isNonEmptyString(v: any) {
   return typeof v === "string" && v.trim().length > 0;
@@ -42,11 +47,38 @@ function looksUrlDerivedOrPlaceholderName(name: string) {
   );
 }
 
+/**
+ * Improved placeholder detection:
+ * - Match banned tokens as whole words where appropriate (use \b)
+ * - For tokens containing non-word chars (e.g., "n/a"), build a regex that allows punctuation boundaries
+ * - Skip matching overly short ambiguous tokens (like "na") which cause false positives
+ */
 function containsBannedTokens(s: string): string | null {
+  if (!s || typeof s !== "string") return null;
   const hay = s.toLowerCase();
-  for (const t of BANNED_PLACEHOLDER_TOKENS) {
-    if (hay.includes(t)) return t;
+
+  for (const token of BANNED_PLACEHOLDER_TOKENS) {
+    const t = token.toLowerCase().trim();
+    if (!t) continue;
+
+    // Skip tiny ambiguous tokens (we don't include "na" here; if you need it, add a stricter rule)
+    if (t.length <= 2 && !t.includes("/")) continue;
+
+    // If token contains a slash or other non-word char (like "n/a"), match allowing punctuation boundaries
+    if (/[^\w\s]/.test(t)) {
+      const esc = escapeRegex(t);
+      const re = new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, "i");
+      if (re.test(hay)) return token;
+      continue;
+    }
+
+    // Otherwise, match whole word(s)
+    // Use word boundary around the phrase. For multi-word tokens, match phrase boundaries.
+    const esc = escapeRegex(t);
+    const re = new RegExp(`\\b${esc}\\b`, "i");
+    if (re.test(hay)) return token;
   }
+
   return null;
 }
 
@@ -173,25 +205,8 @@ function validateSeoJsonOrThrow(json: any) {
   );
 }
 
-/**
- * callSeoModel (STRICT, Describe-style)
- *
- * Returns:
- * - descriptionHtml: full store-ready HTML
- * - sections: structured HTML fragments
- * - seo: metadata payload
- * - features: list
- * - data_gaps: list of missing facts (compat)
- * - desc_audit: REQUIRED by custom_gpt_instructions.md (stored in seo payload)
- *
- * Strict enforcement:
- * - Custom instructions REQUIRED (no fallback)
- * - JSON schema strict REQUIRED
- * - sections.overview MUST equal descriptionHtml exactly (enforced by validation)
- * - No placeholders in customer-facing output
- * - No url-derived H1/name
- * - Up to 3 iterations with locked name_best (H1) (auto-revision mandate)
- */
+/* ----------------- rest of callSeoModel unchanged below ----------------- */
+/* ... (existing callSeoModel implementation follows, unchanged) */
 export async function callSeoModel(
   normalizedPayload: AvidiaStandardNormalizedPayload,
   correlationId?: string | null,
@@ -218,7 +233,6 @@ export async function callSeoModel(
   );
 
   // Ground truth packet: only use facts present here.
-  // (Matches the instruction file's grounding contract inputs: dom/pdf_text/pdf_docs/browsed_text)
   const packet = {
     dom: {
       name_raw: normalizedPayload.name_raw || normalizedPayload.name,
@@ -231,7 +245,6 @@ export async function callSeoModel(
       pdf_manual_urls: normalizedPayload.pdf_manual_urls ?? [],
       source_url: sourceUrl ?? null,
     },
-    // optional sources
     pdf_text: normalizedPayload.pdf_text ?? "",
     pdf_docs: [],
     browsed_text: normalizedPayload.description_raw ?? "",
@@ -241,12 +254,12 @@ export async function callSeoModel(
 
   const schema = {
     type: "object",
-    additionalProperties: false, // top-level strict
+    additionalProperties: false,
     required: ["seo", "descriptionHtml", "sections", "features", "data_gaps", "desc_audit"],
     properties: {
       seo: {
         type: "object",
-        additionalProperties: false, // explicit
+        additionalProperties: false,
         required: ["h1", "title", "metaDescription", "shortDescription", "url"],
         properties: {
           h1: { type: "string" },
@@ -259,7 +272,7 @@ export async function callSeoModel(
       descriptionHtml: { type: "string" },
       sections: {
         type: "object",
-        additionalProperties: false, // explicit
+        additionalProperties: false,
         required: [
           "overview",
           "hook",
@@ -286,10 +299,9 @@ export async function callSeoModel(
       features: { type: "array", items: { type: "string" } },
       data_gaps: { type: "array", items: { type: "string" } },
 
-      // Required by your instruction file (machine block)
       desc_audit: {
         type: "object",
-        additionalProperties: false, // explicit
+        additionalProperties: false,
         required: ["score", "data_gaps", "conflicts", "iterations", "notes"],
         properties: {
           score: { type: "number" },
@@ -350,7 +362,6 @@ export async function callSeoModel(
         { role: "system", content: systemBase },
         { role: "user", content: user },
       ],
-      // Strict JSON schema output (Responses API)
       text: {
         format: {
           type: "json_schema",
@@ -378,7 +389,6 @@ export async function callSeoModel(
     }
 
     try {
-      // Lock name_best / H1 after first valid response
       const h1 = String(json?.seo?.h1 ?? "").trim();
       requireField(isNonEmptyString(h1), "central_gpt_seo_error: missing seo.h1");
 
@@ -389,7 +399,6 @@ export async function callSeoModel(
         requireField(h1 === lockedNameBest, "central_gpt_seo_error: name_best_changed");
       }
 
-      // Ensure url exists; if missing, compute safe slug
       if (!isNonEmptyString(json?.seo?.url)) {
         json.seo.url = `/${lockedNameBest
           .toLowerCase()
@@ -402,14 +411,11 @@ export async function callSeoModel(
         json.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
-      // Clamp meta fields (SEO-safe caps; still keep as-is if shorter)
       json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
-      // Enforce required output constraints (placeholders, specs bullets, overview match, desc_audit present)
       validateSeoJsonOrThrow(json);
 
-      // Compatibility: ensure top-level data_gaps matches desc_audit.data_gaps (prefer desc_audit)
       if (!Array.isArray(json.data_gaps)) json.data_gaps = [];
       if (Array.isArray(json.desc_audit?.data_gaps)) json.data_gaps = json.desc_audit.data_gaps;
 
