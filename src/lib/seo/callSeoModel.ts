@@ -1,6 +1,6 @@
 // src/lib/seo/callSeoModel.ts
 // Updated: stricter Responses API schema, robust banned-token detection, improved HTML normalization,
-// and validator now compares normalized text (not raw HTML) for overview === descriptionHtml.
+// and relaxed "overview equals descriptionHtml" check using normalized text + token similarity auto-fix.
 //
 // Ready to drop into repository.
 
@@ -134,7 +134,6 @@ function countLi(html: string): number {
 
 /**
  * Basic HTML entity decoding (common entities) and helper to normalize HTML -> plain text.
- * We use this for a robust comparison rather than requiring exact HTML string equality.
  */
 function decodeHtmlEntities(s: string): string {
   if (!s) return "";
@@ -173,7 +172,7 @@ function htmlToNormalizedText(s: any): string {
   // Expand escaped newline/tab sequences if present in raw model output
   t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
 
-  // Remove tags (replace with space to avoid concatenation of words)
+  // Remove tags (replace with space to avoid concatenation)
   t = t.replace(/<[^>]+>/g, " ");
 
   // Decode common entities
@@ -186,11 +185,38 @@ function htmlToNormalizedText(s: any): string {
 }
 
 /**
+ * Compute a simple token-based similarity (Jaccard) between two normalized texts.
+ * Returns a number in [0,1]. Uses lowercased word tokens, filters out short tokens (1-char).
+ */
+function tokenJaccardSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const normalizeTokens = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 1);
+
+  const ta = new Set(normalizeTokens(a));
+  const tb = new Set(normalizeTokens(b));
+  if (ta.size === 0 || tb.size === 0) return 0;
+
+  let intersection = 0;
+  for (const x of ta) {
+    if (tb.has(x)) intersection++;
+  }
+  const union = new Set([...ta, ...tb]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
  * Hard validations to keep us compliant with custom_gpt_instructions.md
  * and to guarantee "no hallucination / no placeholders" behavior.
  *
- * NOTE: We compare normalized text (htmlToNormalizedText) for overview equality
- * instead of raw string equality to avoid false positives due to formatting.
+ * NOTE: We compare normalized text (htmlToNormalizedText) + token similarity for overview equality
+ * to avoid false positives due to minor formatting differences. If normalized text exactly matches,
+ * or token similarity >= SIMILARITY_THRESHOLD, we consider them equal.
  */
 function validateSeoJsonOrThrow(json: any) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
@@ -234,9 +260,14 @@ function validateSeoJsonOrThrow(json: any) {
   const normOverview = htmlToNormalizedText(json.sections.overview);
   const normDesc = htmlToNormalizedText(json.descriptionHtml);
 
-  // If normalized text differs, fail — we want them to be effectively the same content.
+  const SIMILARITY_THRESHOLD = 0.9; // 90% token overlap required to accept as equal
+
+  const exactEqual = normOverview === normDesc;
+  const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
+
+  // Accept if exact normalized equality OR high token similarity
   requireField(
-    normOverview === normDesc,
+    exactEqual || tokenSim >= SIMILARITY_THRESHOLD,
     "central_gpt_seo_error: sections.overview_must_equal_descriptionHtml"
   );
 
@@ -478,13 +509,22 @@ export async function callSeoModel(
       json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
-      // --- Robust normalization and auto-fix for overview equality ---
+      // --- Robust normalization and similarity-based auto-fix for overview equality ---
       try {
         const normOverview = htmlToNormalizedText(json.sections?.overview ?? "");
         const normDesc = htmlToNormalizedText(json.descriptionHtml ?? "");
+
+        // If normalized exact match, set canonical
         if (normOverview && normDesc && normOverview === normDesc) {
-          // Auto-fix: set overview to canonical descriptionHtml so strict equality passes later
           json.sections.overview = json.descriptionHtml;
+        } else {
+          // Otherwise compute token similarity and auto-fix when very similar
+          const sim = tokenJaccardSimilarity(normOverview, normDesc);
+          // Auto-fix threshold: 90% token overlap
+          if (sim >= 0.9) {
+            console.info("[seo] overview ~= descriptionHtml (sim=", sim.toFixed(3), "), auto-fixing overview");
+            json.sections.overview = json.descriptionHtml;
+          }
         }
       } catch (nfErr) {
         console.warn("normalizeHtmlForCompare failed:", nfErr);
