@@ -1,4 +1,4 @@
-// (only changed: top-level schema.additionalProperties set to false)
+// Updated: nested object schemas now declare additionalProperties: false as required by Responses API strict json_schema
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
@@ -241,11 +241,12 @@ export async function callSeoModel(
 
   const schema = {
     type: "object",
-    additionalProperties: false, // <- STRICT: Responses API requires explicit false for strict json_schema
+    additionalProperties: false, // top-level strict
     required: ["seo", "descriptionHtml", "sections", "features", "data_gaps", "desc_audit"],
     properties: {
       seo: {
         type: "object",
+        additionalProperties: false, // explicit
         required: ["h1", "title", "metaDescription", "shortDescription", "url"],
         properties: {
           h1: { type: "string" },
@@ -258,6 +259,7 @@ export async function callSeoModel(
       descriptionHtml: { type: "string" },
       sections: {
         type: "object",
+        additionalProperties: false, // explicit
         required: [
           "overview",
           "hook",
@@ -287,6 +289,7 @@ export async function callSeoModel(
       // Required by your instruction file (machine block)
       desc_audit: {
         type: "object",
+        additionalProperties: false, // explicit
         required: ["score", "data_gaps", "conflicts", "iterations", "notes"],
         properties: {
           score: { type: "number" },
