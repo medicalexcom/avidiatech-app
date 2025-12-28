@@ -1,17 +1,19 @@
 // src/lib/seo/compatSeoMapping.ts
 // Small helper to map canonical seo result into a shape that includes legacy/top-level aliases
 // so audit and other legacy consumers will find h1/title/metaDescription/shortDescription.
+//
+// Drop this file into the repo and import mapSeoResultToStore() where you persist seo_payload.
 
 export function mapSeoResultToStore(seoResult: any) {
   // canonical nested object (preferred)
   const canonicalSeo = (seoResult && seoResult.seo) ? seoResult.seo : seoResult ?? {};
 
-  const get = (...paths: Array<string | (string | number)[]>) => {
+  // Helper to safely read possible locations (dot paths or arrays of path segments)
+  const getFirst = (...paths: Array<string | string[] | undefined>) => {
     for (const p of paths) {
       if (!p) continue;
       if (typeof p === "string") {
-        // single path string may be dot-delimited
-        const parts = (p as string).split(".");
+        const parts = p.split(".");
         let cur: any = seoResult;
         for (const part of parts) {
           if (cur == null) { cur = undefined; break; }
@@ -19,11 +21,10 @@ export function mapSeoResultToStore(seoResult: any) {
         }
         if (cur !== undefined) return cur;
       } else if (Array.isArray(p)) {
-        // array of keys: try sequentially
-        let cur = seoResult;
-        for (const key of p) {
+        let cur: any = seoResult;
+        for (const seg of p) {
           if (cur == null) { cur = undefined; break; }
-          cur = cur[key as string];
+          cur = cur[seg as string];
         }
         if (cur !== undefined) return cur;
       }
@@ -38,48 +39,30 @@ export function mapSeoResultToStore(seoResult: any) {
     seo: canonicalSeo,
     // ensure debug/meta present
     _meta: seoResult?._meta ?? null,
+
     // legacy / top-level compatibility (prefer canonical values)
-    h1: canonicalSeo?.h1 ?? seoResult?.h1 ?? null,
+    h1: getFirst("seo.h1", "h1") ?? null,
+
     pageTitle:
-      canonicalSeo?.pageTitle ??
-      canonicalSeo?.title ??
-      seoResult?.pageTitle ??
-      seoResult?.title ??
-      null,
+      getFirst("seo.pageTitle", "seo.title", "pageTitle", "title") ?? null,
+
     title:
-      canonicalSeo?.title ??
-      canonicalSeo?.pageTitle ??
-      seoResult?.title ??
-      seoResult?.pageTitle ??
-      null,
+      getFirst("seo.title", "seo.pageTitle", "title", "pageTitle") ?? null,
+
     metaDescription:
-      canonicalSeo?.metaDescription ??
-      canonicalSeo?.meta_description ??
-      seoResult?.metaDescription ??
-      seoResult?.meta_description ??
-      null,
+      getFirst("seo.metaDescription", "seo.meta_description", "metaDescription", "meta_description") ?? null,
+
     meta_description:
-      canonicalSeo?.meta_description ??
-      canonicalSeo?.metaDescription ??
-      seoResult?.meta_description ??
-      seoResult?.metaDescription ??
-      null,
+      getFirst("seo.meta_description", "seo.metaDescription", "meta_description", "metaDescription") ?? null,
+
     shortDescription:
-      canonicalSeo?.shortDescription ??
-      canonicalSeo?.seoShortDescription ??
-      seoResult?.shortDescription ??
-      seoResult?.seoShortDescription ??
-      null,
+      getFirst("seo.shortDescription", "seo.seoShortDescription", "shortDescription", "seoShortDescription") ?? null,
+
     seoShortDescription:
-      canonicalSeo?.seoShortDescription ??
-      canonicalSeo?.shortDescription ??
-      seoResult?.seoShortDescription ??
-      seoResult?.shortDescription ??
-      null,
+      getFirst("seo.seoShortDescription", "seo.shortDescription", "seoShortDescription", "shortDescription") ?? null,
   };
 
-  // Also provide backward-compatible fallback names that some code may check
-  // (pageTitle vs. title, meta vs metaDescription)
+  // Additional fallbacks: ensure both pageTitle and title exist
   if (!seo_payload_to_store.pageTitle && seo_payload_to_store.title) {
     seo_payload_to_store.pageTitle = seo_payload_to_store.title;
   }
