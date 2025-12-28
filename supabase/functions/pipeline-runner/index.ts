@@ -217,7 +217,9 @@ Deno.serve(async (req) => {
         if (moduleName === "seo") {
           if (!ingestionId) throw new Error("missing_ingestionId_for_seo");
 
-          const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/seo`, {
+          const endpoint = `${appUrl}/api/v1/pipeline/internal/seo`;
+
+          const resp = await fetch(endpoint, {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -226,6 +228,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ ingestionId, options: options?.seo ?? null }),
           });
 
+          // CRITICAL: capture response body ALWAYS so failures aren't opaque.
           const text = await resp.text().catch(() => "");
           let json: any;
           try {
@@ -239,34 +242,45 @@ Deno.serve(async (req) => {
             ingestionId,
             module: { name: moduleName, index: moduleIndex },
             generatedAt: new Date().toISOString(),
-            http: { status: resp.status },
+            http: { url: endpoint, status: resp.status },
             seo: json,
           });
 
           if (!resp.ok) {
+            const errPayload = {
+              message: `seo_internal_http_${resp.status}`,
+              http_status: resp.status,
+              url: endpoint,
+              body: json,
+            };
+
             await supabase
               .from("module_runs")
               .update({
                 status: "failed" satisfies ModuleStatus,
                 finished_at: new Date().toISOString(),
                 output_ref: key,
-                error: {
-                  message: `seo_internal_http_${resp.status}`,
-                  http_status: resp.status,
-                  body: json,
-                },
+                error: errPayload,
               })
               .eq("id", moduleId);
-          
+
             await supabase
               .from("pipeline_runs")
-              .update({ status: "failed", finished_at: new Date().toISOString() })
+              .update({
+                status: "failed",
+                finished_at: new Date().toISOString(),
+                error: errPayload,
+              })
               .eq("id", pipelineRunId);
-          
-            return new Response(JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName }), {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            });
+
+            // Return 200 for runner contract, but include full error details for debugging.
+            return new Response(
+              JSON.stringify({ ok: false, pipelineRunId, failedModule: moduleName, error: errPayload }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }
+            );
           }
 
           await supabase
