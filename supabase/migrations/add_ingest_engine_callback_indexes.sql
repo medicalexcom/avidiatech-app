@@ -1,4 +1,4 @@
--- Indexes to support pipeline gating queries and debugging.
+-- Indexes to speed up pipeline gating/polling and debugging.
 
 create index if not exists product_ingestions_ingest_callback_at_idx
   on public.product_ingestions (ingest_callback_at);
