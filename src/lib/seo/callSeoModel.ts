@@ -1,7 +1,10 @@
 // src/lib/seo/callSeoModel.ts
-// Ready-to-drop: truncation updated to avoid cutting words without appending an ellipsis.
-// Truncation will return the longest substring <= maxLen that ends at a word boundary;
-// if a single token exceeds maxLen, it will hard-trim that token to maxLen.
+// Ready-to-drop: improved truncation using sentence-boundary preference with small allowed overrun,
+// avoiding mid-word and mid-sentence cuts while respecting limits.
+//
+// - Title: max 70 chars, allow small overrun (12) to finish sentence if close.
+// - Meta: max 160 chars, allow small overrun (20).
+// - Falls back to clause, word-boundary, entity-safe, then hard-trim.
 
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
@@ -51,9 +54,9 @@ function looksUrlDerivedOrPlaceholderName(name: string) {
 
 /**
  * Improved placeholder detection:
- * - Match banned tokens as whole words where appropriate (use \b)
- * - For tokens containing non-word chars (e.g., "n/a"), build a regex that allows punctuation boundaries
- * - Skip matching overly short ambiguous tokens which cause false positives
+ * - Match banned tokens as whole words where appropriate
+ * - For tokens containing non-word chars (e.g., "n/a"), match allowing punctuation boundaries
+ * - Skip overly short ambiguous tokens which cause false positives
  */
 function containsBannedTokens(s: string): string | null {
   if (!s || typeof s !== "string") return null;
@@ -63,10 +66,8 @@ function containsBannedTokens(s: string): string | null {
     const t = token.toLowerCase().trim();
     if (!t) continue;
 
-    // Skip tiny ambiguous tokens (avoid "na" false positives)
     if (t.length <= 2 && !t.includes("/")) continue;
 
-    // If token contains a slash or other non-word char (like "n/a"), match allowing punctuation boundaries
     if (/[^\w\s]/.test(t)) {
       const esc = escapeRegex(t);
       const re = new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, "i");
@@ -74,7 +75,6 @@ function containsBannedTokens(s: string): string | null {
       continue;
     }
 
-    // Otherwise, match whole word(s)
     const esc = escapeRegex(t);
     const re = new RegExp(`\\b${esc}\\b`, "i");
     if (re.test(hay)) return token;
@@ -92,41 +92,69 @@ function requireField(condition: boolean, message: string) {
 }
 
 /**
- * Truncate a plain-text string to a maximum length without cutting a word in the middle.
- * - If the string is shorter than maxLen return unchanged.
- * - Finds the last whitespace boundary before or at maxLen and returns up to that boundary.
- * - If no whitespace boundary exists before maxLen (very long token), hard-trim to maxLen.
- * - Returns a non-empty string where possible.
+ * Truncate preferring sentence boundaries with controlled overrun and fallbacks.
+ *
+ * Behavior:
+ * 1. If string length <= maxLen -> return unchanged.
+ * 2. Try to find a sentence terminator (., !, ?) at or before maxLen; if found return up to it.
+ * 3. If not found, allow small overrun (maxOverrun) to include a terminator shortly after maxLen.
+ * 4. Fallback to clause boundary (comma/semicolon), then word boundary, then entity-safe back-up,
+ *    and finally hard trim to maxLen.
+ *
+ * Does not append ellipsis. Returns the longest sensible substring <= maxLen (or slightly > maxLen
+ * when overrun rule applies).
  */
-function truncateAtWordBoundaryNoEllipsis(s: string, maxLen: number): string {
+function truncatePreferSentenceBoundary(s: string, maxLen: number, maxOverrun = 20): string {
   if (typeof s !== "string" || maxLen <= 0) return "";
   const str = s.trim();
-
   if (str.length <= maxLen) return str;
 
-  // If character at maxLen is whitespace, we can safely slice
-  if (/\s/.test(str.charAt(maxLen))) {
-    const candidate = str.slice(0, maxLen).trim();
-    return candidate.length ? candidate : str.slice(0, maxLen);
+  // 1) Sentence terminator at or before maxLen
+  for (let i = Math.min(str.length - 1, maxLen); i >= 0; i--) {
+    const ch = str[i];
+    if (ch === "." || ch === "!" || ch === "?") {
+      // include punctuation
+      const candidate = str.slice(0, i + 1).trim();
+      if (candidate.length) return candidate;
+      break;
+    }
   }
 
-  // Find last whitespace before or at maxLen
+  // 2) Allow small overrun to include terminator shortly after maxLen
+  if (maxOverrun > 0) {
+    const searchEnd = Math.min(str.length - 1, maxLen + maxOverrun);
+    for (let i = maxLen + 1; i <= searchEnd; i++) {
+      const ch = str[i];
+      if (ch === "." || ch === "!" || ch === "?") {
+        const candidate = str.slice(0, i + 1).trim();
+        if (candidate.length) return candidate;
+      }
+    }
+  }
+
+  // 3) Clause boundary fallback (comma/semicolon)
+  const lastClause = Math.max(str.lastIndexOf(",", maxLen), str.lastIndexOf(";", maxLen));
+  if (lastClause > -1 && lastClause >= Math.floor(maxLen * 0.25)) {
+    const candidate = str.slice(0, lastClause).trim();
+    if (candidate.length) return candidate;
+  }
+
+  // 4) Word-boundary fallback: last whitespace before maxLen
   const upto = str.slice(0, maxLen);
   const lastSpace = Math.max(upto.lastIndexOf(" "), upto.lastIndexOf("\n"), upto.lastIndexOf("\t"));
-
-  if (lastSpace > -1 && lastSpace >= Math.floor(maxLen * 0.25)) {
+  if (lastSpace > -1 && lastSpace >= Math.floor(maxLen * 0.2)) {
     const candidate = str.slice(0, lastSpace).trim();
     if (candidate.length) return candidate;
   }
 
-  // Try to avoid breaking HTML entities like &amp; by backing up to '&' if present
+  // 5) Try to avoid cutting an HTML entity
   const entityStart = upto.lastIndexOf("&");
-  if (entityStart >= 0 && entityStart > 0) {
+  if (entityStart > 0) {
     const candidate = str.slice(0, entityStart).trim();
     if (candidate.length) return candidate;
   }
 
-  // As a last resort, hard trim to maxLen (avoid empty string)
+  // 6) Last resort: hard trim to maxLen (ensure non-empty)
   return str.slice(0, Math.max(1, maxLen));
 }
 
@@ -359,13 +387,11 @@ export async function callSeoModel(
   const { text: instructions, source: instructionsSource } =
     await loadCustomGptInstructionsWithInfo(tenantId ?? null);
 
-  // HARD REQUIRE: no fallback instructions
   requireField(
     isNonEmptyString(instructions),
     "seo_missing_custom_instructions: custom_gpt_instructions are required"
   );
 
-  // Ground truth packet: only use facts present here.
   const packet = {
     dom: {
       name_raw: normalizedPayload.name_raw || normalizedPayload.name,
@@ -385,7 +411,6 @@ export async function callSeoModel(
     tenant_id: tenantId ?? null,
   };
 
-  // Strict schema: top-level and nested objects explicitly disallow additionalProperties
   const schema = {
     type: "object",
     additionalProperties: false,
@@ -548,7 +573,7 @@ export async function callSeoModel(
         json.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
-      // Clamp meta fields (SEO-safe caps) using word-boundary truncation (no ellipsis)
+      // Truncate meta fields using sentence-preference truncation (no ellipsis)
       try {
         const rawTitle = String(json.seo.title || json.seo?.pageTitle || "").trim();
         const rawMeta = String(json.seo.metaDescription || json.seo?.meta_description || "").trim();
@@ -556,9 +581,12 @@ export async function callSeoModel(
         const decodedTitle = decodeHtmlEntities(rawTitle);
         const decodedMeta = decodeHtmlEntities(rawMeta);
 
-        json.seo.title = truncateAtWordBoundaryNoEllipsis(decodedTitle, 70);
-        json.seo.metaDescription = truncateAtWordBoundaryNoEllipsis(decodedMeta, 160);
+        // Title: 70 chars, allow small overrun to finish sentence
+        json.seo.title = truncatePreferSentenceBoundary(decodedTitle, 70, 12);
+        // Meta: 160 chars, allow up to 20 chars overrun to finish sentence
+        json.seo.metaDescription = truncatePreferSentenceBoundary(decodedMeta, 160, 20);
       } catch (tErr) {
+        // fallback to safe slice if unexpected
         json.seo.title = String(json.seo.title || json.seo?.pageTitle || "").trim().slice(0, 70);
         json.seo.metaDescription = String(json.seo.metaDescription || json.seo?.meta_description || "").trim().slice(0, 160);
       }
