@@ -1,9 +1,9 @@
 // src/lib/seo/callSeoModel.ts
-// Updated: stricter Responses API schema, robust banned-token detection, improved HTML normalization,
-// and improved validation error for overview equality which includes normalized strings and token similarity
-// in the thrown Error.details so pipeline-runner persists useful debug info.
-//
-// Ready to drop into repository.
+// Ready-to-drop. Contains:
+// - strict Responses API schema (additionalProperties: false for nested objects)
+// - robust banned-token detection
+// - HTML normalization + token-similarity checks for sections.overview === descriptionHtml
+// - preserves validator debug details when re-throwing so callers can persist diagnostics
 
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
@@ -53,9 +53,9 @@ function looksUrlDerivedOrPlaceholderName(name: string) {
 
 /**
  * Improved placeholder detection:
- * - Match banned tokens as whole words where appropriate (use \b)
- * - For tokens containing non-word chars (e.g., "n/a"), build a regex that allows punctuation boundaries
- * - Skip matching overly short ambiguous tokens (like "na") which cause false positives
+ * - Match banned tokens as whole words where appropriate
+ * - For tokens containing non-word chars (e.g., "n/a"), allow punctuation boundaries
+ * - Skip overly short ambiguous tokens (like "na") which cause false positives
  */
 function containsBannedTokens(s: string): string | null {
   if (!s || typeof s !== "string") return null;
@@ -65,10 +65,8 @@ function containsBannedTokens(s: string): string | null {
     const t = token.toLowerCase().trim();
     if (!t) continue;
 
-    // Skip tiny ambiguous tokens (avoid "na" false positives)
     if (t.length <= 2 && !t.includes("/")) continue;
 
-    // If token contains a slash or other non-word char (like "n/a"), match allowing punctuation boundaries
     if (/[^\w\s]/.test(t)) {
       const esc = escapeRegex(t);
       const re = new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, "i");
@@ -76,7 +74,6 @@ function containsBannedTokens(s: string): string | null {
       continue;
     }
 
-    // Otherwise, match whole word(s)
     const esc = escapeRegex(t);
     const re = new RegExp(`\\b${esc}\\b`, "i");
     if (re.test(hay)) return token;
@@ -93,9 +90,7 @@ function requireField(condition: boolean, message: string) {
   }
 }
 
-/**
- * Extract text from OpenAI Responses API output safely.
- */
+/** Extract text from OpenAI Responses API output safely. */
 function extractTextFromResponses(res: any): string {
   const out0 = res?.output?.at?.(0) ?? res?.output?.[0] ?? null;
   if (!out0) return "";
@@ -133,9 +128,7 @@ function countLi(html: string): number {
   return m ? m.length : 0;
 }
 
-/**
- * Basic HTML entity decoding (common entities) and helper to normalize HTML -> plain text.
- */
+/** Decode basic HTML entities to plain text. */
 function decodeHtmlEntities(s: string): string {
   if (!s) return "";
   const replacements: Record<string, string> = {
@@ -162,33 +155,23 @@ function decodeHtmlEntities(s: string): string {
 }
 
 /**
- * Convert HTML-like string to normalized plain text for comparison:
- * - Expand escaped newline sequences ("\\n")
- * - Remove tags, decode entities, collapse whitespace
+ * Normalize HTML-like content to plain text:
+ * - Expand escaped newline/tab sequences
+ * - Remove tags (replace with space)
+ * - Decode entities
+ * - Collapse whitespace
  */
 function htmlToNormalizedText(s: any): string {
   if (s === null || s === undefined) return "";
   let t = String(s);
-
-  // Expand escaped newline/tab sequences if present in raw model output
   t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
-
-  // Remove tags (replace with space to avoid concatenation)
   t = t.replace(/<[^>]+>/g, " ");
-
-  // Decode common entities
   t = decodeHtmlEntities(t);
-
-  // Normalize whitespace
   t = t.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-
   return t;
 }
 
-/**
- * Compute a simple token-based similarity (Jaccard) between two normalized texts.
- * Returns a number in [0,1]. Uses lowercased word tokens, filters out short tokens (1-char).
- */
+/** Simple token Jaccard similarity on normalized text (filter tokens length > 1) */
 function tokenJaccardSimilarity(a: string, b: string): number {
   if (!a || !b) return 0;
   const normalizeTokens = (s: string) =>
@@ -212,17 +195,12 @@ function tokenJaccardSimilarity(a: string, b: string): number {
 }
 
 /**
- * Hard validations to keep us compliant with custom_gpt_instructions.md
- * and to guarantee "no hallucination / no placeholders" behavior.
- *
- * NOTE: We compare normalized text (htmlToNormalizedText) + token similarity for overview equality
- * to avoid false positives due to minor formatting differences. When the check fails we throw an Error
- * that contains machine-readable debug details (normalized strings + similarity) in err.details.
+ * Validate SEO JSON. When overview/description equality check fails, throw an error with
+ * err.details = { normalizedOverview, normalizedDescription, tokenSimilarity } for diagnostics.
  */
 function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
 
-  // required top-level fields
   requireField(json.seo && typeof json.seo === "object", "central_gpt_seo_error: missing seo");
   requireField(isNonEmptyString(json.seo.h1), "central_gpt_seo_error: missing seo.h1");
   requireField(isNonEmptyString(json.seo.title), "central_gpt_seo_error: missing seo.title");
@@ -233,13 +211,11 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   requireField(isNonEmptyString(json.descriptionHtml), "central_gpt_seo_error: missing descriptionHtml");
   requireField(json.sections && typeof json.sections === "object", "central_gpt_seo_error: missing sections");
 
-  // must not be url-derived
   requireField(
     !looksUrlDerivedOrPlaceholderName(String(json.seo.h1)),
     "central_gpt_seo_error: h1_contains_url_or_placeholder"
   );
 
-  // no placeholders anywhere in customer-facing output
   const aggregate = [
     String(json.seo?.h1 ?? ""),
     String(json.seo?.title ?? ""),
@@ -252,7 +228,6 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   const bad = containsBannedTokens(aggregate);
   requireField(!bad, `central_gpt_seo_error: banned_placeholder_token:${bad}`);
 
-  // overview must be semantically equal to descriptionHtml (normalized text)
   requireField(
     typeof json.sections.overview === "string" && json.sections.overview.trim().length > 0,
     "central_gpt_seo_error: sections.overview_missing"
@@ -266,7 +241,6 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
 
   if (!(exactEqual || tokenSim >= similarityThreshold)) {
     const err: any = new Error("central_gpt_seo_error: sections.overview_must_equal_descriptionHtml");
-    // Provide machine-readable debug for the pipeline-runner to persist
     err.details = {
       normalizedOverview: normOverview,
       normalizedDescription: normDesc,
@@ -276,7 +250,6 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
     throw err;
   }
 
-  // specs must exist and have bullets
   requireField(
     typeof json.sections.specifications === "string" &&
       json.sections.specifications.trim().length > 0,
@@ -287,7 +260,6 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
     "central_gpt_seo_error: specifications_has_no_bullets"
   );
 
-  // desc_audit required by instruction file (we store it)
   requireField(
     json.desc_audit && typeof json.desc_audit === "object",
     "central_gpt_seo_error: desc_audit_missing"
@@ -299,9 +271,7 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
 }
 
 /**
- * callSeoModel (STRICT, Describe-style)
- *
- * Returns: descriptionHtml, sections, seo, features, data_gaps, desc_audit, _meta
+ * callSeoModel (STRICT)
  */
 export async function callSeoModel(
   normalizedPayload: AvidiaStandardNormalizedPayload,
@@ -322,13 +292,11 @@ export async function callSeoModel(
   const { text: instructions, source: instructionsSource } =
     await loadCustomGptInstructionsWithInfo(tenantId ?? null);
 
-  // HARD REQUIRE: no fallback instructions
   requireField(
     isNonEmptyString(instructions),
     "seo_missing_custom_instructions: custom_gpt_instructions are required"
   );
 
-  // Ground truth packet: only use facts present here.
   const packet = {
     dom: {
       name_raw: normalizedPayload.name_raw || normalizedPayload.name,
@@ -348,7 +316,6 @@ export async function callSeoModel(
     tenant_id: tenantId ?? null,
   };
 
-  // Strict schema: top-level and nested objects explicitly disallow additionalProperties
   const schema = {
     type: "object",
     additionalProperties: false,
@@ -459,7 +426,6 @@ export async function callSeoModel(
         { role: "system", content: systemBase },
         { role: "user", content: user },
       ],
-      // Strict JSON schema output (Responses API)
       text: {
         format: {
           type: "json_schema",
@@ -487,7 +453,6 @@ export async function callSeoModel(
     }
 
     try {
-      // Lock name_best / H1 after first valid response
       const h1 = String(json?.seo?.h1 ?? "").trim();
       requireField(isNonEmptyString(h1), "central_gpt_seo_error: missing seo.h1");
 
@@ -498,7 +463,6 @@ export async function callSeoModel(
         requireField(h1 === lockedNameBest, "central_gpt_seo_error: name_best_changed");
       }
 
-      // Ensure url exists; if missing, compute safe slug
       if (!isNonEmptyString(json?.seo?.url)) {
         json.seo.url = `/${lockedNameBest
           .toLowerCase()
@@ -511,16 +475,15 @@ export async function callSeoModel(
         json.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
-      // Clamp meta fields (SEO-safe caps)
       json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
-      // --- Robust normalization and similarity-based auto-fix for overview equality ---
+      // Normalization + similarity auto-fix
       try {
         const normOverview = htmlToNormalizedText(json.sections?.overview ?? "");
         const normDesc = htmlToNormalizedText(json.descriptionHtml ?? "");
 
-        const SIMILARITY_THRESHOLD = 0.75; // tolerance for token overlap
+        const SIMILARITY_THRESHOLD = 0.75;
         const exactEqual = normOverview === normDesc;
         const sim = tokenJaccardSimilarity(normOverview, normDesc);
 
@@ -536,10 +499,8 @@ export async function callSeoModel(
         console.warn("normalizeHtmlForCompare failed:", nfErr);
       }
 
-      // Enforce required output constraints (placeholders, specs bullets, overview match, desc_audit present)
       validateSeoJsonOrThrow(json, 0.75);
 
-      // Compatibility: ensure top-level data_gaps matches desc_audit.data_gaps (prefer desc_audit)
       if (!Array.isArray(json.data_gaps)) json.data_gaps = [];
       if (Array.isArray(json.desc_audit?.data_gaps)) json.data_gaps = json.desc_audit.data_gaps;
 
@@ -562,7 +523,9 @@ export async function callSeoModel(
 
       if (i === maxIterations) {
         const err: any = new Error(lastViolation.startsWith("central_gpt_") ? lastViolation : `central_gpt_seo_error: ${lastViolation}`);
-        err.raw = lastRaw;
+        err.raw = e?.raw ?? lastRaw ?? null;
+        if (e?.details) err.details = e.details;
+        if (e?.stack) err.innerStack = e.stack;
         throw err;
       }
       continue;
