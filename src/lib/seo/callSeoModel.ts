@@ -1,8 +1,7 @@
 // src/lib/seo/callSeoModel.ts
-// Ready-to-drop replacement:
-// - Accepts overview == first paragraph of descriptionHtml (auto-fix to full descriptionHtml).
-// - Keeps strict JSON schema and other validation rules.
-// - Preserves debug details on validation failure.
+// Ready-to-drop: truncation updated to avoid cutting words without appending an ellipsis.
+// Truncation will return the longest substring <= maxLen that ends at a word boundary;
+// if a single token exceeds maxLen, it will hard-trim that token to maxLen.
 
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
@@ -50,7 +49,12 @@ function looksUrlDerivedOrPlaceholderName(name: string) {
   );
 }
 
-/** Improved placeholder detection */
+/**
+ * Improved placeholder detection:
+ * - Match banned tokens as whole words where appropriate (use \b)
+ * - For tokens containing non-word chars (e.g., "n/a"), build a regex that allows punctuation boundaries
+ * - Skip matching overly short ambiguous tokens which cause false positives
+ */
 function containsBannedTokens(s: string): string | null {
   if (!s || typeof s !== "string") return null;
   const hay = s.toLowerCase();
@@ -59,8 +63,10 @@ function containsBannedTokens(s: string): string | null {
     const t = token.toLowerCase().trim();
     if (!t) continue;
 
+    // Skip tiny ambiguous tokens (avoid "na" false positives)
     if (t.length <= 2 && !t.includes("/")) continue;
 
+    // If token contains a slash or other non-word char (like "n/a"), match allowing punctuation boundaries
     if (/[^\w\s]/.test(t)) {
       const esc = escapeRegex(t);
       const re = new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, "i");
@@ -68,6 +74,7 @@ function containsBannedTokens(s: string): string | null {
       continue;
     }
 
+    // Otherwise, match whole word(s)
     const esc = escapeRegex(t);
     const re = new RegExp(`\\b${esc}\\b`, "i");
     if (re.test(hay)) return token;
@@ -84,7 +91,48 @@ function requireField(condition: boolean, message: string) {
   }
 }
 
-/** Extract text from OpenAI Responses API output safely. */
+/**
+ * Truncate a plain-text string to a maximum length without cutting a word in the middle.
+ * - If the string is shorter than maxLen return unchanged.
+ * - Finds the last whitespace boundary before or at maxLen and returns up to that boundary.
+ * - If no whitespace boundary exists before maxLen (very long token), hard-trim to maxLen.
+ * - Returns a non-empty string where possible.
+ */
+function truncateAtWordBoundaryNoEllipsis(s: string, maxLen: number): string {
+  if (typeof s !== "string" || maxLen <= 0) return "";
+  const str = s.trim();
+
+  if (str.length <= maxLen) return str;
+
+  // If character at maxLen is whitespace, we can safely slice
+  if (/\s/.test(str.charAt(maxLen))) {
+    const candidate = str.slice(0, maxLen).trim();
+    return candidate.length ? candidate : str.slice(0, maxLen);
+  }
+
+  // Find last whitespace before or at maxLen
+  const upto = str.slice(0, maxLen);
+  const lastSpace = Math.max(upto.lastIndexOf(" "), upto.lastIndexOf("\n"), upto.lastIndexOf("\t"));
+
+  if (lastSpace > -1 && lastSpace >= Math.floor(maxLen * 0.25)) {
+    const candidate = str.slice(0, lastSpace).trim();
+    if (candidate.length) return candidate;
+  }
+
+  // Try to avoid breaking HTML entities like &amp; by backing up to '&' if present
+  const entityStart = upto.lastIndexOf("&");
+  if (entityStart >= 0 && entityStart > 0) {
+    const candidate = str.slice(0, entityStart).trim();
+    if (candidate.length) return candidate;
+  }
+
+  // As a last resort, hard trim to maxLen (avoid empty string)
+  return str.slice(0, Math.max(1, maxLen));
+}
+
+/**
+ * Extract text from OpenAI Responses API output safely.
+ */
 function extractTextFromResponses(res: any): string {
   const out0 = res?.output?.at?.(0) ?? res?.output?.[0] ?? null;
   if (!out0) return "";
@@ -122,7 +170,9 @@ function countLi(html: string): number {
   return m ? m.length : 0;
 }
 
-/** Decode a handful of HTML entities to plain text. */
+/**
+ * Basic HTML entity decoding (common entities) and helper to normalize HTML -> plain text.
+ */
 function decodeHtmlEntities(s: string): string {
   if (!s) return "";
   const replacements: Record<string, string> = {
@@ -148,31 +198,34 @@ function decodeHtmlEntities(s: string): string {
   return out;
 }
 
-/** Normalize HTML-like text to a plain text fingerprint for comparison. */
+/**
+ * Convert HTML-like string to normalized plain text for comparison:
+ * - Expand escaped newline sequences ("\\n")
+ * - Remove tags, decode entities, collapse whitespace
+ */
 function htmlToNormalizedText(s: any): string {
   if (s === null || s === undefined) return "";
   let t = String(s);
+
+  // Expand escaped newline/tab sequences if present in raw model output
   t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
-  // Remove tags (preserve spacing)
+
+  // Remove tags (replace with space to avoid concatenation)
   t = t.replace(/<[^>]+>/g, " ");
+
+  // Decode common entities
   t = decodeHtmlEntities(t);
+
+  // Normalize whitespace
   t = t.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+
   return t;
 }
 
-/** Extract the first paragraph (HTML) from descriptionHtml */
-function extractFirstParagraphHtml(html: string): string {
-  if (!html || typeof html !== "string") return "";
-  const m = html.match(/<p[^>]*>[\s\S]*?<\/p>/i);
-  if (m) return m[0];
-  // Fallback: split on first <h2> or first double newline
-  const idxH2 = html.search(/<h2\b/i);
-  if (idxH2 >= 0) return html.slice(0, idxH2);
-  const splitByDouble = html.split(/\n\s*\n/);
-  return splitByDouble.length ? splitByDouble[0] : html;
-}
-
-/** Simple token Jaccard similarity on normalized text */
+/**
+ * Compute a simple token-based similarity (Jaccard) between two normalized texts.
+ * Returns a number in [0,1]. Uses lowercased word tokens, filters out short tokens (1-char).
+ */
 function tokenJaccardSimilarity(a: string, b: string): number {
   if (!a || !b) return 0;
   const normalizeTokens = (s: string) =>
@@ -182,19 +235,31 @@ function tokenJaccardSimilarity(a: string, b: string): number {
       .split(/\s+/)
       .map((t) => t.trim())
       .filter((t) => t.length > 1);
+
   const ta = new Set(normalizeTokens(a));
   const tb = new Set(normalizeTokens(b));
   if (ta.size === 0 || tb.size === 0) return 0;
+
   let intersection = 0;
-  for (const x of ta) if (tb.has(x)) intersection++;
+  for (const x of ta) {
+    if (tb.has(x)) intersection++;
+  }
   const union = new Set([...ta, ...tb]).size;
   return union === 0 ? 0 : intersection / union;
 }
 
-/** Validate SEO JSON. When failing overview==description check, include details on err.details */
+/**
+ * Hard validations to keep us compliant with custom_gpt_instructions.md
+ * and to guarantee "no hallucination / no placeholders" behavior.
+ *
+ * NOTE: We compare normalized text (htmlToNormalizedText) + token similarity for overview equality
+ * to avoid false positives due to minor formatting differences. When the check fails we throw an Error
+ * that contains machine-readable debug details (normalized strings + similarity) in err.details.
+ */
 function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
 
+  // required top-level fields
   requireField(json.seo && typeof json.seo === "object", "central_gpt_seo_error: missing seo");
   requireField(isNonEmptyString(json.seo.h1), "central_gpt_seo_error: missing seo.h1");
   requireField(isNonEmptyString(json.seo.title), "central_gpt_seo_error: missing seo.title");
@@ -205,11 +270,13 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   requireField(isNonEmptyString(json.descriptionHtml), "central_gpt_seo_error: missing descriptionHtml");
   requireField(json.sections && typeof json.sections === "object", "central_gpt_seo_error: missing sections");
 
+  // must not be url-derived
   requireField(
     !looksUrlDerivedOrPlaceholderName(String(json.seo.h1)),
     "central_gpt_seo_error: h1_contains_url_or_placeholder"
   );
 
+  // no placeholders anywhere in customer-facing output
   const aggregate = [
     String(json.seo?.h1 ?? ""),
     String(json.seo?.title ?? ""),
@@ -222,12 +289,31 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   const bad = containsBannedTokens(aggregate);
   requireField(!bad, `central_gpt_seo_error: banned_placeholder_token:${bad}`);
 
+  // overview must be semantically equal to descriptionHtml (normalized text)
   requireField(
     typeof json.sections.overview === "string" && json.sections.overview.trim().length > 0,
     "central_gpt_seo_error: sections.overview_missing"
   );
 
-  // Ensure sections.specifications exists and has at least one <li>
+  const normOverview = htmlToNormalizedText(json.sections.overview);
+  const normDesc = htmlToNormalizedText(json.descriptionHtml);
+
+  const exactEqual = normOverview === normDesc;
+  const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
+
+  if (!(exactEqual || tokenSim >= similarityThreshold)) {
+    const err: any = new Error("central_gpt_seo_error: sections.overview_must_equal_descriptionHtml");
+    // Provide machine-readable debug for the pipeline-runner to persist
+    err.details = {
+      normalizedOverview: normOverview,
+      normalizedDescription: normDesc,
+      tokenSimilarity: tokenSim,
+      similarityThreshold,
+    };
+    throw err;
+  }
+
+  // specs must exist and have bullets
   requireField(
     typeof json.sections.specifications === "string" &&
       json.sections.specifications.trim().length > 0,
@@ -238,7 +324,7 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
     "central_gpt_seo_error: specifications_has_no_bullets"
   );
 
-  // desc_audit required
+  // desc_audit required by instruction file (we store it)
   requireField(
     json.desc_audit && typeof json.desc_audit === "object",
     "central_gpt_seo_error: desc_audit_missing"
@@ -247,13 +333,12 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
     Array.isArray(json.desc_audit.data_gaps),
     "central_gpt_seo_error: desc_audit.data_gaps_missing"
   );
-
-  // Final overview==description equality check is performed earlier in callSeoModel after any auto-fix,
-  // so here we don't re-run it. This function ensures the structural fields are present.
 }
 
 /**
- * callSeoModel (STRICT)
+ * callSeoModel (STRICT, Describe-style)
+ *
+ * Returns: descriptionHtml, sections, seo, features, data_gaps, desc_audit, _meta
  */
 export async function callSeoModel(
   normalizedPayload: AvidiaStandardNormalizedPayload,
@@ -274,11 +359,13 @@ export async function callSeoModel(
   const { text: instructions, source: instructionsSource } =
     await loadCustomGptInstructionsWithInfo(tenantId ?? null);
 
+  // HARD REQUIRE: no fallback instructions
   requireField(
     isNonEmptyString(instructions),
     "seo_missing_custom_instructions: custom_gpt_instructions are required"
   );
 
+  // Ground truth packet: only use facts present here.
   const packet = {
     dom: {
       name_raw: normalizedPayload.name_raw || normalizedPayload.name,
@@ -298,6 +385,7 @@ export async function callSeoModel(
     tenant_id: tenantId ?? null,
   };
 
+  // Strict schema: top-level and nested objects explicitly disallow additionalProperties
   const schema = {
     type: "object",
     additionalProperties: false,
@@ -408,6 +496,7 @@ export async function callSeoModel(
         { role: "system", content: systemBase },
         { role: "user", content: user },
       ],
+      // Strict JSON schema output (Responses API)
       text: {
         format: {
           type: "json_schema",
@@ -435,6 +524,7 @@ export async function callSeoModel(
     }
 
     try {
+      // Lock name_best / H1 after first valid response
       const h1 = String(json?.seo?.h1 ?? "").trim();
       requireField(isNonEmptyString(h1), "central_gpt_seo_error: missing seo.h1");
 
@@ -445,6 +535,7 @@ export async function callSeoModel(
         requireField(h1 === lockedNameBest, "central_gpt_seo_error: name_best_changed");
       }
 
+      // Ensure url exists; if missing, compute safe slug
       if (!isNonEmptyString(json?.seo?.url)) {
         json.seo.url = `/${lockedNameBest
           .toLowerCase()
@@ -457,14 +548,34 @@ export async function callSeoModel(
         json.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
-      json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
-      json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
+      // Clamp meta fields (SEO-safe caps) using word-boundary truncation (no ellipsis)
+      try {
+        const rawTitle = String(json.seo.title || json.seo?.pageTitle || "").trim();
+        const rawMeta = String(json.seo.metaDescription || json.seo?.meta_description || "").trim();
 
-      // --- New behavior: allow overview to be the first paragraph of descriptionHtml ---
+        const decodedTitle = decodeHtmlEntities(rawTitle);
+        const decodedMeta = decodeHtmlEntities(rawMeta);
+
+        json.seo.title = truncateAtWordBoundaryNoEllipsis(decodedTitle, 70);
+        json.seo.metaDescription = truncateAtWordBoundaryNoEllipsis(decodedMeta, 160);
+      } catch (tErr) {
+        json.seo.title = String(json.seo.title || json.seo?.pageTitle || "").trim().slice(0, 70);
+        json.seo.metaDescription = String(json.seo.metaDescription || json.seo?.meta_description || "").trim().slice(0, 160);
+      }
+
+      // --- Robust normalization and similarity-based auto-fix for overview equality ---
       try {
         const overviewHtml = json.sections?.overview ?? "";
         const descHtml = json.descriptionHtml ?? "";
-        const firstParaHtml = extractFirstParagraphHtml(descHtml);
+        const firstParaHtml = (function extractFirstParagraphHtml(html: string) {
+          if (!html || typeof html !== "string") return "";
+          const m = html.match(/<p[^>]*>[\s\S]*?<\/p>/i);
+          if (m) return m[0];
+          const idxH2 = html.search(/<h2\b/i);
+          if (idxH2 >= 0) return html.slice(0, idxH2);
+          const splitByDouble = html.split(/\n\s*\n/);
+          return splitByDouble.length ? splitByDouble[0] : html;
+        })(descHtml);
 
         const normOverview = htmlToNormalizedText(overviewHtml);
         const normFirstPara = htmlToNormalizedText(firstParaHtml);
@@ -475,13 +586,11 @@ export async function callSeoModel(
 
         const SIMILARITY_THRESHOLD = 0.75;
 
-        // If overview matches the first paragraph (or is highly similar), consider it acceptable
+        // If overview matches the first paragraph (or is highly similar), auto-fix overview
         if (normOverview && normFirstPara && (normOverview === normFirstPara || simOverviewFirst >= SIMILARITY_THRESHOLD)) {
-          // Auto-fix: set sections.overview to canonical full descriptionHtml so strict equality requirement passes.
           json.sections.overview = json.descriptionHtml;
           autoFixedOverviewFlag = true;
         } else {
-          // Otherwise, fall back to previous criteria: compare overview vs full description
           const exactEqual = normOverview === normDesc;
           const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
           if (exactEqual || tokenSim >= SIMILARITY_THRESHOLD) {
@@ -493,9 +602,10 @@ export async function callSeoModel(
         console.warn("normalize+first-paragraph logic failed:", nfErr);
       }
 
-      // Validate structure and preserved constraints
+      // Enforce required output constraints (placeholders, specs bullets, overview match, desc_audit present)
       validateSeoJsonOrThrow(json, 0.75);
 
+      // Compatibility: ensure top-level data_gaps matches desc_audit.data_gaps (prefer desc_audit)
       if (!Array.isArray(json.data_gaps)) json.data_gaps = [];
       if (Array.isArray(json.desc_audit?.data_gaps)) json.data_gaps = json.desc_audit.data_gaps;
 
