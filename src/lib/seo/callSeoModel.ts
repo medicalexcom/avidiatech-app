@@ -1,5 +1,6 @@
-// Updated banned-token detection to avoid false positives (match whole words, handle "n/a")
-// Rest of file unchanged except containsBannedTokens implementation.
+// src/lib/seo/callSeoModel.ts
+// Updated: stricter Responses API schema, robust banned-token detection, and HTML normalization auto-fix
+// Ready to drop into repository.
 
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
@@ -61,7 +62,7 @@ function containsBannedTokens(s: string): string | null {
     const t = token.toLowerCase().trim();
     if (!t) continue;
 
-    // Skip tiny ambiguous tokens (we don't include "na" here; if you need it, add a stricter rule)
+    // Skip tiny ambiguous tokens (avoid "na" false positives)
     if (t.length <= 2 && !t.includes("/")) continue;
 
     // If token contains a slash or other non-word char (like "n/a"), match allowing punctuation boundaries
@@ -73,7 +74,6 @@ function containsBannedTokens(s: string): string | null {
     }
 
     // Otherwise, match whole word(s)
-    // Use word boundary around the phrase. For multi-word tokens, match phrase boundaries.
     const esc = escapeRegex(t);
     const re = new RegExp(`\\b${esc}\\b`, "i");
     if (re.test(hay)) return token;
@@ -133,12 +133,6 @@ function countLi(html: string): number {
 /**
  * Hard validations to keep us compliant with custom_gpt_instructions.md
  * and to guarantee "no hallucination / no placeholders" behavior.
- *
- * NOTE: The model is asked to return desc_audit. We also enforce that:
- * - overview === descriptionHtml (exact string match)
- * - specs section exists and has >= 1 bullet
- * - no placeholders anywhere in customer-facing output
- * - name_best/H1 does not contain URL
  */
 function validateSeoJsonOrThrow(json: any) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
@@ -205,8 +199,11 @@ function validateSeoJsonOrThrow(json: any) {
   );
 }
 
-/* ----------------- rest of callSeoModel unchanged below ----------------- */
-/* ... (existing callSeoModel implementation follows, unchanged) */
+/**
+ * callSeoModel (STRICT, Describe-style)
+ *
+ * Returns: descriptionHtml, sections, seo, features, data_gaps, desc_audit, _meta
+ */
 export async function callSeoModel(
   normalizedPayload: AvidiaStandardNormalizedPayload,
   correlationId?: string | null,
@@ -252,6 +249,7 @@ export async function callSeoModel(
     tenant_id: tenantId ?? null,
   };
 
+  // Strict schema: top-level and nested objects explicitly disallow additionalProperties
   const schema = {
     type: "object",
     additionalProperties: false,
@@ -298,7 +296,6 @@ export async function callSeoModel(
       },
       features: { type: "array", items: { type: "string" } },
       data_gaps: { type: "array", items: { type: "string" } },
-
       desc_audit: {
         type: "object",
         additionalProperties: false,
@@ -362,6 +359,7 @@ export async function callSeoModel(
         { role: "system", content: systemBase },
         { role: "user", content: user },
       ],
+      // Strict JSON schema output (Responses API)
       text: {
         format: {
           type: "json_schema",
@@ -389,6 +387,7 @@ export async function callSeoModel(
     }
 
     try {
+      // Lock name_best / H1 after first valid response
       const h1 = String(json?.seo?.h1 ?? "").trim();
       requireField(isNonEmptyString(h1), "central_gpt_seo_error: missing seo.h1");
 
@@ -399,6 +398,7 @@ export async function callSeoModel(
         requireField(h1 === lockedNameBest, "central_gpt_seo_error: name_best_changed");
       }
 
+      // Ensure url exists; if missing, compute safe slug
       if (!isNonEmptyString(json?.seo?.url)) {
         json.seo.url = `/${lockedNameBest
           .toLowerCase()
@@ -411,11 +411,39 @@ export async function callSeoModel(
         json.seo.url = u.startsWith("/") ? (u.endsWith("/") ? u : `${u}/`) : `/${u}/`;
       }
 
+      // Clamp meta fields (SEO-safe caps)
       json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
+      // --- Normalization and auto-fix for overview equality (avoid false positives due to whitespace/formatting) ---
+      function normalizeHtmlForCompare(s: any): string {
+        if (s === null || s === undefined) return "";
+        let t = String(s);
+        // Expand escaped newline/tab sequences if present
+        t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
+        // Normalize newlines to spaces and collapse whitespace
+        t = t.replace(/[\r\n]/g, " ").replace(/\s+/g, " ");
+        // Remove spaces between tags: ">   <" -> "><"
+        t = t.replace(/>\s+</g, "><");
+        return t.trim();
+      }
+
+      try {
+        const nOverview = normalizeHtmlForCompare(json.sections?.overview ?? "");
+        const nDesc = normalizeHtmlForCompare(json.descriptionHtml ?? "");
+        if (nOverview && nDesc && nOverview === nDesc) {
+          // Auto-fix: replace overview with canonical descriptionHtml so strict equality passes.
+          json.sections.overview = json.descriptionHtml;
+        }
+      } catch (nfErr) {
+        // Non-fatal: continue to validation and let it report.
+        console.warn("normalizeHtmlForCompare failed:", nfErr);
+      }
+
+      // Enforce required output constraints (placeholders, specs bullets, overview match, desc_audit present)
       validateSeoJsonOrThrow(json);
 
+      // Compatibility: ensure top-level data_gaps matches desc_audit.data_gaps (prefer desc_audit)
       if (!Array.isArray(json.data_gaps)) json.data_gaps = [];
       if (Array.isArray(json.desc_audit?.data_gaps)) json.data_gaps = json.desc_audit.data_gaps;
 
