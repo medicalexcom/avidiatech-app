@@ -319,6 +319,16 @@ export default function AvidiaSeoPage() {
   );
   const [runMode, setRunMode] = useState<RunMode>(urlParam ? "full" : "seo");
 
+  // UI: single vs bulk panel (full-width switch, no side-by-side cards)
+  const [panelMode, setPanelMode] = useState<"single" | "bulk">(
+    bulkJobIdParam ? "bulk" : "single"
+  );
+
+  useEffect(() => {
+    if (bulkJobIdParam) setPanelMode("bulk");
+  }, [bulkJobIdParam]);
+
+
   const [urlInput, setUrlInput] = useState<string>(urlParam || "");
   const [ingestionIdInput, setIngestionIdInput] = useState<string>(
     ingestionIdParam || ""
@@ -1067,7 +1077,7 @@ export default function AvidiaSeoPage() {
             </span>
           </div>
 
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-3xl">
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500 bg-clip-text text-transparent">
             SEO-ready fields + description HTML, with bulk throughput
           </h1>
 
@@ -1129,436 +1139,502 @@ export default function AvidiaSeoPage() {
             ) : null}
           </div>
 
-          {/* Run modules (visible on load) */}
-          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Single */}
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Run SEO (single)
+          {/* Run (single/bulk) — full-width switcher under hero */}
+          <div className="mt-5">
+            <div className="rounded-3xl bg-gradient-to-r from-sky-500/25 via-emerald-500/20 to-amber-500/25 p-[1px] shadow-sm">
+              <div className="rounded-3xl bg-white/80 p-4 backdrop-blur dark:bg-slate-900/60">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {panelMode === "single" ? "Run SEO" : "Bulk URLs"}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      {panelMode === "single"
+                        ? "Choose input + run mode. No hidden assumptions."
+                        : "Paste many URLs or upload CSV. Creates a bulk job and runs the same pipeline per item."}
+                    </div>
                   </div>
-                  <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Choose input + run mode. No hidden assumptions.
-                  </div>
-                </div>
 
-                {ingestionIdInput.trim() ? (
-                  <a
-                    className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                    href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
-                  >
-                    Open Monitor
-                  </a>
-                ) : null}
-              </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {panelMode === "single" && ingestionIdInput.trim() ? (
+                      <a
+                        className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                        href={`/dashboard/monitor?ingestionId=${encodeURIComponent(
+                          ingestionIdInput.trim()
+                        )}`}
+                      >
+                        Open Monitor
+                      </a>
+                    ) : null}
 
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    sourceMode === "url"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setSourceMode("url")}
-                  disabled={generating}
-                >
-                  From URL
-                </button>
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    sourceMode === "ingestion"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setSourceMode("ingestion")}
-                  disabled={generating}
-                >
-                  From ingestionId
-                </button>
-              </div>
+                    {panelMode === "bulk" ? (
+                      <button
+                        className="text-xs text-slate-600 underline hover:text-slate-900 disabled:opacity-60 dark:text-slate-300 dark:hover:text-slate-100"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={bulkSubmitting}
+                      >
+                        Upload CSV
+                      </button>
+                    ) : null}
 
-              {sourceMode === "url" ? (
-                <div className="mt-3">
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Source URL
-                  </label>
-                  <input
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    placeholder="https://example.com/product/..."
-                    disabled={generating}
-                  />
-
-                  {ingestionIdParam && urlParam ? (
-                    <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        checked={reuseExistingWhenSameUrl}
-                        onChange={(e) => setReuseExistingWhenSameUrl(e.target.checked)}
-                        disabled={generating}
-                      />
-                      Re-use existing ingestionId when URL matches this page
-                    </label>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mt-3">
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Ingestion ID
-                  </label>
-                  <input
-                    value={ingestionIdInput}
-                    onChange={(e) => setIngestionIdInput(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    placeholder="ing_..."
-                    disabled={generating}
-                  />
-                  <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    runMode === "seo"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setRunMode("seo")}
-                  disabled={generating}
-                >
-                  SEO only
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    extract → seo
-                  </div>
-                </button>
-
-                <button
-                  className={cx(
-                    "rounded-lg px-3 py-2 text-left",
-                    runMode === "full"
-                      ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  )}
-                  onClick={() => setRunMode("full")}
-                  disabled={generating}
-                >
-                  Full pipeline
-                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    extract → … → price
-                  </div>
-                </button>
-              </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  className={cx(
-                    "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
-                    canRun
-                      ? "bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 hover:opacity-95 dark:from-slate-100 dark:via-slate-100 dark:to-white dark:text-slate-950"
-                      : "bg-slate-300 dark:bg-slate-700"
-                  )}
-                  onClick={runNow}
-                  disabled={!canRun}
-                >
-                  {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
-                </button>
-
-                {ingestionIdInput.trim() ? (
-                  <button
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-                    onClick={() => fetchIngestionData(ingestionIdInput.trim())}
-                    disabled={generating}
-                    title="Refresh ingestion row"
-                  >
-                    Refresh
-                  </button>
-                ) : null}
-              </div>
-
-              {error ? (
-                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
-                  {error}
-                </div>
-              ) : null}
-
-              {rawIngestResponse ? (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">
-                    Ingest debug
-                  </summary>
-                  <pre className="mt-2 max-h-[220px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
-                    {JSON.stringify(rawIngestResponse, null, 2)}
-                  </pre>
-                </details>
-              ) : null}
-            </div>
-
-            {/* Bulk */}
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/60">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Bulk URLs
-                  </div>
-                  <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Paste many URLs or upload CSV. Creates a bulk job and runs the same pipeline per item.
-                  </div>
-                </div>
-                <button
-                  className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={bulkSubmitting}
-                >
-                  Upload CSV
-                </button>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onUploadCsv(f);
-                  e.currentTarget.value = "";
-                }}
-              />
-
-              <div className="mt-3">
-                <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                  Paste URLs (one per line). Optional price via <span className="font-mono">url,price</span> or <span className="font-mono">url\tprice</span>
-                </label>
-                <textarea
-                  value={bulkText}
-                  onChange={(e) => setBulkText(e.target.value)}
-                  className="mt-2 h-[118px] w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                  placeholder={"https://brand.com/p1,19.99\nhttps://brand.com/p2\nhttps://another.com/item\t29.95"}
-                  disabled={bulkSubmitting}
-                />
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Job name (optional)
-                  </label>
-                  <input
-                    value={bulkName}
-                    onChange={(e) => setBulkName(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    placeholder="e.g., Supplier batch - 2026-01-15"
-                    disabled={bulkSubmitting}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Mode
-                  </label>
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
-                    <button
-                      className={cx(
-                        "rounded-lg px-3 py-2 text-left",
-                        bulkMode === "quick"
-                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                      )}
-                      onClick={() => setBulkMode("quick")}
-                      disabled={bulkSubmitting}
-                    >
-                      Quick
-                      <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        extract → seo
-                      </div>
-                    </button>
-
-                    <button
-                      className={cx(
-                        "rounded-lg px-3 py-2 text-left",
-                        bulkMode === "full"
-                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
-                          : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                      )}
-                      onClick={() => setBulkMode("full")}
-                      disabled={bulkSubmitting}
-                    >
-                      Full
-                      <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        extract → … → price
-                      </div>
-                    </button>
+                    <div className="inline-flex rounded-2xl bg-slate-100 p-1 text-xs shadow-inner dark:bg-slate-800/60">
+                      <button
+                        className={cx(
+                          "rounded-xl px-3 py-2",
+                          panelMode === "single"
+                            ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                        )}
+                        onClick={() => setPanelMode("single")}
+                        disabled={generating || bulkSubmitting}
+                      >
+                        Single
+                      </button>
+                      <button
+                        className={cx(
+                          "rounded-xl px-3 py-2",
+                          panelMode === "bulk"
+                            ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                        )}
+                        onClick={() => setPanelMode("bulk")}
+                        disabled={generating || bulkSubmitting}
+                      >
+                        Bulk
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Concurrency
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={bulkConcurrency}
-                    onChange={(e) => setBulkConcurrency(Number(e.target.value || 10))}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                    disabled={bulkSubmitting}
-                  />
-                  <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    Global parallelism (backend-enforced).
-                  </div>
-                </div>
+                {/* SINGLE PANEL */}
+                {panelMode === "single" ? (
+                  <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
+                    <div className="lg:col-span-8">
+                      <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+                        {/* Source selector */}
+                        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              sourceMode === "url"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setSourceMode("url")}
+                            disabled={generating}
+                          >
+                            From URL
+                          </button>
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              sourceMode === "ingestion"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setSourceMode("ingestion")}
+                            disabled={generating}
+                          >
+                            From ingestionId
+                          </button>
+                        </div>
 
-                <div>
-                  <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Per-domain limit
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={bulkPerDomainLimit}
-                    onChange={(e) => setBulkPerDomainLimit(Number(e.target.value || 2))}
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-                    disabled={bulkSubmitting}
-                  />
-                  <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    Politeness throttle per domain.
-                  </div>
-                </div>
-              </div>
+                        {sourceMode === "url" ? (
+                          <div className="mt-3">
+                            <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                              Source URL
+                            </label>
+                            <input
+                              value={urlInput}
+                              onChange={(e) => setUrlInput(e.target.value)}
+                              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                              placeholder="https://example.com/product/..."
+                              disabled={generating}
+                            />
 
-              {/* Preview */}
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                    Preview
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {bulkRows.length ? `${bulkRows.filter(r => r.valid && !bulkRemoved[r.idempotencyKey]).length} ready` : "—"}
-                  </div>
-                </div>
-
-                {bulkParseError ? (
-                  <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/25 dark:text-rose-200">
-                    {bulkParseError}
-                  </div>
-                ) : null}
-
-                {bulkRows.length ? (
-                  <div className="mt-2 max-h-[160px] overflow-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-slate-50 text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
-                        <tr className="text-left">
-                          <th className="px-2 py-1 w-10">#</th>
-                          <th className="px-2 py-1">URL</th>
-                          <th className="px-2 py-1 w-20">Price</th>
-                          <th className="px-2 py-1 w-28">Domain</th>
-                          <th className="px-2 py-1 w-20">Status</th>
-                          <th className="px-2 py-1 w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bulkRows.slice(0, 120).map((r) => {
-                          const removed = !!bulkRemoved[r.idempotencyKey];
-                          return (
-                            <tr
-                              key={r.idempotencyKey}
-                              className={cx(
-                                "border-t border-slate-200 dark:border-slate-800",
-                                removed ? "opacity-40" : ""
-                              )}
-                            >
-                              <td className="px-2 py-1 text-slate-500">{r.index}</td>
-                              <td className="px-2 py-1">
-                                <div className="line-clamp-1 text-slate-800 dark:text-slate-200">{r.url}</div>
-                                {!r.valid && r.reason ? (
-                                  <div className="mt-0.5 text-[11px] text-rose-700 dark:text-rose-300">
-                                    {r.reason}
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="px-2 py-1 text-slate-700 dark:text-slate-200">{r.price || "—"}</td>
-                              <td className="px-2 py-1 text-slate-600 dark:text-slate-300">{r.domain}</td>
-                              <td className="px-2 py-1">
-                                <span
-                                  className={cx(
-                                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
-                                    r.valid ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/35 dark:text-emerald-200" : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200"
-                                  )}
-                                >
-                                  {r.valid ? "ready" : "bad"}
-                                </span>
-                              </td>
-                              <td className="px-2 py-1 text-right">
-                                <button
-                                  className="text-[11px] text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
-                                  onClick={() =>
-                                    setBulkRemoved((prev) => ({
-                                      ...prev,
-                                      [r.idempotencyKey]: !prev[r.idempotencyKey],
-                                    }))
+                            {ingestionIdParam && urlParam ? (
+                              <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                                <input
+                                  type="checkbox"
+                                  checked={reuseExistingWhenSameUrl}
+                                  onChange={(e) =>
+                                    setReuseExistingWhenSameUrl(e.target.checked)
                                   }
-                                >
-                                  {removed ? "Undo" : "Remove"}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Paste URLs or upload a CSV to see a preview.
-                  </div>
-                )}
-              </div>
+                                  disabled={generating}
+                                />
+                                Re-use existing ingestionId when URL matches this page
+                              </label>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="mt-3">
+                            <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                              Ingestion ID
+                            </label>
+                            <input
+                              value={ingestionIdInput}
+                              onChange={(e) => setIngestionIdInput(e.target.value)}
+                              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                              placeholder="ing_..."
+                              disabled={generating}
+                            />
+                            <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
+                            </div>
+                          </div>
+                        )}
 
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  className={cx(
-                    "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
-                    bulkRows.some((r) => r.valid && !bulkRemoved[r.idempotencyKey]) && !bulkSubmitting
-                      ? "bg-gradient-to-r from-sky-600 via-cyan-600 to-emerald-600 hover:opacity-95"
-                      : "bg-slate-300 dark:bg-slate-700"
-                  )}
-                  onClick={submitBulkJob}
-                  disabled={
-                    bulkSubmitting || !bulkRows.some((r) => r.valid && !bulkRemoved[r.idempotencyKey])
-                  }
-                >
-                  {bulkSubmitting ? "Submitting…" : "Create bulk job"}
-                </button>
+                        {/* Run mode selector */}
+                        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              runMode === "seo"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setRunMode("seo")}
+                            disabled={generating}
+                          >
+                            SEO only
+                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                              extract → seo
+                            </div>
+                          </button>
 
-                {bulkJobId ? (
-                  <button
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-                    onClick={() => refreshBulk(bulkJobId)}
-                    disabled={bulkSubmitting}
-                  >
-                    Refresh
-                  </button>
+                          <button
+                            className={cx(
+                              "rounded-lg px-3 py-2 text-left",
+                              runMode === "full"
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                            )}
+                            onClick={() => setRunMode("full")}
+                            disabled={generating}
+                          >
+                            Full pipeline
+                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                              extract → … → price
+                            </div>
+                          </button>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <button
+                            className={cx(
+                              "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
+                              canRun
+                                ? "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+                                : "bg-slate-300 dark:bg-slate-700"
+                            )}
+                            onClick={runNow}
+                            disabled={!canRun}
+                          >
+                            {generating
+                              ? "Running…"
+                              : runMode === "seo"
+                              ? "Run SEO"
+                              : "Run Full Pipeline"}
+                          </button>
+
+                          {ingestionIdInput.trim() ? (
+                            <button
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+                              onClick={() => fetchIngestionData(ingestionIdInput.trim())}
+                              disabled={generating}
+                              title="Refresh ingestion row"
+                            >
+                              Refresh
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {error ? (
+                          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                            {error}
+                          </div>
+                        ) : null}
+
+                        {rawIngestResponse ? (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">
+                              Ingest debug
+                            </summary>
+                            <pre className="mt-2 max-h-[220px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
+                              {JSON.stringify(rawIngestResponse, null, 2)}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                          Operator hints
+                        </div>
+                        <ul className="mt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                          <li>
+                            <span className="font-medium text-slate-800 dark:text-slate-100">
+                              Re-run flag:
+                            </span>{" "}
+                            when running with an existing ingestionId, a small diagnostics marker is persisted.
+                          </li>
+                          <li>
+                            <span className="font-medium text-slate-800 dark:text-slate-100">
+                              Failures:
+                            </span>{" "}
+                            use <span className="font-mono">View output</span> in telemetry to see module errors.
+                          </li>
+                          <li>
+                            <span className="font-medium text-slate-800 dark:text-slate-100">
+                              Share:
+                            </span>{" "}
+                            the URL contains ingestionId + pipelineRunId for quick support handoffs.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* BULK PANEL */}
+                {panelMode === "bulk" ? (
+                  <div className="mt-4">
+                    {/* hidden input for CSV */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={onBulkCsvPicked}
+                    />
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                      <div className="lg:col-span-8">
+                        <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+                          <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                            Paste URLs (one per line). Optional price via{" "}
+                            <span className="font-mono">url,price</span> or{" "}
+                            <span className="font-mono">url\tprice</span>
+                          </label>
+                          <textarea
+                            value={bulkText}
+                            onChange={(e) => setBulkText(e.target.value)}
+                            className="mt-2 h-[140px] w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                            placeholder={
+                              "https://brand.com/p1,19.99\nhttps://brand.com/p2\nhttps://another.com/item\t29.95"
+                            }
+                            disabled={bulkSubmitting}
+                          />
+
+                          {bulkParseError ? (
+                            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                              {bulkParseError}
+                            </div>
+                          ) : null}
+
+                          <div className="mt-4 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                            <table className="min-w-[760px] w-full text-sm">
+                              <thead className="bg-slate-50 text-xs text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+                                <tr className="text-left">
+                                  <th className="px-3 py-2">Keep</th>
+                                  <th className="px-3 py-2">URL</th>
+                                  <th className="px-3 py-2">Price</th>
+                                  <th className="px-3 py-2">Domain</th>
+                                  <th className="px-3 py-2">Warnings</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bulkRowsPreview.map((r) => (
+                                  <tr
+                                    key={r.key}
+                                    className="border-t border-slate-200 dark:border-slate-800"
+                                  >
+                                    <td className="px-3 py-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={!bulkRemoved[r.key]}
+                                        onChange={() =>
+                                          setBulkRemoved((prev) => ({
+                                            ...prev,
+                                            [r.key]: !prev[r.key],
+                                          }))
+                                        }
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="max-w-[460px] truncate font-mono text-xs text-slate-800 dark:text-slate-200">
+                                        {r.url}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                                      {r.price ?? "—"}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                                      {r.domain || "—"}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                                      {r.warning ? (
+                                        <span className="text-amber-700 dark:text-amber-300">
+                                          {r.warning}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+
+                                {!bulkRowsPreview.length ? (
+                                  <tr>
+                                    <td
+                                      className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400"
+                                      colSpan={5}
+                                    >
+                                      Paste URLs or upload a CSV to preview.
+                                    </td>
+                                  </tr>
+                                ) : null}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 dark:border-slate-800 dark:bg-slate-900/40">
+                              Parsed: <span className="font-semibold">{bulkRows.length}</span>
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 dark:border-slate-800 dark:bg-slate-900/40">
+                              Kept: <span className="font-semibold">{bulkKeptCount}</span>
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 dark:border-slate-800 dark:bg-slate-900/40">
+                              Deduped: <span className="font-semibold">{bulkDedupedCount}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="lg:col-span-4">
+                        <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            Bulk options
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-1 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                                Job name (optional)
+                              </label>
+                              <input
+                                value={bulkName}
+                                onChange={(e) => setBulkName(e.target.value)}
+                                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
+                                placeholder="e.g., Supplier batch 2026-01"
+                                disabled={bulkSubmitting}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs dark:bg-slate-800/60">
+                              <button
+                                className={cx(
+                                  "rounded-lg px-3 py-2 text-left",
+                                  bulkMode === "quick"
+                                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                    : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                                )}
+                                onClick={() => setBulkMode("quick")}
+                                disabled={bulkSubmitting}
+                              >
+                                Quick
+                                <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                  extract → seo
+                                </div>
+                              </button>
+                              <button
+                                className={cx(
+                                  "rounded-lg px-3 py-2 text-left",
+                                  bulkMode === "full"
+                                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100"
+                                    : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100"
+                                )}
+                                onClick={() => setBulkMode("full")}
+                                disabled={bulkSubmitting}
+                              >
+                                Full
+                                <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                  extract → … → price
+                                </div>
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                                  Concurrency
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  value={bulkConcurrency}
+                                  onChange={(e) =>
+                                    setBulkConcurrency(Number(e.target.value || 1))
+                                  }
+                                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                                  disabled={bulkSubmitting}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                                  Per-domain
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={10}
+                                  value={bulkPerDomainLimit}
+                                  onChange={(e) =>
+                                    setBulkPerDomainLimit(Number(e.target.value || 1))
+                                  }
+                                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                                  disabled={bulkSubmitting}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              className={cx(
+                                "mt-1 inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
+                                bulkCanSubmit
+                                  ? "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+                                  : "bg-slate-300 dark:bg-slate-700"
+                              )}
+                              onClick={createBulkJob}
+                              disabled={!bulkCanSubmit}
+                            >
+                              {bulkSubmitting ? "Creating job…" : "Create bulk job"}
+                            </button>
+
+                            {bulkSubmitError ? (
+                              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                                {bulkSubmitError}
+                              </div>
+                            ) : null}
+
+                            {bulkFetchError ? (
+                              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                                {bulkFetchError}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : null}
               </div>
-
-              {bulkFetchError ? (
-                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
-                  {bulkFetchError}
-                </div>
-              ) : null}
             </div>
           </div>
-        </div>
 
         {/* Bulk job dashboard (appears when bulkJobId exists) */}
         {bulkJobId ? (
