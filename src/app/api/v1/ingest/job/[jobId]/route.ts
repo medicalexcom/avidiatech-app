@@ -13,6 +13,10 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  * - 202 while waiting for callback
  * - 409 when callback received but engine reported error
  * - 200 when callback received and engine did not report error
+ *
+ * NOTE:
+ * The app's Supabase client types appear to allow `data` to be a union including an error-like type
+ * (e.g. GenericStringError). We therefore treat the row as `any` after checking `error` and `data`.
  */
 
 export async function GET(request: Request) {
@@ -50,7 +54,6 @@ export async function GET(request: Request) {
           "completed_at",
           "last_error",
           "error",
-          // New durable engine callback markers
           "ingest_callback_at",
           "ingest_engine_status",
           "ingest_callback_request_id",
@@ -85,20 +88,36 @@ export async function GET(request: Request) {
       );
     }
 
-    const hasCallback = Boolean((data as any).ingest_callback_at);
-    const engineStatus = (data as any).ingest_engine_status || null;
+    const row = data as any;
+
+    const ingestionId = String(row.id ?? "");
+    if (!ingestionId) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "ROW_SHAPE_INVALID",
+            message: "Loaded ingestion row missing id",
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    const hasCallback = Boolean(row.ingest_callback_at);
+    const engineStatus = row.ingest_engine_status ?? null;
 
     // 1) Waiting for callback => 202 (keep polling)
     if (!hasCallback) {
       return NextResponse.json(
         {
-          ingestionId: data.id,
+          ok: true,
+          ingestionId,
           jobId,
-          status: (data as any).status || "processing",
+          status: row.status || "processing",
           ingest_callback_at: null,
           ingest_engine_status: null,
           normalized_payload: null,
-          source_url: data.source_url ?? null,
+          source_url: row.source_url ?? null,
         },
         { status: 202 }
       );
@@ -109,15 +128,15 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          ingestionId: data.id,
+          ingestionId,
           jobId,
           status: "error",
-          ingest_callback_at: (data as any).ingest_callback_at,
+          ingest_callback_at: row.ingest_callback_at,
           ingest_engine_status: engineStatus,
-          ingest_callback_request_id: (data as any).ingest_callback_request_id ?? null,
-          last_error: (data as any).last_error ?? null,
-          error: (data as any).error ?? null,
-          source_url: data.source_url ?? null,
+          ingest_callback_request_id: row.ingest_callback_request_id ?? null,
+          last_error: row.last_error ?? null,
+          error: row.error ?? null,
+          source_url: row.source_url ?? null,
         },
         { status: 409 }
       );
@@ -127,14 +146,14 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         ok: true,
-        ingestionId: data.id,
+        ingestionId,
         jobId,
         status: "completed",
-        ingest_callback_at: (data as any).ingest_callback_at,
+        ingest_callback_at: row.ingest_callback_at,
         ingest_engine_status: engineStatus,
-        ingest_callback_request_id: (data as any).ingest_callback_request_id ?? null,
-        normalized_payload: (data as any).normalized_payload ?? null,
-        source_url: data.source_url ?? null,
+        ingest_callback_request_id: row.ingest_callback_request_id ?? null,
+        normalized_payload: row.normalized_payload ?? null,
+        source_url: row.source_url ?? null,
       },
       { status: 200 }
     );
