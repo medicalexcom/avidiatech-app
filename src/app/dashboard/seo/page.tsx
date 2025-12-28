@@ -2015,7 +2015,8 @@ export default function AvidiaSeoPage() {
             </section>
           </aside>
         </div>
-      </div>
-    </main>
+	      </div>
+	      </div>
+	    </main>
   );
 }
