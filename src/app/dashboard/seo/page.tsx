@@ -1,25 +1,28 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 /**
- * AvidiaSEO page (client)
- *
- * Modes:
- * - Quick SEO: ingest → poll → pipeline(extract+seo) → refresh ingestion
- * - Full Pipeline: ingest → poll → pipeline(extract+seo+audit+import+monitor+price) → refresh ingestion
+ * /dashboard/seo
  *
  * Notes:
- * - We no longer call /api/v1/seo directly from this page.
- * - Both modes still create pipeline_runs + module_runs so there is always traceability and durable artifacts.
+ * - This page runs pipeline runs and then refreshes ingestion data.
+ * - Canonical naming for SEO results is now Describe-style:
+ *   - seo
+ *   - descriptionHtml
+ *   - features
  *
- * Changes in this production-ready version:
- * - You can now run Full Pipeline (or Quick SEO) without providing a URL by supplying an existing ingestionId.
- *   Provide ingestionId either via query param `?ingestionId=...` (deep link) or paste it into the new
- *   "Existing ingestion id" field. If a URL is present it will be used; otherwise ingestionId is used.
- * - Improved UX and telemetry for running existing ingestions (no extra ingestion created).
- * - Primary colors are greenish-blue (cyan/emerald) and the left-top radial glow is present.
+ * IMPORTANT (2025-12-28):
+ * - Do NOT report "completed" if the pipeline run status is "failed".
+ * - Ingestion polling must treat terminal errors as terminal (server returns 409).
+ *
+ * Additions in this version:
+ * - When running a pipeline against an existing ingestion id (no new ingestion created),
+ *   we persist a small diagnostics "rerun" flag by calling the ingest diagnostics endpoint.
+ *   This is a best-effort POST; if it fails we continue but log a warning. After marking,
+ *   we refresh the ingestion row so operators can immediately see the flag.
+ * - UI shows a "Re-run" badge when job.diagnostics indicates a re-run.
  */
 
 type AnyObj = Record<string, any>;
@@ -71,6 +74,15 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function extractEngineErrorMessage(payload: any): string {
+  const e = payload?.error;
+  if (typeof e === "string" && e.trim()) return e;
+  if (e && typeof e === "object") {
+    return String(e.message || e.detail || e.code || "ingest_engine_error");
+  }
+  return String(payload?.last_error || "ingest_engine_error");
+}
+
 export default function AvidiaSeoPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -78,11 +90,9 @@ export default function AvidiaSeoPage() {
   const urlParam = params?.get("url") || null;
   const pipelineRunIdParam = params?.get("pipelineRunId") || null;
 
-  // Query-provided ingestionId (deep link). We'll also provide UI to enter an ingestionId manually.
   const ingestionId = ingestionIdParam;
 
   const [urlInput, setUrlInput] = useState<string>(urlParam || "");
-  const [manualIngestionId, setManualIngestionId] = useState<string>(""); // NEW: manual field
   const [job, setJob] = useState<AnyObj | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -96,238 +106,96 @@ export default function AvidiaSeoPage() {
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
   const [pollingState, setPollingState] = useState<string | null>(null);
 
-  // We no longer support front-end "preview persist:false" for /api/v1/seo
   const [isPreviewResult] = useState(false);
 
   // Pipeline state
   const [pipelineRunId, setPipelineRunId] = useState<string | null>(pipelineRunIdParam);
   const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
-  const [lastMode, setLastMode] = useState<Mode>("quick");
 
-  // Live UI
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  const [localRunStartMs, setLocalRunStartMs] = useState<number | null>(null);
-  const [recentUrls, setRecentUrls] = useState<string[]>([]);
+  const [mode, setMode] = useState<Mode>("quick");
 
-  // Remember the URL that came from query params; used to decide if we should reuse ingestionId
-  const [initialUrl] = useState(urlParam || "");
-
-  // keep a steady clock for elapsed timers + “last updated”
   useEffect(() => {
-    const t = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+    if (pipelineRunIdParam) setPipelineRunId(pipelineRunIdParam);
+  }, [pipelineRunIdParam]);
 
-  // recent URLs (localStorage)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("avidia:seo:recentUrls");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setRecentUrls(parsed.filter((x) => typeof x === "string").slice(0, 6));
-    } catch {
-      // ignore
+    if (urlParam && urlParam.length > 0) {
+      setMode("full");
+      setUrlInput(urlParam);
+    } else if (ingestionIdParam) {
+      setMode("quick");
     }
-  }, []);
+  }, [urlParam, ingestionIdParam]);
 
-  const rememberUrl = (u: string) => {
-    const cleaned = (u || "").trim();
-    if (!cleaned) return;
-    setRecentUrls((prev) => {
-      const next = [cleaned, ...prev.filter((x) => x !== cleaned)].slice(0, 6);
-      try {
-        localStorage.setItem("avidia:seo:recentUrls", JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
+  async function fetchIngestionData(id: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Fetch failed: ${res.status}`);
+      const row = json?.data ?? json;
+      setJob(row);
+      return row;
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const fetchIngestionData = useCallback(
-    async (id: string, isCancelled: () => boolean = () => false) => {
-      setLoading(true);
-      setError(null);
-      setStatusMessage("Refreshing ingestion");
-      try {
-        const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
-        const json = await res.json();
-        if (!res.ok) {
-          throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
-        }
-        if (!isCancelled()) {
-          setJob(json?.data ?? json);
-          setStatusMessage("Ingestion ready");
-        }
-      } catch (err: any) {
-        if (!isCancelled()) {
-          setError(String(err?.message || err));
-          setStatusMessage(null);
-        }
-      } finally {
-        if (!isCancelled()) setLoading(false);
-      }
-    },
-    []
-  );
-
-  const fetchPipelineSnapshot = useCallback(async (runId: string) => {
+  async function fetchPipelineSnapshot(runId: string) {
     const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
     const json = await res.json().catch(() => null);
-    if (!res.ok) {
-      const msg = json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`;
-      throw new Error(msg);
-    }
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
     return json as PipelineSnapshot;
-  }, []);
+  }
 
   async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2000) {
     const start = Date.now();
-    setStatusMessage("Pipeline running");
     while (Date.now() - start < timeoutMs) {
       const snap = await fetchPipelineSnapshot(runId);
       setPipelineSnapshot(snap);
-      setLastUpdatedAt(Date.now());
-
-      const status = snap?.run?.status;
-      if (status === "succeeded" || status === "failed") return snap;
-
+      const s = snap?.run?.status;
+      if (s === "succeeded" || s === "failed") return snap;
       await sleep(intervalMs);
     }
     throw new Error("Pipeline did not complete within timeout");
   }
 
-  async function startPipelineRun(ingestionIdToUse: string, mode: Mode) {
-    setLastMode(mode);
-    setGenerating(true);
-    setError(null);
-
-    const steps = mode === "quick" ? [...QUICK_STEPS] : [...FULL_STEPS];
-    setStatusMessage(mode === "quick" ? "Starting Quick SEO pipeline" : "Starting Full pipeline");
-
-    // local clock start (helps even if API doesn’t include started_at yet)
-    setLocalRunStartMs(Date.now());
-
-    const res = await fetch("/api/v1/pipeline/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ingestionId: ingestionIdToUse,
-        triggerModule: "seo",
-        steps,
-        options: {
-          seo: {
-            profile: "medicalex_v1",
-            strict: true,
-            model: null,
-          },
-        },
-      }),
-    });
-
-    const json = await res.json().catch(() => null);
-    if (!res.ok) {
-      throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
-    }
-
-    const newRunId = json?.pipelineRunId?.toString?.() || "";
-    if (!newRunId) throw new Error("Pipeline start did not return pipelineRunId");
-
-    setPipelineRunId(newRunId);
-    setLastUpdatedAt(Date.now());
-
-    router.push(
-      `/dashboard/seo?ingestionId=${encodeURIComponent(ingestionIdToUse)}&pipelineRunId=${encodeURIComponent(newRunId)}`
-    );
-
-    return newRunId;
-  }
-
-  useEffect(() => {
-    if (!ingestionId) return;
-    let cancelled = false;
-    setStatusMessage("Loading ingestion");
-    fetchIngestionData(ingestionId, () => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchIngestionData, ingestionId]);
-
-  useEffect(() => {
-    if (!pipelineRunId) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setStatusMessage("Loading pipeline run");
-        const snap = await fetchPipelineSnapshot(pipelineRunId);
-        if (!cancelled) {
-          setPipelineSnapshot(snap);
-          setLastUpdatedAt(Date.now());
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(String(e?.message || e));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchPipelineSnapshot, pipelineRunId]);
-
-  // Auto-refresh pipeline snapshot when running
-  useEffect(() => {
-    if (!pipelineRunId) return;
-    if (!autoRefresh) return;
-
-    let stopped = false;
-    const tick = setInterval(async () => {
-      if (stopped) return;
-      try {
-        const snap = await fetchPipelineSnapshot(pipelineRunId);
-        setPipelineSnapshot(snap);
-        setLastUpdatedAt(Date.now());
-
-        const status = snap?.run?.status;
-        if (status === "succeeded" || status === "failed") {
-          clearInterval(tick);
-        }
-      } catch {
-        // don’t spam error banners while polling; leave last known state
-      }
-    }, 2000);
-
-    return () => {
-      stopped = true;
-      clearInterval(tick);
-    };
-  }, [autoRefresh, fetchPipelineSnapshot, pipelineRunId]);
-
-  // Polling helper: polls /api/v1/ingest/job/:jobId until ingestion row is completed
+  /**
+   * Polls /api/v1/ingest/job/:jobId until:
+   * - 200 => returns payload
+   * - 409 => throws terminal error (stop polling)
+   * - 202 => continues polling
+   */
   async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
     const start = Date.now();
     setPollingState(`polling job ${jobId}`);
     setStatusMessage("Scraping & normalizing");
+
     while (Date.now() - start < timeoutMs) {
-      try {
-        const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
-        if (res.status === 200) {
-          const j = await res.json();
-          setPollingState(`completed: ingestionId=${j.ingestionId}`);
-          setStatusMessage("Ingestion completed");
-          return j;
-        }
-        const elapsed = Math.floor((Date.now() - start) / 1000);
-        setPollingState(`waiting... ${elapsed}s`);
-      } catch (e) {
-        console.warn("pollForIngestion error", e);
-        setPollingState(`error polling: ${String(e)}`);
-        setStatusMessage(null);
+      const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
+      const payload = await res.json().catch(() => null);
+
+      if (res.status === 200) {
+        setPollingState(`completed: ingestionId=${payload?.ingestionId}`);
+        setStatusMessage("Ingestion callback received");
+        return payload;
       }
+
+      if (res.status === 409) {
+        const msg = extractEngineErrorMessage(payload);
+        setPollingState(`failed: ${msg}`);
+        setStatusMessage(null);
+        const err: any = new Error(msg);
+        err.code = payload?.error?.code || "ingest_engine_error";
+        err.payload = payload;
+        throw err;
+      }
+
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      setPollingState(`waiting... ${elapsed}s`);
       await sleep(intervalMs);
     }
+
     setPollingState("timeout");
     setStatusMessage(null);
     throw new Error("Ingestion did not complete within timeout");
@@ -372,76 +240,161 @@ export default function AvidiaSeoPage() {
     }
 
     const jobId = json?.jobId ?? json?.job?.id ?? null;
-    if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug pane.");
-
+    if (!jobId) throw new Error("Ingest did not return an ingestionId or jobId. See debug.");
     const pollResult = await pollForIngestion(jobId, 120_000, 3000);
-    const newIngestionId = pollResult?.ingestionId ?? pollResult?.id ?? null;
-    if (!newIngestionId) throw new Error("Polling returned no ingestionId. See debug pane.");
-    return newIngestionId;
+    const newId = pollResult?.ingestionId ?? pollResult?.id ?? null;
+    if (!newId) throw new Error("Polling returned no ingestionId.");
+    return newId;
+  }
+
+  async function startPipelineRun(forIngestionId: string, m: Mode) {
+    const steps = m === "quick" ? QUICK_STEPS : FULL_STEPS;
+
+    setStatusMessage("Starting pipeline");
+    const res = await fetch("/api/v1/pipeline/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ingestionId: forIngestionId,
+        triggerModule: "seo",
+        steps,
+        options: {},
+      }),
+    });
+
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
+
+    const runId = String(json?.pipelineRunId ?? "");
+    if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
+
+    setPipelineRunId(runId);
+    router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(forIngestionId)}&pipelineRunId=${encodeURIComponent(runId)}`);
+
+    setStatusMessage("Pipeline running");
+    return runId;
   }
 
   /**
-   * runMode (updated)
+   * markIngestionRerun
    *
-   * Behavior:
-   * - If a URL is provided: create a new ingestion and run pipeline.
-   * - If no URL provided but an existing ingestion id is available (from query or "Existing ingestion id" field),
-   *   run the pipeline against that ingestion id (no new ingestion created).
-   *
-   * This enables running Full pipeline (or Quick) with no URL input by pointing the dashboard at an ingestion.
+   * Best-effort: attempt to persist a small diagnostics flag on the ingestion indicating this UI triggered a rerun.
+   * Tries POST /api/v1/ingest/{id}/diagnostics with minimal payload; if it fails we log a warning and continue.
+   * After success (or even failure), we refresh the ingestion row to show operators the current diagnostics.
    */
-  async function runMode(mode: Mode) {
+  async function markIngestionRerun(ingestionIdToMark: string, modeToMark: Mode) {
+    try {
+      const payload = {
+        rerun_by_ui: true,
+        rerun_at: new Date().toISOString(),
+        rerun_mode: modeToMark,
+        note: "ui_rerun_flag",
+      };
+
+      // Primary attempt: POST to diagnostics endpoint (preferred)
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}/diagnostics`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        // refresh row so UI reflects the persisted diagnostics
+        await fetchIngestionData(ingestionIdToMark);
+        return true;
+      }
+
+      // Fallback: try PATCH-ing the ingestion record (best-effort)
+      const fallback = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionIdToMark)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ diagnostics: { ...(job?.diagnostics || {}), ui_rerun: payload } }),
+      });
+
+      if (fallback.ok) {
+        await fetchIngestionData(ingestionIdToMark);
+        return true;
+      }
+
+      // not critical - log and continue
+      console.warn("markIngestionRerun: all attempts failed", { resStatus: res.status, fallbackStatus: fallback.status });
+      return false;
+    } catch (err) {
+      console.warn("markIngestionRerun failed", err);
+      return false;
+    }
+  }
+
+  async function run(modeToRun: Mode) {
     if (generating) return;
 
     setGenerating(true);
     setError(null);
+    setStatusMessage(null);
     setPipelineSnapshot(null);
-
-    const trimmed = (urlInput || "").trim();
-    if (trimmed) rememberUrl(trimmed);
 
     try {
       let idToUse: string | null = null;
-      const isSameAsInitial = Boolean(initialUrl && trimmed === initialUrl);
+      const trimmed = (urlInput || "").trim();
+      const isSameAsInitial = Boolean(urlParam && trimmed && urlParam === trimmed);
 
-      // NEW behavior: If user didn't provide a URL (trimmed empty) but provided/has an ingestionId
-      // (query param or manual field), use that ingestion id directly.
-      const candidateIngestionId = (manualIngestionId && manualIngestionId.trim()) ? manualIngestionId.trim() : ingestionId;
+      // Track whether we created a new ingestion during this run.
+      let createdNewIngestion = false;
 
-      if (!trimmed && candidateIngestionId) {
-        // Use existing ingestion (no new ingestion created)
-        idToUse = candidateIngestionId;
-        setStatusMessage(`Using existing ingestion ${idToUse}`);
-      } else if (ingestionId && isSameAsInitial) {
-        // If a query ingestionId is present and the URL equals initial, reuse it
+      if (ingestionId && modeToRun === "quick") {
+        // Quick mode against a provided ingestionId uses that ingestion (re-run)
         idToUse = ingestionId;
-      } else {
-        // Normal path: create new ingestion from URL
-        setJob(null);
-        setRawIngestResponse(null);
-        setPollingState(null);
-        setStatusMessage(null);
+      } else if (modeToRun === "full") {
+        // Full mode prefers creating a new ingestion from URL unless we explicitly detect the URL equals initial and an ingestionId exists.
+        if (trimmed && isSameAsInitial && ingestionId) {
+          idToUse = ingestionId;
+        } else {
+          setJob(null);
+          setRawIngestResponse(null);
+          setPollingState(null);
+          setStatusMessage(null);
 
-        idToUse = await createIngestion(trimmed);
-        // deep-link so user can refresh or share
-        router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(idToUse)}`);
+          idToUse = await createIngestion(trimmed);
+          createdNewIngestion = true;
+          router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(idToUse)}`);
+        }
       }
 
       if (!idToUse) throw new Error("No ingestionId available to run pipeline");
 
+      // If we're running against an existing ingestion (no new ingestion created), persist rerun flag
+      const isExistingRerun = !createdNewIngestion;
+      if (isExistingRerun) {
+        // best-effort: persist small diagnostics flag so operators can see this was a rerun
+        await markIngestionRerun(idToUse, modeToRun);
+      }
+
       // fetch current ingestion row before starting pipeline (improves telemetry)
       await fetchIngestionData(idToUse);
 
-      const runId = await startPipelineRun(idToUse, mode);
+      const runId = await startPipelineRun(idToUse, modeToRun);
 
-      // Poll until pipeline completes (time limits tuned by mode)
-      await pollPipeline(runId, mode === "quick" ? 180_000 : 300_000, 2000);
+      const snap = await pollPipeline(runId, modeToRun === "quick" ? 180_000 : 300_000, 2000);
 
-      // Refresh ingestion row after pipeline completes
+      // Always refresh ingestion after pipeline stops (success or failure)
       await fetchIngestionData(idToUse);
 
-      setStatusMessage(mode === "quick" ? "Quick SEO completed" : "Full pipeline completed");
+      const finalStatus = snap?.run?.status;
+
+      if (finalStatus === "succeeded") {
+        setStatusMessage(modeToRun === "quick" ? "Quick SEO succeeded" : "Full pipeline succeeded");
+      } else if (finalStatus === "failed") {
+        setStatusMessage(null);
+        throw new Error("Pipeline failed (see pipeline telemetry + module output).");
+      } else {
+        // shouldn't happen but avoid lying to the user
+        setStatusMessage(null);
+        throw new Error(`Pipeline ended in unexpected status: ${String(finalStatus)}`);
+      }
     } catch (e: any) {
+      if (e?.payload) {
+        console.warn("Terminal ingest error payload:", e.payload);
+      }
       setError(String(e?.message || e));
       setStatusMessage(null);
     } finally {
@@ -457,12 +410,18 @@ export default function AvidiaSeoPage() {
     return job;
   }, [job]);
 
-  const seoPayload = jobData?.seo_payload ?? (jobData as any)?.seoPayload ?? null;
+  const seo = useMemo(() => {
+    return (
+      (jobData as any)?.seo ??
+      (jobData as any)?.seoPayload ??
+      (jobData as any)?.seo_payload ??
+      null
+    );
+  }, [jobData]);
 
   const rawDescriptionHtml =
-    jobData?.description_html ??
     (jobData as any)?.descriptionHtml ??
-    (jobData as any)?.seo_payload?.description_html ??
+    (jobData as any)?.description_html ??
     (jobData as any)?._debug?.description_html ??
     null;
 
@@ -470,7 +429,7 @@ export default function AvidiaSeoPage() {
     typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
 
   const features = useMemo(() => {
-    if (Array.isArray(jobData?.features)) return jobData.features;
+    if (Array.isArray((jobData as any)?.features)) return (jobData as any).features;
     if (Array.isArray((jobData as any)?.seo_payload?.features)) return (jobData as any).seo_payload.features;
     return null;
   }, [jobData]);
@@ -481,19 +440,35 @@ export default function AvidiaSeoPage() {
     try {
       const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(${escaped})`, "gi");
-      return descriptionHtml.replace(regex, '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>');
+      return descriptionHtml.replace(
+        regex,
+        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
+      );
     } catch (err) {
       console.warn("Unable to highlight search term", err);
       return descriptionHtml;
     }
   }, [descriptionHtml, searchTerm]);
 
-  const knownSeoKeys = ["h1", "pageTitle", "title", "metaDescription", "meta_description", "seoShortDescription", "seo_short_description", "keywords", "slug", "name_best"];
+  const knownSeoKeys = [
+    "h1",
+    "pageTitle",
+    "title",
+    "metaDescription",
+    "meta_description",
+    "seoShortDescription",
+    "seo_short_description",
+    "shortDescription",
+    "short_description",
+    "keywords",
+    "slug",
+    "name_best",
+  ];
 
   const parkedExtras = useMemo(() => {
-    if (!seoPayload || typeof seoPayload !== "object") return [] as [string, any][];
-    return Object.entries(seoPayload).filter(([key]) => !knownSeoKeys.includes(key));
-  }, [seoPayload]);
+    if (!seo || typeof seo !== "object") return [] as [string, any][];
+    return Object.entries(seo).filter(([key]) => !knownSeoKeys.includes(key));
+  }, [seo]);
 
   const handleCopyDescription = async () => {
     if (!descriptionHtml) return;
@@ -502,745 +477,246 @@ export default function AvidiaSeoPage() {
       setCopyState("copied");
       setTimeout(() => setCopyState("idle"), 1500);
     } catch (err) {
-      console.error("copy failed", err);
+      console.warn("clipboard copy failed", err);
       setCopyState("error");
       setTimeout(() => setCopyState("idle"), 1500);
     }
   };
 
-  const handleDownloadDescription = () => {
-    if (!descriptionHtml) return;
-    const blob = new Blob([descriptionHtml], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `avidia-seo-description-${ingestionId || "preview"}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handlePasteUrl = async () => {
-    try {
-      const txt = await navigator.clipboard.readText();
-      const next = (txt || "").trim();
-      if (!next) return;
-      setUrlInput(next);
-      setJob(null);
-      setRawIngestResponse(null);
-      setPollingState(null);
-      setStatusMessage("Pasted from clipboard — choose Quick SEO or Full Pipeline");
-      setError(null);
-      setPipelineRunId(null);
-      setPipelineSnapshot(null);
-    } catch {
-      // ignore (clipboard permissions)
-    }
-  };
-
-  const hasSeo = Boolean(seoPayload || descriptionHtml || features);
-
-  const moduleStatusByName = useMemo(() => {
-    const map = new Map<string, PipelineModule>();
-    for (const m of pipelineSnapshot?.modules ?? []) map.set(m.module_name, m);
-    return map;
+  const moduleDurations = useMemo(() => {
+    const mods = pipelineSnapshot?.modules ?? [];
+    return mods.map((m) => {
+      const start = safeDateMs(m.started_at ?? null);
+      const end = safeDateMs(m.finished_at ?? null);
+      const duration = start != null && end != null ? clamp(end - start, 0, 24 * 60 * 60 * 1000) : null;
+      return { ...m, duration_ms: duration };
+    });
   }, [pipelineSnapshot]);
 
-  const stepsForPills = useMemo(() => {
-    const available = new Set((pipelineSnapshot?.modules ?? []).map((m) => m.module_name));
-    if (available.size > 0) {
-      const out: string[] = [];
-      for (const name of FULL_STEPS) if (available.has(name)) out.push(name);
-      return out.length ? out : (lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS]);
-    }
-    return lastMode === "full" ? [...FULL_STEPS] : [...QUICK_STEPS];
-  }, [lastMode, pipelineSnapshot]);
-
-  const statusPills = useMemo(() => {
-    const pills: Array<{ key: string; label: string; state: "idle" | "active" | "done"; hint: string }> = [];
-
-    pills.push({
-      key: "scrape",
-      label: "Scraping & Normalizing",
-      state:
-        loading || pollingState
-          ? "active"
-          : jobData?.status === "completed" || jobData?.normalized_payload || jobData?.completed_at
-          ? "done"
-          : "idle",
-      hint: pollingState || jobData?.status || (jobData?.normalized_payload ? "normalized" : "waiting"),
-    });
-
-    for (const stepName of stepsForPills) {
-      const m = moduleStatusByName.get(stepName);
-      if (stepName === "seo") {
-        pills.push({
-          key: "seo",
-          label: "AvidiaSEO Generation",
-          state: generating || m?.status === "running" ? "active" : hasSeo || m?.status === "succeeded" ? "done" : "idle",
-          hint: m?.status ? `module: ${m.status}` : generating ? "starting" : hasSeo ? "SEO saved" : "ready",
-        });
-        continue;
-      }
-      if (stepName === "extract") {
-        pills.push({
-          key: "extract",
-          label: "Extract module",
-          state: m?.status === "running" ? "active" : m?.status === "succeeded" ? "done" : "idle",
-          hint: m?.status || "ready",
-        });
-        continue;
-      }
-      pills.push({
-        key: stepName,
-        label: `${stepName[0].toUpperCase()}${stepName.slice(1)} module`,
-        state: m?.status === "running" ? "active" : m?.status === "succeeded" ? "done" : "idle",
-        hint: m?.status || "not run",
-      });
-    }
-
-    pills.push({
-      key: "review",
-      label: "Human-ready Preview",
-      state: hasSeo ? "done" : "idle",
-      hint: hasSeo ? "Rendered" : "awaiting generation",
-    });
-
-    return pills;
-  }, [generating, hasSeo, jobData, loading, moduleStatusByName, pollingState, stepsForPills]);
-
-  // progress + elapsed
-  const progress = useMemo(() => {
-    const total = statusPills.length || 1;
-    const done = statusPills.filter((p) => p.state === "done").length;
-    const active = statusPills.find((p) => p.state === "active")?.label ?? null;
-    const pct = clamp(Math.round((done / total) * 100), 0, 100);
-    return { total, done, pct, active };
-  }, [statusPills]);
-
-  const runStartedAtMs = useMemo(() => {
-    const fromApi = safeDateMs((pipelineSnapshot?.run as any)?.started_at) ?? safeDateMs((pipelineSnapshot?.run as any)?.created_at);
-    return fromApi ?? localRunStartMs;
-  }, [localRunStartMs, pipelineSnapshot]);
-
-  const elapsedLabel = useMemo(() => {
-    if (!runStartedAtMs) return "—";
-    return formatDuration(nowTick - runStartedAtMs);
-  }, [nowTick, runStartedAtMs]);
-
-  const lastUpdatedLabel = useMemo(() => {
-    if (!lastUpdatedAt) return "—";
-    const delta = nowTick - lastUpdatedAt;
-    if (delta < 2000) return "just now";
-    return `${Math.round(delta / 1000)}s ago`;
-  }, [lastUpdatedAt, nowTick]);
-
-  const moduleRuntimeBadges = useMemo(() => {
-    const mods = pipelineSnapshot?.modules ?? [];
-    return mods
-      .slice()
-      .sort((a, b) => (a.module_index ?? 0) - (b.module_index ?? 0))
-      .map((m) => {
-        const s = safeDateMs(m.started_at);
-        const f = safeDateMs(m.finished_at);
-        const d = s && f ? f - s : null;
-        return {
-          key: m.module_name,
-          status: m.status,
-          duration: d != null ? formatDuration(d) : m.status === "running" && s ? formatDuration(nowTick - s) : "—",
-          output_ref: m.output_ref ?? null,
-          error: m.error ?? null,
-        };
-      });
-  }, [nowTick, pipelineSnapshot]);
-
-  const demoUrl = "https://www.apple.com/iphone-17/";
-
-  const headlineAccent =
-    "bg-[linear-gradient(90deg,rgba(34,211,238,1),rgba(56,189,248,1),rgba(52,211,153,1),rgba(244,114,182,1),rgba(250,204,21,1))]";
+  // Rerun indicator from persisted diagnostics (if present)
+  const rerunInfo = useMemo(() => {
+    return jobData?.diagnostics?.rerun_by_ui || jobData?.diagnostics?.ui_rerun || jobData?.diagnostics?.ui_rerun?.rerun_by_ui
+      ? jobData?.diagnostics?.ui_rerun ?? { rerun_by_ui: jobData?.diagnostics?.rerun_by_ui, rerun_at: jobData?.diagnostics?.rerun_at, rerun_mode: jobData?.diagnostics?.rerun_mode }
+      : null;
+  }, [jobData]);
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
-      {/* Animated headline gradient + glow */}
-      <style jsx>{`
-        .hero-gradient {
-          background-size: 200% 200%;
-          animation: heroGradient 7s ease-in-out infinite;
-        }
-        @keyframes heroGradient {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-        .hero-glow {
-          text-shadow: 0 0 32px rgba(34, 211, 238, 0.25), 0 0 48px rgba(52, 211, 153, 0.18);
-        }
-      `}</style>
-
-      {/* Background treatment (greenish-blue primary look, left-top radial glow) */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 -left-36 h-80 w-80 rounded-full bg-cyan-300/24 blur-3xl dark:bg-cyan-500/12" />
-        <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-300/18 blur-3xl dark:bg-emerald-500/10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.06)_0,_rgba(34,211,238,0.02)_30%,transparent_60%)]" />
-        <div className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)]" />
-        </div>
-      </div>
-
-      <div className="relative mx-auto max-w-7xl px-4 pt-4 pb-10 lg:px-8 lg:pt-6">
-        {/* HERO + COMMAND BAR (above the fold) */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-stretch">
-          {/* Left: headline + command bar */}
-          <div className="lg:col-span-7 space-y-4">
-            {/* Module pill */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/70 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-cyan-500/40 dark:bg-slate-950/80 dark:text-cyan-100">
-              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-100 border border-cyan-300 dark:bg-slate-900 dark:border-cyan-400/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              </span>
-              AvidiaTech • AvidiaSEO
-              {ingestionId && (
-                <>
-                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">{ingestionId.slice(0, 8)}…</span>
-                </>
-              )}
-              {pipelineRunId && (
-                <>
-                  <span className="h-3 w-px bg-slate-300/70 dark:bg-slate-700/70" />
-                  <span className="font-mono text-[10px]">run:{pipelineRunId.slice(0, 8)}…</span>
-                </>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight dark:text-slate-50">
-                Turn any manufacturer URL into a{" "}
-                <span
-                  className={[
-                    "bg-clip-text text-transparent hero-gradient hero-glow",
-                    headlineAccent,
-                  ].join(" ")}
-                >
-                  production-ready SEO page
-                </span>
-                .
-              </h1>
-              <p className="text-sm text-slate-600 max-w-xl dark:text-slate-300">
-                Paste a product URL and run Quick SEO (fast) or the Full Pipeline (audit/import/monitor/price) when you’re ready to ship.
-                If you already have an ingestion (extracted earlier), paste its id below and run the pipeline directly — no URL needed.
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col gap-4">
+        <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-semibold">AvidiaSEO</h1>
+              <p className="text-sm text-slate-500">
+                Canonical naming aligned with Describe: <code>seo</code>, <code>descriptionHtml</code>, <code>features</code>
               </p>
             </div>
 
-            {/* Command bar (URL is the hero) */}
-            <div className="rounded-2xl bg-white/95 border border-slate-200 shadow-sm p-3.5 dark:bg-slate-950/70 dark:border-slate-700/70">
-              <div className="flex flex-col gap-2.5">
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1">
-                    <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
-                      Manufacturer product URL
-                    </label>
-                    <input
-                      value={urlInput}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setUrlInput(next);
-
-                        setJob(null);
-                        setRawIngestResponse(null);
-                        setPollingState(null);
-                        setStatusMessage(null);
-                        setError(null);
-
-                        setPipelineRunId(null);
-                        setPipelineSnapshot(null);
-                      }}
-                      placeholder="https://manufacturer.com/product..."
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30 text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50 dark:placeholder:text-slate-500"
-                      type="url"
-                      inputMode="url"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                    />
-                    <div className="mt-2 text-xs text-slate-500">
-                      Or provide an existing ingestion id below and run Full Pipeline without a URL.
-                    </div>
-                    {/* NEW: manual ingestion id input */}
-                    <div className="mt-2">
-                      <label className="text-[11px] text-slate-500 mb-1 block">Existing ingestion id (optional)</label>
-                      <input
-                        value={manualIngestionId}
-                        onChange={(e) => setManualIngestionId(e.target.value)}
-                        placeholder="Paste existing ingestion id (e.g. from Extract)"
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="sm:w-[310px] w-full">
-                    <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-300 mb-1">
-                      Run mode
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          runMode("quick");
-                        }}
-                        disabled={generating}
-                        className="px-4 py-2.5 rounded-xl bg-cyan-500 text-slate-950 text-sm font-semibold shadow-sm hover:bg-cyan-400 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px]"
-                        title="Runs extract + seo"
-                      >
-                        {generating && lastMode === "quick" ? "Running…" : "Quick SEO"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          runMode("full");
-                        }}
-                        disabled={generating}
-                        className="px-4 py-2.5 rounded-xl bg-slate-900 text-slate-50 text-sm font-semibold shadow-sm hover:bg-slate-800 disabled:opacity-60 disabled:shadow-none transition-transform hover:-translate-y-[1px] dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                        title="Runs extract + seo + audit + import + monitor + price"
-                      >
-                        {generating && lastMode === "full" ? "Running…" : "Full Pipeline"}
-                      </button>
-                    </div>
-                  </div>
+            <div className="flex items-center gap-3">
+              {rerunInfo ? (
+                <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs text-amber-800">
+                  Re-run • {rerunInfo.rerun_mode ?? rerunInfo.rerun_at ? new Date(rerunInfo.rerun_at).toLocaleString() : ""}
                 </div>
+              ) : null}
 
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-950/60 dark:border-slate-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                      {statusMessage || "Ready"}
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-950/60 dark:border-slate-700">
-                      <span className="font-mono">progress</span> {progress.pct}%
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 border border-slate-200 px-3 py-1.5 dark:bg-slate-950/60 dark:border-slate-700">
-                      <span className="font-mono">elapsed</span> {elapsedLabel}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handlePasteUrl}
-                      className="text-[11px] text-slate-700 hover:text-slate-900 underline underline-offset-4 dark:text-slate-300 dark:hover:text-slate-100"
-                    >
-                      Paste URL
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUrlInput(demoUrl);
-                        setJob(null);
-                        setRawIngestResponse(null);
-                        setPollingState(null);
-                        setPipelineRunId(null);
-                        setPipelineSnapshot(null);
-                        setStatusMessage("Demo URL loaded — choose Quick SEO or Full Pipeline");
-                        setError(null);
-                      }}
-                      className="text-[11px] text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
-                    >
-                      Try a demo URL
-                    </button>
-                  </div>
-                </div>
-
-                {recentUrls.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                      Recent:
-                    </span>
-                    {recentUrls.map((u) => (
-                      <button
-                        key={u}
-                        type="button"
-                        onClick={() => {
-                          setUrlInput(u);
-                          setJob(null);
-                          setRawIngestResponse(null);
-                          setPollingState(null);
-                          setStatusMessage("Loaded recent URL — choose Quick SEO or Full Pipeline");
-                          setError(null);
-                          setPipelineRunId(null);
-                          setPipelineSnapshot(null);
-                        }}
-                        className="max-w-[260px] truncate rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] text-slate-700 hover:bg-white shadow-sm dark:bg-slate-950/60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-950"
-                        title={u}
-                      >
-                        {u}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Inline “what happens” strip */}
-            <div className="flex flex-wrap gap-2 text-[11px]">
-              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                <span className="text-cyan-700 font-semibold uppercase tracking-[0.16em] dark:text-cyan-200">Quick</span>
-                <span className="text-slate-600 dark:text-slate-300">
-                  <span className="font-mono">extract → seo</span>
-                </span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-xl bg-white/90 border border-slate-200 px-3 py-2 shadow-sm dark:bg-slate-950/80 dark:border-slate-700/70">
-                <span className="text-slate-700 font-semibold uppercase tracking-[0.16em] dark:text-slate-200">Full</span>
-                <span className="text-slate-600 dark:text-slate-300">
-                  <span className="font-mono">extract → seo → audit → import → monitor → price</span>
-                </span>
+              <div className="flex items-center gap-2">
+                <button
+                  className={`rounded px-3 py-2 text-sm border ${mode === "quick" ? "bg-slate-900 text-white" : "bg-white"}`}
+                  onClick={() => setMode("quick")}
+                  disabled={generating}
+                >
+                  Quick SEO
+                </button>
+                <button
+                  className={`rounded px-3 py-2 text-sm border ${mode === "full" ? "bg-slate-900 text-white" : "bg-white"}`}
+                  onClick={() => setMode("full")}
+                  disabled={generating}
+                >
+                  Full Pipeline
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Right: live telemetry */}
-          <div className="lg:col-span-5 flex flex-col gap-3">
-            <div className="rounded-2xl bg-white/95 border border-slate-200 shadow-sm p-4 dark:bg-slate-950/70 dark:border-slate-700/70">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Live telemetry
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!pipelineRunId) return;
-                      try {
-                        const snap = await fetchPipelineSnapshot(pipelineRunId);
-                        setPipelineSnapshot(snap);
-                        setLastUpdatedAt(Date.now());
-                      } catch (e: any) {
-                        setError(String(e?.message || e));
-                      }
-                    }}
-                    disabled={!pipelineRunId}
-                    className="text-[11px] text-slate-600 hover:text-slate-900 underline underline-offset-4 disabled:opacity-40 dark:text-slate-300 dark:hover:text-white"
-                  >
-                    Refresh now
-                  </button>
+          {mode === "full" && (
+            <div className="mt-3 flex flex-col gap-2">
+              <label className="text-sm font-medium">Source URL</label>
+              <input
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                className="w-full rounded border px-3 py-2 text-sm"
+                placeholder="https://example.com/product/..."
+                disabled={generating}
+              />
+            </div>
+          )}
 
-                  <label className="inline-flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      className="accent-cyan-500"
-                      checked={autoRefresh}
-                      onChange={(e) => setAutoRefresh(e.target.checked)}
-                    />
-                    Auto-refresh
-                  </label>
-                </div>
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              onClick={() => run(mode)}
+              disabled={generating || (mode === "full" && !urlInput.trim())}
+            >
+              {generating ? "Running..." : mode === "quick" ? "Run Quick SEO" : "Run Full Pipeline"}
+            </button>
+
+            {ingestionId && (
+              <a
+                className="text-sm underline text-slate-600"
+                href={`/dashboard/seo?ingestionId=${encodeURIComponent(ingestionId)}`}
+              >
+                Refresh
+              </a>
+            )}
+          </div>
+
+          {(statusMessage || pollingState) && (
+            <div className="mt-3 text-sm text-slate-600">
+              {statusMessage ? <div>Status: {statusMessage}</div> : null}
+              {pollingState ? <div>Polling: {pollingState}</div> : null}
+            </div>
+          )}
+
+          {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
+
+          {rawIngestResponse && (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm text-slate-600">Ingest debug</summary>
+              <pre className="mt-2 max-h-[260px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
+                {JSON.stringify(rawIngestResponse, null, 2)}
+              </pre>
+            </details>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2 rounded-lg border bg-white p-4 dark:bg-slate-950">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">Description HTML</h2>
+              <div className="flex items-center gap-2">
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="rounded border px-2 py-1 text-sm"
+                  placeholder="Search in HTML..."
+                />
+                <button
+                  className="rounded border px-2 py-1 text-sm"
+                  onClick={handleCopyDescription}
+                  disabled={!descriptionHtml}
+                >
+                  {copyState === "copied" ? "Copied" : "Copy"}
+                </button>
               </div>
+            </div>
 
-              <div className="mt-3 space-y-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:bg-slate-950/60 dark:border-slate-700">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-600 dark:text-slate-300">Progress</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-200">
-                      {progress.done}/{progress.total} • {progress.pct}%
-                    </span>
-                  </div>
-                  <div className="mt-2 h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400"
-                      style={{ width: `${progress.pct}%` }}
-                    />
-                  </div>
-                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    {progress.active ? (
-                      <>
-                        Now: <span className="font-medium text-slate-700 dark:text-slate-200">{progress.active}</span>
-                      </>
-                    ) : (
-                      "Idle"
-                    )}
-                    <span className="mx-2 text-slate-300 dark:text-slate-700">•</span>
-                    Last update: <span className="font-mono">{lastUpdatedLabel}</span>
-                  </p>
-                </div>
+            <div className="mt-3 rounded border p-3">
+              <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
+            </div>
+          </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:bg-slate-950/60 dark:border-slate-700">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Run status</p>
-                    <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
-                      {pipelineSnapshot?.run?.status || (pipelineRunId ? "loading…" : "—")}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:bg-slate-950/60 dark:border-slate-700">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Elapsed</p>
-                    <p className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">{elapsedLabel}</p>
-                  </div>
-                </div>
+          <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
+            <h2 className="text-sm font-semibold">SEO</h2>
+            <div className="mt-2 text-sm">
+              <div><span className="font-medium">H1:</span> {seo?.h1 ?? "—"}</div>
+              <div><span className="font-medium">Title:</span> {seo?.pageTitle ?? seo?.title ?? "—"}</div>
+              <div><span className="font-medium">Meta:</span> {seo?.metaDescription ?? seo?.meta_description ?? "—"}</div>
+              <div><span className="font-medium">Short:</span> {seo?.shortDescription ?? seo?.seoShortDescription ?? seo?.seo_short_description ?? "—"}</div>
+            </div>
 
-                {moduleRuntimeBadges.length > 0 ? (
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:bg-slate-950/60 dark:border-slate-700">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400 mb-2">Module runtimes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {moduleRuntimeBadges.map((m) => {
-                        const tone =
-                          m.status === "succeeded"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-100"
-                            : m.status === "running"
-                            ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-100"
-                            : m.status === "failed"
-                            ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/50 dark:text-rose-100"
-                            : "border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300";
-                        return (
-                          <span
-                            key={m.key}
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${tone}`}
-                            title={m.output_ref ? `output_ref: ${m.output_ref}` : m.error ? JSON.stringify(m.error) : m.status}
+            {Array.isArray(features) && features.length > 0 && (
+              <>
+                <h3 className="mt-4 text-sm font-semibold">Features</h3>
+                <ul className="mt-2 list-disc pl-5 text-sm">
+                  {features.map((f, i) => (
+                    <li key={i}>{String(f)}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+            {parkedExtras.length > 0 && (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm text-slate-600">Extra SEO keys</summary>
+                <pre className="mt-2 max-h-[260px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
+                  {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
+                </pre>
+              </details>
+            )}
+
+            <details className="mt-4">
+              <summary
+                className="cursor-pointer text-sm text-slate-600"
+                onClick={() => setShowRawExtras((v) => !v)}
+              >
+                Raw ingestion JSON
+              </summary>
+              <pre className="mt-2 max-h-[360px] overflow-auto rounded border bg-black p-3 text-[12px] text-white">
+                {JSON.stringify(jobData ?? null, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </div>
+
+        {pipelineSnapshot && (
+          <div className="rounded-lg border bg-white p-4 dark:bg-slate-950">
+            <h2 className="text-sm font-semibold">Pipeline telemetry</h2>
+            <div className="mt-2 text-sm text-slate-600">
+              Run: {pipelineSnapshot?.run?.id ?? pipelineRunId ?? "—"} • Status:{" "}
+              {pipelineSnapshot?.run?.status ?? "—"}
+            </div>
+            <div className="mt-3 overflow-auto">
+              <table className="min-w-[640px] w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="py-2 pr-3">Module</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Duration</th>
+                    <th className="py-2 pr-3">Output</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {moduleDurations.map((m) => (
+                    <tr key={`${m.module_name}-${m.module_index}`} className="border-b">
+                      <td className="py-2 pr-3">{m.module_name} (#{m.module_index})</td>
+                      <td className="py-2 pr-3">{m.status}</td>
+                      <td className="py-2 pr-3">
+                        {m.duration_ms != null ? formatDuration(m.duration_ms) : "—"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {pipelineRunId && (
+                          <a
+                            className="underline"
+                            href={`/api/v1/pipeline/run/${encodeURIComponent(
+                              pipelineRunId
+                            )}/output/${encodeURIComponent(String(m.module_index))}`}
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            <span className="font-medium">{m.key}</span>
-                            <span className="text-[10px] opacity-80">{m.duration}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-950/60 dark:border-slate-700 dark:text-slate-400">
-                    Run a URL (or provide an ingestion id) to see live module timings and artifacts.
-                  </div>
-                )}
-              </div>
+                            View output
+                          </a>
+                        )}
+                        {!pipelineRunId && "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {!moduleDurations.length && (
+                    <tr>
+                      <td className="py-2" colSpan={4}>
+                        No module telemetry available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            {/* Real-time pipeline list (compact) */}
-            <div className="rounded-2xl bg-white/95 border border-slate-200 px-4 py-3 shadow-sm dark:bg-slate-950/70 dark:border-slate-700/70">
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                  Real-time pipeline
-                </p>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {loading || generating ? "Running…" : pipelineRunId ? "Ready" : "Idle"}
-                </span>
-              </div>
-
-              <ol className="mt-3 space-y-2 text-xs">
-                {statusPills.map((pill) => {
-                  const isDone = pill.state === "done";
-                  const isActive = pill.state === "active";
-                  return (
-                    <li key={pill.key} className="flex items-center justify-between rounded-xl border px-3 py-2 dark:border-slate-700">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={[
-                            "h-2 w-2 rounded-full",
-                            isDone ? "bg-emerald-400" : isActive ? "bg-amber-400 animate-pulse" : "bg-slate-400 dark:bg-slate-500",
-                          ].join(" ")}
-                        />
-                        <span className="text-[11px] font-medium text-slate-800 dark:text-slate-100">{pill.label}</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">{pill.hint}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-          </div>
-        </section>
-
-        {/* Error banner */}
-        {error && (
-          <div className="mt-4 rounded-2xl border border-rose-300 bg-rose-50 text-rose-800 px-4 py-3 text-sm shadow-sm dark:border-rose-500/40 dark:bg-rose-950/60 dark:text-rose-50">
-            {error}
+            {isPreviewResult && <div className="mt-2 text-xs text-amber-700">Preview-only mode.</div>}
           </div>
         )}
 
-        {/* RESULTS */}
-        <div className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-          {/* Main results */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* Premium HTML viewer */}
-            <div className="rounded-2xl bg-white text-slate-900 shadow-sm p-5 border border-slate-200 dark:bg-slate-900/85 dark:text-white dark:border-slate-700/80">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-1 dark:text-slate-400">
-                    Description window
-                  </p>
-                  <h3 className="text-xl sm:text-2xl font-semibold mb-1">Premium HTML viewer</h3>
-                  <p className="text-slate-600 text-xs max-w-2xl dark:text-slate-300">
-                    See the final copy exactly as it will appear on a product page. Highlight any claim, copy it into your CMS, or export the HTML.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopyDescription}
-                    disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 border border-slate-900 shadow-sm hover:bg-slate-800 disabled:opacity-40 dark:bg-white/5 dark:border-white/25 dark:text-white dark:hover:bg-white/10"
-                  >
-                    {copyState === "copied" ? "Copied!" : copyState === "error" ? "Copy failed" : "Copy description"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownloadDescription}
-                    disabled={!descriptionHtml}
-                    className="px-3 py-2 rounded-lg bg-slate-900 text-xs text-slate-50 font-semibold border border-slate-900 shadow-sm hover:-translate-y-[1px] transition disabled:opacity-40 disabled:shadow-none dark:bg-white dark:text-slate-900 dark:border-white/30"
-                  >
-                    Download HTML
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSearchTerm((prev) => prev.trim())}
-                    className="px-3 py-2 rounded-lg bg-amber-400 text-xs text-slate-900 font-semibold shadow-sm hover:bg-amber-300"
-                  >
-                    Search in text
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 dark:bg-white/5 dark:border-white/15">
-                  <input
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search headline, claims, or FAQs"
-                    className="flex-1 bg-transparent text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white dark:placeholder:text-slate-300"
-                  />
-                  <span className="text-[11px] text-slate-500 dark:text-slate-200">Live highlight</span>
-                </div>
-
-                <div className="rounded-2xl bg-white text-slate-900 shadow-inner border border-slate-200 overflow-hidden dark:bg-white dark:text-slate-900 dark:border-slate-200">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50 dark:bg-slate-50">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Rendered description</p>
-                      <p className="text-xs text-slate-600 m-0">
-                        Mirrors your custom GPT instructions — headings, lists, disclaimers, and manuals stay structured.
-                      </p>
-                    </div>
-                    {isPreviewResult && (
-                      <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
-                        Preview only
-                      </span>
-                    )}
-                  </div>
-                  <div className="prose prose-slate max-w-none px-6 py-5 text-sm">
-                    {descriptionHtml ? (
-                      <article
-                        className="prose-headings:scroll-mt-20 prose-h2:mt-6 prose-h3:mt-4 prose-ul:list-disc prose-li:marker:text-slate-400"
-                        dangerouslySetInnerHTML={{ __html: highlightedDescription }}
-                      />
-                    ) : (
-                      <div className="text-slate-500 text-sm italic">
-                        No description generated yet. Paste a URL above and run Quick SEO or Full Pipeline, or provide an existing ingestion id and run Full Pipeline.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Side column */}
-          <div className="lg:col-span-4 space-y-4">
-            {/* SEO structure */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">SEO structure</h4>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">Driven by custom instructions</span>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">H1</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    {seoPayload?.h1 ?? seoPayload?.name_best ?? "Not yet generated"}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Page title</p>
-                  <p className="font-semibold text-slate-900 dark:text-slate-50">
-                    {seoPayload?.pageTitle ?? seoPayload?.title ?? "Not yet generated"}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Meta description</p>
-                  <p className="text-slate-800 leading-relaxed dark:text-slate-100">
-                    {seoPayload?.metaDescription ?? seoPayload?.meta_description ?? "Not yet generated"}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 dark:bg-slate-950/60 dark:border-slate-700">
-                  <p className="text-[11px] uppercase text-slate-500 mb-1 dark:text-slate-400">Short description</p>
-                  <p className="text-slate-800 dark:text-slate-100">
-                    {seoPayload?.seoShortDescription ?? seoPayload?.seo_short_description ?? "Not yet generated"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Features */}
-            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Feature bullets</h4>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">From SEO output</span>
-              </div>
-              {Array.isArray(features) && features.length > 0 ? (
-                <ul className="list-disc list-inside space-y-1 text-xs text-slate-800 dark:text-slate-100">
-                  {features.map((feat: string, idx: number) => (
-                    <li key={idx}>{feat}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-slate-500 text-xs dark:text-slate-400">No features captured yet. Run Quick SEO to generate.</p>
-              )}
-
-              {parkedExtras.length > 0 && (
-                <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setShowRawExtras((v) => !v)}
-                    className="text-xs text-cyan-700 hover:text-cyan-600 underline underline-offset-4 dark:text-cyan-300 dark:hover:text-cyan-200"
-                  >
-                    {showRawExtras ? "Hide" : "Show"} parked extras ({parkedExtras.length})
-                  </button>
-                  {showRawExtras && (
-                    <pre className="mt-2 p-3 rounded-lg bg-slate-900 text-[11px] text-slate-100 border border-slate-700 overflow-auto dark:bg-slate-950/70">
-                      {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Debug: Source payload */}
-            {jobData && (ingestionId || manualIngestionId) && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Source payload (normalized)</h4>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">Live from ingestion</span>
-                </div>
-                <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
-                  {JSON.stringify(jobData.normalized_payload ?? jobData, null, 2)}
-                </pre>
-              </div>
-            )}
-
-            {/* Debug: raw ingest response */}
-            {rawIngestResponse && (
-              <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 space-y-3 dark:bg-slate-900/80 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Raw /api/v1/ingest response</h4>
-                  {pollingState && <span className="text-[11px] text-slate-500 dark:text-slate-400">{pollingState}</span>}
-                </div>
-                <pre className="bg-slate-900/95 border border-slate-800 rounded-lg p-3 text-[11px] text-slate-100 whitespace-pre-wrap break-words dark:bg-slate-950/70">
-                  {JSON.stringify(rawIngestResponse, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        </div>
+        {loading && <div className="text-sm text-slate-600">Loading ingestion…</div>}
       </div>
-    </main>
+    </div>
   );
 }
