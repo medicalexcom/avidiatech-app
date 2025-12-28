@@ -683,9 +683,10 @@ export default function AvidiaSeoPage() {
           setJob(null);
           setRawIngestResponse(null);
           setPollingState(null);
-          idToUse = await createIngestion(trimmedUrl);
+          const newIngestionId = await createIngestion(trimmedUrl);
+          idToUse = newIngestionId;
           createdNewIngestion = true;
-          setIngestionIdInput(idToUse);
+          setIngestionIdInput(newIngestionId);
         }
       }
 
