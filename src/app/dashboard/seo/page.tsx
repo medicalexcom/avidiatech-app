@@ -921,6 +921,15 @@ export default function AvidiaSeoPage() {
     }
   }
 
+  const onBulkCsvPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    // allow picking the same file twice
+    e.target.value = "";
+    if (!file) return;
+    await onUploadCsv(file);
+  };
+
+
   const jobData = useMemo(() => {
     if (!job) return null;
     if ((job as any)?.data?.data) return (job as any).data.data;
