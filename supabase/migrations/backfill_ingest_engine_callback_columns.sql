@@ -1,5 +1,5 @@
--- Backfill callback columns for existing rows where we can infer state.
--- This is best-effort; it does not attempt to reconstruct request_id.
+-- Best-effort backfill so existing rows become gateable without re-ingesting.
+-- Uses completed_at/error fields that already exist.
 
 update public.product_ingestions
 set
