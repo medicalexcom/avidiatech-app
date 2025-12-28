@@ -26,6 +26,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
+        ok: true,
         ingestionId: result.ingestionId,
 
         // canonical
@@ -45,29 +46,33 @@ export async function POST(req: Request) {
   } catch (err: any) {
     const msg = err?.message || String(err);
 
+    // Include stack in non-prod if available (helps pipeline debugging)
+    const stack =
+      process.env.NODE_ENV === "production" ? null : err?.stack || null;
+
     if (msg === "ingestion_not_found")
-      return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
+      return NextResponse.json({ ok: false, error: "ingestion_not_found", stack }, { status: 404 });
 
     // IMPORTANT: treat prefixed ingestion_not_ready messages as 409 too
     if (msg === "ingestion_not_ready" || msg.startsWith("ingestion_not_ready:")) {
-      return NextResponse.json({ error: "ingestion_not_ready", detail: msg }, { status: 409 });
+      return NextResponse.json({ ok: false, error: "ingestion_not_ready", detail: msg, stack }, { status: 409 });
     }
 
     if (msg.startsWith("ingestion_load_failed:"))
-      return NextResponse.json({ error: "ingestion_load_failed", detail: msg }, { status: 500 });
+      return NextResponse.json({ ok: false, error: "ingestion_load_failed", detail: msg, stack }, { status: 500 });
 
     if (
       msg === "central_gpt_invalid_json" ||
       msg.startsWith("central_gpt_not_configured:") ||
       msg.startsWith("central_gpt_seo_error:")
     ) {
-      return NextResponse.json({ error: "seo_model_failed", detail: msg }, { status: 500 });
+      return NextResponse.json({ ok: false, error: "seo_model_failed", detail: msg, stack }, { status: 500 });
     }
 
     if (msg.startsWith("seo_persist_failed:")) {
-      return NextResponse.json({ error: "seo_persist_failed", detail: msg }, { status: 500 });
+      return NextResponse.json({ ok: false, error: "seo_persist_failed", detail: msg, stack }, { status: 500 });
     }
 
-    return NextResponse.json({ error: "seo_internal_failed", detail: msg }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "seo_internal_failed", detail: msg, stack }, { status: 500 });
   }
 }
