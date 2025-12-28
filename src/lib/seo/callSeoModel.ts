@@ -1,5 +1,7 @@
 // src/lib/seo/callSeoModel.ts
-// Updated: stricter Responses API schema, robust banned-token detection, and improved HTML normalization auto-fix
+// Updated: stricter Responses API schema, robust banned-token detection, improved HTML normalization,
+// and validator now compares normalized text (not raw HTML) for overview === descriptionHtml.
+//
 // Ready to drop into repository.
 
 import OpenAI from "openai";
@@ -131,14 +133,11 @@ function countLi(html: string): number {
 }
 
 /**
- * Helper: convert HTML (or HTML-like strings) to normalized plain text for comparison.
- * - Removes tags
- * - Decodes common HTML entities (basic)
- * - Collapses whitespace
+ * Basic HTML entity decoding (common entities) and helper to normalize HTML -> plain text.
+ * We use this for a robust comparison rather than requiring exact HTML string equality.
  */
 function decodeHtmlEntities(s: string): string {
   if (!s) return "";
-  // Basic named entities
   const replacements: Record<string, string> = {
     "&nbsp;": " ",
     "&amp;": "&",
@@ -152,7 +151,6 @@ function decodeHtmlEntities(s: string): string {
   for (const [k, v] of Object.entries(replacements)) {
     out = out.replace(new RegExp(k, "gi"), v);
   }
-  // numeric entities: &#123;
   out = out.replace(/&#(\d+);/g, (_m, code) => {
     try {
       return String.fromCharCode(Number(code));
@@ -163,17 +161,22 @@ function decodeHtmlEntities(s: string): string {
   return out;
 }
 
+/**
+ * Convert HTML-like string to normalized plain text for comparison:
+ * - Expand escaped newline sequences ("\\n")
+ * - Remove tags, decode entities, collapse whitespace
+ */
 function htmlToNormalizedText(s: any): string {
   if (s === null || s === undefined) return "";
   let t = String(s);
 
-  // If escaped newline sequences ("\n") are present as backslash + n, expand them
+  // Expand escaped newline/tab sequences if present in raw model output
   t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
 
-  // Remove tags by replacing them with a space so words don't concatenate
+  // Remove tags (replace with space to avoid concatenation of words)
   t = t.replace(/<[^>]+>/g, " ");
 
-  // Decode entities
+  // Decode common entities
   t = decodeHtmlEntities(t);
 
   // Normalize whitespace
@@ -185,6 +188,9 @@ function htmlToNormalizedText(s: any): string {
 /**
  * Hard validations to keep us compliant with custom_gpt_instructions.md
  * and to guarantee "no hallucination / no placeholders" behavior.
+ *
+ * NOTE: We compare normalized text (htmlToNormalizedText) for overview equality
+ * instead of raw string equality to avoid false positives due to formatting.
  */
 function validateSeoJsonOrThrow(json: any) {
   requireField(json && typeof json === "object", "central_gpt_invalid_json");
@@ -219,13 +225,18 @@ function validateSeoJsonOrThrow(json: any) {
   const bad = containsBannedTokens(aggregate);
   requireField(!bad, `central_gpt_seo_error: banned_placeholder_token:${bad}`);
 
-  // overview must exactly equal descriptionHtml
+  // overview must be semantically equal to descriptionHtml (normalized text)
   requireField(
     typeof json.sections.overview === "string" && json.sections.overview.trim().length > 0,
     "central_gpt_seo_error: sections.overview_missing"
   );
+
+  const normOverview = htmlToNormalizedText(json.sections.overview);
+  const normDesc = htmlToNormalizedText(json.descriptionHtml);
+
+  // If normalized text differs, fail — we want them to be effectively the same content.
   requireField(
-    String(json.sections.overview).trim() === String(json.descriptionHtml).trim(),
+    normOverview === normDesc,
     "central_gpt_seo_error: sections.overview_must_equal_descriptionHtml"
   );
 
@@ -371,7 +382,7 @@ export async function callSeoModel(
     "1) Output MUST be valid JSON matching the provided JSON schema (strict).",
     "2) Do NOT invent facts. Use ONLY the packet fields as grounding.",
     "3) Customer-facing copy MUST NOT contain placeholders. Omit missing lines instead; record gaps only in desc_audit.data_gaps.",
-    "4) sections.overview MUST equal descriptionHtml exactly.",
+    "4) sections.overview MUST equal descriptionHtml exactly (content equality after normalization).",
     "5) Product Specifications section MUST include real bullet(s) derived from packet.dom.specs.",
     "",
     "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
@@ -468,12 +479,11 @@ export async function callSeoModel(
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
       // --- Robust normalization and auto-fix for overview equality ---
-      // Compare normalized plain-text representations (strip tags, decode entities, collapse whitespace).
       try {
         const normOverview = htmlToNormalizedText(json.sections?.overview ?? "");
         const normDesc = htmlToNormalizedText(json.descriptionHtml ?? "");
         if (normOverview && normDesc && normOverview === normDesc) {
-          // Auto-fix: replace overview with canonical descriptionHtml so strict equality passes.
+          // Auto-fix: set overview to canonical descriptionHtml so strict equality passes later
           json.sections.overview = json.descriptionHtml;
         }
       } catch (nfErr) {
