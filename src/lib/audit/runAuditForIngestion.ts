@@ -19,6 +19,29 @@ function clamp(n: number, min: number, max: number) {
 }
 
 /**
+ * Helper: prefer canonical nested seo.* fields, fall back to legacy top-level aliases.
+ */
+function getSeoValue(seoPayload: any, ...keys: string[]) {
+  if (!seoPayload) return null;
+
+  // Prefer nested canonical seo object first
+  if (seoPayload.seo && typeof seoPayload.seo === "object") {
+    for (const k of keys) {
+      const v = seoPayload.seo[k];
+      if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+    }
+  }
+
+  // Then check top-level aliases
+  for (const k of keys) {
+    const v = seoPayload[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+
+  return null;
+}
+
+/**
  * Minimal v1 audit:
  * - Ensures core SEO fields exist and meet basic quality gates
  * - Provides deterministic scoring for downstream gating
@@ -34,29 +57,20 @@ export function auditSeoPayload(input: {
   const warnings: string[] = [];
   const checks: AuditResult["checks"] = [];
 
-  const seo = input.seo_payload || {};
+  const seoPayload = input.seo_payload || {};
   const description = typeof input.description_html === "string" ? input.description_html.trim() : "";
   const features = Array.isArray(input.features) ? input.features : [];
 
-  const h1 = typeof seo?.h1 === "string" ? seo.h1.trim() : "";
-  const title =
-    typeof seo?.pageTitle === "string"
-      ? seo.pageTitle.trim()
-      : typeof seo?.title === "string"
-      ? seo.title.trim()
-      : "";
-  const meta =
-    typeof seo?.metaDescription === "string"
-      ? seo.metaDescription.trim()
-      : typeof seo?.meta_description === "string"
-      ? seo.meta_description.trim()
-      : "";
-  const shortDesc =
-    typeof seo?.seoShortDescription === "string"
-      ? seo.seoShortDescription.trim()
-      : typeof seo?.seo_short_description === "string"
-      ? seo.seo_short_description.trim()
-      : "";
+  // Use helper to prefer canonical nested keys but fall back to legacy aliases
+  const h1Val = getSeoValue(seoPayload, "h1", "heading", "title");
+  const titleVal = getSeoValue(seoPayload, "pageTitle", "title");
+  const metaVal = getSeoValue(seoPayload, "metaDescription", "meta_description", "meta");
+  const shortDescVal = getSeoValue(seoPayload, "shortDescription", "seoShortDescription", "seo_short_description");
+
+  const h1 = typeof h1Val === "string" ? h1Val.trim() : "";
+  const title = typeof titleVal === "string" ? titleVal.trim() : "";
+  const meta = typeof metaVal === "string" ? metaVal.trim() : "";
+  const shortDesc = typeof shortDescVal === "string" ? shortDescVal.trim() : "";
 
   // H1
   if (!h1) {
