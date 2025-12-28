@@ -1,5 +1,6 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
+import { mapSeoResultToStore } from "@/lib/seo/compatSeoMapping";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
 
 function isNonEmptyString(v: any) {
@@ -31,7 +32,7 @@ function hasNonEmptySpecs(specs: any): boolean {
  * - Hard gates: grounded name + non-empty specs
  * - Calls callSeoModel which enforces custom_gpt_instructions.md + auto-revision + no placeholders
  * - Persists BOTH:
- *    - seo_payload: full model output (including desc_audit) [recommended]
+ *    - seo_payload: full model output (including desc_audit) + compatibility top-level aliases
  *    - description_html, features, seo_generated_at
  * - Also persists diagnostics.seo metadata (model/instruction source + audit summary)
  */
@@ -111,16 +112,11 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   };
 
   /**
-   * Store full seo payload (recommended):
-   * This keeps desc_audit and all structured outputs together.
-   * Existing consumers that expect seo_payload to only be meta may need to be updated,
-   * but the pipeline/internal/seo endpoint already returns canonical fields.
+   * Store full seo payload (recommended) but include compatibility aliases:
+   * This keeps desc_audit and all structured outputs together while allowing legacy consumers
+   * to read top-level h1/title/meta fields.
    */
-  const seo_payload_to_store = {
-    ...seoResult,
-    // ensure _meta is included for debugging
-    _meta: seoResult._meta ?? null,
-  };
+  const seo_payload_to_store = mapSeoResultToStore(seoResult);
 
   const { data: updated, error: updErr } = await supabase
     .from("product_ingestions")
