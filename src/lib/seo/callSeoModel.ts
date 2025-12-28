@@ -1,5 +1,5 @@
 // src/lib/seo/callSeoModel.ts
-// Updated: stricter Responses API schema, robust banned-token detection, and HTML normalization auto-fix
+// Updated: stricter Responses API schema, robust banned-token detection, and improved HTML normalization auto-fix
 // Ready to drop into repository.
 
 import OpenAI from "openai";
@@ -128,6 +128,58 @@ function stripJsonFences(raw: string): string {
 function countLi(html: string): number {
   const m = (html || "").match(/<li\b/gi);
   return m ? m.length : 0;
+}
+
+/**
+ * Helper: convert HTML (or HTML-like strings) to normalized plain text for comparison.
+ * - Removes tags
+ * - Decodes common HTML entities (basic)
+ * - Collapses whitespace
+ */
+function decodeHtmlEntities(s: string): string {
+  if (!s) return "";
+  // Basic named entities
+  const replacements: Record<string, string> = {
+    "&nbsp;": " ",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+  };
+  let out = s;
+  for (const [k, v] of Object.entries(replacements)) {
+    out = out.replace(new RegExp(k, "gi"), v);
+  }
+  // numeric entities: &#123;
+  out = out.replace(/&#(\d+);/g, (_m, code) => {
+    try {
+      return String.fromCharCode(Number(code));
+    } catch {
+      return "";
+    }
+  });
+  return out;
+}
+
+function htmlToNormalizedText(s: any): string {
+  if (s === null || s === undefined) return "";
+  let t = String(s);
+
+  // If escaped newline sequences ("\n") are present as backslash + n, expand them
+  t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
+
+  // Remove tags by replacing them with a space so words don't concatenate
+  t = t.replace(/<[^>]+>/g, " ");
+
+  // Decode entities
+  t = decodeHtmlEntities(t);
+
+  // Normalize whitespace
+  t = t.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+
+  return t;
 }
 
 /**
@@ -415,28 +467,16 @@ export async function callSeoModel(
       json.seo.title = String(json.seo.title || "").trim().slice(0, 70);
       json.seo.metaDescription = String(json.seo.metaDescription || "").trim().slice(0, 160);
 
-      // --- Normalization and auto-fix for overview equality (avoid false positives due to whitespace/formatting) ---
-      function normalizeHtmlForCompare(s: any): string {
-        if (s === null || s === undefined) return "";
-        let t = String(s);
-        // Expand escaped newline/tab sequences if present
-        t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
-        // Normalize newlines to spaces and collapse whitespace
-        t = t.replace(/[\r\n]/g, " ").replace(/\s+/g, " ");
-        // Remove spaces between tags: ">   <" -> "><"
-        t = t.replace(/>\s+</g, "><");
-        return t.trim();
-      }
-
+      // --- Robust normalization and auto-fix for overview equality ---
+      // Compare normalized plain-text representations (strip tags, decode entities, collapse whitespace).
       try {
-        const nOverview = normalizeHtmlForCompare(json.sections?.overview ?? "");
-        const nDesc = normalizeHtmlForCompare(json.descriptionHtml ?? "");
-        if (nOverview && nDesc && nOverview === nDesc) {
+        const normOverview = htmlToNormalizedText(json.sections?.overview ?? "");
+        const normDesc = htmlToNormalizedText(json.descriptionHtml ?? "");
+        if (normOverview && normDesc && normOverview === normDesc) {
           // Auto-fix: replace overview with canonical descriptionHtml so strict equality passes.
           json.sections.overview = json.descriptionHtml;
         }
       } catch (nfErr) {
-        // Non-fatal: continue to validation and let it report.
         console.warn("normalizeHtmlForCompare failed:", nfErr);
       }
 
