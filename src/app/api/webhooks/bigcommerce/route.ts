@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         .single();
 
       // enqueue connector-sync job for this integration if you prefer to process webhook-triggered syncs centrally
-      const { getQueue } = require("@/lib/queue/bull");
+      const { getQueue } = require("@/lib/queue");
       const queue = getQueue("connector-sync");
       await queue.add("connector-sync", { integrationId: integration.id, jobId: jobRow.id }, { attempts: 3 });
 
