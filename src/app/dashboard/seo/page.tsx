@@ -13,7 +13,10 @@ import { useRouter, useSearchParams } from "next/navigation";
  *   - descriptionHtml
  *   - features
  *
- * The server may still store DB values in snake_case columns; we normalize display here.
+ * IMPORTANT (2025-12-28):
+ * - Ingestion completion must gate on ingest_callback_at (new durable column),
+ *   NOT on legacy status fields (which may remain "processing").
+ * - If ingest_engine_status = "error", fail fast and surface the engine error payload.
  */
 
 type AnyObj = Record<string, any>;
@@ -63,6 +66,30 @@ function formatDuration(ms: number) {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function engineErrorMessage(job: AnyObj | null): string | null {
+  if (!job) return null;
+  // Support both: {data: row} and raw row
+  const row = (job as any)?.data ?? job;
+
+  const err = (row as any)?.error ?? null;
+  const last = (row as any)?.last_error ?? null;
+
+  if (err && typeof err === "object") {
+    return (
+      err.message ||
+      err.detail ||
+      err.error ||
+      (typeof err.code === "string" ? err.code : null) ||
+      (typeof last === "string" ? last : null)
+    );
+  }
+
+  if (typeof err === "string" && err.trim()) return err;
+  if (typeof last === "string" && last.trim()) return last;
+
+  return null;
 }
 
 export default function AvidiaSeoPage() {
@@ -142,7 +169,16 @@ export default function AvidiaSeoPage() {
     throw new Error("Pipeline did not complete within timeout");
   }
 
-  // Polling helper: polls /api/v1/ingest/job/:jobId until ingestion row is completed
+  /**
+   * Polling helper:
+   * Polls /api/v1/ingest/job/:jobId until ingestion callback is persisted.
+   *
+   * IMPORTANT:
+   * The server endpoint must treat ingestion as "done" when ingest_callback_at is non-null,
+   * not when legacy status flips away from processing.
+   *
+   * This page ALSO fail-fast if ingest_engine_status == "error".
+   */
   async function pollForIngestion(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
     const start = Date.now();
     setPollingState(`polling job ${jobId}`);
@@ -150,12 +186,20 @@ export default function AvidiaSeoPage() {
     while (Date.now() - start < timeoutMs) {
       try {
         const res = await fetch(`/api/v1/ingest/job/${encodeURIComponent(jobId)}`);
+        const j = await res.json().catch(() => null);
+
+        // Success path: server explicitly says done
         if (res.status === 200) {
-          const j = await res.json();
           setPollingState(`completed: ingestionId=${j.ingestionId}`);
-          setStatusMessage("Ingestion completed");
+          setStatusMessage("Ingestion callback received");
           return j;
         }
+
+        // Fail-fast path: server can return engine error details but not 200
+        if (j?.error?.code === "ingest_engine_error" || j?.error?.code === "ingest_invalid_normalized_payload") {
+          throw new Error(j?.error?.message || j?.error?.code);
+        }
+
         const elapsed = Math.floor((Date.now() - start) / 1000);
         setPollingState(`waiting... ${elapsed}s`);
       } catch (e) {
@@ -163,6 +207,7 @@ export default function AvidiaSeoPage() {
         setPollingState(`error polling: ${String(e)}`);
         setStatusMessage(null);
       }
+
       await sleep(intervalMs);
     }
     setPollingState("timeout");
@@ -238,7 +283,9 @@ export default function AvidiaSeoPage() {
     if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
 
     setPipelineRunId(runId);
-    router.push(`/dashboard/seo?ingestionId=${encodeURIComponent(forIngestionId)}&pipelineRunId=${encodeURIComponent(runId)}`);
+    router.push(
+      `/dashboard/seo?ingestionId=${encodeURIComponent(forIngestionId)}&pipelineRunId=${encodeURIComponent(runId)}`
+    );
 
     setStatusMessage("Pipeline running");
     return runId;
@@ -276,7 +323,15 @@ export default function AvidiaSeoPage() {
 
       if (!idToUse) throw new Error("No ingestionId available to run pipeline");
 
-      await fetchIngestionData(idToUse);
+      const ing = await fetchIngestionData(idToUse);
+
+      // Fail-fast on engine error, using new durable fields if present
+      const row = (ing as any)?.data ?? ing;
+      const ingestEngineStatus = row?.ingest_engine_status ?? row?.ingestEngineStatus ?? null;
+      if (ingestEngineStatus === "error") {
+        const msg = engineErrorMessage(row) || "Ingestion engine failed (ingest_engine_status=error)";
+        throw new Error(msg);
+      }
 
       const runId = await startPipelineRun(idToUse, modeToRun);
 
@@ -325,7 +380,9 @@ export default function AvidiaSeoPage() {
     null;
 
   const descriptionHtml =
-    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
+    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0
+      ? rawDescriptionHtml
+      : null;
 
   const features = useMemo(() => {
     if (Array.isArray((jobData as any)?.features)) return (jobData as any).features;
@@ -393,7 +450,6 @@ export default function AvidiaSeoPage() {
     });
   }, [pipelineSnapshot]);
 
-  // --- UI (kept minimal: this file is drop-in and should compile with existing styles/components) ---
   return (
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-4">
@@ -404,6 +460,14 @@ export default function AvidiaSeoPage() {
               <p className="text-sm text-slate-500">
                 Canonical naming aligned with Describe: <code>seo</code>, <code>descriptionHtml</code>, <code>features</code>
               </p>
+              {(jobData as any)?.ingest_callback_at ? (
+                <p className="text-xs text-slate-500 mt-1">
+                  ingest_callback_at:{" "}
+                  <span className="font-mono">{String((jobData as any)?.ingest_callback_at)}</span>{" "}
+                  • ingest_engine_status:{" "}
+                  <span className="font-mono">{String((jobData as any)?.ingest_engine_status ?? "—")}</span>
+                </p>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">
