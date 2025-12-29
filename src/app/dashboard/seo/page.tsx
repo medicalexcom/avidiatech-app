@@ -53,6 +53,10 @@ type SourceMode = "url" | "ingestion";
 
 type BulkItem = { input_url: string; metadata: Record<string, any> };
 
+type ToastTone = "info" | "success" | "error" | "warn";
+type Toast = { id: string; tone: ToastTone; message: string };
+
+
 const SEO_ONLY_STEPS = ["extract", "seo"] as const;
 const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
 
@@ -106,6 +110,26 @@ function statusPillTone(status?: string | null) {
   if (s === "running") return "bg-sky-50 text-sky-800 border-sky-200";
   if (s === "queued" || s === "pending") return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+
+function Spinner({ className }: { className?: string }) {
+  return (
+    <svg
+      className={cx("h-4 w-4 animate-spin", className)}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  );
 }
 
 /* ---- Bulk parse helper (inline) ----
@@ -246,6 +270,17 @@ export default function AvidiaSeoPage() {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  function pushToast(message: string, tone: ToastTone = "info", ttlMs = 2600) {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToasts((prev) => [...prev, { id, tone, message }].slice(-4));
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, ttlMs);
+  }
+
 
   // Debug / polling state
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
@@ -553,6 +588,7 @@ export default function AvidiaSeoPage() {
 
       if (finalStatus === "succeeded") {
         setStatusMessage(runMode === "seo" ? "SEO run succeeded" : "Full pipeline succeeded");
+        pushToast(runMode === "seo" ? "SEO run succeeded" : "Full pipeline succeeded", "success");
       } else if (finalStatus === "failed") {
         setStatusMessage(null);
         throw new Error("Pipeline failed (see pipeline telemetry + module output).");
@@ -562,7 +598,9 @@ export default function AvidiaSeoPage() {
       }
     } catch (e: any) {
       if (e?.payload) console.warn("Terminal ingest error payload:", e.payload);
-      setError(String(e?.message || e));
+      const msg = String(e?.message || e);
+      setError(msg);
+      pushToast(msg, "error");
       setStatusMessage(null);
     } finally {
       setGenerating(false);
@@ -630,10 +668,12 @@ export default function AvidiaSeoPage() {
     try {
       await navigator.clipboard.writeText(descriptionHtml);
       setCopyState("copied");
+      pushToast("Description copied", "success");
       setTimeout(() => setCopyState("idle"), 1500);
     } catch (err) {
       console.warn("clipboard copy failed", err);
       setCopyState("error");
+      pushToast("Copy failed", "error");
       setTimeout(() => setCopyState("idle"), 1500);
     }
   };
@@ -665,6 +705,31 @@ export default function AvidiaSeoPage() {
   const canRun =
     !generating &&
     ((sourceMode === "url" && urlInput.trim().length > 0) || (sourceMode === "ingestion" && ingestionIdInput.trim().length > 0));
+
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const isEnter = e.key === "Enter";
+      if (!isEnter) return;
+
+      // Ctrl/⌘ + Enter => run single
+      if ((e.ctrlKey || e.metaKey) && panelMode === "single" && canRun && !generating) {
+        e.preventDefault();
+        runNow();
+        return;
+      }
+
+      // Shift + Enter => create bulk
+      if (e.shiftKey && panelMode === "bulk" && bulkText.trim().length > 0 && !bulkCreating) {
+        e.preventDefault();
+        createBulk();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelMode, canRun, generating, bulkCreating, bulkText]);
 
   /* ---------------- Bulk helpers ---------------- */
   function previewBulk() {
@@ -720,9 +785,12 @@ export default function AvidiaSeoPage() {
       setBulkCsvName(file.name);
       setBulkText(converted);
       setBulkError(null);
+      pushToast(`Loaded CSV: ${file.name}`, "success");
       setBulkPreview([]);
     } catch (err: any) {
-      setBulkError(String(err?.message || err));
+      const msg = String(err?.message || err);
+      setBulkError(msg);
+      pushToast(msg, "error");
     } finally {
       // reset so picking same file again triggers onChange
       e.target.value = "";
@@ -749,10 +817,13 @@ export default function AvidiaSeoPage() {
         throw new Error(j?.error || j?.message || `Bulk create failed: ${res?.status}`);
       }
       setBulkJobId(String(j.bulkJobId));
+      pushToast("Bulk job created", "success");
       // Navigate to bulk dashboard (existing page) with the id as param for operator convenience
       router.push(`/dashboard/bulk?bulkJobId=${encodeURIComponent(String(j.bulkJobId))}`);
     } catch (err: any) {
-      setBulkError(String(err?.message || err));
+      const msg = String(err?.message || err);
+      setBulkError(msg);
+      pushToast(msg, "error");
     } finally {
       setBulkCreating(false);
     }
@@ -783,6 +854,39 @@ export default function AvidiaSeoPage() {
         <div className="absolute top-64 -left-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl dark:bg-emerald-900/15" />
         <div className="absolute bottom-0 -right-24 h-72 w-72 rounded-full bg-amber-200/25 blur-3xl dark:bg-amber-900/15" />
       </div>
+
+      {/* Toasts */}
+      {toasts.length ? (
+        <div className="fixed right-4 top-[84px] z-50 flex w-[min(420px,calc(100vw-2rem))] flex-col gap-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={cx(
+                "rounded-2xl border bg-white/90 px-3 py-2 text-sm shadow-lg backdrop-blur dark:bg-slate-950/70",
+                t.tone === "success" && "border-emerald-200 text-emerald-900 dark:border-emerald-900/40 dark:text-emerald-200",
+                t.tone === "error" && "border-rose-200 text-rose-900 dark:border-rose-900/40 dark:text-rose-200",
+                t.tone === "warn" && "border-amber-200 text-amber-900 dark:border-amber-900/40 dark:text-amber-200",
+                t.tone === "info" && "border-slate-200 text-slate-800 dark:border-slate-800 dark:text-slate-200"
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <span
+                  className={cx(
+                    "mt-1 inline-block h-2 w-2 rounded-full",
+                    t.tone === "success" && "bg-emerald-500",
+                    t.tone === "error" && "bg-rose-500",
+                    t.tone === "warn" && "bg-amber-500",
+                    t.tone === "info" && "bg-sky-500"
+                  )}
+                />
+                <div className="min-w-0">
+                  <div className="break-words">{t.message}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
         {/* Hero (no extra frame) */}
@@ -996,7 +1100,12 @@ export default function AvidiaSeoPage() {
                           onClick={runNow}
                           disabled={!canRun}
                         >
-                          {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
+                          {generating ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Spinner className="text-white" />
+                              Running…
+                            </span>
+                          ) : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
                         </button>
 
                         {ingestionIdInput.trim() ? (
@@ -1009,6 +1118,9 @@ export default function AvidiaSeoPage() {
                             Refresh
                           </button>
                         ) : null}
+                      </div>
+                      <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        Shortcut: <span className="font-mono">Ctrl/⌘ + Enter</span> to run.
                       </div>
 
                       {statusMessage ? (
@@ -1124,7 +1236,14 @@ export default function AvidiaSeoPage() {
                             onClick={previewBulk}
                             disabled={!bulkText.trim() || bulkCreating}
                           >
-                            Preview
+                            {bulkCreating ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Spinner className="text-white" />
+                                Preview
+                              </span>
+                            ) : (
+                              "Preview"
+                            )}
                           </button>
                           <button
                             className={cx(
@@ -1134,8 +1253,18 @@ export default function AvidiaSeoPage() {
                             onClick={createBulk}
                             disabled={!bulkCanSubmit}
                           >
-                            {bulkCreating ? "Creating…" : "Create Bulk Job"}
+                            {bulkCreating ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Spinner className="text-white" />
+                                Creating…
+                              </span>
+                            ) : (
+                              "Create Bulk Job"
+                            )}
                           </button>
+                        </div>
+                        <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          Shortcut: <span className="font-mono">Shift + Enter</span> to create job.
                         </div>
 
                         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
