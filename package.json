@@ -1,0 +1,50 @@
+{
+  "name": "avidiatech-app",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts",
+    "worker:dev": "ts-node --transpile-only src/worker/worker.ts",
+    "worker:start": "node dist/worker/worker.js"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.28.1",
+    "@supabase/supabase-js": "^2.81.1",
+    "autoprefixer": "^10.4.20",
+    "clsx": "^2.1.1",
+    "csv-parse": "^5.5.5",
+    "next": "^16.0.10",
+    "next-themes": "^0.4.6",
+    "node-fetch": "^2.7.0",
+    "openai": "^6.10.0",
+    "postcss": "^8.4.49",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "stripe": "^16.0.0",
+    "tailwindcss": "^3.4.14",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8",
+    "papaparse": "^5.4.1",
+    "xlsx": "^0.18.5",
+    "bullmq": "^4.10.0",
+    "ioredis": "^5.3.2",
+    "@sentry/node": "^8.0.0",
+    "@sentry/tracing": "^7.0.0",
+    "cheerio": "^1.0.0-rc.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/node-fetch": "^2.6.13",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "@types/papaparse": "^5.2.6"
+  }
+}

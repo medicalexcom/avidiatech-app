@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Mobile-first sensible defaults */
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+body {
+  @apply bg-white text-gray-900 antialiased leading-6;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* responsive container utility */
+.container {
+  @apply mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* fluid heading example */
+.h1 {
+  font-weight: 700;
+  font-size: clamp(1.25rem, 2.5vw, 1.875rem);
+}
+
+/* small-screen improvements */
+img, video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* prevent horizontal overflow on small screens */
+:root {
+  overscroll-behavior-x: none;
+}
