@@ -1700,7 +1700,7 @@ const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "runnin
                                   ? "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
                                   : "bg-slate-300 dark:bg-slate-700"
                               )}
-                              onClick={createBulkJob}
+                              onClick={submitBulkJob}
                               disabled={!bulkCanSubmit}
                             >
                               {bulkSubmitting ? "Creating job…" : "Create bulk job"}
