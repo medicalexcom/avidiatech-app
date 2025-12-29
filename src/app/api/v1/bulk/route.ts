@@ -1,36 +1,41 @@
-// src/app/api/v1/bulk/route.ts
 import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { parsePastedUrls } from "@/lib/bulk/parse";
 import { createBulkJob } from "@/lib/bulk/db";
 import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from "@/lib/billing";
 import { extractEmailFromSessionClaims } from "@/lib/clerk-utils";
 import { getQueue } from "@/lib/queue/bull";
 
-export async function POST(request: Request) {
+/**
+ * POST /api/v1/bulk
+ *
+ * Accepts JSON: { name?, pasted?: string, items?: [{ url, metadata }] }
+ * Creates a bulk job and enqueues a bulk-master job.
+ */
+export async function POST(request: NextRequest) {
   const { userId, sessionClaims } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
+
+    // requireSubscriptionAndUsage expects a typed 'feature' value. Cast to any to stay compatible
+    // with your billing helper's runtime checks while satisfying TypeScript here.
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantFromRequest(request),
-      feature: "bulk",
+      feature: "bulk" as any,
       increment: 1,
       userEmail,
     });
 
-    // Accept content-type application/json or multipart/form-data (paste text in JSON)
     const contentType = request.headers.get("content-type") || "";
-
     let payload: any = null;
+
     if (contentType.includes("application/json")) {
       payload = await request.json();
     } else {
-      // Fallback: try parse text body
       const text = await request.text();
-      // try JSON first
       try {
         payload = JSON.parse(text || "{}");
       } catch {
@@ -41,7 +46,9 @@ export async function POST(request: Request) {
     const name = payload?.name ?? `bulk-${new Date().toISOString()}`;
     const options = payload?.options ?? {};
     const pasted = payload?.pasted ?? payload?.text ?? null;
-    const itemsFromBody = Array.isArray(payload?.items) ? payload.items.map((it: any) => ({ input_url: it.url || it.input_url, metadata: it.metadata || {} })) : [];
+    const itemsFromBody = Array.isArray(payload?.items)
+      ? payload.items.map((it: any) => ({ input_url: it.url || it.input_url, metadata: it.metadata || {} }))
+      : [];
 
     let items = itemsFromBody;
     if (pasted && typeof pasted === "string") {
