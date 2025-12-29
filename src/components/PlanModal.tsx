@@ -35,21 +35,33 @@ const PRICE_DATA: Record<
     monthly: { monthlyLabel: "$49/mo", centsMonthly: 4900 },
     yearly: { monthlyLabel: "$39/mo", annualTotal: 468, centsMonthly: 3900 },
     subtitle: "For solopreneurs & small shops who want essential automation.",
-    features: ["100 product ingests / month", "Basic Extraction & Description AI", "Basic SEO & Specs extraction"],
+    features: [
+      "100 product ingests / month",
+      "Basic Extraction & Description AI",
+      "Basic SEO & Specs extraction",
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
   growth: {
     monthly: { monthlyLabel: "$149/mo", centsMonthly: 14900 },
     yearly: { monthlyLabel: "$119/mo", annualTotal: 1428, centsMonthly: 11900 },
     subtitle: "For growing e‑commerce teams managing catalogs and workflows.",
-    features: ["300 product ingests / month", "Full Extraction, SEO & Variants", "Feeds, Bulk Ops & API (read-only)"],
+    features: [
+      "300 product ingests / month",
+      "Full Extraction, SEO & Variants",
+      "Feeds, Bulk Ops & API (read-only)",
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
   pro: {
     monthly: { monthlyLabel: "$399/mo", centsMonthly: 39900 },
     yearly: { monthlyLabel: "$319/mo", annualTotal: 3828, centsMonthly: 31900 },
     subtitle: "For agencies, distributors, and large catalog operations.",
-    features: ["1,000 product ingests / month", "Unlimited users & dedicated queues", "Full API (read+write) & agency tools"],
+    features: [
+      "1,000 product ingests / month",
+      "Unlimited users & dedicated queues",
+      "Full API (read+write) & agency tools",
+    ],
     ctaLabel: "Start 14‑day free trial",
   },
 };
@@ -119,7 +131,8 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   // Poll when returning from Stripe (session_id present) — only relevant if signed-in
   useEffect(() => {
     if (!isSignedIn) return;
-    const sessionId = searchParams.get("session_id");
+    // use optional chaining to handle the case when `searchParams` might be null
+    const sessionId = searchParams?.get("session_id");
     if (!sessionId) return;
     let stop = false;
     const interval = setInterval(async () => {
@@ -132,21 +145,26 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [searchParams.toString(), isSignedIn]);
+    // include searchParams?.toString() in dependency to re-run if query params change
+  }, [searchParams?.toString(), isSignedIn]);
 
   // NEW: handle checkout_canceled param — clear any lingering loading state and allow immediate interaction
   useEffect(() => {
-    const canceled = searchParams.get("checkout_canceled");
+    // safely handle possible null searchParams
+    const canceled = searchParams?.get("checkout_canceled");
     if (canceled) {
       setLoadingPlan(null);
-      setError("You canceled checkout — you can pick another plan or try again.");
+      setError(
+        "You canceled checkout — you can pick another plan or try again."
+      );
       setTimeout(() => {
         firstFocusableRef.current?.focus();
       }, 50);
       const t = setTimeout(() => setError(null), 5_000);
       return () => clearTimeout(t);
     }
-  }, [searchParams.toString()]);
+    // watch searchParams?.toString() so effect re-evaluates when query string changes
+  }, [searchParams?.toString()]);
 
   // Focus trap inside modal; focus selected plan CTA by default
   useEffect(() => {
@@ -175,12 +193,16 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
           e.preventDefault();
           return;
         }
-        const currentIndex = focusables.indexOf(document.activeElement as HTMLElement);
+        const currentIndex = focusables.indexOf(
+          document.activeElement as HTMLElement
+        );
         let nextIndex = currentIndex;
         if (e.shiftKey) {
-          nextIndex = currentIndex <= 0 ? focusables.length - 1 : currentIndex - 1;
+          nextIndex =
+            currentIndex <= 0 ? focusables.length - 1 : currentIndex - 1;
         } else {
-          nextIndex = currentIndex === focusables.length - 1 ? 0 : currentIndex + 1;
+          nextIndex =
+            currentIndex === focusables.length - 1 ? 0 : currentIndex + 1;
         }
         e.preventDefault();
         focusables[nextIndex]?.focus();
@@ -240,27 +262,50 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   // If user is not signed in, show a simple modal with sign-in / sign-up CTAs (no embedded SignUp)
   if (!isSignedIn) {
     const signInModal = (
-      <div aria-modal="true" role="dialog" aria-label="Sign in or create an account" className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div
+        aria-modal="true"
+        role="dialog"
+        aria-label="Sign in or create an account"
+        className="fixed inset-0 z-[9999] flex items-center justify-center"
+      >
         <div className="absolute inset-0 bg-black/65"></div>
-        <div ref={modalRef} className="relative z-[10000] w-full max-w-md mx-4 rounded-lg bg-white dark:bg-slate-900 shadow-xl p-6" role="document">
+        <div
+          ref={modalRef}
+          className="relative z-[10000] w-full max-w-md mx-4 rounded-lg bg-white dark:bg-slate-900 shadow-xl p-6"
+          role="document"
+        >
           <h2 className="text-2xl font-bold">Create your account</h2>
           <p className="mt-2 text-sm text-slate-600">
-            You need an account to access this area. Sign in if you already have an account, or create one to continue.
+            You need an account to access this area. Sign in if you already have an
+            account, or create one to continue.
           </p>
 
           <div className="mt-6 flex flex-col gap-3">
-            <button onClick={() => router.push(`/sign-in?redirect=/dashboard`)} className="w-full py-2 rounded bg-indigo-600 text-white">
+            <button
+              onClick={() => router.push(`/sign-in?redirect=/dashboard`)}
+              className="w-full py-2 rounded bg-indigo-600 text-white"
+            >
               Sign in
             </button>
-            <button onClick={() => router.push(`/sign-up?redirect=/dashboard`)} className="w-full py-2 rounded border">
+            <button
+              onClick={() => router.push(`/sign-up?redirect=/dashboard`)}
+              className="w-full py-2 rounded border"
+            >
               Create an account
             </button>
           </div>
 
           <div className="mt-6 flex items-center justify-between">
-            <div className="text-sm text-slate-500">Need help? Contact support@avidiatech.com</div>
+            <div className="text-sm text-slate-500">
+              Need help? Contact support@avidiatech.com
+            </div>
             <div className="flex items-center gap-3">
-              <button onClick={manualCheck} className="text-sm underline text-slate-600" type="button" disabled={checking}>
+              <button
+                onClick={manualCheck}
+                className="text-sm underline text-slate-600"
+                type="button"
+                disabled={checking}
+              >
                 Check subscription
               </button>
             </div>
@@ -269,7 +314,9 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       </div>
     );
 
-    return typeof document !== "undefined" ? createPortal(signInModal, document.body) : null;
+    return typeof document !== "undefined"
+      ? createPortal(signInModal, document.body)
+      : null;
   }
 
   const planCard = (planKey: PlanKey) => {
@@ -279,13 +326,18 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     const isSelected = selectedPlan === planKey;
     const isRecommended = planKey === "growth";
 
-    const baseClasses = "relative cursor-pointer flex-1 rounded-lg p-4 border bg-white dark:bg-slate-900";
-    const interactiveClasses = "transform-gpu transition-shadow transition-colors duration-300 ease-out";
+    const baseClasses =
+      "relative cursor-pointer flex-1 rounded-lg p-4 border bg-white dark:bg-slate-900";
+    const interactiveClasses =
+      "transform-gpu transition-shadow transition-colors duration-300 ease-out";
     const selectedVisuals = isSelected
       ? "ring-2 ring-indigo-500 shadow-[0_12px_30px_rgba(99,102,241,0.06)] bg-indigo-50 dark:bg-slate-800"
       : "shadow-sm hover:shadow-[0_10px_24px_rgba(15,23,42,0.06)] hover:-translate-y-0.5";
 
-    const priceLabel = billing === "monthly" ? plan.monthly.monthlyLabel : plan.yearly.monthlyLabel;
+    const priceLabel =
+      billing === "monthly"
+        ? plan.monthly.monthlyLabel
+        : plan.yearly.monthlyLabel;
     const annualTotal = billing === "yearly" ? plan.yearly.annualTotal : undefined;
 
     return (
@@ -307,13 +359,23 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
 
         <div className="flex items-baseline justify-between gap-4">
           <div className="pr-4">
-            <h3 className="text-lg font-semibold">{planKey === "pro" ? "Pro / Agency" : planKey.charAt(0).toUpperCase() + planKey.slice(1)}</h3>
-            <div className="text-sm text-slate-500 leading-tight">{plan.subtitle}</div>
+            <h3 className="text-lg font-semibold">
+              {planKey === "pro" ? "Pro / Agency" : planKey.charAt(0).toUpperCase() + planKey.slice(1)}
+            </h3>
+            <div className="text-sm text-slate-500 leading-tight">
+              {plan.subtitle}
+            </div>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold">{priceLabel}</div>
-            <div className="text-xs text-slate-500">billed {billing === "monthly" ? "monthly" : "yearly"}</div>
-            {annualTotal ? <div className="text-xs text-slate-500 mt-1 font-medium">${annualTotal}/yr</div> : null}
+            <div className="text-xs text-slate-500">
+              billed {billing === "monthly" ? "monthly" : "yearly"}
+            </div>
+            {annualTotal ? (
+              <div className="text-xs text-slate-500 mt-1 font-medium">
+                ${annualTotal}/yr
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -344,7 +406,9 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
             }`}
             disabled={Boolean(loadingPlan)}
             type="button"
-            aria-label={`${planKey} - ${priceLabel} - ${plan.ctaLabel ?? "Start trial"}`}
+            aria-label={`${planKey} - ${priceLabel} - ${
+              plan.ctaLabel ?? "Start trial"
+            }`}
           >
             {loading ? "Redirecting…" : plan.ctaLabel ?? "Start trial"}
           </button>
@@ -404,7 +468,11 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     <div className="inline-flex items-center gap-3 bg-slate-100 dark:bg-slate-800 rounded-full p-1">
       <button
         onClick={() => setBilling("monthly")}
-        className={`px-3 py-1 rounded-full text-sm ${billing === "monthly" ? "bg-white dark:bg-slate-900 shadow-sm font-semibold" : "text-slate-600"}`}
+        className={`px-3 py-1 rounded-full text-sm ${
+          billing === "monthly"
+            ? "bg-white dark:bg-slate-900 shadow-sm font-semibold"
+            : "text-slate-600"
+        }`}
         aria-pressed={billing === "monthly"}
         type="button"
       >
@@ -412,7 +480,11 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
       </button>
       <button
         onClick={() => setBilling("yearly")}
-        className={`px-3 py-1 rounded-full text-sm ${billing === "yearly" ? "bg-white dark:bg-slate-900 shadow-sm font-semibold" : "text-slate-600"}`}
+        className={`px-3 py-1 rounded-full text-sm ${
+          billing === "yearly"
+            ? "bg-white dark:bg-slate-900 shadow-sm font-semibold"
+            : "text-slate-600"
+        }`}
         aria-pressed={billing === "yearly"}
         type="button"
       >
@@ -422,7 +494,12 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
   );
 
   const modal = (
-    <div aria-modal="true" role="dialog" aria-label="Choose a plan" className="fixed inset-0 z-[9999] flex items-center justify-center">
+    <div
+      aria-modal="true"
+      role="dialog"
+      aria-label="Choose a plan"
+      className="fixed inset-0 z-[9999] flex items-center justify-center"
+    >
       <div className="absolute inset-0 bg-black/65"></div>
 
       <div
@@ -434,7 +511,8 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
           <div>
             <h2 className="text-2xl font-bold">Choose a plan</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Start your 14‑day free trial. Your trial converts automatically unless canceled.
+              Start your 14‑day free trial. Your trial converts automatically
+              unless canceled.
             </p>
           </div>
 
@@ -468,22 +546,36 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
 
         <div className="mt-6 flex items-center justify-between gap-4">
           <div className="text-sm text-slate-500">
-            {error ? <span className="text-red-600">{error}</span> : <span>Secure payment via Stripe</span>}
+            {error ? (
+              <span className="text-red-600">{error}</span>
+            ) : (
+              <span>Secure payment via Stripe</span>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={manualCheck} className="text-sm underline text-slate-600" type="button" disabled={checking}>
+            <button
+              onClick={manualCheck}
+              className="text-sm underline text-slate-600"
+              type="button"
+              disabled={checking}
+            >
               Already completed checkout? Check status
             </button>
 
-            <a href="/dashboard/pricing" className="text-sm text-slate-600 underline">
+            <a
+              href="/dashboard/pricing"
+              className="text-sm text-slate-600 underline"
+            >
               View full pricing page
             </a>
           </div>
         </div>
 
         <div className="mt-4 border-t pt-4 flex items-center justify-between">
-          <div className="text-sm text-slate-500">Need help? Contact support@avidiatech.com</div>
+          <div className="text-sm text-slate-500">
+            Need help? Contact support@avidiatech.com
+          </div>
 
           <div className="flex items-center gap-4">
             <button
@@ -494,7 +586,11 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
               Account
             </button>
 
-            <button onClick={handleSignOut} className="text-sm text-red-600" type="button">
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-red-600"
+              type="button"
+            >
               Sign out
             </button>
           </div>
@@ -503,5 +599,7 @@ export default function PlanModal({ onActivated }: { onActivated?: () => void })
     </div>
   );
 
-  return typeof document !== "undefined" ? createPortal(modal, document.body) : null;
+  return typeof document !== "undefined"
+    ? createPortal(modal, document.body)
+    : null;
 }
