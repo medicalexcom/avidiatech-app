@@ -404,6 +404,9 @@ export default function AvidiaSeoPage() {
   const [bulkFetchError, setBulkFetchError] = useState<string | null>(null);
   const [bulkPolling, setBulkPolling] = useState<boolean>(true);
 
+  // Error when submitting a bulk job. Separate from fetch errors when polling or refreshing.
+  const [bulkSubmitError, setBulkSubmitError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -844,7 +847,9 @@ export default function AvidiaSeoPage() {
     }
 
     setBulkSubmitting(true);
+    // Clear previous errors before submitting
     setBulkFetchError(null);
+    setBulkSubmitError(null);
 
     try {
       const payload = {
@@ -890,7 +895,8 @@ export default function AvidiaSeoPage() {
       await refreshBulk(newId);
       setStatusMessage(`Bulk job created (${good.length} items)`);
     } catch (e: any) {
-      setBulkFetchError(String(e?.message || e));
+      // Distinguish between submit and fetch errors
+      setBulkSubmitError(String(e?.message || e));
     } finally {
       setBulkSubmitting(false);
     }
