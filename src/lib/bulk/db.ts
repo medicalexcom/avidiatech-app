@@ -66,8 +66,12 @@ export async function getBulkJob(bulkJobId: string) {
 
 export async function listBulkItems(bulkJobId: string, opts?: { limit?: number; offset?: number }) {
   const supabase = getServiceSupabaseClient();
-  const query = supabase.from("bulk_job_items").select("*").eq("bulk_job_id", bulkJobId).order("item_index", { ascending: true });
-  if (opts?.limit) query.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  let query: any = supabase.from("bulk_job_items").select("*").eq("bulk_job_id", bulkJobId).order("item_index", { ascending: true });
+  if (typeof opts?.limit === "number") {
+    const from = opts.offset ?? 0;
+    const to = from + opts.limit - 1;
+    query = query.range(from, to);
+  }
   const { data, error } = await query;
   if (error) throw error;
   return data;
@@ -85,28 +89,34 @@ export async function updateBulkItemStatus(bulkJobItemId: string, updates: Recor
   return data;
 }
 
+/**
+ * incrementBulkCounters
+ *
+ * NOTE: Supabase JS does not expose a direct `raw` expression API for atomic increments across all clients.
+ * If you have a DB-side RPC (preferred) you can call it instead for atomic increments.
+ * This implementation performs a read-then-update; it's appropriate for moderate concurrency.
+ */
 export async function incrementBulkCounters(bulkJobId: string, delta: { completed?: number; failed?: number }) {
   const supabase = getServiceSupabaseClient();
-  // Use SQL to increment atomically
-  const updates: Record<string, any> = {};
-  if (typeof delta.completed === "number") updates.completed_items = (supabase.raw = undefined); // placeholder not used
-  // We'll do a raw query for atomic increment
-  const { error } = await supabase.rpc("bulk_jobs_increment_counters", {
-    job_id: bulkJobId,
-    inc_completed: delta.completed ?? 0,
-    inc_failed: delta.failed ?? 0,
-  }).catch(() => ({ error: null } as any));
-  // NOTE: If you don't have the RPC, fallback to a simple update (safe for low concurrency)
-  if (error) {
-    const { data, error: upErr } = await supabase
-      .from("bulk_jobs")
-      .update({
-        completed_items: (delta.completed ? `completed_items + ${delta.completed}` : undefined),
-        failed_items: (delta.failed ? `failed_items + ${delta.failed}` : undefined),
-      })
-      .eq("id", bulkJobId);
-    if (upErr) throw upErr;
-    return data;
-  }
+
+  // Read current counters
+  const { data: current, error: readErr } = await supabase
+    .from("bulk_jobs")
+    .select("completed_items, failed_items")
+    .eq("id", bulkJobId)
+    .maybeSingle();
+
+  if (readErr) throw readErr;
+  if (!current) throw new Error("bulk_job_not_found");
+
+  const completedNow = Number(current.completed_items ?? 0) + Number(delta.completed ?? 0);
+  const failedNow = Number(current.failed_items ?? 0) + Number(delta.failed ?? 0);
+
+  const { error: upErr } = await supabase
+    .from("bulk_jobs")
+    .update({ completed_items: completedNow, failed_items: failedNow, updated_at: new Date().toISOString() })
+    .eq("id", bulkJobId);
+
+  if (upErr) throw upErr;
   return true;
 }
