@@ -12,10 +12,13 @@ export default function ChooseOrganizationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Safely handle the possibility that `searchParams` might be null. Use optional
+  // chaining so that each call will resolve to `undefined` if `searchParams` is null,
+  // and the nullish coalescing will progress to the next option or fallback.
   const afterSignIn =
-    searchParams.get("after_sign_in_url") ??
-    searchParams.get("after_sign_up_url") ??
-    searchParams.get("redirect_url") ??
+    searchParams?.get("after_sign_in_url") ??
+    searchParams?.get("after_sign_up_url") ??
+    searchParams?.get("redirect_url") ??
     "/dashboard";
 
   useEffect(() => {
