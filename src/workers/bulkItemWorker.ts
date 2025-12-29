@@ -12,24 +12,28 @@
 import { getRedisConnection } from "@/lib/queue/bull";
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
+import { incrementBulkCounters } from "@/lib/bulk/db";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const serviceApiKey = process.env.SERVICE_API_KEY || process.env.NEXT_PUBLIC_SERVICE_API_KEY || ""; // If you have a service API to call internal routes
+const serviceApiKey = process.env.SERVICE_API_KEY || process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
+
 if (!supabaseUrl || !supabaseKey) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 async function markItem(id: string, updates: Record<string, any>) {
   return supabase.from("bulk_job_items").update(updates).eq("id", id);
 }
 
-async function startIngestAndPipelineForUrl(url: string) {
+async function startIngestAndReturnIngestionId(url: string) {
   // 1) POST /api/v1/ingest
-  const ingestRes = await fetch(`${process.env.INTERNAL_API_BASE || ""}/api/v1/ingest`, {
+  const ingestRes = await fetch(`${internalApiBase}/api/v1/ingest`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -38,38 +42,51 @@ async function startIngestAndPipelineForUrl(url: string) {
     body: JSON.stringify({ url, persist: true, options: { includeSeo: true } }),
   });
   const ingestJson = await ingestRes.json().catch(() => null);
-  if (!ingestRes.ok) throw new Error(ingestJson?.error || `ingest failed ${ingestRes.status}`);
-  // If server responds with jobId, we need to poll /api/v1/ingest/job/:jobId until 200 returns ingestionId
-  const jobId = ingestJson?.jobId ?? ingestJson?.ingestionId ?? null;
-  if (!jobId) {
-    // If immediate ingestionId returned
-    const ingestionId = ingestJson?.ingestionId ?? ingestJson?.id ?? null;
-    if (!ingestionId) throw new Error("ingest did not return jobId or ingestionId");
-    return ingestionId;
+  if (!ingestRes.ok) {
+    const msg = ingestJson?.error ?? `ingest failed ${ingestRes.status}`;
+    throw new Error(msg);
   }
 
-  // Poll job
+  // If API returned an ingestionId directly
+  const possibleIngestionId =
+    ingestJson?.ingestionId ?? ingestJson?.id ?? ingestJson?.data?.id ?? ingestJson?.data?.ingestionId ?? null;
+  if (possibleIngestionId) {
+    // If status indicates accepted with jobId, we still need to poll
+    if (ingestJson?.status === "accepted" || ingestRes.status === 202) {
+      const jobId = ingestJson?.jobId ?? ingestJson?.ingestionId ?? possibleIngestionId;
+      return await pollForIngestionJob(jobId);
+    }
+    return possibleIngestionId;
+  }
+
+  const jobId = ingestJson?.jobId ?? ingestJson?.job?.id ?? null;
+  if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
+  return await pollForIngestionJob(jobId);
+}
+
+async function pollForIngestionJob(jobId: string, timeoutMs = 120_000) {
   const start = Date.now();
-  const timeoutMs = 120_000;
   while (Date.now() - start < timeoutMs) {
-    const r = await fetch(`${process.env.INTERNAL_API_BASE || ""}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
+    const r = await fetch(`${internalApiBase}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
       headers: { ...(serviceApiKey ? { "x-service-api-key": serviceApiKey } : {}) },
     });
+    const j = await r.json().catch(() => null);
     if (r.status === 200) {
-      const j = await r.json().catch(() => null);
       return j?.ingestionId ?? j?.id ?? null;
     }
     if (r.status === 409) {
-      const payload = await r.json().catch(() => null);
-      throw new Error(payload?.error || "ingest job failed (409)");
+      const msg = (j?.error && (j.error.message || j.error)) || j?.detail || "ingest_engine_error";
+      const err: any = new Error(msg);
+      err.payload = j;
+      throw err;
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((res) => setTimeout(res, 2500));
   }
   throw new Error("ingest job timeout");
 }
 
 async function startPipeline(ingestionId: string, steps: string[] = ["extract", "seo"]) {
-  const res = await fetch(`${process.env.INTERNAL_API_BASE || ""}/api/v1/pipeline/run`, {
+  const res = await fetch(`${internalApiBase}/api/v1/pipeline/run`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(serviceApiKey ? { "x-service-api-key": serviceApiKey } : {}) },
     body: JSON.stringify({
@@ -87,7 +104,7 @@ async function startPipeline(ingestionId: string, steps: string[] = ["extract", 
 async function pollPipeline(runId: string, timeoutMs = 180_000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const r = await fetch(`${process.env.INTERNAL_API_BASE || ""}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
+    const r = await fetch(`${internalApiBase}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
       headers: { ...(serviceApiKey ? { "x-service-api-key": serviceApiKey } : {}) },
     });
     const j = await r.json().catch(() => null);
@@ -95,7 +112,7 @@ async function pollPipeline(runId: string, timeoutMs = 180_000) {
       const s = j.run.status;
       if (s === "succeeded" || s === "failed") return j;
     }
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise((res) => setTimeout(res, 2500));
   }
   throw new Error("pipeline poll timeout");
 }
@@ -113,36 +130,41 @@ async function handle(job: any) {
   await markItem(bulkJobItemId, { status: "in_progress", started_at: new Date().toISOString(), tries: (itemRow.tries || 0) + 1 });
 
   try {
-    // 1) create ingestion for URL (or reuse if itemRow.ingestion_id present)
+    // create ingestion if needed
     let ingestionId = itemRow.ingestion_id ?? null;
     if (!ingestionId) {
-      ingestionId = await startIngestAndPipelineForUrl(itemRow.input_url);
+      ingestionId = await startIngestAndReturnIngestionId(itemRow.input_url);
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
 
-    // 2) start pipeline (use quick by default or derive from bulk job options)
+    // start pipeline
     const runId = await startPipeline(ingestionId, ["extract", "seo"]);
     await markItem(bulkJobItemId, { pipeline_run_id: runId });
 
-    // 3) poll pipeline to completion (optional; for scale you might skip polling)
+    // poll pipeline to completion (for now we wait)
     const snap = await pollPipeline(runId);
     const finalStatus = snap.run?.status;
+
     if (finalStatus === "succeeded") {
       await markItem(bulkJobItemId, { status: "succeeded", finished_at: new Date().toISOString() });
-      // update bulk_jobs counters
-      await supabase.from("bulk_jobs").update({ completed_items: supabase.raw("completed_items + 1") }).eq("id", itemRow.bulk_job_id);
+      // atomically increment counters via helper (avoids using supabase.raw)
+      await incrementBulkCounters(itemRow.bulk_job_id, { completed: 1 });
     } else {
       await markItem(bulkJobItemId, {
         status: "failed",
         finished_at: new Date().toISOString(),
         last_error: { pipelineStatus: finalStatus, run: snap.run },
       });
-      await supabase.from("bulk_jobs").update({ failed_items: supabase.raw("failed_items + 1") }).eq("id", itemRow.bulk_job_id);
+      await incrementBulkCounters(itemRow.bulk_job_id, { failed: 1 });
     }
   } catch (err: any) {
     console.error("item processing error", err);
     await markItem(bulkJobItemId, { status: "failed", finished_at: new Date().toISOString(), last_error: { message: String(err?.message || err) } });
-    await supabase.from("bulk_jobs").update({ failed_items: supabase.raw("failed_items + 1") }).eq("id", itemRow.bulk_job_id);
+    try {
+      await incrementBulkCounters(itemRow.bulk_job_id, { failed: 1 });
+    } catch (e) {
+      console.warn("incrementBulkCounters failed", e);
+    }
   }
 }
 
