@@ -28,7 +28,73 @@ import { useRouter, useSearchParams } from "next/navigation";
  *   we persist a small diagnostics “rerun” flag (best-effort) so operators can see it was a re-run.
  */
 
-import type { AnyObj, PipelineRunStatus, ModuleRunStatus, PipelineModule, PipelineSnapshot, RunMode, SourceMode, BulkMode, BulkParseRow, BulkJobSummary, BulkJobItem } from './types';
+// Type definitions
+type AnyObj = Record<string, any>;
+
+type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
+type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+
+type PipelineModule = {
+  id?: string;
+  module_index: number;
+  module_name: string;
+  status: ModuleRunStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+  output_ref?: string | null;
+  error?: any;
+};
+
+type PipelineSnapshot = {
+  run?: ({ id: string; status: PipelineRunStatus } & Record<string, any>) | null;
+  modules?: PipelineModule[] | null;
+};
+
+type RunMode = "seo" | "full";
+type SourceMode = "url" | "ingestion";
+
+type BulkMode = "quick" | "full";
+type BulkParseRow = {
+  /** Stable key for UI selection/removal (unique per row). */
+  key: string;
+  index: number;
+  url: string;
+  price?: string | null;
+  /** Dedupe/idempotency key (same URLs+metadata should share this). */
+  idempotencyKey: string;
+  domain: string;
+  valid: boolean;
+  reason?: string | null;
+  /** Non-fatal warnings (e.g., duplicate rows) */
+  warning?: string | null;
+};
+
+type BulkJobSummary = {
+  id: string;
+  name?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  total_items?: number | null;
+  completed_items?: number | null;
+  failed_items?: number | null;
+  options?: any;
+  metrics?: any;
+};
+
+type BulkJobItem = {
+  id: string;
+  index?: number | null;
+  input_url?: string | null;
+  metadata?: any;
+  idempotency_key?: string | null;
+  ingestion_id?: string | null;
+  pipeline_run_id?: string | null;
+  status?: string | null;
+  tries?: number | null;
+  last_error?: any;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
 
 const SEO_ONLY_STEPS = ["extract", "seo"] as const;
 const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
@@ -96,7 +162,7 @@ function canonicalizeUrl(u: string): string {
     if (proto !== "http:" && proto !== "https:") return u.trim();
     // normalize host casing, strip hash; keep query (some sites depend on it)
     const host = url.hostname.toLowerCase();
-    const path = url.pathname.replace(/\/+$, ""); // remove trailing slashes
+    const path = url.pathname.replace(/\/+$/, ""); // remove trailing slashes
     const query = url.search || "";
     return `${proto}//${host}${path}${query}`;
   } catch {
