@@ -1102,7 +1102,15 @@ export default function AvidiaSeoPage() {
 
 
 
-  const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "running" : null);
+  
+  const bulkCanSubmit = useMemo(() => {
+    // Can submit bulk job only when we have at least 1 valid, non-removed row and we're not already submitting.
+    if (bulkSubmitting) return false;
+    if (bulkParseError) return false;
+    return bulkKeptCount > 0;
+  }, [bulkSubmitting, bulkParseError, bulkKeptCount]);
+
+const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "running" : null);
 
   const canRun =
     !generating &&
