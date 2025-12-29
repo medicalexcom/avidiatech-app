@@ -1083,6 +1083,25 @@ export default function AvidiaSeoPage() {
   }, [bulkRows]);
 
 
+  const bulkKeptCount = useMemo(() => {
+    // "Kept" = valid rows that are NOT marked removed (what will be submitted)
+    return bulkRows.filter((r) => r.valid && !bulkRemoved[r.key]).length;
+  }, [bulkRows, bulkRemoved]);
+
+  const bulkDedupedCount = useMemo(() => {
+    // "Deduped" = rows auto-removed because they were duplicates (operators can uncheck)
+    return bulkRows.filter(
+      (r) =>
+        r.valid &&
+        !!bulkRemoved[r.key] &&
+        typeof r.warning === "string" &&
+        r.warning.toLowerCase().startsWith("duplicate")
+    ).length;
+  }, [bulkRows, bulkRemoved]);
+
+
+
+
   const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "running" : null);
 
   const canRun =
