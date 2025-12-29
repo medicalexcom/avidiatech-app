@@ -28,67 +28,7 @@ import { useRouter, useSearchParams } from "next/navigation";
  *   we persist a small diagnostics “rerun” flag (best-effort) so operators can see it was a re-run.
  */
 
-type AnyObj = Record<string, any>;
-
-type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
-type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
-
-type PipelineModule = {
-  id?: string;
-  module_index: number;
-  module_name: string;
-  status: ModuleRunStatus;
-  started_at?: string | null;
-  finished_at?: string | null;
-  output_ref?: string | null;
-  error?: any;
-};
-
-type PipelineSnapshot = {
-  run?: ({ id: string; status: PipelineRunStatus } & Record<string, any>) | null;
-  modules?: PipelineModule[] | null;
-};
-
-type RunMode = "seo" | "full";
-type SourceMode = "url" | "ingestion";
-
-type BulkMode = "quick" | "full";
-type BulkParseRow = {
-  index: number;
-  url: string;
-  price?: string | null;
-  idempotencyKey: string;
-  domain: string;
-  valid: boolean;
-  reason?: string | null;
-};
-
-type BulkJobSummary = {
-  id: string;
-  name?: string | null;
-  status?: string | null;
-  created_at?: string | null;
-  total_items?: number | null;
-  completed_items?: number | null;
-  failed_items?: number | null;
-  options?: any;
-  metrics?: any;
-};
-
-type BulkJobItem = {
-  id: string;
-  index?: number | null;
-  input_url?: string | null;
-  metadata?: any;
-  idempotency_key?: string | null;
-  ingestion_id?: string | null;
-  pipeline_run_id?: string | null;
-  status?: string | null;
-  tries?: number | null;
-  last_error?: any;
-  started_at?: string | null;
-  finished_at?: string | null;
-};
+import type { AnyObj, PipelineRunStatus, ModuleRunStatus, PipelineModule, PipelineSnapshot, RunMode, SourceMode, BulkMode, BulkParseRow, BulkJobSummary, BulkJobItem } from './types';
 
 const SEO_ONLY_STEPS = ["extract", "seo"] as const;
 const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
@@ -156,7 +96,7 @@ function canonicalizeUrl(u: string): string {
     if (proto !== "http:" && proto !== "https:") return u.trim();
     // normalize host casing, strip hash; keep query (some sites depend on it)
     const host = url.hostname.toLowerCase();
-    const path = url.pathname.replace(/\/+$/, ""); // remove trailing slashes
+    const path = url.pathname.replace(/\/+$, ""); // remove trailing slashes
     const query = url.search || "";
     return `${proto}//${host}${path}${query}`;
   } catch {
@@ -228,7 +168,8 @@ function parseBulkText(text: string): BulkParseRow[] {
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
 
-  const seen = new Set<string>();
+  // Track first occurrence of an idempotency key to flag duplicates (non-fatal)
+  const seenFirstIndex = new Map<string, number>();
   const rows: BulkParseRow[] = [];
 
   lines.forEach((line, idx) => {
@@ -237,7 +178,10 @@ function parseBulkText(text: string): BulkParseRow[] {
 
     // Prefer tab split, then comma split (first comma), then whitespace split
     if (line.includes("\t")) {
-      const parts = line.split("\t").map((p) => p.trim()).filter(Boolean);
+      const parts = line
+        .split("\t")
+        .map((p) => p.trim())
+        .filter(Boolean);
       url = parts[0] || "";
       price = parts[1] || null;
     } else if (line.includes(",")) {
@@ -250,30 +194,49 @@ function parseBulkText(text: string): BulkParseRow[] {
         price = right || null;
       }
     } else if (line.includes(" ")) {
-      const parts = line.split(/\s+/).map((p) => p.trim()).filter(Boolean);
+      const parts = line
+        .split(/\s+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
       url = parts[0] || "";
       price = parts[1] || null;
     }
 
     const canonical = canonicalizeUrl(url);
-    const valid = isValidHttpUrl(url);
-    const domain = valid ? getDomain(canonical) : "—";
+    const isHttp = isValidHttpUrl(url);
+    const domain = isHttp ? getDomain(canonical) : "—";
+
     const idempotencyKey = computeIdempotencyKey(canonical, price);
+    const key = `${idempotencyKey}::${idx}`;
 
+    let valid = true;
+    let warning: string | null = null;
     let reason: string | null = null;
-    if (!valid) reason = "Invalid URL (must start with http/https)";
-    else if (seen.has(idempotencyKey)) reason = "Duplicate (idempotency key)";
 
-    if (valid) seen.add(idempotencyKey);
+    if (!isHttp) {
+      valid = false;
+      reason = "Invalid URL (must start with http/https)";
+      warning = reason;
+    } else {
+      const first = seenFirstIndex.get(idempotencyKey);
+      if (first != null) {
+        // duplicates are allowed but warned; operator can uncheck removal
+        warning = `Duplicate of row ${first + 1}`;
+      } else {
+        seenFirstIndex.set(idempotencyKey, idx);
+      }
+    }
 
     rows.push({
+      key,
       index: idx + 1,
       url: canonical,
       price,
       idempotencyKey,
       domain,
-      valid: valid && !reason,
+      valid,
       reason,
+      warning,
     });
   });
 
@@ -418,7 +381,22 @@ export default function AvidiaSeoPage() {
         }
         const parsed = parseBulkText(t);
         setBulkRows(parsed);
-        setBulkRemoved({});
+
+        // Default removals: invalid rows + duplicates (operators can uncheck)
+        const removed: Record<string, boolean> = {};
+        const firstByIdem = new Set<string>();
+        for (const r of parsed) {
+          if (!r.valid) {
+            removed[r.key] = true;
+            continue;
+          }
+          if (firstByIdem.has(r.idempotencyKey)) {
+            removed[r.key] = true;
+          } else {
+            firstByIdem.add(r.idempotencyKey);
+          }
+        }
+        setBulkRemoved(removed);
       } catch (e: any) {
         setBulkParseError(String(e?.message || e));
       }
@@ -683,9 +661,10 @@ export default function AvidiaSeoPage() {
           setJob(null);
           setRawIngestResponse(null);
           setPollingState(null);
-          idToUse = await createIngestion(trimmedUrl);
+          const newIngestionId = await createIngestion(trimmedUrl);
+          idToUse = newIngestionId;
           createdNewIngestion = true;
-          setIngestionIdInput(idToUse);
+          setIngestionIdInput(newIngestionId);
         }
       }
 
@@ -790,7 +769,7 @@ export default function AvidiaSeoPage() {
   async function submitBulkJob() {
     if (bulkSubmitting) return;
 
-    const activeRows = bulkRows.filter((r) => !bulkRemoved[r.idempotencyKey]);
+    const activeRows = bulkRows.filter((r) => !bulkRemoved[r.key]);
     const good = activeRows.filter((r) => r.valid);
 
     if (!good.length) {
@@ -920,6 +899,15 @@ export default function AvidiaSeoPage() {
     }
   }
 
+  const onBulkCsvPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    // allow picking the same file twice
+    e.target.value = "";
+    if (!file) return;
+    await onUploadCsv(file);
+  };
+
+
   const jobData = useMemo(() => {
     if (!job) return null;
     if ((job as any)?.data?.data) return (job as any).data.data;
@@ -1018,6 +1006,43 @@ export default function AvidiaSeoPage() {
     if (d?.ui_rerun?.rerun_by_ui) return d.ui_rerun;
     return null;
   }, [jobData]);
+
+  const bulkRowsPreview = useMemo(() => {
+    // Present valid rows first, then invalid (so operators see what will run).
+    const rows = [...bulkRows];
+    rows.sort((a, b) => {
+      if (a.valid === b.valid) return a.index - b.index;
+      return a.valid ? -1 : 1;
+    });
+    return rows;
+  }, [bulkRows]);
+
+
+  const bulkKeptCount = useMemo(() => {
+    // "Kept" = valid rows that are NOT marked removed (what will be submitted)
+    return bulkRows.filter((r) => r.valid && !bulkRemoved[r.key]).length;
+  }, [bulkRows, bulkRemoved]);
+
+  const bulkDedupedCount = useMemo(() => {
+    // "Deduped" = rows auto-removed because they were duplicates (operators can uncheck)
+    return bulkRows.filter(
+      (r) =>
+        r.valid &&
+        !!bulkRemoved[r.key] &&
+        typeof r.warning === "string" &&
+        r.warning.toLowerCase().startsWith("duplicate")
+    ).length;
+  }, [bulkRows, bulkRemoved]);
+
+
+
+
+  const bulkCanSubmit = useMemo(() => {
+    // Can submit bulk job only when we have at least 1 valid, non-removed row and we're not already submitting.
+    if (bulkSubmitting) return false;
+    if (bulkParseError) return false;
+    return bulkKeptCount > 0;
+  }, [bulkSubmitting, bulkParseError, bulkKeptCount]);
 
   const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "running" : null);
 
@@ -1609,7 +1634,7 @@ export default function AvidiaSeoPage() {
                                   ? "bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
                                   : "bg-slate-300 dark:bg-slate-700"
                               )}
-                              onClick={createBulkJob}
+                              onClick={submitBulkJob}
                               disabled={!bulkCanSubmit}
                             >
                               {bulkSubmitting ? "Creating job…" : "Create bulk job"}
@@ -1834,7 +1859,7 @@ export default function AvidiaSeoPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Description HTML</h2>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Live preview (search + copy). Uses canonical field:{" "}
+                    Live preview (search + copy). Uses canonical field: {" "}
                     <span className="font-mono">descriptionHtml</span>
                   </p>
                 </div>
@@ -2015,7 +2040,8 @@ export default function AvidiaSeoPage() {
             </section>
           </aside>
         </div>
-      </div>
-    </main>
+              </div>
+              </div>
+            </main>
   );
 }
