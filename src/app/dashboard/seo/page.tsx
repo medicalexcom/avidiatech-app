@@ -54,13 +54,18 @@ type SourceMode = "url" | "ingestion";
 
 type BulkMode = "quick" | "full";
 type BulkParseRow = {
+  /** Stable key for UI selection/removal (unique per row). */
+  key: string;
   index: number;
   url: string;
   price?: string | null;
+  /** Dedupe/idempotency key (same URLs+metadata should share this). */
   idempotencyKey: string;
   domain: string;
   valid: boolean;
   reason?: string | null;
+  /** Non-fatal warnings (e.g., duplicate rows) */
+  warning?: string | null;
 };
 
 type BulkJobSummary = {
@@ -228,7 +233,8 @@ function parseBulkText(text: string): BulkParseRow[] {
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
 
-  const seen = new Set<string>();
+  // Track first occurrence of an idempotency key to flag duplicates (non-fatal)
+  const seenFirstIndex = new Map<string, number>();
   const rows: BulkParseRow[] = [];
 
   lines.forEach((line, idx) => {
@@ -237,7 +243,10 @@ function parseBulkText(text: string): BulkParseRow[] {
 
     // Prefer tab split, then comma split (first comma), then whitespace split
     if (line.includes("\t")) {
-      const parts = line.split("\t").map((p) => p.trim()).filter(Boolean);
+      const parts = line
+        .split("\t")
+        .map((p) => p.trim())
+        .filter(Boolean);
       url = parts[0] || "";
       price = parts[1] || null;
     } else if (line.includes(",")) {
@@ -250,30 +259,49 @@ function parseBulkText(text: string): BulkParseRow[] {
         price = right || null;
       }
     } else if (line.includes(" ")) {
-      const parts = line.split(/\s+/).map((p) => p.trim()).filter(Boolean);
+      const parts = line
+        .split(/\s+/)
+        .map((p) => p.trim())
+        .filter(Boolean);
       url = parts[0] || "";
       price = parts[1] || null;
     }
 
     const canonical = canonicalizeUrl(url);
-    const valid = isValidHttpUrl(url);
-    const domain = valid ? getDomain(canonical) : "—";
+    const isHttp = isValidHttpUrl(url);
+    const domain = isHttp ? getDomain(canonical) : "—";
+
     const idempotencyKey = computeIdempotencyKey(canonical, price);
+    const key = `${idempotencyKey}::${idx}`;
 
+    let valid = true;
+    let warning: string | null = null;
     let reason: string | null = null;
-    if (!valid) reason = "Invalid URL (must start with http/https)";
-    else if (seen.has(idempotencyKey)) reason = "Duplicate (idempotency key)";
 
-    if (valid) seen.add(idempotencyKey);
+    if (!isHttp) {
+      valid = false;
+      reason = "Invalid URL (must start with http/https)";
+      warning = reason;
+    } else {
+      const first = seenFirstIndex.get(idempotencyKey);
+      if (first != null) {
+        // duplicates are allowed but warned; operator can uncheck removal
+        warning = `Duplicate of row ${first + 1}`;
+      } else {
+        seenFirstIndex.set(idempotencyKey, idx);
+      }
+    }
 
     rows.push({
+      key,
       index: idx + 1,
       url: canonical,
       price,
       idempotencyKey,
       domain,
-      valid: valid && !reason,
+      valid,
       reason,
+      warning,
     });
   });
 
@@ -418,7 +446,22 @@ export default function AvidiaSeoPage() {
         }
         const parsed = parseBulkText(t);
         setBulkRows(parsed);
-        setBulkRemoved({});
+
+        // Default removals: invalid rows + duplicates (operators can uncheck)
+        const removed: Record<string, boolean> = {};
+        const firstByIdem = new Set<string>();
+        for (const r of parsed) {
+          if (!r.valid) {
+            removed[r.key] = true;
+            continue;
+          }
+          if (firstByIdem.has(r.idempotencyKey)) {
+            removed[r.key] = true;
+          } else {
+            firstByIdem.add(r.idempotencyKey);
+          }
+        }
+        setBulkRemoved(removed);
       } catch (e: any) {
         setBulkParseError(String(e?.message || e));
       }
@@ -791,7 +834,7 @@ export default function AvidiaSeoPage() {
   async function submitBulkJob() {
     if (bulkSubmitting) return;
 
-    const activeRows = bulkRows.filter((r) => !bulkRemoved[r.idempotencyKey]);
+    const activeRows = bulkRows.filter((r) => !bulkRemoved[r.key]);
     const good = activeRows.filter((r) => r.valid);
 
     if (!good.length) {
@@ -1028,6 +1071,17 @@ export default function AvidiaSeoPage() {
     if (d?.ui_rerun?.rerun_by_ui) return d.ui_rerun;
     return null;
   }, [jobData]);
+
+  const bulkRowsPreview = useMemo(() => {
+    // Present valid rows first, then invalid (so operators see what will run).
+    const rows = [...bulkRows];
+    rows.sort((a, b) => {
+      if (a.valid === b.valid) return a.index - b.index;
+      return a.valid ? -1 : 1;
+    });
+    return rows;
+  }, [bulkRows]);
+
 
   const pipelineStatus = pipelineSnapshot?.run?.status || (pipelineRunId ? "running" : null);
 
