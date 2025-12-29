@@ -50,9 +50,11 @@ export default function JsonViewer({
   const hasData =
     effectiveData !== null &&
     effectiveData !== undefined &&
-    !(typeof effectiveData === "object" &&
+    !(
+      typeof effectiveData === "object" &&
       effectiveData !== null &&
-      Object.keys(effectiveData as any).length === 0);
+      Object.keys(effectiveData as any).length === 0
+    );
 
   const toggle = (path: string) => {
     setExpanded((prev) => ({
@@ -135,7 +137,7 @@ export default function JsonViewer({
             placeholder="Search key or value"
             className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
-          {envelope && (
+          {!!envelope && (
             <button
               type="button"
               onClick={() => setShowEnvelope((v) => !v)}
@@ -182,7 +184,7 @@ export default function JsonViewer({
   );
 }
 
-type JsonNodeProps = {
+interface JsonNodeProps {
   name?: string;
   value: unknown;
   path: string;
@@ -191,7 +193,7 @@ type JsonNodeProps = {
   toggle: (path: string) => void;
   defaultExpandedLevels: number;
   filter: string;
-};
+}
 
 function JsonNode({
   name,
@@ -210,14 +212,11 @@ function JsonNode({
 
   // When searching, expand all complex nodes so matches are visible.
   const isExpanded =
-    expandedState[path] ??
-    (filter ? true : level < defaultExpandedLevels);
+    expandedState[path] ?? (filter ? true : level < defaultExpandedLevels);
 
   const label = name !== undefined ? name : undefined;
 
-  const filterMatch = filter
-    ? matchesFilter(label, value, filter)
-    : false;
+  const filterMatch = filter ? matchesFilter(label, value, filter) : false;
 
   const handleToggle = () => {
     if (!isComplex) return;
@@ -228,9 +227,7 @@ function JsonNode({
     return (
       <div
         style={{ paddingLeft: indent }}
-        className={`leading-5 ${
-          filter && filterMatch ? "bg-amber-900/60" : ""
-        }`}
+        className={`leading-5 ${filter && filterMatch ? "bg-amber-900/60" : ""}`}
       >
         {label !== undefined && (
           <span className="text-sky-300 mr-1">
@@ -246,9 +243,7 @@ function JsonNode({
   const entries: [string, unknown][] =
     type === "object"
       ? Object.entries(value as Record<string, unknown>)
-      : (value as unknown[]).map(
-          (v, i) => [String(i), v] as [string, unknown]
-        );
+      : (value as unknown[]).map((v, i) => [String(i), v] as [string, unknown]);
 
   const bracketOpen = type === "object" ? "{" : "[";
   const bracketClose = type === "object" ? "}" : "]";
@@ -263,9 +258,7 @@ function JsonNode({
       <div
         style={{ paddingLeft: indent }}
         className={`cursor-pointer select-none flex items-start gap-1 rounded-sm ${
-          filter && filterMatch
-            ? "bg-amber-900/60"
-            : "hover:bg-neutral-800/60"
+          filter && filterMatch ? "bg-amber-900/60" : "hover:bg-neutral-800/60"
         }`}
         onClick={handleToggle}
       >
@@ -280,9 +273,7 @@ function JsonNode({
             </span>
           )}
           <span className="text-neutral-300">{bracketOpen}</span>
-          <span className="ml-1 text-[11px] text-neutral-500">
-            {summary}
-          </span>
+          <span className="ml-1 text-[11px] text-neutral-500">{summary}</span>
           <span className="text-neutral-300">
             {!isExpanded && entries.length > 0 ? " …" : ""}
             {entries.length === 0 && bracketClose}
@@ -323,10 +314,7 @@ function JsonNode({
               </div>
             );
           })}
-          <div
-            style={{ paddingLeft: indent }}
-            className="text-neutral-300"
-          >
+          <div style={{ paddingLeft: indent }} className="text-neutral-300">
             {bracketClose}
           </div>
         </div>
@@ -343,34 +331,18 @@ function Primitive({ value }: { value: unknown }) {
   }
 
   if (type === "string") {
-    return (
-      <span className="text-emerald-300">
-        {JSON.stringify(value)}
-      </span>
-    );
+    return <span className="text-emerald-300">{JSON.stringify(value)}</span>;
   }
 
   if (type === "number") {
-    return (
-      <span className="text-orange-300">
-        {String(value)}
-      </span>
-    );
+    return <span className="text-orange-300">{String(value)}</span>;
   }
 
   if (type === "boolean") {
-    return (
-      <span className="text-indigo-300">
-        {String(value)}
-      </span>
-    );
+    return <span className="text-indigo-300">{String(value)}</span>;
   }
 
-  return (
-    <span className="text-neutral-300">
-      {JSON.stringify(value)}
-    </span>
-  );
+  return <span className="text-neutral-300">{JSON.stringify(value)}</span>;
 }
 
 function getType(
@@ -431,11 +403,7 @@ function getDisplayRoot(value: unknown): {
 }
 
 /** Filter: does this node match the search term? */
-function matchesFilter(
-  name: string | undefined,
-  value: unknown,
-  filter: string
-): boolean {
+function matchesFilter(name: string | undefined, value: unknown, filter: string): boolean {
   if (!filter) return false;
 
   const needle = filter.toLowerCase();
