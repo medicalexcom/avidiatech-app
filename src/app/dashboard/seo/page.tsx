@@ -16,15 +16,15 @@ import { useRouter, useSearchParams } from "next/navigation";
  *   - "SEO only": extract → seo
  *   - "Full pipeline": extract → seo → audit → import → monitor → price
  *
- * New:
- * - Bulk paste UI: paste many URLs (optional price column) and create a bulk job by calling POST /api/v1/bulk
- * - Shows created bulkJobId and link to Bulk dashboard (preview)
+ * Bulk:
+ * - Paste many URLs (optional price column) or upload a CSV to populate the paste box.
+ * - Create a bulk job by calling POST /api/v1/bulk (existing wiring).
  *
  * Operator guardrails:
  * - Never report “completed” if pipeline status is “failed”.
  * - Ingestion polling treats terminal errors as terminal (server returns 409).
  * - When running a pipeline against an existing ingestion id (no new ingestion created),
- *   we persist a small diagnostics “rerun” flag (best-effort) so operators can see it was a re-run.
+ *   we persist a small diagnostics “re-run” flag (best-effort) so operators can see it was a re-run.
  */
 
 type AnyObj = Record<string, any>;
@@ -50,6 +50,8 @@ type PipelineSnapshot = {
 
 type RunMode = "seo" | "full";
 type SourceMode = "url" | "ingestion";
+
+type BulkItem = { input_url: string; metadata: Record<string, any> };
 
 const SEO_ONLY_STEPS = ["extract", "seo"] as const;
 const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
@@ -112,13 +114,13 @@ function statusPillTone(status?: string | null) {
      https://example.com/prod, 19.99
    Returns [{ input_url, metadata }]
 */
-function parseBulkText(text: string) {
+function parseBulkText(text: string): BulkItem[] {
   if (!text) return [];
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
-  const items: Array<{ input_url: string; metadata: Record<string, any> }> = [];
+  const items: BulkItem[] = [];
   for (const raw of lines) {
     // split by comma or tab
     const parts = raw.split(/[,|\t]/).map((p) => p.trim());
@@ -136,6 +138,87 @@ function parseBulkText(text: string) {
   return items;
 }
 
+/* ---- Minimal CSV parsing to populate bulkText ----
+   - Detect header row if it contains "url"
+   - Accept columns: url, price (optional)
+   - Produces bulkText lines in: url, price
+*/
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === '"') {
+      // escaped quote
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && ch === ",") {
+      out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  out.push(cur.trim());
+  return out.map((v) => v.replace(/^"|"$/g, "").trim());
+}
+
+function csvToBulkText(csv: string): string {
+  if (!csv) return "";
+  const rows = csv
+    .split(/\r?\n/)
+    .map((r) => r.trim())
+    .filter((r) => r.length > 0);
+
+  if (!rows.length) return "";
+
+  const first = splitCsvLine(rows[0]).map((h) => h.toLowerCase());
+  const hasHeader = first.some((h) => h.includes("url"));
+
+  let urlIdx = 0;
+  let priceIdx = -1;
+  let startAt = 0;
+
+  if (hasHeader) {
+    urlIdx = Math.max(
+      0,
+      first.findIndex((h) => h === "url" || h.includes("product_url") || h.includes("product url") || h.includes("link"))
+    );
+    priceIdx = first.findIndex((h) => h === "price" || h.includes("msrp") || h.includes("cost"));
+    startAt = 1;
+  } else {
+    // best guess: first col = url, second col = price
+    urlIdx = 0;
+    priceIdx = 1;
+    startAt = 0;
+  }
+
+  const lines: string[] = [];
+  for (let i = startAt; i < rows.length; i++) {
+    const cols = splitCsvLine(rows[i]);
+    const url = (cols[urlIdx] || "").trim();
+    if (!url) continue;
+
+    const priceRaw = priceIdx >= 0 ? (cols[priceIdx] || "").trim() : "";
+    if (priceRaw) lines.push(`${url}, ${priceRaw}`);
+    else lines.push(url);
+  }
+
+  return lines.join("\n");
+}
+
 /* ----------------- Component ----------------- */
 export default function AvidiaSeoPage() {
   const params = useSearchParams();
@@ -147,6 +230,7 @@ export default function AvidiaSeoPage() {
 
   const [sourceMode, setSourceMode] = useState<SourceMode>(urlParam ? "url" : ingestionIdParam ? "ingestion" : "url");
   const [runMode, setRunMode] = useState<RunMode>(urlParam ? "full" : "seo");
+  const [panelMode, setPanelMode] = useState<"single" | "bulk">(urlParam || ingestionIdParam ? "single" : "single");
 
   const [urlInput, setUrlInput] = useState<string>(urlParam || "");
   const [ingestionIdInput, setIngestionIdInput] = useState<string>(ingestionIdParam || "");
@@ -173,11 +257,12 @@ export default function AvidiaSeoPage() {
 
   // ---- Bulk UI state ----
   const [bulkText, setBulkText] = useState<string>("");
-  const [bulkPreview, setBulkPreview] = useState<Array<{ input_url: string; metadata: Record<string, any> }>>([]);
+  const [bulkPreview, setBulkPreview] = useState<BulkItem[]>([]);
   const [bulkName, setBulkName] = useState<string>("");
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkCsvName, setBulkCsvName] = useState<string | null>(null);
 
   useEffect(() => {
     if (pipelineRunIdParam) setPipelineRunId(pipelineRunIdParam);
@@ -186,10 +271,12 @@ export default function AvidiaSeoPage() {
   useEffect(() => {
     // Keep UI sensible when page loads with params.
     if (urlParam) {
+      setPanelMode("single");
       setSourceMode("url");
       setRunMode("full");
       setUrlInput(urlParam);
     } else if (ingestionIdParam) {
+      setPanelMode("single");
       setSourceMode("ingestion");
       setIngestionIdInput(ingestionIdParam);
     }
@@ -305,16 +392,15 @@ export default function AvidiaSeoPage() {
       throw new Error(json?.error?.message || json?.error || `Ingest failed: ${res.status}`);
     }
 
-    const possibleIngestionId =
-      json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
+    const possibleIngestionId = json?.ingestionId ?? json?.id ?? json?.data?.id ?? json?.data?.ingestionId ?? null;
 
     if (possibleIngestionId) {
       if (json?.status === "accepted" || res.status === 202) {
         const jobId = json?.jobId ?? json?.ingestionId ?? possibleIngestionId;
         const pollResult = await pollForIngestion(jobId, 120_000, 3000);
-        return pollResult?.ingestionId ?? possibleIngestionId;
+        return String(pollResult?.ingestionId ?? possibleIngestionId);
       }
-      return possibleIngestionId;
+      return String(possibleIngestionId);
     }
 
     const jobId = json?.jobId ?? json?.job?.id ?? null;
@@ -322,7 +408,7 @@ export default function AvidiaSeoPage() {
     const pollResult = await pollForIngestion(jobId, 120_000, 3000);
     const newId = pollResult?.ingestionId ?? pollResult?.id ?? null;
     if (!newId) throw new Error("Polling returned no ingestionId.");
-    return newId;
+    return String(newId);
   }
 
   async function startPipelineRun(forIngestionId: string, mode: RunMode) {
@@ -442,7 +528,7 @@ export default function AvidiaSeoPage() {
           setPollingState(null);
           idToUse = await createIngestion(trimmedUrl);
           createdNewIngestion = true;
-          setIngestionIdInput(idToUse);
+          setIngestionIdInput(String(idToUse));
         }
       }
 
@@ -498,8 +584,7 @@ export default function AvidiaSeoPage() {
   const rawDescriptionHtml =
     (jobData as any)?.descriptionHtml ?? (jobData as any)?.description_html ?? (jobData as any)?._debug?.description_html ?? null;
 
-  const descriptionHtml =
-    typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
+  const descriptionHtml = typeof rawDescriptionHtml === "string" && rawDescriptionHtml.trim().length > 0 ? rawDescriptionHtml : null;
 
   const features = useMemo(() => {
     if (Array.isArray((jobData as any)?.features)) return (jobData as any).features;
@@ -513,10 +598,7 @@ export default function AvidiaSeoPage() {
     try {
       const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`(${escaped})`, "gi");
-      return descriptionHtml.replace(
-        regex,
-        '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>'
-      );
+      return descriptionHtml.replace(regex, '<mark class="bg-amber-200 text-gray-900 px-1 rounded-sm">$1</mark>');
     } catch (err) {
       console.warn("Unable to highlight search term", err);
       return descriptionHtml;
@@ -596,6 +678,57 @@ export default function AvidiaSeoPage() {
     }
   }
 
+  const bulkDecoratedPreview = useMemo(() => {
+    const items = bulkPreview || [];
+    const seen = new Set<string>();
+    return items.map((it, idx) => {
+      const key = it.input_url.trim();
+      const dup = seen.has(key);
+      seen.add(key);
+      return { ...it, _idx: idx, _key: key || String(idx), _dup: dup };
+    });
+  }, [bulkPreview]);
+
+  const bulkStats = useMemo(() => {
+    const items = bulkPreview || [];
+    const seen = new Set<string>();
+    let kept = 0;
+    let deduped = 0;
+    for (const it of items) {
+      const k = it.input_url.trim();
+      if (!k) continue;
+      if (seen.has(k)) deduped++;
+      else {
+        seen.add(k);
+        kept++;
+      }
+    }
+    return { total: items.length, kept, deduped };
+  }, [bulkPreview]);
+
+  const bulkCanSubmit = useMemo(() => {
+    return !bulkCreating && bulkText.trim().length > 0;
+  }, [bulkCreating, bulkText]);
+
+  async function onBulkCsvPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const t = await file.text();
+      const converted = csvToBulkText(t);
+      if (!converted.trim()) throw new Error("CSV contained no usable URL rows");
+      setBulkCsvName(file.name);
+      setBulkText(converted);
+      setBulkError(null);
+      setBulkPreview([]);
+    } catch (err: any) {
+      setBulkError(String(err?.message || err));
+    } finally {
+      // reset so picking same file again triggers onChange
+      e.target.value = "";
+    }
+  }
+
   async function createBulk() {
     if (bulkCreating) return;
     setBulkCreating(true);
@@ -615,9 +748,9 @@ export default function AvidiaSeoPage() {
       if (!res.ok || !j?.bulkJobId) {
         throw new Error(j?.error || j?.message || `Bulk create failed: ${res?.status}`);
       }
-      setBulkJobId(j.bulkJobId);
+      setBulkJobId(String(j.bulkJobId));
       // Navigate to bulk dashboard (existing page) with the id as param for operator convenience
-      router.push(`/dashboard/bulk?bulkJobId=${encodeURIComponent(j.bulkJobId)}`);
+      router.push(`/dashboard/bulk?bulkJobId=${encodeURIComponent(String(j.bulkJobId))}`);
     } catch (err: any) {
       setBulkError(String(err?.message || err));
     } finally {
@@ -625,259 +758,459 @@ export default function AvidiaSeoPage() {
     }
   }
 
-  /* ---------------- Layout (kept clean, no truncated classes) ---------------- */
+  /* ---------------- Layout ---------------- */
   return (
     <main className="relative min-h-[calc(100vh-64px)]">
       {/* Background treatment (artsy, module-gradients) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950" />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 20% 10%, rgba(14,165,233,0.22), transparent 45%), radial-gradient(circle at 80% 18%, rgba(16,185,129,0.18), transparent 48%)" }} />
-        <div className="absolute inset-0 opacity-30" style={{ backgroundSize: "24px 24px", backgroundImage: "linear-gradient(to right, rgba(148,163,184,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.08) 1px, transparent 1px)" }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 18% 6%, rgba(14,165,233,0.22), transparent 45%), radial-gradient(circle at 78% 10%, rgba(16,185,129,0.18), transparent 48%), radial-gradient(circle at 72% 76%, rgba(245,158,11,0.16), transparent 50%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            backgroundSize: "24px 24px",
+            backgroundImage:
+              "linear-gradient(to right, rgba(148,163,184,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.08) 1px, transparent 1px)",
+          }}
+        />
         <div className="absolute -top-24 left-1/2 h-72 w-[70rem] -translate-x-1/2 rounded-full bg-sky-200/35 blur-3xl dark:bg-sky-900/20" />
-        <div className="absolute top-56 -left-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl dark:bg-emerald-900/15" />
+        <div className="absolute top-64 -left-24 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl dark:bg-emerald-900/15" />
         <div className="absolute bottom-0 -right-24 h-72 w-72 rounded-full bg-amber-200/25 blur-3xl dark:bg-amber-900/15" />
       </div>
 
       <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8">
-        {/* Hero + Launcher */}
-        <section className="relative overflow-hidden rounded-3xl">
-          <div className="rounded-3xl bg-gradient-to-r from-sky-500/40 via-emerald-500/30 to-amber-500/35 p-[1px]">
-            <div className="rounded-3xl border border-white/30 bg-white/85 p-5 shadow-sm backdrop-blur dark:border-slate-800/70 dark:bg-slate-900/60 md:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm">
-                  <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500" />
-                  AvidiaSEO <span className="text-slate-400">•</span> <span className="text-slate-500">Extract → SEO → HTML</span>
+        {/* Hero (no extra frame) */}
+        <section className="relative">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200">
+                <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500" />
+                AvidiaSEO <span className="text-slate-400">•</span> <span className="text-slate-500 dark:text-slate-300">Extract → SEO → HTML</span>
+              </div>
+
+              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-3xl">
+                SEO-ready fields + description HTML, with full run telemetry
+              </h1>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                Run SEO from a URL, replay a stored ingestion, or queue many URLs in bulk. You always keep the diagnostic trail:
+                module statuses, per-module outputs, and the raw ingestion JSON.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className={cx("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs", statusPillTone(pipelineStatus))}>
+                <span className="font-medium">Pipeline</span>
+                <span className="text-slate-400">•</span>
+                <span>{pipelineStatus || "—"}</span>
+              </div>
+
+              {ingestionIdInput.trim() ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200">
+                  <span className="font-medium">Ingestion</span>
+                  <span className="text-slate-400">•</span>
+                  <span className="font-mono">{shortId(ingestionIdInput.trim())}</span>
+                </div>
+              ) : null}
+
+              {pipelineRunId ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200">
+                  <span className="font-medium">Run</span>
+                  <span className="text-slate-400">•</span>
+                  <span className="font-mono">{shortId(pipelineRunId)}</span>
+                </div>
+              ) : null}
+
+              {rerunInfo ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-900 shadow-sm">
+                  <span className="font-medium">Re-run</span>
+                  <span className="text-amber-500">•</span>
+                  <span>{rerunInfo?.rerun_mode || "—"}</span>
+                  {rerunInfo?.rerun_at ? <span className="text-amber-700">{new Date(rerunInfo.rerun_at).toLocaleString()}</span> : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Launcher / Bulk (full-width, mode switch) */}
+          <div className="mt-5 rounded-3xl bg-gradient-to-r from-sky-500/35 via-emerald-500/25 to-amber-500/30 p-[1px]">
+            <div className="rounded-3xl border border-white/30 bg-white/80 p-5 shadow-sm backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/35 md:p-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Run SEO</div>
+                  <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Choose input + run mode, or switch to bulk. No hidden assumptions.
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className={cx("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs", statusPillTone(pipelineStatus))}>
-                    <span className="font-medium">Pipeline</span>
-                    <span className="text-slate-400">•</span>
-                    <span>{pipelineStatus || "—"}</span>
+                <div className="inline-flex w-full max-w-[420px] rounded-2xl bg-slate-100/80 p-1 text-xs shadow-sm dark:bg-slate-900/50">
+                  <button
+                    className={cx(
+                      "flex-1 rounded-xl px-3 py-2 text-left",
+                      panelMode === "single" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
+                    )}
+                    onClick={() => setPanelMode("single")}
+                    disabled={generating || bulkCreating}
+                  >
+                    Single run
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">URL or ingestionId</div>
+                  </button>
+
+                  <button
+                    className={cx(
+                      "flex-1 rounded-xl px-3 py-2 text-left",
+                      panelMode === "bulk" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
+                    )}
+                    onClick={() => setPanelMode("bulk")}
+                    disabled={generating || bulkCreating}
+                  >
+                    Bulk URLs
+                    <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">Paste or upload CSV</div>
+                  </button>
+                </div>
+              </div>
+
+              {panelMode === "single" ? (
+                <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-12">
+                  <div className="min-w-0 lg:col-span-8">
+                    <div className="inline-flex rounded-2xl bg-slate-100/80 p-1 text-xs shadow-sm dark:bg-slate-900/50">
+                      <button
+                        className={cx(
+                          "rounded-xl px-3 py-2 text-left",
+                          sourceMode === "url" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
+                        )}
+                        onClick={() => setSourceMode("url")}
+                        disabled={generating}
+                      >
+                        From URL
+                      </button>
+                      <button
+                        className={cx(
+                          "rounded-xl px-3 py-2 text-left",
+                          sourceMode === "ingestion" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
+                        )}
+                        onClick={() => setSourceMode("ingestion")}
+                        disabled={generating}
+                      >
+                        From ingestionId
+                      </button>
+                    </div>
+
+                    {sourceMode === "url" ? (
+                      <div className="mt-3">
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Source URL</label>
+                        <input
+                          value={urlInput}
+                          onChange={(e) => setUrlInput(e.target.value)}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                          placeholder="https://example.com/product/..."
+                          disabled={generating}
+                        />
+
+                        {ingestionIdParam && urlParam ? (
+                          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={reuseExistingWhenSameUrl}
+                              onChange={(e) => setReuseExistingWhenSameUrl(e.target.checked)}
+                              disabled={generating}
+                            />
+                            Re-use existing ingestionId when URL matches this page
+                          </label>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Ingestion ID</label>
+                        <input
+                          value={ingestionIdInput}
+                          onChange={(e) => setIngestionIdInput(e.target.value)}
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                          placeholder="ing_..."
+                          disabled={generating}
+                        />
+                        <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {ingestionIdInput.trim() ? (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm">
-                      <span className="font-medium">Ingestion</span>
-                      <span className="text-slate-400">•</span>
-                      <span className="font-mono">{shortId(ingestionIdInput.trim())}</span>
-                    </div>
-                  ) : null}
+                  <div className="lg:col-span-4">
+                    <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/25">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Run mode</div>
+                          <div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {runMode === "seo" ? "SEO only" : "Full pipeline"}
+                          </div>
+                        </div>
 
-                  {pipelineRunId ? (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm">
-                      <span className="font-medium">Run</span>
-                      <span className="text-slate-400">•</span>
-                      <span className="font-mono">{shortId(pipelineRunId)}</span>
-                    </div>
-                  ) : null}
+                        {ingestionIdInput.trim() ? (
+                          <a
+                            className="text-xs text-slate-600 underline dark:text-slate-300"
+                            href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                          >
+                            Open Monitor
+                          </a>
+                        ) : null}
+                      </div>
 
-                  {rerunInfo ? (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-900 shadow-sm">
-                      <span className="font-medium">Re-run</span>
-                      <span className="text-amber-500">•</span>
-                      <span>{rerunInfo?.rerun_mode || "—"}</span>
-                      {rerunInfo?.rerun_at ? <span className="text-amber-700">{new Date(rerunInfo.rerun_at).toLocaleString()}</span> : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="mt-4 max-w-3xl">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100 md:text-3xl">
-                  SEO-ready fields + description HTML, with full run telemetry
-                </h1>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                  Run SEO from a URL or replay a stored ingestion. You always keep the diagnostic trail: module statuses,
-                  per-module outputs, and the raw ingestion JSON.
-                </p>
-              </div>
-
-              {/* Launcher */}
-              <div className="mt-5 rounded-2xl bg-gradient-to-r from-sky-500/25 via-emerald-500/20 to-amber-500/20 p-[1px]">
-                <div className="rounded-2xl border border-white/30 bg-white/85 p-4 shadow-sm backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/35">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Run SEO</div>
-                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Choose input + run mode. No hidden assumptions.</div>
-
-                      <div className="mt-3 inline-flex rounded-xl bg-slate-100 p-1 text-xs">
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100/80 p-1 text-xs dark:bg-slate-900/50">
                         <button
                           className={cx(
-                            "rounded-lg px-3 py-2 text-left",
-                            sourceMode === "url" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+                            "rounded-xl px-3 py-2 text-left",
+                            runMode === "seo" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
                           )}
-                          onClick={() => setSourceMode("url")}
+                          onClick={() => setRunMode("seo")}
                           disabled={generating}
                         >
-                          From URL
+                          SEO only
+                          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → seo</div>
                         </button>
+
                         <button
                           className={cx(
-                            "rounded-lg px-3 py-2 text-left",
-                            sourceMode === "ingestion" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+                            "rounded-xl px-3 py-2 text-left",
+                            runMode === "full" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100" : "text-slate-600 dark:text-slate-300"
                           )}
-                          onClick={() => setSourceMode("ingestion")}
+                          onClick={() => setRunMode("full")}
                           disabled={generating}
                         >
-                          From ingestionId
+                          Full pipeline
+                          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">extract → … → price</div>
                         </button>
                       </div>
 
-                      {sourceMode === "url" ? (
-                        <div className="mt-3">
-                          <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Source URL</label>
-                          <input
-                            value={urlInput}
-                            onChange={(e) => setUrlInput(e.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400"
-                            placeholder="https://example.com/product/..."
-                            disabled={generating}
-                          />
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          className={cx(
+                            "inline-flex flex-1 items-center justify-center rounded-2xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
+                            canRun ? "bg-gradient-to-r from-sky-600 via-emerald-600 to-amber-600 hover:brightness-[1.05]" : "bg-slate-300 dark:bg-slate-700"
+                          )}
+                          onClick={runNow}
+                          disabled={!canRun}
+                        >
+                          {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
+                        </button>
 
-                          {ingestionIdParam && urlParam ? (
-                            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                              <input
-                                type="checkbox"
-                                checked={reuseExistingWhenSameUrl}
-                                onChange={(e) => setReuseExistingWhenSameUrl(e.target.checked)}
-                                disabled={generating}
-                              />
-                              Re-use existing ingestionId when URL matches this page
-                            </label>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="mt-3">
-                          <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Ingestion ID</label>
-                          <input
-                            value={ingestionIdInput}
-                            onChange={(e) => setIngestionIdInput(e.target.value)}
-                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400"
-                            placeholder="ing_..."
+                        {ingestionIdInput.trim() ? (
+                          <button
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200"
+                            onClick={() => fetchIngestionData(ingestionIdInput.trim())}
                             disabled={generating}
-                          />
-                          <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                            Replays a stored ingestion and marks diagnostics as a re-run (best-effort).
-                          </div>
+                            title="Refresh ingestion row"
+                          >
+                            Refresh
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {statusMessage ? (
+                        <div className="mt-3 rounded-2xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700 dark:border-slate-800/70 dark:bg-slate-950/30 dark:text-slate-200">
+                          <span className="font-medium">Status</span>
+                          <span className="text-slate-400"> • </span>
+                          <span>{statusMessage}</span>
                         </div>
-                      )}
+                      ) : null}
+
+                      {pollingState ? (
+                        <div className="mt-2 rounded-2xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700 dark:border-slate-800/70 dark:bg-slate-950/30 dark:text-slate-200">
+                          <span className="font-medium">Ingest</span>
+                          <span className="text-slate-400"> • </span>
+                          <span>{pollingState}</span>
+                        </div>
+                      ) : null}
+
+                      {error ? (
+                        <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                          {error}
+                        </div>
+                      ) : null}
+
+                      {rawIngestResponse ? (
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">Ingest debug</summary>
+                          <pre className="mt-2 max-h-[220px] overflow-auto rounded-2xl border border-slate-800 bg-black p-3 text-[11px] text-white">
+                            {JSON.stringify(rawIngestResponse, null, 2)}
+                          </pre>
+                        </details>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-12">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {ingestionIdInput.trim() ? (
+                        <a
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200"
+                          href={`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                        >
+                          Open Extract
+                        </a>
+                      ) : null}
+
+                      {ingestionIdInput.trim() ? (
+                        <a
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200"
+                          href={`/dashboard/describe?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                        >
+                          Open Describe
+                        </a>
+                      ) : null}
+
+                      {ingestionIdInput.trim() ? (
+                        <a
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/40 dark:text-slate-200"
+                          href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}
+                        >
+                          Open Monitor
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                    <div className="lg:col-span-8">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bulk URLs</h3>
+                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                            Paste one URL per line. Optional price may follow after a comma: <code>https://... , 19.99</code>
+                          </p>
+                        </div>
+
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                          Upload CSV
+                          <input type="file" accept=".csv,text/csv" className="hidden" onChange={onBulkCsvPicked} />
+                        </label>
+                      </div>
+
+                      <textarea
+                        value={bulkText}
+                        onChange={(e) => setBulkText(e.target.value)}
+                        placeholder="https://example.com/product-1, 19.99\nhttps://example.com/product-2"
+                        className="mt-3 w-full min-h-[180px] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                      />
+
+                      {bulkCsvName ? (
+                        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                          Loaded CSV: <span className="font-medium">{bulkCsvName}</span>
+                        </div>
+                      ) : null}
                     </div>
 
-                    <div className="w-full lg:w-[360px]">
-                      <div className="rounded-xl border border-slate-200/70 bg-white/70 p-3 shadow-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-xs font-medium text-slate-600">Run mode</div>
-                            <div className="mt-0.5 text-sm font-semibold text-slate-900">{runMode === "seo" ? "SEO only" : "Full pipeline"}</div>
-                          </div>
+                    <div className="lg:col-span-4">
+                      <div className="rounded-2xl border border-slate-200/70 bg-white/70 p-4 shadow-sm dark:border-slate-800/70 dark:bg-slate-950/25">
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-300">Job setup</div>
 
-                          {ingestionIdInput.trim() ? (
-                            <a className="text-xs text-slate-600 underline" href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}>
-                              Open Monitor
-                            </a>
-                          ) : null}
-                        </div>
+                        <input
+                          value={bulkName}
+                          onChange={(e) => setBulkName(e.target.value)}
+                          placeholder="Job name (optional)"
+                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                        />
 
-                        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1 text-xs">
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
-                            className={cx("rounded-lg px-3 py-2 text-left", runMode === "seo" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600")}
-                            onClick={() => setRunMode("seo")}
-                            disabled={generating}
+                            className="inline-flex items-center justify-center rounded-2xl bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-[1.05]"
+                            onClick={previewBulk}
+                            disabled={!bulkText.trim() || bulkCreating}
                           >
-                            SEO only
-                            <div className="mt-0.5 text-[11px] text-slate-500">extract → seo</div>
+                            Preview
                           </button>
-
-                          <button
-                            className={cx("rounded-lg px-3 py-2 text-left", runMode === "full" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600")}
-                            onClick={() => setRunMode("full")}
-                            disabled={generating}
-                          >
-                            Full pipeline
-                            <div className="mt-0.5 text-[11px] text-slate-500">extract → … → price</div>
-                          </button>
-                        </div>
-
-                        <div className="mt-3 flex items-center gap-2">
                           <button
                             className={cx(
-                              "inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
-                              canRun ? "bg-gradient-to-r from-sky-600 via-emerald-600 to-amber-600" : "bg-slate-300"
+                              "inline-flex flex-1 items-center justify-center rounded-2xl px-3 py-2 text-sm font-semibold text-white shadow-sm",
+                              bulkCanSubmit ? "bg-gradient-to-r from-emerald-600 via-sky-600 to-amber-600 hover:brightness-[1.05]" : "bg-slate-300 dark:bg-slate-700"
                             )}
-                            onClick={runNow}
-                            disabled={!canRun}
+                            onClick={createBulk}
+                            disabled={!bulkCanSubmit}
                           >
-                            {generating ? "Running…" : runMode === "seo" ? "Run SEO" : "Run Full Pipeline"}
+                            {bulkCreating ? "Creating…" : "Create Bulk Job"}
                           </button>
-
-                          {ingestionIdInput.trim() ? (
-                            <button
-                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm"
-                              onClick={() => fetchIngestionData(ingestionIdInput.trim())}
-                              disabled={generating}
-                              title="Refresh ingestion row"
-                            >
-                              Refresh
-                            </button>
-                          ) : null}
                         </div>
 
-                        {statusMessage ? (
-                          <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700">
-                            <span className="font-medium">Status</span>
-                            <span className="text-slate-400"> • </span>
-                            <span>{statusMessage}</span>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
+                            Total: <span className="font-semibold">{bulkStats.total}</span>
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
+                            Kept: <span className="font-semibold">{bulkStats.kept}</span>
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
+                            Deduped: <span className="font-semibold">{bulkStats.deduped}</span>
+                          </span>
+                        </div>
+
+                        {bulkError ? (
+                          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                            {bulkError}
                           </div>
                         ) : null}
 
-                        {pollingState ? (
-                          <div className="mt-2 rounded-xl border border-slate-200/70 bg-white/60 px-3 py-2 text-xs text-slate-700">
-                            <span className="font-medium">Ingest</span>
-                            <span className="text-slate-400"> • </span>
-                            <span>{pollingState}</span>
+                        {bulkJobId ? (
+                          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
+                            Bulk job created:{" "}
+                            <a className="font-mono underline" href={`/dashboard/bulk?bulkJobId=${encodeURIComponent(bulkJobId)}`}>
+                              {bulkJobId}
+                            </a>
                           </div>
-                        ) : null}
-
-                        {error ? (
-                          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                            {error}
-                          </div>
-                        ) : null}
-
-                        {rawIngestResponse ? (
-                          <details className="mt-3">
-                            <summary className="cursor-pointer text-xs text-slate-600">Ingest debug</summary>
-                            <pre className="mt-2 max-h-[220px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
-                              {JSON.stringify(rawIngestResponse, null, 2)}
-                            </pre>
-                          </details>
                         ) : null}
                       </div>
                     </div>
+
+                    {bulkDecoratedPreview.length > 0 ? (
+                      <div className="lg:col-span-12">
+                        <div className="mt-1 overflow-hidden rounded-2xl border border-slate-200 bg-white/80 shadow-sm dark:border-slate-800 dark:bg-slate-950/25">
+                          <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300">
+                            <div className="font-medium">Preview</div>
+                            <div className="text-slate-500 dark:text-slate-400">Showing first 50 rows (duplicates flagged)</div>
+                          </div>
+
+                          <div className="max-h-[260px] overflow-auto">
+                            <table className="w-full text-sm">
+                              <thead className="sticky top-0 bg-white text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">#</th>
+                                  <th className="px-3 py-2 text-left">URL</th>
+                                  <th className="px-3 py-2 text-left">Price</th>
+                                  <th className="px-3 py-2 text-left">Dedup</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bulkDecoratedPreview.slice(0, 50).map((it: any) => (
+                                  <tr key={`${it._key}-${it._idx}`} className="border-t border-slate-200 dark:border-slate-800">
+                                    <td className="px-3 py-2 text-xs text-slate-500">{it._idx + 1}</td>
+                                    <td className="px-3 py-2 break-words">{it.input_url}</td>
+                                    <td className="px-3 py-2">{it.metadata?.price ?? "—"}</td>
+                                    <td className="px-3 py-2">
+                                      {it._dup ? (
+                                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-900">
+                                          duplicate
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-slate-400">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                {ingestionIdInput.trim() ? (
-                  <a className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700" href={`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}>
-                    Open Extract
-                  </a>
-                ) : null}
-
-                {ingestionIdInput.trim() ? (
-                  <a className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700" href={`/dashboard/describe?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}>
-                    Open Describe
-                  </a>
-                ) : null}
-
-                {ingestionIdInput.trim() ? (
-                  <a className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/70 px-3 py-1 text-xs text-slate-700" href={`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionIdInput.trim())}`}>
-                    Open Monitor
-                  </a>
-                ) : null}
-              </div>
+              )}
             </div>
           </div>
         </section>
@@ -885,24 +1218,25 @@ export default function AvidiaSeoPage() {
         {/* Body */}
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
           {/* Left: human canvas */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* Description and Pipeline telemetry sections (kept as in original) */}
-            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+          <div className="space-y-4 lg:col-span-8">
+            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/25">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Description HTML</h2>
-                  <p className="mt-0.5 text-xs text-slate-500">Live preview (search + copy). Uses canonical field: <span className="font-mono">descriptionHtml</span></p>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Description HTML</h2>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Live preview (search + copy). Uses canonical field: <span className="font-mono">descriptionHtml</span>
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-9 w-[220px] rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                    className="h-9 w-[220px] rounded-2xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
                     placeholder="Search in HTML…"
                   />
                   <button
-                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                    className="h-9 rounded-2xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200"
                     onClick={handleCopyDescription}
                     disabled={!descriptionHtml}
                   >
@@ -911,61 +1245,87 @@ export default function AvidiaSeoPage() {
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
-                <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                <div className="prose max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
               </div>
             </section>
 
-            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/25">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Pipeline telemetry</h2>
-                  <p className="mt-0.5 text-xs text-slate-500">Module statuses, durations, and direct module output links (even on failure).</p>
+                  <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Pipeline telemetry</h2>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    Module statuses, durations, and direct module output links (even on failure).
+                  </p>
                 </div>
 
                 {pipelineSnapshot?.run?.id || pipelineRunId ? (
-                  <div className="text-right text-xs text-slate-600">
-                    <div>Run: <span className="font-mono">{shortId(pipelineSnapshot?.run?.id || pipelineRunId)}</span></div>
-                    <div>Status: <span className="font-semibold">{pipelineSnapshot?.run?.status || "—"}</span></div>
+                  <div className="text-right text-xs text-slate-600 dark:text-slate-300">
+                    <div>
+                      Run: <span className="font-mono">{shortId(pipelineSnapshot?.run?.id || pipelineRunId)}</span>
+                    </div>
+                    <div>
+                      Status: <span className="font-semibold">{pipelineSnapshot?.run?.status || "—"}</span>
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500">No run yet.</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">No run yet.</div>
                 )}
               </div>
 
-              <div className="mt-3 overflow-auto rounded-xl border border-slate-200 bg-white">
-                <table className="min-w-[760px] w-full text-sm">
-                  <thead className="bg-slate-50 text-xs text-slate-600">
+              <div className="mt-3 overflow-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/40">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
                     <tr>
-                      <th className="px-3 py-2">Module</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2">Duration</th>
-                      <th className="px-3 py-2">Output</th>
-                      <th className="px-3 py-2">Error</th>
+                      <th className="px-3 py-2 text-left">Module</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-left">Duration</th>
+                      <th className="px-3 py-2 text-left">Output</th>
+                      <th className="px-3 py-2 text-left">Error</th>
                     </tr>
                   </thead>
                   <tbody>
                     {moduleDurations.map((m: any) => (
-                      <tr key={`${m.module_name}-${m.module_index}`} className="border-t">
-                        <td className="px-3 py-2"><span className="font-medium">{m.module_name}</span> <span className="text-xs text-slate-400">#{m.module_index}</span></td>
+                      <tr key={`${m.module_name}-${m.module_index}`} className="border-t border-slate-200 dark:border-slate-800">
                         <td className="px-3 py-2">
-                          <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", statusPillTone(m.status))}>{m.status}</span>
+                          <span className="font-medium">{m.module_name}</span>{" "}
+                          <span className="text-xs text-slate-400">#{m.module_index}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", statusPillTone(m.status))}>
+                            {m.status}
+                          </span>
                         </td>
                         <td className="px-3 py-2">{m.duration_ms != null ? formatDuration(m.duration_ms) : "—"}</td>
                         <td className="px-3 py-2">
                           {pipelineRunId ? (
-                            <a className="text-sm text-slate-700 underline" href={`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${encodeURIComponent(String(m.module_index))}`} target="_blank" rel="noreferrer">View output</a>
-                          ) : <span className="text-slate-400">—</span>}
+                            <a
+                              className="text-sm text-slate-700 underline dark:text-slate-200"
+                              href={`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${encodeURIComponent(String(m.module_index))}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View output
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-xs">
-                          {m.status === "failed" ? <span className="line-clamp-2">{typeof m.error === "string" ? m.error : JSON.stringify(m.error || "")}</span> : <span className="text-slate-400">—</span>}
+                          {m.status === "failed" ? (
+                            <span className="line-clamp-2">{typeof m.error === "string" ? m.error : JSON.stringify(m.error || "")}</span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
 
                     {!moduleDurations.length ? (
                       <tr>
-                        <td className="px-3 py-3 text-sm text-slate-500" colSpan={5}>No module telemetry available yet.</td>
+                        <td className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400" colSpan={5}>
+                          No module telemetry available yet.
+                        </td>
                       </tr>
                     ) : null}
                   </tbody>
@@ -973,151 +1333,68 @@ export default function AvidiaSeoPage() {
               </div>
             </section>
 
-            {loading ? <div className="text-sm text-slate-600">Loading ingestion…</div> : null}
+            {loading ? <div className="text-sm text-slate-600 dark:text-slate-300">Loading ingestion…</div> : null}
           </div>
 
           {/* Right rail */}
-          <aside className="lg:col-span-4 space-y-4">
+          <aside className="space-y-4 lg:col-span-4">
             {/* SEO card */}
-            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">SEO</h2>
-              <div className="mt-3 space-y-2 text-sm text-slate-800">
+            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/25">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">SEO</h2>
+              <div className="mt-3 space-y-2 text-sm text-slate-800 dark:text-slate-200">
                 <div>
-                  <div className="text-xs font-medium text-slate-500">H1</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">H1</div>
                   <div className="mt-0.5 break-words">{seo?.h1 ?? "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium text-slate-500">Title</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Title</div>
                   <div className="mt-0.5 break-words">{seo?.pageTitle ?? seo?.title ?? "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium text-slate-500">Meta description</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Meta description</div>
                   <div className="mt-0.5 break-words">{seo?.metaDescription ?? seo?.meta_description ?? "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs font-medium text-slate-500">Short description</div>
-                  <div className="mt-0.5 break-words">{seo?.shortDescription ?? seo?.seoShortDescription ?? seo?.seo_short_description ?? "—"}</div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Short description</div>
+                  <div className="mt-0.5 break-words">
+                    {seo?.shortDescription ?? seo?.seoShortDescription ?? seo?.seo_short_description ?? "—"}
+                  </div>
                 </div>
               </div>
 
               {Array.isArray(features) && features.length > 0 ? (
                 <>
-                  <h3 className="mt-4 text-sm font-semibold text-slate-900">Features</h3>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-800">
+                  <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Features</h3>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-800 dark:text-slate-200">
                     {features.map((f: any, i: number) => (
-                      <li key={i} className="break-words">{String(f)}</li>
+                      <li key={i} className="break-words">
+                        {String(f)}
+                      </li>
                     ))}
                   </ul>
                 </>
               ) : (
-                <div className="mt-4 text-xs text-slate-500">No features found.</div>
+                <div className="mt-4 text-xs text-slate-500 dark:text-slate-400">No features found.</div>
               )}
 
               {parkedExtras.length > 0 ? (
                 <details className="mt-4">
-                  <summary className="cursor-pointer text-sm text-slate-600">Extra SEO keys</summary>
-                  <pre className="mt-2 max-h-[260px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
+                  <summary className="cursor-pointer text-sm text-slate-600 dark:text-slate-300">Extra SEO keys</summary>
+                  <pre className="mt-2 max-h-[260px] overflow-auto rounded-2xl border border-slate-800 bg-black p-3 text-[11px] text-white">
                     {JSON.stringify(Object.fromEntries(parkedExtras), null, 2)}
                   </pre>
                 </details>
               ) : (
-                <div className="mt-3 text-xs text-slate-500">No extra SEO keys.</div>
+                <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">No extra SEO keys.</div>
               )}
             </section>
 
-            {/* Bulk paste card - NEW */}
-            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-900">Bulk paste</h2>
-                <div className="text-xs text-slate-500">Create a bulk job from pasted URLs</div>
-              </div>
-
-              <div className="mt-3 text-xs text-slate-500">
-                Paste one URL per line. Optional price may follow after a comma: <code>https://... , 19.99</code>
-              </div>
-
-              <textarea
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                placeholder="https://example.com/product-1, 19.99\nhttps://example.com/product-2"
-                className="mt-3 w-full min-h-[120px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  value={bulkName}
-                  onChange={(e) => setBulkName(e.target.value)}
-                  placeholder="Job name (optional)"
-                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                />
-                <button
-                  className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white"
-                  onClick={() => {
-                    previewBulk();
-                  }}
-                >
-                  Preview
-                </button>
-                <button
-                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
-                  onClick={createBulk}
-                  disabled={bulkCreating || !bulkText.trim()}
-                >
-                  {bulkCreating ? "Creating…" : "Create Bulk Job"}
-                </button>
-              </div>
-
-              {bulkError ? <div className="mt-3 text-sm text-rose-600">{bulkError}</div> : null}
-
-              {bulkPreview.length > 0 ? (
-                <div className="mt-3 text-xs">
-                  <div className="text-xs text-slate-600">Preview ({bulkPreview.length} items)</div>
-                  <div className="mt-2 max-h-40 overflow-auto rounded border border-slate-200 bg-white p-2 text-xs">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr>
-                          <th className="text-left">#</th>
-                          <th className="text-left">URL</th>
-                          <th className="text-left">Price</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bulkPreview.slice(0, 50).map((it, i) => (
-                          <tr key={i} className="border-t">
-                            <td className="py-1 pr-2">{i + 1}</td>
-                            <td className="py-1 break-words">{it.input_url}</td>
-                            <td className="py-1">{it.metadata?.price ?? "—"}</td>
-                          </tr>
-                        ))}
-                        {bulkPreview.length > 50 && (
-                          <tr>
-                            <td colSpan={3} className="py-1 text-slate-500">…truncated</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null}
-
-              {bulkJobId ? (
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                  Bulk job created:{" "}
-                  <a className="font-mono underline" href={`/dashboard/bulk?bulkJobId=${encodeURIComponent(bulkJobId)}`}>
-                    {bulkJobId}
-                  </a>
-                </div>
-              ) : null}
-            </section>
-
             {/* Raw ingestion JSON */}
-            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+            <section className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/25">
               <details>
-                <summary className="cursor-pointer text-sm font-semibold text-slate-900">Raw ingestion JSON</summary>
-                <div className="mt-2 text-xs text-slate-500">
-                  The full persisted ingestion row used by downstream modules.
-                </div>
-                <pre className="mt-3 max-h-[420px] overflow-auto rounded-xl border border-slate-800 bg-black p-3 text-[11px] text-white">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-900 dark:text-slate-100">Raw ingestion JSON</summary>
+                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">The full persisted ingestion row used by downstream modules.</div>
+                <pre className="mt-3 max-h-[420px] overflow-auto rounded-2xl border border-slate-800 bg-black p-3 text-[11px] text-white">
                   {JSON.stringify(jobData ?? null, null, 2)}
                 </pre>
               </details>
