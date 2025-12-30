@@ -11,7 +11,12 @@
     "start": "next start",
     "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts",
     "worker:dev": "ts-node --transpile-only src/worker/worker.ts",
-    "worker:start": "node dist/worker/worker.js"
+    "worker:start": "node dist/worker/worker.js",
+
+    // Worker start scripts (added)
+    "start:worker:master": "node ./dist/workers/bulkMasterWorker.js",
+    "start:worker:item": "node ./dist/workers/bulkItemWorker.js",
+    "start:workers": "npm run start:worker:master & npm run start:worker:item"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.28.1",
