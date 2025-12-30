@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { parsePastedUrls } from "@/lib/bulk/parse";
 import { createBulkJob } from "@/lib/bulk/db";
-import { handleRouteError, requireSubscriptionAndUsage, tenantFromRequest } from "@/lib/billing";
+import { handleRouteError, tenantFromRequest } from "@/lib/billing";
 import { extractEmailFromSessionClaims } from "@/lib/clerk-utils";
 import { getQueue } from "@/lib/queue/bull";
 
@@ -12,6 +12,9 @@ import { getQueue } from "@/lib/queue/bull";
  *
  * Accepts JSON: { name?, pasted?: string, items?: [{ url, metadata }] }
  * Creates a bulk job and enqueues a bulk-master job.
+ *
+ * NOTE: We do NOT run requireSubscriptionAndUsage here to avoid blocking the UI.
+ *       Billing and quota enforcement happens per-item inside the worker.
  */
 export async function POST(request: NextRequest) {
   const { userId, sessionClaims } = await auth();
@@ -19,37 +22,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
-
-    // Defensive billing check: try to require subscription/usage, but surface a clear error
-    try {
-      // cast to any to avoid strict UsageFeature typing mismatches
-      await requireSubscriptionAndUsage({
-        userId,
-        requestedTenantId: tenantFromRequest(request),
-        feature: "bulk" as any,
-        increment: 1,
-        userEmail,
-      });
-    } catch (billingErr: any) {
-      // Log full server-side error for debugging
-      console.error("Billing/requireSubscriptionAndUsage failed for bulk create:", billingErr);
-
-      // If we're in development, allow bypass for convenience (OPTIONAL)
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("Bypassing billing check in non-production environment.");
-      } else {
-        // Return a clear error for operators
-        return NextResponse.json(
-          {
-            error: "billing_check_failed",
-            message:
-              "Billing/subscription check failed while creating bulk job. Ensure billing tables (team_members etc.) and migrations are applied and environment variables are configured.",
-            details: String(billingErr?.message ?? billingErr),
-          },
-          { status: 503 }
-        );
-      }
-    }
 
     const contentType = request.headers.get("content-type") || "";
     let payload: any = null;
@@ -79,11 +51,13 @@ export async function POST(request: NextRequest) {
 
     if (!items.length) return NextResponse.json({ error: "No items provided" }, { status: 400 });
 
+    // Create job quickly; do not perform subscription/usage check here.
+    // Workers will perform usage checks and increment usage as they process items.
     const bulkJobId = await createBulkJob({
       orgId: payload?.orgId ?? null,
       name,
       createdBy: userId,
-      options,
+      options: { ...options, source_tenant: tenantFromRequest(request) ?? null, requested_by_email: userEmail },
       items,
     });
 
@@ -93,7 +67,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, bulkJobId });
   } catch (err) {
-    // Use your generic error handler if available
     return handleRouteError(err);
   }
 }
