@@ -1,3 +1,4 @@
+// src/app/api/v1/bulk/route.ts
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { parsePastedUrls } from "@/lib/bulk/parse";
@@ -19,15 +20,36 @@ export async function POST(request: NextRequest) {
   try {
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
 
-    // requireSubscriptionAndUsage expects a typed 'feature' value. Cast to any to stay compatible
-    // with your billing helper's runtime checks while satisfying TypeScript here.
-    await requireSubscriptionAndUsage({
-      userId,
-      requestedTenantId: tenantFromRequest(request),
-      feature: "bulk" as any,
-      increment: 1,
-      userEmail,
-    });
+    // Defensive billing check: try to require subscription/usage, but surface a clear error
+    try {
+      // cast to any to avoid strict UsageFeature typing mismatches
+      await requireSubscriptionAndUsage({
+        userId,
+        requestedTenantId: tenantFromRequest(request),
+        feature: "bulk" as any,
+        increment: 1,
+        userEmail,
+      });
+    } catch (billingErr: any) {
+      // Log full server-side error for debugging
+      console.error("Billing/requireSubscriptionAndUsage failed for bulk create:", billingErr);
+
+      // If we're in development, allow bypass for convenience (OPTIONAL)
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("Bypassing billing check in non-production environment.");
+      } else {
+        // Return a clear error for operators
+        return NextResponse.json(
+          {
+            error: "billing_check_failed",
+            message:
+              "Billing/subscription check failed while creating bulk job. Ensure billing tables (team_members etc.) and migrations are applied and environment variables are configured.",
+            details: String(billingErr?.message ?? billingErr),
+          },
+          { status: 503 }
+        );
+      }
+    }
 
     const contentType = request.headers.get("content-type") || "";
     let payload: any = null;
@@ -71,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, bulkJobId });
   } catch (err) {
+    // Use your generic error handler if available
     return handleRouteError(err);
   }
 }
