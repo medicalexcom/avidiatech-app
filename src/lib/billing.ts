@@ -1,18 +1,38 @@
-// (OVERWRITE) src/lib/billing.ts
-import { NextResponse } from 'next/server';
-import { clerkClient } from '@clerk/nextjs/server';
-import { HttpError } from './errors';
-import { getServiceSupabaseClient } from './supabase';
-import { getOwnerEmails, normalizeEmail } from './owners';
+/**
+ * src/lib/billing.ts
+ *
+ * Billing / subscription / usage helpers used by workers and API routes.
+ *
+ * - Resolves tenant membership for a user (team_members).
+ * - Fetches subscription status (tenant_subscriptions).
+ * - Gets or creates usage counters (usage_counters) idempotently and robustly.
+ * - Provides requireSubscriptionAndUsage() which enforces subscription/quota unless
+ *   the user is an owner/admin (owner bypass).
+ *
+ * Notes:
+ * - If team membership is missing, you can enable a synthetic-tenant bypass for creators
+ *   by setting ALLOW_SYNTHETIC_TENANT_FOR_CREATORS=1 in the environment. This will treat
+ *   tenantId = requestedTenantId || userId and role = 'owner' for that call (opt-in).
+ * - getOrCreateUsageRow handles duplicate key races by re-selecting after duplicate errors.
+ */
 
-export type TenantRole = 'owner' | 'admin' | 'member';
-export type UsageFeature = 'ingestion' | 'seo' | 'variants' | 'match';
+import { NextResponse } from "next/server";
+import { clerkClient } from "@clerk/nextjs/server";
+import { HttpError } from "./errors";
+import { getServiceSupabaseClient } from "./supabase";
+import { getOwnerEmails, normalizeEmail } from "./owners";
 
-const FEATURE_COLUMNS: Record<UsageFeature, { column: string; quotaKey: keyof SubscriptionStatus['quotas'] }> = {
-  ingestion: { column: 'ingestion_count', quotaKey: 'ingestion' },
-  seo: { column: 'seo_count', quotaKey: 'seo' },
-  variants: { column: 'variants_count', quotaKey: 'variants' },
-  match: { column: 'match_count', quotaKey: 'match' },
+export type TenantRole = "owner" | "admin" | "member";
+export type UsageFeature = "ingestion" | "seo" | "variants" | "match";
+
+const FEATURE_COLUMNS: Record<
+  UsageFeature,
+  { column: string; quotaKey: keyof SubscriptionStatus["quotas"] }
+> = {
+  ingestion: { column: "ingestion_count", quotaKey: "ingestion" },
+  seo: { column: "seo_count", quotaKey: "seo" },
+  variants: { column: "variants_count", quotaKey: "variants" },
+  match: { column: "match_count", quotaKey: "match" },
 };
 
 export interface SubscriptionStatus {
@@ -46,11 +66,13 @@ export interface TenantContext {
   usage: UsageSnapshot;
 }
 
+/* -------------------------
+   Helpers
+   ------------------------- */
+
 async function resolveOwnerOverride(userId: string, userEmail?: string): Promise<boolean> {
   const ownerEmails = getOwnerEmails();
-  if (ownerEmails.length === 0) {
-    return false;
-  }
+  if (!ownerEmails || ownerEmails.length === 0) return false;
 
   const normalizedEmail = normalizeEmail(userEmail);
   if (normalizedEmail) {
@@ -60,44 +82,43 @@ async function resolveOwnerOverride(userId: string, userEmail?: string): Promise
   try {
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
-
     const primary =
       normalizeEmail(user.primaryEmailAddress?.emailAddress) ||
       normalizeEmail(user.emailAddresses?.[0]?.emailAddress);
-    if (!primary) {
-      return false;
-    }
+    if (!primary) return false;
     return ownerEmails.includes(primary);
-  } catch (error) {
-    console.error('Failed to resolve owner override', error);
+  } catch (err) {
+    console.warn("billing.resolveOwnerOverride: clerk lookup failed (non-fatal)", (err as any)?.message ?? err);
     return false;
   }
 }
 
 function isSubscriptionActive(status: string | null | undefined): boolean {
   if (!status) return false;
-  return ['active', 'trialing', 'paid'].includes(status);
+  return ["active", "trialing", "paid"].includes(status);
 }
 
 export function tenantFromRequest(req: Request): string | undefined {
-  const headerTenant = req.headers.get('x-tenant-id');
+  const headerTenant = req.headers.get("x-tenant-id");
   if (headerTenant) return headerTenant;
   const url = new URL(req.url);
-  return url.searchParams.get('tenant_id') ?? undefined;
+  return url.searchParams.get("tenant_id") ?? undefined;
 }
+
+/* -------------------------
+   Membership & subscription
+   ------------------------- */
 
 async function resolveTenantMembership(userId: string, requestedTenantId?: string): Promise<{ tenantId: string; role: TenantRole }> {
   const supabase = getServiceSupabaseClient();
   let query = supabase
-    .from('team_members')
-    .select('tenant_id, role')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
+    .from("team_members")
+    .select("tenant_id, role")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
     .limit(1);
 
-  if (requestedTenantId) {
-    query = query.eq('tenant_id', requestedTenantId);
-  }
+  if (requestedTenantId) query = query.eq("tenant_id", requestedTenantId);
 
   const { data, error } = await query;
   if (error) {
@@ -105,7 +126,7 @@ async function resolveTenantMembership(userId: string, requestedTenantId?: strin
   }
   const membership = data?.[0];
   if (!membership) {
-    throw new HttpError(403, 'No tenant membership found for user.');
+    throw new HttpError(403, "No tenant membership found for user.");
   }
   return { tenantId: membership.tenant_id, role: membership.role as TenantRole };
 }
@@ -113,12 +134,10 @@ async function resolveTenantMembership(userId: string, requestedTenantId?: strin
 async function fetchSubscription(tenantId: string): Promise<SubscriptionStatus> {
   const supabase = getServiceSupabaseClient();
   const { data, error } = await supabase
-    .from('tenant_subscriptions')
-    .select(
-      'plan_name, status, current_period_end, ingestion_quota, seo_quota, variant_quota, match_quota',
-    )
-    .eq('tenant_id', tenantId)
-    .order('current_period_end', { ascending: false })
+    .from("tenant_subscriptions")
+    .select("plan_name, status, current_period_end, ingestion_quota, seo_quota, variant_quota, match_quota")
+    .eq("tenant_id", tenantId)
+    .order("current_period_end", { ascending: false })
     .limit(1);
 
   if (error) {
@@ -140,19 +159,23 @@ async function fetchSubscription(tenantId: string): Promise<SubscriptionStatus> 
   };
 }
 
+/* -------------------------
+   Usage counters (idempotent)
+   ------------------------- */
+
 async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
   const supabase = getServiceSupabaseClient();
 
-  // 1) Try to read latest existing row
+  // 1) Attempt to read the latest usage row
   const { data, error } = await supabase
-    .from('usage_counters')
-    .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
-    .eq('tenant_id', tenantId)
-    .order('period_start', { ascending: false })
+    .from("usage_counters")
+    .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
+    .eq("tenant_id", tenantId)
+    .order("period_start", { ascending: false })
     .limit(1);
 
   if (error) {
-    // bubble up so caller can surface migration hint
+    // bubble up; caller can surface a migration hint
     throw new Error(error.message);
   }
 
@@ -170,28 +193,26 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
     };
   }
 
-  // 2) No existing row: attempt to create one, but handle duplicate-key races gracefully
+  // 2) No existing row: try insert, but tolerate race/unique constraint by re-selecting
   const today = new Date().toISOString().slice(0, 10);
   try {
     const { data: inserted, error: insertError } = await supabase
-      .from('usage_counters')
+      .from("usage_counters")
       .insert({ tenant_id: tenantId, period_start: today })
-      .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
+      .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
       .limit(1);
 
     if (insertError) {
-      // If insertion failed due to duplicate/unique constraint, try selecting again
-      const msg = String(insertError.message || '').toLowerCase();
-      if (msg.includes('duplicate') || msg.includes('unique')) {
+      const msg = String(insertError.message || "").toLowerCase();
+      // If duplicate/unique constraint race, re-select
+      if (msg.includes("duplicate") || msg.includes("unique")) {
         const { data: after, error: afterErr } = await supabase
-          .from('usage_counters')
-          .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
-          .eq('tenant_id', tenantId)
-          .order('period_start', { ascending: false })
+          .from("usage_counters")
+          .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
+          .eq("tenant_id", tenantId)
+          .order("period_start", { ascending: false })
           .limit(1);
-        if (afterErr) {
-          throw new Error(afterErr.message);
-        }
+        if (afterErr) throw new Error(afterErr.message);
         if (after && after.length > 0) {
           const row = after[0];
           return {
@@ -206,7 +227,7 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
           };
         }
       }
-      // otherwise, surface the insert error
+      // Other insert error: surface
       throw new Error(insertError.message);
     }
 
@@ -222,10 +243,9 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
       updated_at: insertedRow.updated_at ?? undefined,
     };
   } catch (err: any) {
-    // If usage_counters table missing, surface an actionable error upstream
-    const msg = String(err?.message || err || '').toLowerCase();
-    if (msg.includes('does not exist') || msg.includes('relation "usage_counters"')) {
-      throw new Error('usage_counters table missing or schema mismatch. Run migrations.');
+    const msg = String(err?.message || err || "").toLowerCase();
+    if (msg.includes("does not exist") || msg.includes('relation "usage_counters"')) {
+      throw new Error("usage_counters table missing or schema mismatch. Run migrations.");
     }
     throw err;
   }
@@ -237,9 +257,9 @@ async function incrementUsage(usage: UsageSnapshot, feature: UsageFeature, amoun
   const newValue = (usage[column as keyof UsageSnapshot] as number) + amount;
 
   const { error } = await supabase
-    .from('usage_counters')
+    .from("usage_counters")
     .update({ [column]: newValue, updated_at: new Date().toISOString() })
-    .eq('id', usage.id);
+    .eq("id", usage.id);
 
   if (error) {
     throw new Error(error.message);
@@ -251,6 +271,10 @@ async function incrementUsage(usage: UsageSnapshot, feature: UsageFeature, amoun
   } as UsageSnapshot;
 }
 
+/* -------------------------
+   Tenant context resolution
+   ------------------------- */
+
 export async function getTenantContextForUser({
   userId,
   requestedTenantId,
@@ -260,29 +284,67 @@ export async function getTenantContextForUser({
   requestedTenantId?: string;
   userEmail?: string;
 }): Promise<TenantContext> {
-  // Try resolve via membership; if missing, allow owner override fallback
+  // 1) Try to resolve membership. If missing, allow synthetic tenant OR owner override.
   let membershipResult: { tenantId: string; role: TenantRole } | null = null;
   try {
     membershipResult = await resolveTenantMembership(userId, requestedTenantId);
   } catch (err) {
-    // If membership missing, check owner override - owners should be allowed even without a team_members row
-    const ownerOverride = await resolveOwnerOverride(userId, userEmail);
-    if (ownerOverride) {
-      // use requestedTenantId if provided, otherwise synthesize tenantId as the userId string
+    // membership not found -> check synthetic bypass env
+    const allowSynthetic = process.env.ALLOW_SYNTHETIC_TENANT_FOR_CREATORS === "1";
+    if (allowSynthetic) {
       const tenantId = requestedTenantId ?? userId;
-      console.warn(`billing: membership missing for ${userId}, owner override applied, tenant=${tenantId}`);
-      membershipResult = { tenantId, role: 'owner' };
+      console.warn(
+        `billing: membership missing for ${userId}; using synthetic tenant=${tenantId} because ALLOW_SYNTHETIC_TENANT_FOR_CREATORS=1`
+      );
+      membershipResult = { tenantId, role: "owner" };
     } else {
-      // rethrow original membership error (likely HttpError 403)
-      throw err;
+      // owner override via owner email list or Clerk
+      const ownerOverride = await resolveOwnerOverride(userId, userEmail);
+      if (ownerOverride) {
+        const tenantId = requestedTenantId ?? userId;
+        console.warn(`billing: membership missing for ${userId}; owner override applied, tenant=${tenantId}`);
+        membershipResult = { tenantId, role: "owner" };
+      } else {
+        // rethrow original membership error
+        throw err;
+      }
     }
   }
 
+  // 2) If role owner -> return synthetic context that bypasses subscription/usage checks.
+  if (membershipResult.role === "owner") {
+    const usage: UsageSnapshot = {
+      id: "",
+      tenant_id: membershipResult.tenantId,
+      period_start: new Date().toISOString().slice(0, 10),
+      ingestion_count: 0,
+      seo_count: 0,
+      variants_count: 0,
+      match_count: 0,
+      updated_at: new Date().toISOString(),
+    };
+    const subscription: SubscriptionStatus = {
+      planName: null,
+      status: "owner-bypass",
+      currentPeriodEnd: null,
+      quotas: { ingestion: null, seo: null, variants: null, match: null },
+      isActive: true,
+    };
+
+    return {
+      tenantId: membershipResult.tenantId,
+      role: "owner",
+      subscription,
+      usage,
+    };
+  }
+
+  // 3) Non-owner path: fetch subscription & usage normally
   const subscription = await fetchSubscription(membershipResult.tenantId);
   const usage = await getOrCreateUsageRow(membershipResult.tenantId);
   const hasOwnerOverride =
-    membershipResult.role === 'owner' ? true : await resolveOwnerOverride(userId, userEmail);
-  const role: TenantRole = hasOwnerOverride ? 'owner' : membershipResult.role;
+    membershipResult.role === "owner" ? true : await resolveOwnerOverride(userId, userEmail);
+  const role: TenantRole = hasOwnerOverride ? "owner" : membershipResult.role;
 
   return {
     tenantId: membershipResult.tenantId,
@@ -291,6 +353,10 @@ export async function getTenantContextForUser({
     usage,
   };
 }
+
+/* -------------------------
+   Public: requireSubscriptionAndUsage
+   ------------------------- */
 
 export async function requireSubscriptionAndUsage({
   userId,
@@ -306,10 +372,10 @@ export async function requireSubscriptionAndUsage({
   userEmail?: string;
 }): Promise<TenantContext> {
   const context = await getTenantContextForUser({ userId, requestedTenantId, userEmail });
-  const isOwner = context.role === 'owner';
+  const isOwner = context.role === "owner";
 
   if (!isOwner && !context.subscription.isActive) {
-    throw new HttpError(402, 'An active subscription is required for this action.');
+    throw new HttpError(402, "An active subscription is required for this action.");
   }
 
   if (feature) {
@@ -319,23 +385,31 @@ export async function requireSubscriptionAndUsage({
     const projected = currentUsage + increment;
 
     if (!isOwner && quota !== null && projected > quota) {
-      throw new HttpError(402, 'Quota exceeded for this plan. Please upgrade to continue.');
+      throw new HttpError(402, "Quota exceeded for this plan. Please upgrade to continue.");
     }
 
-    const updatedUsage = await incrementUsage(context.usage, feature, increment);
-    return {
-      ...context,
-      usage: updatedUsage,
-    };
+    // Only increment usage for non-synthetic DB-backed usage rows. If usage.id is empty,
+    // it means owner-synthetic context (no DB row) so skip increment.
+    if (context.usage.id) {
+      const updatedUsage = await incrementUsage(context.usage, feature, increment);
+      return { ...context, usage: updatedUsage };
+    } else {
+      // synthetic owner usage: return context with usage unchanged (treated as allowed)
+      return context;
+    }
   }
 
   return context;
 }
+
+/* -------------------------
+   Error handler for routes
+   ------------------------- */
 
 export function handleRouteError(error: unknown) {
   if (error instanceof HttpError) {
     return NextResponse.json({ error: error.message }, { status: error.status });
   }
   console.error(error);
-  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 }
