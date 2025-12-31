@@ -342,8 +342,10 @@ export async function getTenantContextForUser({
   // 3) Non-owner path: fetch subscription & usage normally
   const subscription = await fetchSubscription(membershipResult.tenantId);
   const usage = await getOrCreateUsageRow(membershipResult.tenantId);
-  const hasOwnerOverride =
-    membershipResult.role === "owner" ? true : await resolveOwnerOverride(userId, userEmail);
+
+  // Cast role to TenantRole explicitly to satisfy TypeScript (membershipResult.role may be narrowed)
+  const roleStr = membershipResult.role as TenantRole;
+  const hasOwnerOverride = roleStr === "owner" ? true : await resolveOwnerOverride(userId, userEmail);
   const role: TenantRole = hasOwnerOverride ? "owner" : membershipResult.role;
 
   return {
