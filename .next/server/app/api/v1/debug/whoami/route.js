@@ -1,0 +1,10 @@
+var R=require("../../../../../chunks/[turbopack]_runtime.js")("server/app/api/v1/debug/whoami/route.js")
+R.c("server/chunks/node_modules_f8e2fadc._.js")
+R.c("server/chunks/[root-of-the-server]__8efa6f7c._.js")
+R.c("server/chunks/node_modules_@clerk_nextjs_dist_esm_bdb15d44._.js")
+R.c("server/chunks/node_modules_@clerk_ab05d544._.js")
+R.c("server/chunks/node_modules_next_dist_23bfe24c._.js")
+R.c("server/chunks/[root-of-the-server]__ba39dfbb._.js")
+R.c("server/chunks/_next-internal_server_app_api_v1_debug_whoami_route_actions_738d857b.js")
+R.m(6679)
+module.exports=R.m(6679).exports
