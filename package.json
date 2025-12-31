@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:workers": "node scripts/build-workers.js",
     "start": "next start",
     "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts",
     "worker:dev": "ts-node --transpile-only src/worker/worker.ts",
@@ -48,6 +49,8 @@
     "@types/react-dom": "^19.2.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
-    "@types/papaparse": "^5.2.6"
+    "@types/papaparse": "^5.2.6",
+    "esbuild": "^0.18.20",
+    "tsconfig-paths": "^4.2.0"
   }
 }
