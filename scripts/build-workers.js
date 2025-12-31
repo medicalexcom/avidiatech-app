@@ -2,6 +2,23 @@ const esbuild = require("esbuild");
 const fs = require("fs");
 const path = require("path");
 
+function resolveWithExtensions(basePath) {
+  const exts = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+  // direct file
+  for (const ext of exts) {
+    const p = basePath + ext;
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+  }
+  // index files in directory
+  for (const ext of exts) {
+    const p = path.join(basePath, "index" + ext);
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+  }
+  // if basePath itself is file (with extension already)
+  if (fs.existsSync(basePath) && fs.statSync(basePath).isFile()) return basePath;
+  return null;
+}
+
 (async () => {
   try {
     const srcDir = path.resolve(__dirname, "../src/workers");
@@ -41,17 +58,37 @@ const path = require("path");
         },
         plugins: [
           {
-            name: "alias-at",
+            name: "alias-at-resolver",
             setup(build) {
               const srcRoot = path.resolve(__dirname, "../src");
+
+              // Resolve imports starting with @/
               build.onResolve({ filter: /^@\/(.+)/ }, (args) => {
                 const sub = args.path.replace(/^@\//, "");
-                const resolved = path.join(srcRoot, sub);
-                return { path: resolved };
+                const candidate = path.join(srcRoot, sub);
+                const resolvedFile = resolveWithExtensions(candidate);
+                if (resolvedFile) {
+                  return { path: resolvedFile };
+                }
+                // If not found, still return candidate so esbuild gives a helpful error
+                return { path: candidate };
+              });
+
+              // Also handle bare imports that might point to src/ by some usages
+              build.onResolve({ filter: /^~\/(.+)/ }, (args) => {
+                const sub = args.path.replace(/^~\//, "");
+                const candidate = path.join(srcRoot, sub);
+                const resolvedFile = resolveWithExtensions(candidate);
+                if (resolvedFile) {
+                  return { path: resolvedFile };
+                }
+                return { path: candidate };
               });
             },
           },
         ],
+        // leave node builtins external to keep native behavior
+        external: ["fs", "path", "os", "crypto"],
       });
 
       console.log(`Wrote ${outfile}`);
