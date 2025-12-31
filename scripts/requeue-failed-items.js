@@ -1,18 +1,26 @@
 /**
- * Requeue failed bulk_job_items so workers can process them again.
+ * Requeue failed bulk_job_items with optional filters.
  *
  * Usage:
- *   REDIS_URL="rediss://:...@..." SUPABASE_URL="https://<...>.supabase.co" SUPABASE_SERVICE_ROLE_KEY="..." node scripts/requeue-failed-items.js
+ *   REDIS_URL="rediss://:..." SUPABASE_URL="https://<...>.supabase.co" SUPABASE_SERVICE_ROLE_KEY="..." node scripts/requeue-failed-items.js [--bulk-job-id=<id>] [--filter-error="<substring>"] [--limit=N]
  *
- * Notes:
- * - This script uses BullMQ to enqueue properly (do not push directly into Redis lists).
- * - It sets status => 'queued' in the DB for each item it enqueues.
- * - Test with LIMIT (see the SQL below) before a full run.
+ * Examples:
+ *   node scripts/requeue-failed-items.js --bulk-job-id=7af... --limit=100
+ *   node scripts/requeue-failed-items.js --filter-error="No tenant membership" --limit=500
+ *
+ * Safety:
+ *  - Defaults to limit 1000. Adjust as needed.
+ *  - Script updates DB status back to 'queued' and enqueues jobs into BullMQ queue "bulk-item".
  */
 
 const { Queue } = require("bullmq");
 const IORedis = require("ioredis");
 const { createClient } = require("@supabase/supabase-js");
+
+const argv = require("minimist")(process.argv.slice(2));
+const BULK_JOB_ID = argv["bulk-job-id"] || null;
+const FILTER_ERROR = argv["filter-error"] || null;
+const LIMIT = parseInt(argv.limit || argv.l || 1000, 10);
 
 if (!process.env.REDIS_URL || !process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Missing env. Set REDIS_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
@@ -25,39 +33,49 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 (async () => {
   try {
-    // Supabase client (service role key needed to update rows)
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
 
-    // Fetch failed items (adjust LIMIT / WHERE as needed)
-    const { data: failedItems, error: selectErr } = await supabase
+    // Build query
+    let query = supabase
       .from("bulk_job_items")
       .select("id, bulk_job_id, item_index, last_error")
       .eq("status", "failed")
-      .limit(1000); // change or remove limit for full requeue
+      .limit(LIMIT);
+
+    if (BULK_JOB_ID) query = query.eq("bulk_job_id", BULK_JOB_ID);
+    if (FILTER_ERROR) query = query.filter("last_error->>message", "cs", FILTER_ERROR); // case-sensitive contains
+    // fallback: if filter didn't apply, use ILIKE via rpc or client-side filter if needed
+
+    const { data: failedItems, error: selectErr } = await query;
 
     if (selectErr) throw selectErr;
 
-    console.log(`Found ${failedItems.length} failed items (limited to 1000).`);
+    console.log(`Found ${failedItems.length} failed items (limit ${LIMIT}).`);
 
-    if (failedItems.length === 0) {
-      console.log("Nothing to requeue.");
+    if (!failedItems || failedItems.length === 0) {
+      console.log("No items to requeue.");
       process.exit(0);
     }
 
-    // Create BullMQ queue
+    // setup BullMQ
     const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
     const queue = new Queue("bulk-item", { connection });
 
     let requeued = 0;
     for (const item of failedItems) {
-      // add job to queue with the item id (worker code should read DB by id)
-      // You may choose a specific job name, or let it be default
+      // add job to queue
       await queue.add("process-bulk-item", { bulkJobItemId: item.id }, { attempts: 3, backoff: { type: "exponential", delay: 2000 } });
 
-      // mark item row as queued and clear last_error (service role key required)
+      // update DB status
       const { error: updateErr } = await supabase
         .from("bulk_job_items")
-        .update({ status: "queued", last_error: null, tries: 0, started_at: null, finished_at: null })
+        .update({
+          status: "queued",
+          last_error: null,
+          tries: 0,
+          started_at: null,
+          finished_at: null
+        })
         .eq("id", item.id);
 
       if (updateErr) {
