@@ -1,3 +1,4 @@
+// (OVERWRITE) src/lib/billing.ts
 import { NextResponse } from 'next/server';
 import { clerkClient } from '@clerk/nextjs/server';
 import { HttpError } from './errors';
@@ -57,9 +58,9 @@ async function resolveOwnerOverride(userId: string, userEmail?: string): Promise
   }
 
   try {
-    const clerk = await clerkClient(); 
+    const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
-   
+
     const primary =
       normalizeEmail(user.primaryEmailAddress?.emailAddress) ||
       normalizeEmail(user.emailAddresses?.[0]?.emailAddress);
@@ -141,6 +142,8 @@ async function fetchSubscription(tenantId: string): Promise<SubscriptionStatus> 
 
 async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
   const supabase = getServiceSupabaseClient();
+
+  // 1) Try to read latest existing row
   const { data, error } = await supabase
     .from('usage_counters')
     .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
@@ -149,6 +152,7 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
     .limit(1);
 
   if (error) {
+    // bubble up so caller can surface migration hint
     throw new Error(error.message);
   }
 
@@ -166,28 +170,65 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
     };
   }
 
+  // 2) No existing row: attempt to create one, but handle duplicate-key races gracefully
   const today = new Date().toISOString().slice(0, 10);
-  const { data: inserted, error: insertError } = await supabase
-    .from('usage_counters')
-    .insert({ tenant_id: tenantId, period_start: today })
-    .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
-    .limit(1);
+  try {
+    const { data: inserted, error: insertError } = await supabase
+      .from('usage_counters')
+      .insert({ tenant_id: tenantId, period_start: today })
+      .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
+      .limit(1);
 
-  if (insertError) {
-    throw new Error(insertError.message);
+    if (insertError) {
+      // If insertion failed due to duplicate/unique constraint, try selecting again
+      const msg = String(insertError.message || '').toLowerCase();
+      if (msg.includes('duplicate') || msg.includes('unique')) {
+        const { data: after, error: afterErr } = await supabase
+          .from('usage_counters')
+          .select('id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at')
+          .eq('tenant_id', tenantId)
+          .order('period_start', { ascending: false })
+          .limit(1);
+        if (afterErr) {
+          throw new Error(afterErr.message);
+        }
+        if (after && after.length > 0) {
+          const row = after[0];
+          return {
+            id: row.id,
+            tenant_id: row.tenant_id,
+            period_start: row.period_start,
+            ingestion_count: row.ingestion_count ?? 0,
+            seo_count: row.seo_count ?? 0,
+            variants_count: row.variants_count ?? 0,
+            match_count: row.match_count ?? 0,
+            updated_at: row.updated_at ?? undefined,
+          };
+        }
+      }
+      // otherwise, surface the insert error
+      throw new Error(insertError.message);
+    }
+
+    const insertedRow = inserted?.[0];
+    return {
+      id: insertedRow.id,
+      tenant_id: insertedRow.tenant_id,
+      period_start: insertedRow.period_start,
+      ingestion_count: insertedRow.ingestion_count ?? 0,
+      seo_count: insertedRow.seo_count ?? 0,
+      variants_count: insertedRow.variants_count ?? 0,
+      match_count: insertedRow.match_count ?? 0,
+      updated_at: insertedRow.updated_at ?? undefined,
+    };
+  } catch (err: any) {
+    // If usage_counters table missing, surface an actionable error upstream
+    const msg = String(err?.message || err || '').toLowerCase();
+    if (msg.includes('does not exist') || msg.includes('relation "usage_counters"')) {
+      throw new Error('usage_counters table missing or schema mismatch. Run migrations.');
+    }
+    throw err;
   }
-
-  const insertedRow = inserted?.[0];
-  return {
-    id: insertedRow.id,
-    tenant_id: insertedRow.tenant_id,
-    period_start: insertedRow.period_start,
-    ingestion_count: insertedRow.ingestion_count ?? 0,
-    seo_count: insertedRow.seo_count ?? 0,
-    variants_count: insertedRow.variants_count ?? 0,
-    match_count: insertedRow.match_count ?? 0,
-    updated_at: insertedRow.updated_at ?? undefined,
-  };
 }
 
 async function incrementUsage(usage: UsageSnapshot, feature: UsageFeature, amount: number): Promise<UsageSnapshot> {
@@ -219,15 +260,32 @@ export async function getTenantContextForUser({
   requestedTenantId?: string;
   userEmail?: string;
 }): Promise<TenantContext> {
-  const membership = await resolveTenantMembership(userId, requestedTenantId);
-  const subscription = await fetchSubscription(membership.tenantId);
-  const usage = await getOrCreateUsageRow(membership.tenantId);
+  // Try resolve via membership; if missing, allow owner override fallback
+  let membershipResult: { tenantId: string; role: TenantRole } | null = null;
+  try {
+    membershipResult = await resolveTenantMembership(userId, requestedTenantId);
+  } catch (err) {
+    // If membership missing, check owner override - owners should be allowed even without a team_members row
+    const ownerOverride = await resolveOwnerOverride(userId, userEmail);
+    if (ownerOverride) {
+      // use requestedTenantId if provided, otherwise synthesize tenantId as the userId string
+      const tenantId = requestedTenantId ?? userId;
+      console.warn(`billing: membership missing for ${userId}, owner override applied, tenant=${tenantId}`);
+      membershipResult = { tenantId, role: 'owner' };
+    } else {
+      // rethrow original membership error (likely HttpError 403)
+      throw err;
+    }
+  }
+
+  const subscription = await fetchSubscription(membershipResult.tenantId);
+  const usage = await getOrCreateUsageRow(membershipResult.tenantId);
   const hasOwnerOverride =
-    membership.role === 'owner' ? true : await resolveOwnerOverride(userId, userEmail);
-  const role: TenantRole = hasOwnerOverride ? 'owner' : membership.role;
+    membershipResult.role === 'owner' ? true : await resolveOwnerOverride(userId, userEmail);
+  const role: TenantRole = hasOwnerOverride ? 'owner' : membershipResult.role;
 
   return {
-    tenantId: membership.tenantId,
+    tenantId: membershipResult.tenantId,
     role,
     subscription,
     usage,
