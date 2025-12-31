@@ -178,29 +178,139 @@ async function handleJob(job: any) {
 
   try {
     // Billing / quota: attempt to consume one ingestion quota for the user who created the bulk job
+    // We add a safe owner/admin bypass and a retry path for usage_counters issues.
+    const userId = bulkJob.created_by;
+    // Try to resolve tenantId (prefer bulkJob.org_id)
+    let tenantId: string | null = bulkJob.org_id ?? null;
+    let isOwner = false;
+
     try {
-      await requireSubscriptionAndUsage({
-        userId: bulkJob.created_by,
-        requestedTenantId: bulkJob.options?.source_tenant ?? undefined,
-        feature: "ingestion" as any, // cast to any to avoid strict type mismatch
-        increment: 1,
-        userEmail: bulkJob.options?.requested_by_email ?? undefined,
-      });
-    } catch (usageErr: any) {
-      // Out of quota or billing problem: mark item failed and record reason
-      console.warn("[bulk-item] quota/usage check failed", { bulkJobItemId, err: usageErr?.message ?? usageErr });
-      await markItem(bulkJobItemId, {
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        last_error: { message: String(usageErr?.message || usageErr), code: usageErr?.code ?? "quota_failed" },
-      });
-      // increment failed counter
-      try {
-        await incrementBulkCounters(item.bulk_job_id, { failed: 1 });
-      } catch (incErr) {
-        console.warn("incrementBulkCounters failed after quota error", incErr);
+      // If org_id missing or placeholder, try to lookup from team_members
+      if (!tenantId || tenantId === "<ORG_ID_FOUND>") {
+        const { data: tm, error: tmErr } = await supabase
+          .from("team_members")
+          .select("tenant_id, role")
+          .eq("user_id", userId)
+          .limit(1);
+        if (!tmErr && tm && tm.length > 0) {
+          tenantId = tm[0].tenant_id;
+        }
       }
-      return;
+
+      // Check role for bypass
+      if (tenantId) {
+        const { data: roleRows, error: roleErr } = await supabase
+          .from("team_members")
+          .select("role")
+          .eq("user_id", userId)
+          .eq("tenant_id", tenantId)
+          .limit(1);
+        if (!roleErr && roleRows && roleRows.length > 0) {
+          const role = roleRows[0].role;
+          if (role === "owner" || role === "admin") {
+            isOwner = true;
+          }
+        }
+      }
+    } catch (lookupErr) {
+      // don't block processing if lookup fails; log and continue to requireSubscriptionAndUsage path
+      console.warn("[bulk-item] tenant/role lookup failed, continuing:", lookupErr?.message ?? lookupErr);
+    }
+
+    if (isOwner) {
+      console.log("[bulk-item] owner/admin bypass - skipping subscription check for user", userId);
+      // proceed without calling requireSubscriptionAndUsage
+    } else {
+      // Normal path: call billing function, with a guarded retry for common schema/unique-key issues
+      try {
+        await requireSubscriptionAndUsage({
+          userId,
+          requestedTenantId: bulkJob.options?.source_tenant ?? undefined,
+          feature: "ingestion" as any,
+          increment: 1,
+          userEmail: bulkJob.options?.requested_by_email ?? undefined,
+        });
+      } catch (usageErr: any) {
+        const usageMsg = String(usageErr?.message ?? usageErr ?? "").toLowerCase();
+        console.warn("[bulk-item] quota/usage initial check failed", { bulkJobItemId, err: usageMsg });
+
+        // If the error looks like a schema/usage_counters/unique key problem, attempt a safe upsert/repair and retry once.
+        const needsRepair =
+          usageMsg.includes("usage_counters") ||
+          usageMsg.includes("period_start") ||
+          usageMsg.includes("unique constraint") ||
+          usageMsg.includes("duplicate key");
+
+        if (needsRepair && tenantId) {
+          try {
+            // Check if a usage_counters row exists for tenantId
+            const { data: existing, error: selErr } = await supabase
+              .from("usage_counters")
+              .select("tenant_id")
+              .eq("tenant_id", tenantId)
+              .limit(1);
+
+            if (selErr) {
+              console.warn("[bulk-item] usage_counters select error (non-fatal):", selErr);
+            }
+
+            if (!existing || existing.length === 0) {
+              // Attempt to insert a minimal row. If tenant_id is uuid-typed in DB but tenantId is text, this may fail.
+              // We ignore insert errors (they will be handled by the retry of requireSubscriptionAndUsage).
+              try {
+                await supabase.from("usage_counters").insert({
+                  tenant_id: tenantId,
+                  period_start: new Date().toISOString(),
+                });
+                console.log("[bulk-item] created minimal usage_counters row for tenant:", tenantId);
+              } catch (insErr) {
+                // ignore insert error (likely type/constraint) but log for diagnostics
+                console.warn("[bulk-item] usage_counters insert warning (ignored):", insErr?.message ?? insErr);
+              }
+            }
+          } catch (repairErr) {
+            console.warn("[bulk-item] attempted usage_counters repair failed:", repairErr?.message ?? repairErr);
+          }
+
+          // Retry the billing call once
+          try {
+            await requireSubscriptionAndUsage({
+              userId,
+              requestedTenantId: bulkJob.options?.source_tenant ?? undefined,
+              feature: "ingestion" as any,
+              increment: 1,
+              userEmail: bulkJob.options?.requested_by_email ?? undefined,
+            });
+          } catch (usageErr2: any) {
+            // Still failing after repair attempt: mark item failed as before
+            console.warn("[bulk-item] quota/usage check failed after repair", { bulkJobItemId, err: String(usageErr2?.message ?? usageErr2) });
+            await markItem(bulkJobItemId, {
+              status: "failed",
+              finished_at: new Date().toISOString(),
+              last_error: { message: String(usageErr2?.message ?? usageErr2), code: usageErr2?.code ?? "quota_failed" },
+            });
+            try {
+              await incrementBulkCounters(item.bulk_job_id, { failed: 1 });
+            } catch (incErr) {
+              console.warn("incrementBulkCounters failed after quota error", incErr);
+            }
+            return;
+          }
+        } else {
+          // Non-repairable usage error (e.g., genuinely out of quota/subscription). Mark failed.
+          await markItem(bulkJobItemId, {
+            status: "failed",
+            finished_at: new Date().toISOString(),
+            last_error: { message: String(usageErr?.message ?? usageErr), code: usageErr?.code ?? "quota_failed" },
+          });
+          try {
+            await incrementBulkCounters(item.bulk_job_id, { failed: 1 });
+          } catch (incErr) {
+            console.warn("incrementBulkCounters failed after quota error", incErr);
+          }
+          return;
+        }
+      }
     }
 
     // Ingestion: create if missing
