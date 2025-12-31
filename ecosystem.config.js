@@ -9,9 +9,6 @@ module.exports = {
       watch: false,
       env: {
         NODE_ENV: "production"
-      },
-      env_production: {
-        NODE_ENV: "production"
       }
     },
     {
@@ -22,10 +19,6 @@ module.exports = {
       autorestart: true,
       watch: false,
       env: {
-        NODE_ENV: "production",
-        BULK_ITEM_CONCURRENCY: 8
-      },
-      env_production: {
         NODE_ENV: "production",
         BULK_ITEM_CONCURRENCY: 8
       }
