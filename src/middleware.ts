@@ -201,25 +201,45 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  // Early bypass ONLY for internal endpoints expected to be called without Clerk session.
-  // NOTE: We do NOT bypass /api/v1/debug anymore because those endpoints may call auth().
-  // Allowlist these internal endpoints when the request includes the correct x-service-api-key
+  /**
+   * Internal service-key bypass for worker-called endpoints.
+   *
+   * Behavior:
+   * - If request targets /api/v1/ingest or /api/v1/pipeline AND sends x-service-api-key:
+   *   - If PIPELINE_INTERNAL_SECRET is NOT set on the server => 500 (misconfigured)
+   *   - If provided key matches => allow through without Clerk session
+   *   - If provided key does NOT match => 401 unauthorized (do NOT fall through)
+   *
+   * - If no x-service-api-key is provided => fall through to Clerk checks as usual.
+   */
   try {
-    // Narrow scope: only canonical internal API paths used by workers
-    if (
+    const isInternalPath =
       pathname.startsWith("/api/v1/ingest") ||
-      pathname.startsWith("/api/v1/pipeline")
-    ) {
-      const secret = req.headers.get("x-service-api-key") || "";
-      if (secret && process.env.PIPELINE_INTERNAL_SECRET && secret === process.env.PIPELINE_INTERNAL_SECRET) {
-        // internal authenticated request — allow through without Clerk session
+      pathname.startsWith("/api/v1/pipeline");
+
+    if (isInternalPath) {
+      const provided = (req.headers.get("x-service-api-key") || "").toString();
+      const expected = (process.env.PIPELINE_INTERNAL_SECRET || "").toString();
+
+      // Caller attempted internal auth but server isn't configured
+      if (provided && !expected) {
+        return NextResponse.json(
+          { error: "server_misconfigured_internal_secret" },
+          { status: 500 }
+        );
+      }
+
+      // Correct service key => bypass Clerk entirely
+      if (provided && expected && provided === expected) {
         return NextResponse.next();
       }
-      // If header present but incorrect, explicitly return 401 for API paths
-      if (pathname.startsWith("/api") && secret) {
+
+      // Header present but wrong => explicit 401 (don't leak anything else)
+      if (provided) {
         return NextResponse.json({ error: "unauthorized" }, { status: 401 });
       }
-      // otherwise fallthrough to Clerk checks which will return 401 for missing session
+
+      // No header => fall through to Clerk (will 401 for API requests without session)
     }
   } catch (e) {
     // Non-fatal; continue to Clerk-wrapped handler
