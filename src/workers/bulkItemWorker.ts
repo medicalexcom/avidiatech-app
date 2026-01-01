@@ -416,3 +416,25 @@ async function handleJob(job: any) {
 
   console.log(`[bulk-item] worker started (concurrency=${concurrency})`);
 })();
+
+
+
+
+
+
+
+function serviceHeaders() {
+  const h: Record<string, string> = { "content-type": "application/json" };
+  if (SERVICE_API_KEY) {
+    h["x-service-api-key"] = SERVICE_API_KEY;
+    if (process.env.DEBUG_BULK) {
+      // do NOT print the secret; print only the header name and length to verify presence
+      console.log("[bulk-item][debug] will send header 'x-service-api-key' length:", SERVICE_API_KEY.length);
+    }
+  } else {
+    if (process.env.DEBUG_BULK) {
+      console.log("[bulk-item][debug] no service key available; header will NOT be sent");
+    }
+  }
+  return h;
+}
