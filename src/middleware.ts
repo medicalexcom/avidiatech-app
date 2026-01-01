@@ -203,11 +203,27 @@ export default async function middleware(req: NextRequest) {
 
   // Early bypass ONLY for internal endpoints expected to be called without Clerk session.
   // NOTE: We do NOT bypass /api/v1/debug anymore because those endpoints may call auth().
-  if (
-    pathname.startsWith("/api/v1/pipeline/internal") ||
-    pathname.startsWith("/api/v1/ingest/callback")
-  ) {
-    return NextResponse.next();
+  // Allowlist these internal endpoints when the request includes the correct x-service-api-key
+  try {
+    // Narrow scope: only canonical internal API paths used by workers
+    if (
+      pathname.startsWith("/api/v1/ingest") ||
+      pathname.startsWith("/api/v1/pipeline")
+    ) {
+      const secret = req.headers.get("x-service-api-key") || "";
+      if (secret && process.env.PIPELINE_INTERNAL_SECRET && secret === process.env.PIPELINE_INTERNAL_SECRET) {
+        // internal authenticated request — allow through without Clerk session
+        return NextResponse.next();
+      }
+      // If header present but incorrect, explicitly return 401 for API paths
+      if (pathname.startsWith("/api") && secret) {
+        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      }
+      // otherwise fallthrough to Clerk checks which will return 401 for missing session
+    }
+  } catch (e) {
+    // Non-fatal; continue to Clerk-wrapped handler
+    console.warn("[middleware] internal-bypass-check error", String(e));
   }
 
   // Delegate to Clerk-wrapped handler for all other matched routes.
