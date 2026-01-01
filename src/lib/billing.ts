@@ -3,17 +3,16 @@
  *
  * Billing / subscription / usage helpers used by workers and API routes.
  *
- * - Resolves tenant membership for a user (team_members).
- * - Fetches subscription status (tenant_subscriptions).
- * - Gets or creates usage counters (usage_counters) idempotently and robustly.
- * - Provides requireSubscriptionAndUsage() which enforces subscription/quota unless
- *   the user is an owner/admin (owner bypass).
+ * Updated policy:
+ * - Owners/admins should NOT be blocked by subscription/quota.
+ * - But usage SHOULD still be tracked for owners (DB-backed usage_counters row).
  *
- * Notes:
- * - If team membership is missing, you can enable a synthetic-tenant bypass for creators
- *   by setting ALLOW_SYNTHETIC_TENANT_FOR_CREATORS=1 in the environment. This will treat
- *   tenantId = requestedTenantId || userId and role = 'owner' for that call (opt-in).
- * - getOrCreateUsageRow handles duplicate key races by re-selecting after duplicate errors.
+ * This file implements:
+ * - Resolve tenant membership for a user (team_members).
+ * - Fetch subscription status (tenant_subscriptions).
+ * - Get or create usage counters (usage_counters) idempotently and robustly.
+ * - requireSubscriptionAndUsage(): enforces subscription/quota unless owner/admin,
+ *   BUT still increments usage for owners.
  */
 
 import { NextResponse } from "next/server";
@@ -70,7 +69,10 @@ export interface TenantContext {
    Helpers
    ------------------------- */
 
-async function resolveOwnerOverride(userId: string, userEmail?: string): Promise<boolean> {
+async function resolveOwnerOverride(
+  userId: string,
+  userEmail?: string
+): Promise<boolean> {
   const ownerEmails = getOwnerEmails();
   if (!ownerEmails || ownerEmails.length === 0) return false;
 
@@ -88,7 +90,10 @@ async function resolveOwnerOverride(userId: string, userEmail?: string): Promise
     if (!primary) return false;
     return ownerEmails.includes(primary);
   } catch (err) {
-    console.warn("billing.resolveOwnerOverride: clerk lookup failed (non-fatal)", (err as any)?.message ?? err);
+    console.warn(
+      "billing.resolveOwnerOverride: clerk lookup failed (non-fatal)",
+      (err as any)?.message ?? err
+    );
     return false;
   }
 }
@@ -109,7 +114,10 @@ export function tenantFromRequest(req: Request): string | undefined {
    Membership & subscription
    ------------------------- */
 
-async function resolveTenantMembership(userId: string, requestedTenantId?: string): Promise<{ tenantId: string; role: TenantRole }> {
+async function resolveTenantMembership(
+  userId: string,
+  requestedTenantId?: string
+): Promise<{ tenantId: string; role: TenantRole }> {
   const supabase = getServiceSupabaseClient();
   let query = supabase
     .from("team_members")
@@ -135,7 +143,9 @@ async function fetchSubscription(tenantId: string): Promise<SubscriptionStatus> 
   const supabase = getServiceSupabaseClient();
   const { data, error } = await supabase
     .from("tenant_subscriptions")
-    .select("plan_name, status, current_period_end, ingestion_quota, seo_quota, variant_quota, match_quota")
+    .select(
+      "plan_name, status, current_period_end, ingestion_quota, seo_quota, variant_quota, match_quota"
+    )
     .eq("tenant_id", tenantId)
     .order("current_period_end", { ascending: false })
     .limit(1);
@@ -169,13 +179,14 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
   // 1) Attempt to read the latest usage row
   const { data, error } = await supabase
     .from("usage_counters")
-    .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
+    .select(
+      "id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at"
+    )
     .eq("tenant_id", tenantId)
     .order("period_start", { ascending: false })
     .limit(1);
 
   if (error) {
-    // bubble up; caller can surface a migration hint
     throw new Error(error.message);
   }
 
@@ -193,22 +204,27 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
     };
   }
 
-  // 2) No existing row: try insert, but tolerate race/unique constraint by re-selecting
-  const today = new Date().toISOString().slice(0, 10);
+  // 2) No existing row: try insert, tolerate race/unique constraint by re-selecting
+  // Use full ISO timestamp because period_start is timestamptz in your DB.
+  const nowIso = new Date().toISOString();
+
   try {
     const { data: inserted, error: insertError } = await supabase
       .from("usage_counters")
-      .insert({ tenant_id: tenantId, period_start: today })
-      .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
+      .insert({ tenant_id: tenantId, period_start: nowIso })
+      .select(
+        "id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at"
+      )
       .limit(1);
 
     if (insertError) {
       const msg = String(insertError.message || "").toLowerCase();
-      // If duplicate/unique constraint race, re-select
       if (msg.includes("duplicate") || msg.includes("unique")) {
         const { data: after, error: afterErr } = await supabase
           .from("usage_counters")
-          .select("id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at")
+          .select(
+            "id, tenant_id, period_start, ingestion_count, seo_count, variants_count, match_count, updated_at"
+          )
           .eq("tenant_id", tenantId)
           .order("period_start", { ascending: false })
           .limit(1);
@@ -227,7 +243,6 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
           };
         }
       }
-      // Other insert error: surface
       throw new Error(insertError.message);
     }
 
@@ -244,14 +259,21 @@ async function getOrCreateUsageRow(tenantId: string): Promise<UsageSnapshot> {
     };
   } catch (err: any) {
     const msg = String(err?.message || err || "").toLowerCase();
-    if (msg.includes("does not exist") || msg.includes('relation "usage_counters"')) {
+    if (
+      msg.includes("does not exist") ||
+      msg.includes('relation "usage_counters"')
+    ) {
       throw new Error("usage_counters table missing or schema mismatch. Run migrations.");
     }
     throw err;
   }
 }
 
-async function incrementUsage(usage: UsageSnapshot, feature: UsageFeature, amount: number): Promise<UsageSnapshot> {
+async function incrementUsage(
+  usage: UsageSnapshot,
+  feature: UsageFeature,
+  amount: number
+): Promise<UsageSnapshot> {
   const supabase = getServiceSupabaseClient();
   const { column } = FEATURE_COLUMNS[feature];
   const newValue = (usage[column as keyof UsageSnapshot] as number) + amount;
@@ -284,13 +306,13 @@ export async function getTenantContextForUser({
   requestedTenantId?: string;
   userEmail?: string;
 }): Promise<TenantContext> {
-  // 1) Try to resolve membership. If missing, allow synthetic tenant OR owner override.
+  // 1) Resolve membership. If missing, allow synthetic tenant OR owner override.
   let membershipResult: { tenantId: string; role: TenantRole } | null = null;
   try {
     membershipResult = await resolveTenantMembership(userId, requestedTenantId);
   } catch (err) {
-    // membership not found -> check synthetic bypass env
-    const allowSynthetic = process.env.ALLOW_SYNTHETIC_TENANT_FOR_CREATORS === "1";
+    const allowSynthetic =
+      process.env.ALLOW_SYNTHETIC_TENANT_FOR_CREATORS === "1";
     if (allowSynthetic) {
       const tenantId = requestedTenantId ?? userId;
       console.warn(
@@ -298,31 +320,30 @@ export async function getTenantContextForUser({
       );
       membershipResult = { tenantId, role: "owner" };
     } else {
-      // owner override via owner email list or Clerk
       const ownerOverride = await resolveOwnerOverride(userId, userEmail);
       if (ownerOverride) {
         const tenantId = requestedTenantId ?? userId;
-        console.warn(`billing: membership missing for ${userId}; owner override applied, tenant=${tenantId}`);
+        console.warn(
+          `billing: membership missing for ${userId}; owner override applied, tenant=${tenantId}`
+        );
         membershipResult = { tenantId, role: "owner" };
       } else {
-        // rethrow original membership error
         throw err;
       }
     }
   }
 
-  // 2) If role owner -> return synthetic context that bypasses subscription/usage checks.
-  if (membershipResult.role === "owner") {
-    const usage: UsageSnapshot = {
-      id: "",
-      tenant_id: membershipResult.tenantId,
-      period_start: new Date().toISOString().slice(0, 10),
-      ingestion_count: 0,
-      seo_count: 0,
-      variants_count: 0,
-      match_count: 0,
-      updated_at: new Date().toISOString(),
-    };
+  // 2) Determine final role (respect membership, but allow owner override)
+  const roleFromMembership = membershipResult.role as TenantRole;
+  const hasOwnerOverride =
+    roleFromMembership === "owner"
+      ? true
+      : await resolveOwnerOverride(userId, userEmail);
+  const role: TenantRole = hasOwnerOverride ? "owner" : roleFromMembership;
+
+  // 3) If owner: bypass subscription enforcement, but STILL use DB-backed usage row for tracking
+  if (role === "owner") {
+    const usage = await getOrCreateUsageRow(membershipResult.tenantId);
     const subscription: SubscriptionStatus = {
       planName: null,
       status: "owner-bypass",
@@ -339,14 +360,9 @@ export async function getTenantContextForUser({
     };
   }
 
-  // 3) Non-owner path: fetch subscription & usage normally
+  // 4) Non-owner: fetch subscription & usage normally
   const subscription = await fetchSubscription(membershipResult.tenantId);
   const usage = await getOrCreateUsageRow(membershipResult.tenantId);
-
-  // Cast role to TenantRole explicitly to satisfy TypeScript (membershipResult.role may be narrowed)
-  const roleStr = membershipResult.role as TenantRole;
-  const hasOwnerOverride = roleStr === "owner" ? true : await resolveOwnerOverride(userId, userEmail);
-  const role: TenantRole = hasOwnerOverride ? "owner" : membershipResult.role;
 
   return {
     tenantId: membershipResult.tenantId,
@@ -373,9 +389,15 @@ export async function requireSubscriptionAndUsage({
   increment?: number;
   userEmail?: string;
 }): Promise<TenantContext> {
-  const context = await getTenantContextForUser({ userId, requestedTenantId, userEmail });
+  const context = await getTenantContextForUser({
+    userId,
+    requestedTenantId,
+    userEmail,
+  });
+
   const isOwner = context.role === "owner";
 
+  // Owners bypass subscription requirement entirely
   if (!isOwner && !context.subscription.isActive) {
     throw new HttpError(402, "An active subscription is required for this action.");
   }
@@ -383,22 +405,19 @@ export async function requireSubscriptionAndUsage({
   if (feature) {
     const { quotaKey } = FEATURE_COLUMNS[feature];
     const quota = context.subscription.quotas[quotaKey];
-    const currentUsage = context.usage[FEATURE_COLUMNS[feature].column as keyof UsageSnapshot] as number;
+    const currentUsage =
+      context.usage[
+        FEATURE_COLUMNS[feature].column as keyof UsageSnapshot
+      ] as number;
     const projected = currentUsage + increment;
 
+    // Owners bypass quota checks, but still track usage increments
     if (!isOwner && quota !== null && projected > quota) {
       throw new HttpError(402, "Quota exceeded for this plan. Please upgrade to continue.");
     }
 
-    // Only increment usage for non-synthetic DB-backed usage rows. If usage.id is empty,
-    // it means owner-synthetic context (no DB row) so skip increment.
-    if (context.usage.id) {
-      const updatedUsage = await incrementUsage(context.usage, feature, increment);
-      return { ...context, usage: updatedUsage };
-    } else {
-      // synthetic owner usage: return context with usage unchanged (treated as allowed)
-      return context;
-    }
+    const updatedUsage = await incrementUsage(context.usage, feature, increment);
+    return { ...context, usage: updatedUsage };
   }
 
   return context;
