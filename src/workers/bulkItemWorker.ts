@@ -1,22 +1,14 @@
+
+``typescript name=src/workers/bulkItemWorker.ts url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/workers/bulkItemWorker.ts
 // src/workers/bulkItemWorker.ts
 //
 // Bulk item worker: end-to-end per-item processing for bulk jobs.
-// - Enforces billing/quota per-item via requireSubscriptionAndUsage.
-// - Creates ingestion (POST /api/v1/ingest) if needed and polls ingestion job.
-// - Starts pipeline (POST /api/v1/pipeline/run) and polls until completion.
-// - Updates bulk_job_items status, last_error, ingestion_id, pipeline_run_id, started_at, finished_at.
-// - Updates bulk_jobs counters atomically via incrementBulkCounters helper.
 //
-// Run this as a separate Node process (pm2 / systemd / container).
-// Example (after build): NODE_ENV=production node ./dist/workers/bulkItemWorker.js
-//
-// Required env:
-// - SUPABASE_URL
-// - SUPABASE_SERVICE_ROLE_KEY
-// - REDIS_URL
-// - INTERNAL_API_BASE (required; URL used to call internal endpoints)
-// - SERVICE_API_KEY or PIPELINE_INTERNAL_SECRET (one of these must be set to authenticate internal API calls)
-// - BULK_ITEM_CONCURRENCY (optional, default 8)
+// This version:
+// - Prefers PIPELINE_INTERNAL_SECRET as the canonical secret.
+// - Fail-fast on missing INTERNAL_API_BASE or secret.
+// - Optional debug logging controlled by DEBUG_BULK (prints header presence and length only).
+// - No secret values are printed.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -72,15 +64,11 @@ async function fetchBulkJob(bulkJobId: string) {
   return data as any;
 }
 
-
-
-
 function serviceHeaders() {
   const h: Record<string, string> = { "content-type": "application/json" };
   if (SERVICE_API_KEY) {
     h["x-service-api-key"] = SERVICE_API_KEY;
     if (process.env.DEBUG_BULK) {
-      // do NOT print the secret; print only the header name and length to verify presence
       console.log("[bulk-item][debug] will send header 'x-service-api-key' length:", SERVICE_API_KEY.length);
     }
   } else {
@@ -91,12 +79,12 @@ function serviceHeaders() {
   return h;
 }
 
-
-
-
-
 async function startIngestAndReturnIngestionId(itemUrl: string) {
-  const url = `${internalApiBase}/api/v1/ingest`;
+  const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
+  if (process.env.DEBUG_BULK) {
+    console.log("[bulk-item][debug] startIngest POST", url, "payload.url=", itemUrl);
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: serviceHeaders(),
@@ -120,10 +108,6 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
     return possibleIngestionId;
   }
 
-    if (process.env.DEBUG_BULK) {
-      console.log("[bulk-item][debug] startIngest POST", url, "payload.url=", itemUrl);
-    }
-
   const jobId = j?.jobId ?? j?.job?.id ?? null;
   if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
   return await pollForIngestionJob(jobId);
@@ -132,7 +116,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
 async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`${internalApiBase}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
       headers: serviceHeaders(),
     });
     const j = await res.json().catch(() => null);
@@ -152,7 +136,11 @@ async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalM
 }
 
 async function startPipeline(ingestionId: string, steps: string[]) {
-  const url = `${internalApiBase}/api/v1/pipeline/run`;
+  const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run`;
+  if (process.env.DEBUG_BULK) {
+    console.log("[bulk-item][debug] startPipeline POST", url, "ingestionId=", ingestionId);
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: serviceHeaders(),
@@ -173,7 +161,7 @@ async function startPipeline(ingestionId: string, steps: string[]) {
 async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`${internalApiBase}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
       headers: serviceHeaders(),
     });
     const j = await res.json().catch(() => null);
@@ -436,4 +424,3 @@ async function handleJob(job: any) {
 
   console.log(`[bulk-item] worker started (concurrency=${concurrency})`);
 })();
-
