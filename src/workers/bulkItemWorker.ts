@@ -1,5 +1,3 @@
-
-``typescript name=src/workers/bulkItemWorker.ts url=https://github.com/medicalexcom/avidiatech-app/blob/main/src/workers/bulkItemWorker.ts
 // src/workers/bulkItemWorker.ts
 //
 // Bulk item worker: end-to-end per-item processing for bulk jobs.
