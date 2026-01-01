@@ -12,18 +12,7 @@ const APP_URL =
 
 /**
  * Ingest route
- *
- * Policy updates (2025-12):
- * - Deprecate module toggles from the client. They were part of an older UI.
- * - Always run a full extract with specs enabled to support strict SEO/Describe compliance.
- * - If the request provides options, we will accept them ONLY for docs/variants/export_type,
- *   but we will FORCE includeSpecs=true whenever includeSeo=true (and in practice always).
- *
- * Why:
- * - The SEO/Describe instruction contract forbids placeholders and hallucination.
- * - If specs are not extracted upstream, the model cannot legally generate Product Specifications.
- * - Previously, includeSeo=true with includeSpecs=false caused url-derived product names and
- *   "Not specified" spec placeholders (invalid).
+ * ...
  */
 
 function normalizeBool(v: any): boolean {
@@ -33,17 +22,13 @@ function normalizeBool(v: any): boolean {
 function buildEffectiveOptions(body: any) {
   const export_type = body?.export_type || "JSON";
 
-  // Keep fullExtract for backwards compatibility, but default true and treat toggles as deprecated.
   const fullExtract = body?.fullExtract === undefined ? true : normalizeBool(body?.fullExtract);
 
   const clientOptions = body?.options || {};
 
-  // We no longer honor turning off SEO/specs via client toggles.
-  // Always include SEO + Specs to match strict requirements downstream.
   const includeSeo = true;
   const includeSpecs = true;
 
-  // Docs/Variants may remain optional because they can be expensive.
   const includeDocs = fullExtract ? true : normalizeBool(clientOptions.includeDocs);
   const includeVariants = fullExtract ? true : normalizeBool(clientOptions.includeVariants);
 
@@ -59,6 +44,12 @@ function buildEffectiveOptions(body: any) {
 
 export async function POST(req: NextRequest) {
   try {
+    // DEBUG: do NOT log secret. Log only header presence/length to verify request reaches handler.
+    console.log(
+      "[ingest-debug] x-service-api-key length:",
+      (req.headers.get("x-service-api-key") || "").length
+    );
+
     const { userId } =
       ((safeGetAuth(req as any) as { userId?: string | null }) as {
         userId?: string | null;
