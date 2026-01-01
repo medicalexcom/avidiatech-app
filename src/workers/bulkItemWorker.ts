@@ -14,8 +14,8 @@
 // - SUPABASE_URL
 // - SUPABASE_SERVICE_ROLE_KEY
 // - REDIS_URL
-// - INTERNAL_API_BASE (optional; defaults to empty, used to call internal endpoints)
-// - SERVICE_API_KEY (optional; to authenticate internal API calls)
+// - INTERNAL_API_BASE (required; URL used to call internal endpoints)
+// - SERVICE_API_KEY or PIPELINE_INTERNAL_SECRET (one of these must be set to authenticate internal API calls)
 // - BULK_ITEM_CONCURRENCY (optional, default 8)
 
 import { createClient } from "@supabase/supabase-js";
@@ -27,11 +27,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const serviceApiKey = process.env.SERVICE_API_KEY || process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+
+// Prefer canonical PIPELINE_INTERNAL_SECRET, but allow SERVICE_API_KEY or NEXT_PUBLIC_SERVICE_API_KEY as fallbacks
+const SERVICE_API_KEY =
+  process.env.SERVICE_API_KEY || process.env.PIPELINE_INTERNAL_SECRET || process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+
+// INTERNAL_API_BASE is required for the worker to call internal endpoints
 const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
 
+// Basic required env checks (fail-fast)
 if (!supabaseUrl || !supabaseKey) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
+  process.exit(1);
+}
+if (!internalApiBase) {
+  console.error("[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart.");
+  process.exit(1);
+}
+if (!SERVICE_API_KEY) {
+  console.error("[bulk-item] FATAL: service secret missing. Set SERVICE_API_KEY or PIPELINE_INTERNAL_SECRET and restart.");
   process.exit(1);
 }
 
@@ -60,7 +74,8 @@ async function fetchBulkJob(bulkJobId: string) {
 
 function serviceHeaders() {
   const h: Record<string, string> = { "content-type": "application/json" };
-  if (serviceApiKey) h["x-service-api-key"] = serviceApiKey;
+  // Use SERVICE_API_KEY constant which already prefers PIPELINE_INTERNAL_SECRET
+  if (SERVICE_API_KEY) h["x-service-api-key"] = SERVICE_API_KEY;
   return h;
 }
 
@@ -322,7 +337,10 @@ async function handleJob(job: any) {
     }
 
     // Determine steps (default to extract+seo; allow bulkJob.options.mode === 'full')
-    const steps = (bulkJob.options?.mode === "full" || String(bulkJob.options?.mode) === "full") ? ["extract", "seo", "audit", "import", "monitor", "price"] : ["extract", "seo"];
+    const steps =
+      bulkJob.options?.mode === "full" || String(bulkJob.options?.mode) === "full"
+        ? ["extract", "seo", "audit", "import", "monitor", "price"]
+        : ["extract", "seo"];
 
     // Start pipeline
     const pipelineRunId = await startPipeline(ingestionId, steps);
