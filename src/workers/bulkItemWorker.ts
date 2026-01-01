@@ -120,6 +120,10 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
     return possibleIngestionId;
   }
 
+    if (process.env.DEBUG_BULK) {
+      console.log("[bulk-item][debug] startIngest POST", url, "payload.url=", itemUrl);
+    }
+
   const jobId = j?.jobId ?? j?.job?.id ?? null;
   if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
   return await pollForIngestionJob(jobId);
