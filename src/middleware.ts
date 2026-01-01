@@ -202,48 +202,62 @@ export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
   /**
-   * Internal service-key bypass for worker-called endpoints.
-   *
-   * Behavior:
-   * - If request targets /api/v1/ingest or /api/v1/pipeline AND sends x-service-api-key:
-   *   - If PIPELINE_INTERNAL_SECRET is NOT set on the server => 500 (misconfigured)
-   *   - If provided key matches => allow through without Clerk session
-   *   - If provided key does NOT match => 401 unauthorized (do NOT fall through)
-   *
-   * - If no x-service-api-key is provided => fall through to Clerk checks as usual.
+   * DEBUG / PROOF HEADER
+   * This is safe: it does NOT expose secrets and only returns lengths + a version tag.
+   * Remove once verified.
    */
-  try {
-    const isInternalPath =
-      pathname.startsWith("/api/v1/ingest") ||
-      pathname.startsWith("/api/v1/pipeline");
+  const isProbePath =
+    pathname.startsWith("/api/v1/ingest") ||
+    pathname.startsWith("/api/v1/pipeline");
 
-    if (isInternalPath) {
-      const provided = (req.headers.get("x-service-api-key") || "").toString();
-      const expected = (process.env.PIPELINE_INTERNAL_SECRET || "").toString();
+  if (isProbePath) {
+    const provided = (req.headers.get("x-service-api-key") || "").toString();
+    const expected = (process.env.PIPELINE_INTERNAL_SECRET || "").toString();
 
-      // Caller attempted internal auth but server isn't configured
-      if (provided && !expected) {
-        return NextResponse.json(
-          { error: "server_misconfigured_internal_secret" },
-          { status: 500 }
-        );
-      }
+    // Always respond with a marker header so we can prove THIS middleware is running.
+    // We do not early-return here; we attach the header to whatever response we produce.
+    const marker = "src-middleware.ts::internal-bypass-probe::2026-01-01";
 
-      // Correct service key => bypass Clerk entirely
-      if (provided && expected && provided === expected) {
-        return NextResponse.next();
-      }
-
-      // Header present but wrong => explicit 401 (don't leak anything else)
-      if (provided) {
-        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-      }
-
-      // No header => fall through to Clerk (will 401 for API requests without session)
+    // Implement the internal bypass (and better errors) while we're here:
+    // - provided + missing expected => 500
+    // - provided + match => bypass Clerk
+    // - provided + mismatch => 401
+    if (provided && !expected) {
+      const res = NextResponse.json(
+        { error: "server_misconfigured_internal_secret" },
+        { status: 500 }
+      );
+      res.headers.set("x-mw-version", marker);
+      res.headers.set("x-mw-provided-key-len", String(provided.length));
+      res.headers.set("x-mw-expected-key-len", String(expected.length));
+      res.headers.set("x-mw-internal-path", "1");
+      return res;
     }
-  } catch (e) {
-    // Non-fatal; continue to Clerk-wrapped handler
-    console.warn("[middleware] internal-bypass-check error", String(e));
+
+    if (provided && expected && provided === expected) {
+      const res = NextResponse.next();
+      res.headers.set("x-mw-version", marker);
+      res.headers.set("x-mw-provided-key-len", String(provided.length));
+      res.headers.set("x-mw-expected-key-len", String(expected.length));
+      res.headers.set("x-mw-internal-path", "1");
+      res.headers.set("x-mw-internal-auth", "1");
+      return res;
+    }
+
+    if (provided) {
+      const res = NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      res.headers.set("x-mw-version", marker);
+      res.headers.set("x-mw-provided-key-len", String(provided.length));
+      res.headers.set("x-mw-expected-key-len", String(expected.length));
+      res.headers.set("x-mw-internal-path", "1");
+      res.headers.set("x-mw-internal-auth", "0");
+      return res;
+    }
+
+    // No header: fall through to Clerk, but still add the marker header by wrapping.
+    // (We can't directly mutate the response returned by clerkWrappedHandler later unless we
+    //   capture it; so we just fall through and let Clerk respond. You can still prove
+    //   this middleware is running by making a request WITH any x-service-api-key header.)
   }
 
   // Delegate to Clerk-wrapped handler for all other matched routes.
