@@ -12,7 +12,18 @@ const APP_URL =
 
 /**
  * Ingest route
- * ...
+ *
+ * Policy updates (2025-12):
+ * - Deprecate module toggles from the client. They were part of an older UI.
+ * - Always run a full extract with specs enabled to support strict SEO/Describe compliance.
+ * - If the request provides options, we will accept them ONLY for docs/variants/export_type,
+ *   but we will FORCE includeSpecs=true whenever includeSeo=true (and in practice always).
+ *
+ * Why:
+ * - The SEO/Describe instruction contract forbids placeholders and hallucination.
+ * - If specs are not extracted upstream, the model cannot legally generate Product Specifications.
+ * - Previously, includeSeo=true with includeSpecs=false caused url-derived product names and
+ *   "Not specified" spec placeholders (invalid).
  */
 
 function normalizeBool(v: any): boolean {
@@ -22,13 +33,17 @@ function normalizeBool(v: any): boolean {
 function buildEffectiveOptions(body: any) {
   const export_type = body?.export_type || "JSON";
 
+  // Keep fullExtract for backwards compatibility, but default true and treat toggles as deprecated.
   const fullExtract = body?.fullExtract === undefined ? true : normalizeBool(body?.fullExtract);
 
   const clientOptions = body?.options || {};
 
+  // We no longer honor turning off SEO/specs via client toggles.
+  // Always include SEO + Specs to match strict requirements downstream.
   const includeSeo = true;
   const includeSpecs = true;
 
+  // Docs/Variants may remain optional because they can be expensive.
   const includeDocs = fullExtract ? true : normalizeBool(clientOptions.includeDocs);
   const includeVariants = fullExtract ? true : normalizeBool(clientOptions.includeVariants);
 
@@ -50,13 +65,44 @@ export async function POST(req: NextRequest) {
       (req.headers.get("x-service-api-key") || "").length
     );
 
-    const { userId } =
-      ((safeGetAuth(req as any) as { userId?: string | null }) as {
-        userId?: string | null;
-      }) || {};
+    // Check for service-key based internal requests first.
+    const serviceKey = (req.headers.get("x-service-api-key") || "").toString();
+    const isInternalRequest =
+      !!serviceKey &&
+      !!process.env.PIPELINE_INTERNAL_SECRET &&
+      serviceKey === process.env.PIPELINE_INTERNAL_SECRET;
 
-    if (!userId) {
-      return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+    if (isInternalRequest) {
+      console.info("[ingest-debug] internal request authenticated via service key");
+    }
+
+    // Declare profile-related variables up-front so both branches can set them.
+    let profileData: any = null;
+    let tenant_id: string | null = null;
+    let role: string = "user";
+    let userId: string | null = null;
+
+    if (!isInternalRequest) {
+      // Normal authenticated user path via Clerk
+      const auth = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+      userId = auth.userId ?? null;
+
+      if (!userId) {
+        return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+      }
+    } else {
+      // Internal request: create a temporary internal profile (owner) to bypass quota checks
+      profileData = {
+        id: `internal_${Date.now()}`,
+        tenant_id: null,
+        role: "owner",
+        _temporary: true,
+        clerk_user_id: null,
+        user_id: null,
+      };
+      tenant_id = null;
+      role = "owner";
+      userId = null;
     }
 
     // Hard fail if the ingest engine is not configured.
@@ -95,135 +141,131 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ---- Profile lookup with robust column support + safe fallback ----
-    // Try clerk_user_id first (the column created by the migration), then fall back to user_id.
-    // If the profiles table itself is missing (PGRST205) optionally fallback to a temp profile.
-    let profileData: any = null;
-    let tenant_id: string | null = null;
-    let role: string = "user";
+    // If not internal, perform profile lookup (DB) to derive tenant_id and role.
+    if (!isInternalRequest) {
+      try {
+        // First, attempt to look up by clerk_user_id (most common)
+        const byClerk = await supabase
+          .from("profiles")
+          .select("id, tenant_id, role")
+          .eq("clerk_user_id", userId)
+          .limit(1)
+          .maybeSingle();
 
-    try {
-      // First, attempt to look up by clerk_user_id (most common)
-      const byClerk = await supabase
-        .from("profiles")
-        .select("id, tenant_id, role")
-        .eq("clerk_user_id", userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!byClerk.error) {
-        profileData = byClerk.data ?? null;
-      } else {
-        // If clerk_user_id column doesn't exist (or other DB error), try user_id
-        const errMsg = String(byClerk.error?.message ?? "");
-        const isMissingCol =
-          String(byClerk.error?.code) === "42703" ||
-          errMsg.includes("does not exist") ||
-          errMsg.includes("Could not find the table");
-
-        if (isMissingCol) {
-          // Try the legacy column name user_id
-          const byUser = await supabase
-            .from("profiles")
-            .select("id, tenant_id, role")
-            .eq("user_id", userId)
-            .limit(1)
-            .maybeSingle();
-
-          if (!byUser.error) {
-            profileData = byUser.data ?? null;
-          } else {
-            // byUser also errored — rethrow so outer catch handles missing-table vs other errors
-            throw byUser.error;
-          }
+        if (!byClerk.error) {
+          profileData = byClerk.data ?? null;
         } else {
-          // Some other DB error when querying clerk_user_id — rethrow
-          throw byClerk.error;
+          // If clerk_user_id column doesn't exist (or other DB error), try user_id
+          const errMsg = String(byClerk.error?.message ?? "");
+          const isMissingCol =
+            String(byClerk.error?.code) === "42703" ||
+            errMsg.includes("does not exist") ||
+            errMsg.includes("Could not find the table");
+
+          if (isMissingCol) {
+            // Try the legacy column name user_id
+            const byUser = await supabase
+              .from("profiles")
+              .select("id, tenant_id, role")
+              .eq("user_id", userId)
+              .limit(1)
+              .maybeSingle();
+
+            if (!byUser.error) {
+              profileData = byUser.data ?? null;
+            } else {
+              // byUser also errored — rethrow so outer catch handles missing-table vs other errors
+              throw byUser.error;
+            }
+          } else {
+            // Some other DB error when querying clerk_user_id — rethrow
+            throw byClerk.error;
+          }
+        }
+
+        if (profileData) {
+          tenant_id = profileData.tenant_id ?? null;
+          role = profileData.role ?? "user";
+          console.info("[ingest] profile found", {
+            correlation_id,
+            profileId: profileData.id,
+          });
+        } else {
+          // No matching profile row
+          console.warn("[ingest] profile not found for user", {
+            correlation_id,
+            userId,
+          });
+        }
+      } catch (err: any) {
+        // Detect PostgREST schema/cache error (missing table) or column issues
+        const isPgrstMissingTable =
+          err &&
+          (err.code === "PGRST205" ||
+            (typeof err.message === "string" &&
+              err.message.includes("Could not find the table")));
+
+        const isColumnMissing =
+          err &&
+          (String(err.code) === "42703" ||
+            (typeof err.message === "string" && err.message.includes("does not exist")));
+
+        console.error("[ingest] profile lookup failed", { correlation_id, err });
+
+        if (isPgrstMissingTable || isColumnMissing) {
+          const allowFallback =
+            String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() ===
+            "true";
+
+          if (!allowFallback) {
+            // Do not attempt fallback — return clear error so ops can run migrations
+            console.warn(
+              "[ingest] profiles table/column missing and fallback disabled. Aborting."
+            );
+            return NextResponse.json(
+              {
+                error: "profile_lookup_failed",
+                detail: isPgrstMissingTable
+                  ? "profiles table missing in DB (PGRST205)"
+                  : "profiles table missing expected column",
+              },
+              { status: 500 }
+            );
+          }
+
+          // Build a minimal temporary profile object from the Clerk session (best-effort).
+          const tempProfile = {
+            id: `tmp_${userId}`,
+            tenant_id: null,
+            clerk_user_id: userId,
+            user_id: userId,
+            role: "owner", // temporary elevated role for convenience during recovery; change as needed
+            _temporary: true,
+          };
+          profileData = tempProfile;
+          tenant_id = null;
+          role = tempProfile.role;
+          console.warn(
+            "[ingest] using temporary fallback profile due to missing table/column",
+            { correlation_id, tempProfileId: tempProfile.id }
+          );
+        } else {
+          // Other DB error — surface generic profile lookup failure
+          return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
         }
       }
 
-      if (profileData) {
-        tenant_id = profileData.tenant_id ?? null;
-        role = profileData.role ?? "user";
-        console.info("[ingest] profile found", {
-          correlation_id,
-          profileId: profileData.id,
-        });
-      } else {
-        // No matching profile row
-        console.warn("[ingest] profile not found for user", {
+      // If profileData still null (no row found and no fallback), return error
+      if (!profileData) {
+        console.warn("[ingest] profile not found and no fallback available", {
           correlation_id,
           userId,
         });
-      }
-    } catch (err: any) {
-      // Detect PostgREST schema/cache error (missing table) or column issues
-      const isPgrstMissingTable =
-        err &&
-        (err.code === "PGRST205" ||
-          (typeof err.message === "string" &&
-            err.message.includes("Could not find the table")));
-
-      const isColumnMissing =
-        err &&
-        (String(err.code) === "42703" ||
-          (typeof err.message === "string" && err.message.includes("does not exist")));
-
-      console.error("[ingest] profile lookup failed", { correlation_id, err });
-
-      if (isPgrstMissingTable || isColumnMissing) {
-        const allowFallback =
-          String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() ===
-          "true";
-
-        if (!allowFallback) {
-          // Do not attempt fallback — return clear error so ops can run migrations
-          console.warn(
-            "[ingest] profiles table/column missing and fallback disabled. Aborting."
-          );
-          return NextResponse.json(
-            {
-              error: "profile_lookup_failed",
-              detail: isPgrstMissingTable
-                ? "profiles table missing in DB (PGRST205)"
-                : "profiles table missing expected column",
-            },
-            { status: 500 }
-          );
-        }
-
-        // Build a minimal temporary profile object from the Clerk session (best-effort).
-        const tempProfile = {
-          id: `tmp_${userId}`,
-          tenant_id: null,
-          clerk_user_id: userId,
-          user_id: userId,
-          role: "owner", // temporary elevated role for convenience during recovery; change as needed
-          _temporary: true,
-        };
-        profileData = tempProfile;
-        tenant_id = null;
-        role = tempProfile.role;
-        console.warn(
-          "[ingest] using temporary fallback profile due to missing table/column",
-          { correlation_id, tempProfileId: tempProfile.id }
-        );
-      } else {
-        // Other DB error — surface generic profile lookup failure
         return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
       }
     }
 
-    // If profileData still null (no row found and no fallback), return error
-    if (!profileData) {
-      console.warn("[ingest] profile not found and no fallback available", {
-        correlation_id,
-        userId,
-      });
-      return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
-    }
-
-    // Quota check (if applicable)
+    // Quota check (if applicable) — internal requests have role "owner" so they bypass this.
     if (role !== "owner") {
       const { data: counters } = await supabase
         .from("usage_counters")
@@ -255,7 +297,7 @@ export async function POST(req: NextRequest) {
 
     // Initial diagnostics object so new rows are never null
     const initialDiagnostics = {
-      created_by: "ingest-route",
+      created_by: isInternalRequest ? "ingest-route-internal" : "ingest-route",
       created_at: new Date().toISOString(),
       engine_call: null,
     };
