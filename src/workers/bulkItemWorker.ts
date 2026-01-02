@@ -160,7 +160,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
   return await pollForIngestionJob(jobId);
 }
 
-async function pollForIngestionJob(jobId: string, timeoutMs = 1200_000, intervalMs = 3000) {
+async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
