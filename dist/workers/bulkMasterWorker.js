@@ -22,6 +22,7 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __reExport = (target, mod, secondTarget) => (__copyProps(target, mod, "default"), secondTarget && __copyProps(secondTarget, mod, "default"));
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
@@ -3271,9 +3272,9 @@ var require_lodash = __commonJS({
       return func.apply(thisArg, args);
     }
     function baseTimes(n, iteratee) {
-      var index2 = -1, result = Array(n);
-      while (++index2 < n) {
-        result[index2] = iteratee(index2);
+      var index = -1, result = Array(n);
+      while (++index < n) {
+        result[index] = iteratee(index);
       }
       return result;
     }
@@ -3319,14 +3320,14 @@ var require_lodash = __commonJS({
     function baseRest(func, start) {
       start = nativeMax(start === void 0 ? func.length - 1 : start, 0);
       return function() {
-        var args = arguments, index2 = -1, length = nativeMax(args.length - start, 0), array = Array(length);
-        while (++index2 < length) {
-          array[index2] = args[start + index2];
+        var args = arguments, index = -1, length = nativeMax(args.length - start, 0), array = Array(length);
+        while (++index < length) {
+          array[index] = args[start + index];
         }
-        index2 = -1;
+        index = -1;
         var otherArgs = Array(start + 1);
-        while (++index2 < start) {
-          otherArgs[index2] = args[index2];
+        while (++index < start) {
+          otherArgs[index] = args[index];
         }
         otherArgs[start] = array;
         return apply(func, this, otherArgs);
@@ -3334,9 +3335,9 @@ var require_lodash = __commonJS({
     }
     function copyObject(source, props, object, customizer) {
       object || (object = {});
-      var index2 = -1, length = props.length;
-      while (++index2 < length) {
-        var key = props[index2];
+      var index = -1, length = props.length;
+      while (++index < length) {
+        var key = props[index];
         var newValue = customizer ? customizer(object[key], source[key], key, object, source) : void 0;
         assignValue(object, key, newValue === void 0 ? source[key] : newValue);
       }
@@ -3344,17 +3345,17 @@ var require_lodash = __commonJS({
     }
     function createAssigner(assigner) {
       return baseRest(function(object, sources) {
-        var index2 = -1, length = sources.length, customizer = length > 1 ? sources[length - 1] : void 0, guard = length > 2 ? sources[2] : void 0;
+        var index = -1, length = sources.length, customizer = length > 1 ? sources[length - 1] : void 0, guard = length > 2 ? sources[2] : void 0;
         customizer = assigner.length > 3 && typeof customizer == "function" ? (length--, customizer) : void 0;
         if (guard && isIterateeCall(sources[0], sources[1], guard)) {
           customizer = length < 3 ? void 0 : customizer;
           length = 1;
         }
         object = Object(object);
-        while (++index2 < length) {
-          var source = sources[index2];
+        while (++index < length) {
+          var source = sources[index];
           if (source) {
-            assigner(object, source, index2, customizer);
+            assigner(object, source, index, customizer);
           }
         }
         return object;
@@ -3364,13 +3365,13 @@ var require_lodash = __commonJS({
       length = length == null ? MAX_SAFE_INTEGER : length;
       return !!length && (typeof value == "number" || reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
     }
-    function isIterateeCall(value, index2, object) {
+    function isIterateeCall(value, index, object) {
       if (!isObject(object)) {
         return false;
       }
-      var type = typeof index2;
-      if (type == "number" ? isArrayLike(object) && isIndex(index2, object.length) : type == "string" && index2 in object) {
-        return eq(object[index2], value);
+      var type = typeof index;
+      if (type == "number" ? isArrayLike(object) && isIndex(index, object.length) : type == "string" && index in object) {
+        return eq(object[index], value);
       }
       return false;
     }
@@ -3645,18 +3646,18 @@ var require_common = __commonJS({
           if (typeof args[0] !== "string") {
             args.unshift("%O");
           }
-          let index2 = 0;
+          let index = 0;
           args[0] = args[0].replace(/%([a-zA-Z%])/g, (match, format) => {
             if (match === "%%") {
               return "%";
             }
-            index2++;
+            index++;
             const formatter = createDebug.formatters[format];
             if (typeof formatter === "function") {
-              const val = args[index2];
+              const val = args[index];
               match = formatter.call(self2, val);
-              args.splice(index2, 1);
-              index2--;
+              args.splice(index, 1);
+              index--;
             }
             return match;
           });
@@ -3891,15 +3892,15 @@ var require_browser = __commonJS({
       }
       const c = "color: " + this.color;
       args.splice(1, 0, c, "color: inherit");
-      let index2 = 0;
+      let index = 0;
       let lastC = 0;
       args[0].replace(/%[a-zA-Z%]/g, (match) => {
         if (match === "%%") {
           return;
         }
-        index2++;
+        index++;
         if (match === "%c") {
-          lastC = index2;
+          lastC = index;
         }
       });
       args.splice(lastC, 0, c);
@@ -4504,9 +4505,9 @@ var require_utils2 = __commonJS({
       const options = parsed.query || {};
       const result = {};
       if (parsed.auth) {
-        const index2 = parsed.auth.indexOf(":");
-        result.username = index2 === -1 ? parsed.auth : parsed.auth.slice(0, index2);
-        result.password = index2 === -1 ? "" : parsed.auth.slice(index2 + 1);
+        const index = parsed.auth.indexOf(":");
+        result.username = index === -1 ? parsed.auth : parsed.auth.slice(0, index);
+        result.password = index === -1 ? "" : parsed.auth.slice(index + 1);
       }
       if (parsed.pathname) {
         if (parsed.protocol === "redis:" || parsed.protocol === "rediss:") {
@@ -4557,9 +4558,9 @@ var require_utils2 = __commonJS({
     function shuffle(array) {
       let counter = array.length;
       while (counter > 0) {
-        const index2 = Math.floor(Math.random() * counter);
+        const index = Math.floor(Math.random() * counter);
         counter--;
-        [array[counter], array[index2]] = [array[index2], array[counter]];
+        [array[counter], array[index]] = [array[index], array[counter]];
       }
       return array;
     }
@@ -4567,8 +4568,8 @@ var require_utils2 = __commonJS({
     exports.CONNECTION_CLOSED_ERROR_MSG = "Connection is closed.";
     function zipMap(keys, values) {
       const map = /* @__PURE__ */ new Map();
-      keys.forEach((key, index2) => {
-        map.set(key, values[index2]);
+      keys.forEach((key, index) => {
+        map.set(key, values[index]);
       });
       return map;
     }
@@ -4778,9 +4779,9 @@ var require_Command = __commonJS({
           this.keys = [];
           if ((0, commands_1.exists)(this.name)) {
             const keyIndexes = (0, commands_1.getKeyIndexes)(this.name, this.args);
-            for (const index2 of keyIndexes) {
-              this.args[index2] = transform(this.args[index2]);
-              this.keys.push(this.args[index2]);
+            for (const index of keyIndexes) {
+              this.args[index] = transform(this.args[index]);
+              this.keys.push(this.args[index]);
             }
           }
         }
@@ -6172,8 +6173,8 @@ var require_denque = __commonJS({
         this._list = new Array(4);
       }
     }
-    Denque.prototype.peekAt = function peekAt(index2) {
-      var i = index2;
+    Denque.prototype.peekAt = function peekAt(index) {
+      var i = index;
       if (i !== (i | 0)) {
         return void 0;
       }
@@ -6185,7 +6186,7 @@ var require_denque = __commonJS({
       i = this._head + i & this._capacityMask;
       return this._list[i];
     };
-    Denque.prototype.get = function get(i) {
+    Denque.prototype.get = function get2(i) {
       return this.peekAt(i);
     };
     Denque.prototype.peek = function peek() {
@@ -6228,13 +6229,13 @@ var require_denque = __commonJS({
         return this._capacityMask + 1 - (this._head - this._tail);
     };
     Denque.prototype.shift = function shift() {
-      var head = this._head;
-      if (head === this._tail)
+      var head2 = this._head;
+      if (head2 === this._tail)
         return void 0;
-      var item = this._list[head];
-      this._list[head] = void 0;
-      this._head = head + 1 & this._capacityMask;
-      if (head < 2 && this._tail > 1e4 && this._tail <= this._list.length >>> 2)
+      var item = this._list[head2];
+      this._list[head2] = void 0;
+      this._head = head2 + 1 & this._capacityMask;
+      if (head2 < 2 && this._tail > 1e4 && this._tail <= this._list.length >>> 2)
         this._shrinkArray();
       return item;
     };
@@ -6267,8 +6268,8 @@ var require_denque = __commonJS({
         this._shrinkArray();
       return item;
     };
-    Denque.prototype.removeOne = function removeOne(index2) {
-      var i = index2;
+    Denque.prototype.removeOne = function removeOne(index) {
+      var i = index;
       if (i !== (i | 0)) {
         return void 0;
       }
@@ -6283,14 +6284,14 @@ var require_denque = __commonJS({
       i = this._head + i & this._capacityMask;
       var item = this._list[i];
       var k;
-      if (index2 < size / 2) {
-        for (k = index2; k > 0; k--) {
+      if (index < size / 2) {
+        for (k = index; k > 0; k--) {
           this._list[i] = this._list[i = i - 1 + len & this._capacityMask];
         }
         this._list[i] = void 0;
         this._head = this._head + 1 + len & this._capacityMask;
       } else {
-        for (k = size - 1 - index2; k > 0; k--) {
+        for (k = size - 1 - index; k > 0; k--) {
           this._list[i] = this._list[i = i + 1 + len & this._capacityMask];
         }
         this._list[i] = void 0;
@@ -6298,8 +6299,8 @@ var require_denque = __commonJS({
       }
       return item;
     };
-    Denque.prototype.remove = function remove(index2, count) {
-      var i = index2;
+    Denque.prototype.remove = function remove2(index, count) {
+      var i = index;
       var removed;
       var del_count = count;
       if (i !== (i | 0)) {
@@ -6331,14 +6332,14 @@ var require_denque = __commonJS({
         removed[k] = this._list[this._head + i + k & this._capacityMask];
       }
       i = this._head + i & this._capacityMask;
-      if (index2 + count === size) {
+      if (index + count === size) {
         this._tail = this._tail - count + len & this._capacityMask;
         for (k = count; k > 0; k--) {
           this._list[i = i + 1 + len & this._capacityMask] = void 0;
         }
         return removed;
       }
-      if (index2 === 0) {
+      if (index === 0) {
         this._head = this._head + count + len & this._capacityMask;
         for (k = count - 1; k > 0; k--) {
           this._list[i = i + 1 + len & this._capacityMask] = void 0;
@@ -6346,8 +6347,8 @@ var require_denque = __commonJS({
         return removed;
       }
       if (i < size / 2) {
-        this._head = this._head + index2 + count + len & this._capacityMask;
-        for (k = index2; k > 0; k--) {
+        this._head = this._head + index + count + len & this._capacityMask;
+        for (k = index; k > 0; k--) {
           this.unshift(this._list[i = i - 1 + len & this._capacityMask]);
         }
         i = this._head - 1 + len & this._capacityMask;
@@ -6355,12 +6356,12 @@ var require_denque = __commonJS({
           this._list[i = i - 1 + len & this._capacityMask] = void 0;
           del_count--;
         }
-        if (index2 < 0)
+        if (index < 0)
           this._tail = i;
       } else {
         this._tail = i;
         i = i + count + len & this._capacityMask;
-        for (k = size - (count + index2); k > 0; k--) {
+        for (k = size - (count + index); k > 0; k--) {
           this.push(this._list[i++]);
         }
         i = this._tail;
@@ -6373,8 +6374,8 @@ var require_denque = __commonJS({
         this._shrinkArray();
       return removed;
     };
-    Denque.prototype.splice = function splice(index2, count) {
-      var i = index2;
+    Denque.prototype.splice = function splice(index, count) {
+      var i = index;
       if (i !== (i | 0)) {
         return void 0;
       }
@@ -7050,12 +7051,12 @@ var require_cluster = __commonJS({
         };
         const nodes = (0, utils_1.shuffle)(this.connectionPool.getNodes());
         let lastNodeError = null;
-        function tryNode(index2) {
-          if (index2 === nodes.length) {
+        function tryNode(index) {
+          if (index === nodes.length) {
             const error = new ClusterAllFailedError_1.default(ClusterAllFailedError_1.default.defaultMessage, lastNodeError);
             return wrapper(error);
           }
-          const node = nodes[index2];
+          const node = nodes[index];
           const key = `${node.options.host}:${node.options.port}`;
           debug("getting slot cache from %s", key);
           _this.getInfoFromNode(node, function(err) {
@@ -7069,7 +7070,7 @@ var require_cluster = __commonJS({
             if (err) {
               _this.emit("node error", err, key);
               lastNodeError = err;
-              tryNode(index2 + 1);
+              tryNode(index + 1);
             } else {
               _this.emit("refresh");
               wrapper();
@@ -8170,7 +8171,7 @@ var require_parser = __commonJS({
         return new ReplyError(string);
       }
     }
-    function handleError(parser, type) {
+    function handleError2(parser, type) {
       const err = new ParserError(
         "Protocol error, got " + JSON.stringify(String.fromCharCode(type)) + " as reply type byte",
         JSON.stringify(parser.buffer),
@@ -8241,7 +8242,7 @@ var require_parser = __commonJS({
         case 45:
           return parseError(parser);
         default:
-          return handleError(parser, type);
+          return handleError2(parser, type);
       }
     }
     function decreaseBufferPool() {
@@ -10867,13 +10868,13 @@ var require_re = __commonJS({
     };
     var createToken = (name, value, isGlobal) => {
       const safe = makeSafeRegex(value);
-      const index2 = R++;
-      debug(name, index2, value);
-      t[name] = index2;
-      src[index2] = value;
-      safeSrc[index2] = safe;
-      re[index2] = new RegExp(value, isGlobal ? "g" : void 0);
-      safeRe[index2] = new RegExp(safe, isGlobal ? "g" : void 0);
+      const index = R++;
+      debug(name, index, value);
+      t[name] = index;
+      src[index] = value;
+      safeSrc[index] = safe;
+      re[index] = new RegExp(value, isGlobal ? "g" : void 0);
+      safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
     };
     createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
     createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
@@ -10978,31 +10979,31 @@ var require_semver = __commonJS({
     var parseOptions = require_parse_options();
     var { compareIdentifiers } = require_identifiers();
     var SemVer = class _SemVer {
-      constructor(version2, options) {
+      constructor(version4, options) {
         options = parseOptions(options);
-        if (version2 instanceof _SemVer) {
-          if (version2.loose === !!options.loose && version2.includePrerelease === !!options.includePrerelease) {
-            return version2;
+        if (version4 instanceof _SemVer) {
+          if (version4.loose === !!options.loose && version4.includePrerelease === !!options.includePrerelease) {
+            return version4;
           } else {
-            version2 = version2.version;
+            version4 = version4.version;
           }
-        } else if (typeof version2 !== "string") {
-          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version2}".`);
+        } else if (typeof version4 !== "string") {
+          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version4}".`);
         }
-        if (version2.length > MAX_LENGTH) {
+        if (version4.length > MAX_LENGTH) {
           throw new TypeError(
             `version is longer than ${MAX_LENGTH} characters`
           );
         }
-        debug("SemVer", version2, options);
+        debug("SemVer", version4, options);
         this.options = options;
         this.loose = !!options.loose;
         this.includePrerelease = !!options.includePrerelease;
-        const m = version2.trim().match(options.loose ? re[t.LOOSE] : re[t.FULL]);
+        const m = version4.trim().match(options.loose ? re[t.LOOSE] : re[t.FULL]);
         if (!m) {
-          throw new TypeError(`Invalid Version: ${version2}`);
+          throw new TypeError(`Invalid Version: ${version4}`);
         }
-        this.raw = version2;
+        this.raw = version4;
         this.major = +m[1];
         this.minor = +m[2];
         this.patch = +m[3];
@@ -11248,12 +11249,12 @@ var require_parse = __commonJS({
   "node_modules/semver/functions/parse.js"(exports, module2) {
     "use strict";
     var SemVer = require_semver();
-    var parse2 = (version2, options, throwErrors = false) => {
-      if (version2 instanceof SemVer) {
-        return version2;
+    var parse2 = (version4, options, throwErrors = false) => {
+      if (version4 instanceof SemVer) {
+        return version4;
       }
       try {
-        return new SemVer(version2, options);
+        return new SemVer(version4, options);
       } catch (er) {
         if (!throwErrors) {
           return null;
@@ -11270,8 +11271,8 @@ var require_valid = __commonJS({
   "node_modules/semver/functions/valid.js"(exports, module2) {
     "use strict";
     var parse2 = require_parse();
-    var valid = (version2, options) => {
-      const v = parse2(version2, options);
+    var valid = (version4, options) => {
+      const v = parse2(version4, options);
       return v ? v.version : null;
     };
     module2.exports = valid;
@@ -11283,8 +11284,8 @@ var require_clean = __commonJS({
   "node_modules/semver/functions/clean.js"(exports, module2) {
     "use strict";
     var parse2 = require_parse();
-    var clean = (version2, options) => {
-      const s = parse2(version2.trim().replace(/^[=v]+/, ""), options);
+    var clean = (version4, options) => {
+      const s = parse2(version4.trim().replace(/^[=v]+/, ""), options);
       return s ? s.version : null;
     };
     module2.exports = clean;
@@ -11296,7 +11297,7 @@ var require_inc = __commonJS({
   "node_modules/semver/functions/inc.js"(exports, module2) {
     "use strict";
     var SemVer = require_semver();
-    var inc = (version2, release, options, identifier, identifierBase) => {
+    var inc = (version4, release, options, identifier, identifierBase) => {
       if (typeof options === "string") {
         identifierBase = identifier;
         identifier = options;
@@ -11304,7 +11305,7 @@ var require_inc = __commonJS({
       }
       try {
         return new SemVer(
-          version2 instanceof SemVer ? version2.version : version2,
+          version4 instanceof SemVer ? version4.version : version4,
           options
         ).inc(release, identifier, identifierBase).version;
       } catch (er) {
@@ -11320,9 +11321,9 @@ var require_diff = __commonJS({
   "node_modules/semver/functions/diff.js"(exports, module2) {
     "use strict";
     var parse2 = require_parse();
-    var diff = (version1, version2) => {
+    var diff = (version1, version22) => {
       const v12 = parse2(version1, null, true);
-      const v2 = parse2(version2, null, true);
+      const v2 = parse2(version22, null, true);
       const comparison = v12.compare(v2);
       if (comparison === 0) {
         return null;
@@ -11394,8 +11395,8 @@ var require_prerelease = __commonJS({
   "node_modules/semver/functions/prerelease.js"(exports, module2) {
     "use strict";
     var parse2 = require_parse();
-    var prerelease = (version2, options) => {
-      const parsed = parse2(version2, options);
+    var prerelease = (version4, options) => {
+      const parsed = parse2(version4, options);
       return parsed && parsed.prerelease.length ? parsed.prerelease : null;
     };
     module2.exports = prerelease;
@@ -11583,24 +11584,24 @@ var require_coerce = __commonJS({
     var SemVer = require_semver();
     var parse2 = require_parse();
     var { safeRe: re, t } = require_re();
-    var coerce = (version2, options) => {
-      if (version2 instanceof SemVer) {
-        return version2;
+    var coerce = (version4, options) => {
+      if (version4 instanceof SemVer) {
+        return version4;
       }
-      if (typeof version2 === "number") {
-        version2 = String(version2);
+      if (typeof version4 === "number") {
+        version4 = String(version4);
       }
-      if (typeof version2 !== "string") {
+      if (typeof version4 !== "string") {
         return null;
       }
       options = options || {};
       let match = null;
       if (!options.rtl) {
-        match = version2.match(options.includePrerelease ? re[t.COERCEFULL] : re[t.COERCE]);
+        match = version4.match(options.includePrerelease ? re[t.COERCEFULL] : re[t.COERCE]);
       } else {
         const coerceRtlRegex = options.includePrerelease ? re[t.COERCERTLFULL] : re[t.COERCERTL];
         let next;
-        while ((next = coerceRtlRegex.exec(version2)) && (!match || match.index + match[0].length !== version2.length)) {
+        while ((next = coerceRtlRegex.exec(version4)) && (!match || match.index + match[0].length !== version4.length)) {
           if (!match || next.index + next[0].length !== match.index + match[0].length) {
             match = next;
           }
@@ -11784,19 +11785,19 @@ var require_range = __commonJS({
         });
       }
       // if ANY of the sets match ALL of its comparators, then pass
-      test(version2) {
-        if (!version2) {
+      test(version4) {
+        if (!version4) {
           return false;
         }
-        if (typeof version2 === "string") {
+        if (typeof version4 === "string") {
           try {
-            version2 = new SemVer(version2, this.options);
+            version4 = new SemVer(version4, this.options);
           } catch (er) {
             return false;
           }
         }
         for (let i = 0; i < this.set.length; i++) {
-          if (testSet(this.set[i], version2, this.options)) {
+          if (testSet(this.set[i], version4, this.options)) {
             return true;
           }
         }
@@ -12011,13 +12012,13 @@ var require_range = __commonJS({
       }
       return `${from} ${to}`.trim();
     };
-    var testSet = (set, version2, options) => {
+    var testSet = (set, version4, options) => {
       for (let i = 0; i < set.length; i++) {
-        if (!set[i].test(version2)) {
+        if (!set[i].test(version4)) {
           return false;
         }
       }
-      if (version2.prerelease.length && !options.includePrerelease) {
+      if (version4.prerelease.length && !options.includePrerelease) {
         for (let i = 0; i < set.length; i++) {
           debug(set[i].semver);
           if (set[i].semver === Comparator.ANY) {
@@ -12025,7 +12026,7 @@ var require_range = __commonJS({
           }
           if (set[i].semver.prerelease.length > 0) {
             const allowed = set[i].semver;
-            if (allowed.major === version2.major && allowed.minor === version2.minor && allowed.patch === version2.patch) {
+            if (allowed.major === version4.major && allowed.minor === version4.minor && allowed.patch === version4.patch) {
               return true;
             }
           }
@@ -12086,19 +12087,19 @@ var require_comparator = __commonJS({
       toString() {
         return this.value;
       }
-      test(version2) {
-        debug("Comparator.test", version2, this.options.loose);
-        if (this.semver === ANY || version2 === ANY) {
+      test(version4) {
+        debug("Comparator.test", version4, this.options.loose);
+        if (this.semver === ANY || version4 === ANY) {
           return true;
         }
-        if (typeof version2 === "string") {
+        if (typeof version4 === "string") {
           try {
-            version2 = new SemVer(version2, this.options);
+            version4 = new SemVer(version4, this.options);
           } catch (er) {
             return false;
           }
         }
-        return cmp(version2, this.operator, this.semver, this.options);
+        return cmp(version4, this.operator, this.semver, this.options);
       }
       intersects(comp, options) {
         if (!(comp instanceof _Comparator)) {
@@ -12155,13 +12156,13 @@ var require_satisfies = __commonJS({
   "node_modules/semver/functions/satisfies.js"(exports, module2) {
     "use strict";
     var Range = require_range();
-    var satisfies = (version2, range, options) => {
+    var satisfies = (version4, range, options) => {
       try {
         range = new Range(range, options);
       } catch (er) {
         return false;
       }
-      return range.test(version2);
+      return range.test(version4);
     };
     module2.exports = satisfies;
   }
@@ -12321,8 +12322,8 @@ var require_outside = __commonJS({
     var lt = require_lt();
     var lte = require_lte();
     var gte = require_gte();
-    var outside = (version2, range, hilo, options) => {
-      version2 = new SemVer(version2, options);
+    var outside = (version4, range, hilo, options) => {
+      version4 = new SemVer(version4, options);
       range = new Range(range, options);
       let gtfn, ltefn, ltfn, comp, ecomp;
       switch (hilo) {
@@ -12343,7 +12344,7 @@ var require_outside = __commonJS({
         default:
           throw new TypeError('Must provide a hilo val of "<" or ">"');
       }
-      if (satisfies(version2, range, options)) {
+      if (satisfies(version4, range, options)) {
         return false;
       }
       for (let i = 0; i < range.set.length; ++i) {
@@ -12365,9 +12366,9 @@ var require_outside = __commonJS({
         if (high.operator === comp || high.operator === ecomp) {
           return false;
         }
-        if ((!low.operator || low.operator === comp) && ltefn(version2, low.semver)) {
+        if ((!low.operator || low.operator === comp) && ltefn(version4, low.semver)) {
           return false;
-        } else if (low.operator === ecomp && ltfn(version2, low.semver)) {
+        } else if (low.operator === ecomp && ltfn(version4, low.semver)) {
           return false;
         }
       }
@@ -12382,7 +12383,7 @@ var require_gtr = __commonJS({
   "node_modules/semver/ranges/gtr.js"(exports, module2) {
     "use strict";
     var outside = require_outside();
-    var gtr = (version2, range, options) => outside(version2, range, ">", options);
+    var gtr = (version4, range, options) => outside(version4, range, ">", options);
     module2.exports = gtr;
   }
 });
@@ -12392,7 +12393,7 @@ var require_ltr = __commonJS({
   "node_modules/semver/ranges/ltr.js"(exports, module2) {
     "use strict";
     var outside = require_outside();
-    var ltr = (version2, range, options) => outside(version2, range, "<", options);
+    var ltr = (version4, range, options) => outside(version4, range, "<", options);
     module2.exports = ltr;
   }
 });
@@ -12422,12 +12423,12 @@ var require_simplify = __commonJS({
       let first = null;
       let prev = null;
       const v = versions.sort((a, b) => compare(a, b, options));
-      for (const version2 of v) {
-        const included = satisfies(version2, range, options);
+      for (const version4 of v) {
+        const included = satisfies(version4, range, options);
         if (included) {
-          prev = version2;
+          prev = version4;
           if (!first) {
-            first = version2;
+            first = version4;
           }
         } else {
           if (prev) {
@@ -12855,8 +12856,8 @@ var require_utils3 = __commonJS({
     var childSend = (proc, msg) => (0, exports.asyncSend)(proc, msg);
     exports.childSend = childSend;
     var isRedisVersionLowerThan = (currentVersion, minimumVersion) => {
-      const version2 = semver.valid(semver.coerce(currentVersion));
-      return semver.lt(version2, minimumVersion);
+      const version4 = semver.valid(semver.coerce(currentVersion));
+      return semver.lt(version4, minimumVersion);
     };
     exports.isRedisVersionLowerThan = isRedisVersionLowerThan;
     var parseObjectValues = (obj) => {
@@ -13467,17 +13468,17 @@ var require_lodash4 = __commonJS({
         return func.apply(thisArg, args);
       }
       function arrayAggregator(array, setter, iteratee, accumulator) {
-        var index2 = -1, length = array == null ? 0 : array.length;
-        while (++index2 < length) {
-          var value = array[index2];
+        var index = -1, length = array == null ? 0 : array.length;
+        while (++index < length) {
+          var value = array[index];
           setter(accumulator, value, iteratee(value), array);
         }
         return accumulator;
       }
       function arrayEach(array, iteratee) {
-        var index2 = -1, length = array == null ? 0 : array.length;
-        while (++index2 < length) {
-          if (iteratee(array[index2], index2, array) === false) {
+        var index = -1, length = array == null ? 0 : array.length;
+        while (++index < length) {
+          if (iteratee(array[index], index, array) === false) {
             break;
           }
         }
@@ -13493,19 +13494,19 @@ var require_lodash4 = __commonJS({
         return array;
       }
       function arrayEvery(array, predicate) {
-        var index2 = -1, length = array == null ? 0 : array.length;
-        while (++index2 < length) {
-          if (!predicate(array[index2], index2, array)) {
+        var index = -1, length = array == null ? 0 : array.length;
+        while (++index < length) {
+          if (!predicate(array[index], index, array)) {
             return false;
           }
         }
         return true;
       }
       function arrayFilter(array, predicate) {
-        var index2 = -1, length = array == null ? 0 : array.length, resIndex = 0, result = [];
-        while (++index2 < length) {
-          var value = array[index2];
-          if (predicate(value, index2, array)) {
+        var index = -1, length = array == null ? 0 : array.length, resIndex = 0, result = [];
+        while (++index < length) {
+          var value = array[index];
+          if (predicate(value, index, array)) {
             result[resIndex++] = value;
           }
         }
@@ -13516,35 +13517,35 @@ var require_lodash4 = __commonJS({
         return !!length && baseIndexOf(array, value, 0) > -1;
       }
       function arrayIncludesWith(array, value, comparator) {
-        var index2 = -1, length = array == null ? 0 : array.length;
-        while (++index2 < length) {
-          if (comparator(value, array[index2])) {
+        var index = -1, length = array == null ? 0 : array.length;
+        while (++index < length) {
+          if (comparator(value, array[index])) {
             return true;
           }
         }
         return false;
       }
       function arrayMap(array, iteratee) {
-        var index2 = -1, length = array == null ? 0 : array.length, result = Array(length);
-        while (++index2 < length) {
-          result[index2] = iteratee(array[index2], index2, array);
+        var index = -1, length = array == null ? 0 : array.length, result = Array(length);
+        while (++index < length) {
+          result[index] = iteratee(array[index], index, array);
         }
         return result;
       }
       function arrayPush(array, values) {
-        var index2 = -1, length = values.length, offset = array.length;
-        while (++index2 < length) {
-          array[offset + index2] = values[index2];
+        var index = -1, length = values.length, offset = array.length;
+        while (++index < length) {
+          array[offset + index] = values[index];
         }
         return array;
       }
       function arrayReduce(array, iteratee, accumulator, initAccum) {
-        var index2 = -1, length = array == null ? 0 : array.length;
+        var index = -1, length = array == null ? 0 : array.length;
         if (initAccum && length) {
-          accumulator = array[++index2];
+          accumulator = array[++index];
         }
-        while (++index2 < length) {
-          accumulator = iteratee(accumulator, array[index2], index2, array);
+        while (++index < length) {
+          accumulator = iteratee(accumulator, array[index], index, array);
         }
         return accumulator;
       }
@@ -13559,9 +13560,9 @@ var require_lodash4 = __commonJS({
         return accumulator;
       }
       function arraySome(array, predicate) {
-        var index2 = -1, length = array == null ? 0 : array.length;
-        while (++index2 < length) {
-          if (predicate(array[index2], index2, array)) {
+        var index = -1, length = array == null ? 0 : array.length;
+        while (++index < length) {
+          if (predicate(array[index], index, array)) {
             return true;
           }
         }
@@ -13585,10 +13586,10 @@ var require_lodash4 = __commonJS({
         return result;
       }
       function baseFindIndex(array, predicate, fromIndex, fromRight) {
-        var length = array.length, index2 = fromIndex + (fromRight ? 1 : -1);
-        while (fromRight ? index2-- : ++index2 < length) {
-          if (predicate(array[index2], index2, array)) {
-            return index2;
+        var length = array.length, index = fromIndex + (fromRight ? 1 : -1);
+        while (fromRight ? index-- : ++index < length) {
+          if (predicate(array[index], index, array)) {
+            return index;
           }
         }
         return -1;
@@ -13597,10 +13598,10 @@ var require_lodash4 = __commonJS({
         return value === value ? strictIndexOf(array, value, fromIndex) : baseFindIndex(array, baseIsNaN, fromIndex);
       }
       function baseIndexOfWith(array, value, fromIndex, comparator) {
-        var index2 = fromIndex - 1, length = array.length;
-        while (++index2 < length) {
-          if (comparator(array[index2], value)) {
-            return index2;
+        var index = fromIndex - 1, length = array.length;
+        while (++index < length) {
+          if (comparator(array[index], value)) {
+            return index;
           }
         }
         return -1;
@@ -13623,8 +13624,8 @@ var require_lodash4 = __commonJS({
         };
       }
       function baseReduce(collection, iteratee, accumulator, initAccum, eachFunc) {
-        eachFunc(collection, function(value, index2, collection2) {
-          accumulator = initAccum ? (initAccum = false, value) : iteratee(accumulator, value, index2, collection2);
+        eachFunc(collection, function(value, index, collection2) {
+          accumulator = initAccum ? (initAccum = false, value) : iteratee(accumulator, value, index, collection2);
         });
         return accumulator;
       }
@@ -13637,9 +13638,9 @@ var require_lodash4 = __commonJS({
         return array;
       }
       function baseSum(array, iteratee) {
-        var result, index2 = -1, length = array.length;
-        while (++index2 < length) {
-          var current = iteratee(array[index2]);
+        var result, index = -1, length = array.length;
+        while (++index < length) {
+          var current = iteratee(array[index]);
           if (current !== undefined2) {
             result = result === undefined2 ? current : result + current;
           }
@@ -13647,9 +13648,9 @@ var require_lodash4 = __commonJS({
         return result;
       }
       function baseTimes(n, iteratee) {
-        var index2 = -1, result = Array(n);
-        while (++index2 < n) {
-          result[index2] = iteratee(index2);
+        var index = -1, result = Array(n);
+        while (++index < n) {
+          result[index] = iteratee(index);
         }
         return result;
       }
@@ -13675,16 +13676,16 @@ var require_lodash4 = __commonJS({
         return cache.has(key);
       }
       function charsStartIndex(strSymbols, chrSymbols) {
-        var index2 = -1, length = strSymbols.length;
-        while (++index2 < length && baseIndexOf(chrSymbols, strSymbols[index2], 0) > -1) {
+        var index = -1, length = strSymbols.length;
+        while (++index < length && baseIndexOf(chrSymbols, strSymbols[index], 0) > -1) {
         }
-        return index2;
+        return index;
       }
       function charsEndIndex(strSymbols, chrSymbols) {
-        var index2 = strSymbols.length;
-        while (index2-- && baseIndexOf(chrSymbols, strSymbols[index2], 0) > -1) {
+        var index = strSymbols.length;
+        while (index-- && baseIndexOf(chrSymbols, strSymbols[index], 0) > -1) {
         }
-        return index2;
+        return index;
       }
       function countHolders(array, placeholder) {
         var length = array.length, result = 0;
@@ -13717,9 +13718,9 @@ var require_lodash4 = __commonJS({
         return result;
       }
       function mapToArray(map) {
-        var index2 = -1, result = Array(map.size);
+        var index = -1, result = Array(map.size);
         map.forEach(function(value, key) {
-          result[++index2] = [key, value];
+          result[++index] = [key, value];
         });
         return result;
       }
@@ -13729,47 +13730,47 @@ var require_lodash4 = __commonJS({
         };
       }
       function replaceHolders(array, placeholder) {
-        var index2 = -1, length = array.length, resIndex = 0, result = [];
-        while (++index2 < length) {
-          var value = array[index2];
+        var index = -1, length = array.length, resIndex = 0, result = [];
+        while (++index < length) {
+          var value = array[index];
           if (value === placeholder || value === PLACEHOLDER) {
-            array[index2] = PLACEHOLDER;
-            result[resIndex++] = index2;
+            array[index] = PLACEHOLDER;
+            result[resIndex++] = index;
           }
         }
         return result;
       }
       function setToArray(set) {
-        var index2 = -1, result = Array(set.size);
+        var index = -1, result = Array(set.size);
         set.forEach(function(value) {
-          result[++index2] = value;
+          result[++index] = value;
         });
         return result;
       }
       function setToPairs(set) {
-        var index2 = -1, result = Array(set.size);
+        var index = -1, result = Array(set.size);
         set.forEach(function(value) {
-          result[++index2] = [value, value];
+          result[++index] = [value, value];
         });
         return result;
       }
       function strictIndexOf(array, value, fromIndex) {
-        var index2 = fromIndex - 1, length = array.length;
-        while (++index2 < length) {
-          if (array[index2] === value) {
-            return index2;
+        var index = fromIndex - 1, length = array.length;
+        while (++index < length) {
+          if (array[index] === value) {
+            return index;
           }
         }
         return -1;
       }
       function strictLastIndexOf(array, value, fromIndex) {
-        var index2 = fromIndex + 1;
-        while (index2--) {
-          if (array[index2] === value) {
-            return index2;
+        var index = fromIndex + 1;
+        while (index--) {
+          if (array[index] === value) {
+            return index;
           }
         }
-        return index2;
+        return index;
       }
       function stringSize(string) {
         return hasUnicode(string) ? unicodeSize(string) : asciiSize(string);
@@ -13778,10 +13779,10 @@ var require_lodash4 = __commonJS({
         return hasUnicode(string) ? unicodeToArray(string) : asciiToArray(string);
       }
       function trimmedEndIndex(string) {
-        var index2 = string.length;
-        while (index2-- && reWhitespace.test(string.charAt(index2))) {
+        var index = string.length;
+        while (index-- && reWhitespace.test(string.charAt(index))) {
         }
-        return index2;
+        return index;
       }
       var unescapeHtmlChar = basePropertyOf(htmlUnescapes);
       function unicodeSize(string) {
@@ -13947,15 +13948,15 @@ var require_lodash4 = __commonJS({
           return result2;
         }
         function lazyValue() {
-          var array = this.__wrapped__.value(), dir = this.__dir__, isArr = isArray(array), isRight = dir < 0, arrLength = isArr ? array.length : 0, view = getView(0, arrLength, this.__views__), start = view.start, end = view.end, length = end - start, index2 = isRight ? end : start - 1, iteratees = this.__iteratees__, iterLength = iteratees.length, resIndex = 0, takeCount = nativeMin(length, this.__takeCount__);
+          var array = this.__wrapped__.value(), dir = this.__dir__, isArr = isArray(array), isRight = dir < 0, arrLength = isArr ? array.length : 0, view = getView(0, arrLength, this.__views__), start = view.start, end = view.end, length = end - start, index = isRight ? end : start - 1, iteratees = this.__iteratees__, iterLength = iteratees.length, resIndex = 0, takeCount = nativeMin(length, this.__takeCount__);
           if (!isArr || !isRight && arrLength == length && takeCount == length) {
             return baseWrapperValue(array, this.__actions__);
           }
           var result2 = [];
           outer:
             while (length-- && resIndex < takeCount) {
-              index2 += dir;
-              var iterIndex = -1, value = array[index2];
+              index += dir;
+              var iterIndex = -1, value = array[index];
               while (++iterIndex < iterLength) {
                 var data = iteratees[iterIndex], iteratee2 = data.iteratee, type = data.type, computed = iteratee2(value);
                 if (type == LAZY_MAP_FLAG) {
@@ -13975,10 +13976,10 @@ var require_lodash4 = __commonJS({
         LazyWrapper.prototype = baseCreate(baseLodash.prototype);
         LazyWrapper.prototype.constructor = LazyWrapper;
         function Hash(entries) {
-          var index2 = -1, length = entries == null ? 0 : entries.length;
+          var index = -1, length = entries == null ? 0 : entries.length;
           this.clear();
-          while (++index2 < length) {
-            var entry = entries[index2];
+          while (++index < length) {
+            var entry = entries[index];
             this.set(entry[0], entry[1]);
           }
         }
@@ -14015,10 +14016,10 @@ var require_lodash4 = __commonJS({
         Hash.prototype.has = hashHas;
         Hash.prototype.set = hashSet;
         function ListCache(entries) {
-          var index2 = -1, length = entries == null ? 0 : entries.length;
+          var index = -1, length = entries == null ? 0 : entries.length;
           this.clear();
-          while (++index2 < length) {
-            var entry = entries[index2];
+          while (++index < length) {
+            var entry = entries[index];
             this.set(entry[0], entry[1]);
           }
         }
@@ -14027,33 +14028,33 @@ var require_lodash4 = __commonJS({
           this.size = 0;
         }
         function listCacheDelete(key) {
-          var data = this.__data__, index2 = assocIndexOf(data, key);
-          if (index2 < 0) {
+          var data = this.__data__, index = assocIndexOf(data, key);
+          if (index < 0) {
             return false;
           }
           var lastIndex = data.length - 1;
-          if (index2 == lastIndex) {
+          if (index == lastIndex) {
             data.pop();
           } else {
-            splice.call(data, index2, 1);
+            splice.call(data, index, 1);
           }
           --this.size;
           return true;
         }
         function listCacheGet(key) {
-          var data = this.__data__, index2 = assocIndexOf(data, key);
-          return index2 < 0 ? undefined2 : data[index2][1];
+          var data = this.__data__, index = assocIndexOf(data, key);
+          return index < 0 ? undefined2 : data[index][1];
         }
         function listCacheHas(key) {
           return assocIndexOf(this.__data__, key) > -1;
         }
         function listCacheSet(key, value) {
-          var data = this.__data__, index2 = assocIndexOf(data, key);
-          if (index2 < 0) {
+          var data = this.__data__, index = assocIndexOf(data, key);
+          if (index < 0) {
             ++this.size;
             data.push([key, value]);
           } else {
-            data[index2][1] = value;
+            data[index][1] = value;
           }
           return this;
         }
@@ -14063,10 +14064,10 @@ var require_lodash4 = __commonJS({
         ListCache.prototype.has = listCacheHas;
         ListCache.prototype.set = listCacheSet;
         function MapCache(entries) {
-          var index2 = -1, length = entries == null ? 0 : entries.length;
+          var index = -1, length = entries == null ? 0 : entries.length;
           this.clear();
-          while (++index2 < length) {
-            var entry = entries[index2];
+          while (++index < length) {
+            var entry = entries[index];
             this.set(entry[0], entry[1]);
           }
         }
@@ -14101,10 +14102,10 @@ var require_lodash4 = __commonJS({
         MapCache.prototype.has = mapCacheHas;
         MapCache.prototype.set = mapCacheSet;
         function SetCache(values2) {
-          var index2 = -1, length = values2 == null ? 0 : values2.length;
+          var index = -1, length = values2 == null ? 0 : values2.length;
           this.__data__ = new MapCache();
-          while (++index2 < length) {
-            this.add(values2[index2]);
+          while (++index < length) {
+            this.add(values2[index]);
           }
         }
         function setCacheAdd(value) {
@@ -14223,9 +14224,9 @@ var require_lodash4 = __commonJS({
           }
         }
         function baseAt(object, paths) {
-          var index2 = -1, length = paths.length, result2 = Array2(length), skip = object == null;
-          while (++index2 < length) {
-            result2[index2] = skip ? undefined2 : get(object, paths[index2]);
+          var index = -1, length = paths.length, result2 = Array2(length), skip = object == null;
+          while (++index < length) {
+            result2[index] = skip ? undefined2 : get2(object, paths[index]);
           }
           return result2;
         }
@@ -14329,7 +14330,7 @@ var require_lodash4 = __commonJS({
           }, wait);
         }
         function baseDifference(array, values2, iteratee2, comparator) {
-          var index2 = -1, includes2 = arrayIncludes, isCommon = true, length = array.length, result2 = [], valuesLength = values2.length;
+          var index = -1, includes2 = arrayIncludes, isCommon = true, length = array.length, result2 = [], valuesLength = values2.length;
           if (!length) {
             return result2;
           }
@@ -14345,8 +14346,8 @@ var require_lodash4 = __commonJS({
             values2 = new SetCache(values2);
           }
           outer:
-            while (++index2 < length) {
-              var value = array[index2], computed = iteratee2 == null ? value : iteratee2(value);
+            while (++index < length) {
+              var value = array[index], computed = iteratee2 == null ? value : iteratee2(value);
               value = comparator || value !== 0 ? value : 0;
               if (isCommon && computed === computed) {
                 var valuesIndex = valuesLength;
@@ -14366,16 +14367,16 @@ var require_lodash4 = __commonJS({
         var baseEachRight = createBaseEach(baseForOwnRight, true);
         function baseEvery(collection, predicate) {
           var result2 = true;
-          baseEach(collection, function(value, index2, collection2) {
-            result2 = !!predicate(value, index2, collection2);
+          baseEach(collection, function(value, index, collection2) {
+            result2 = !!predicate(value, index, collection2);
             return result2;
           });
           return result2;
         }
         function baseExtremum(array, iteratee2, comparator) {
-          var index2 = -1, length = array.length;
-          while (++index2 < length) {
-            var value = array[index2], current = iteratee2(value);
+          var index = -1, length = array.length;
+          while (++index < length) {
+            var value = array[index], current = iteratee2(value);
             if (current != null && (computed === undefined2 ? current === current && !isSymbol(current) : comparator(current, computed))) {
               var computed = current, result2 = value;
             }
@@ -14400,19 +14401,19 @@ var require_lodash4 = __commonJS({
         }
         function baseFilter(collection, predicate) {
           var result2 = [];
-          baseEach(collection, function(value, index2, collection2) {
-            if (predicate(value, index2, collection2)) {
+          baseEach(collection, function(value, index, collection2) {
+            if (predicate(value, index, collection2)) {
               result2.push(value);
             }
           });
           return result2;
         }
         function baseFlatten(array, depth, predicate, isStrict, result2) {
-          var index2 = -1, length = array.length;
+          var index = -1, length = array.length;
           predicate || (predicate = isFlattenable);
           result2 || (result2 = []);
-          while (++index2 < length) {
-            var value = array[index2];
+          while (++index < length) {
+            var value = array[index];
             if (depth > 0 && predicate(value)) {
               if (depth > 1) {
                 baseFlatten(value, depth - 1, predicate, isStrict, result2);
@@ -14440,11 +14441,11 @@ var require_lodash4 = __commonJS({
         }
         function baseGet(object, path) {
           path = castPath(path, object);
-          var index2 = 0, length = path.length;
-          while (object != null && index2 < length) {
-            object = object[toKey(path[index2++])];
+          var index = 0, length = path.length;
+          while (object != null && index < length) {
+            object = object[toKey(path[index++])];
           }
-          return index2 && index2 == length ? object : undefined2;
+          return index && index == length ? object : undefined2;
         }
         function baseGetAllKeys(object, keysFunc, symbolsFunc) {
           var result2 = keysFunc(object);
@@ -14479,10 +14480,10 @@ var require_lodash4 = __commonJS({
             caches[othIndex] = !comparator && (iteratee2 || length >= 120 && array.length >= 120) ? new SetCache(othIndex && array) : undefined2;
           }
           array = arrays[0];
-          var index2 = -1, seen = caches[0];
+          var index = -1, seen = caches[0];
           outer:
-            while (++index2 < length && result2.length < maxLength) {
-              var value = array[index2], computed = iteratee2 ? iteratee2(value) : value;
+            while (++index < length && result2.length < maxLength) {
+              var value = array[index], computed = iteratee2 ? iteratee2(value) : value;
               value = comparator || value !== 0 ? value : 0;
               if (!(seen ? cacheHas(seen, computed) : includes2(result2, computed, comparator))) {
                 othIndex = othLength;
@@ -14564,19 +14565,19 @@ var require_lodash4 = __commonJS({
           return isObjectLike(value) && getTag(value) == mapTag;
         }
         function baseIsMatch(object, source, matchData, customizer) {
-          var index2 = matchData.length, length = index2, noCustomizer = !customizer;
+          var index = matchData.length, length = index, noCustomizer = !customizer;
           if (object == null) {
             return !length;
           }
           object = Object2(object);
-          while (index2--) {
-            var data = matchData[index2];
+          while (index--) {
+            var data = matchData[index];
             if (noCustomizer && data[2] ? data[1] !== object[data[0]] : !(data[0] in object)) {
               return false;
             }
           }
-          while (++index2 < length) {
-            data = matchData[index2];
+          while (++index < length) {
+            data = matchData[index];
             var key = data[0], objValue = object[key], srcValue = data[1];
             if (noCustomizer && data[2]) {
               if (objValue === undefined2 && !(key in object)) {
@@ -14650,9 +14651,9 @@ var require_lodash4 = __commonJS({
           return value < other;
         }
         function baseMap(collection, iteratee2) {
-          var index2 = -1, result2 = isArrayLike(collection) ? Array2(collection.length) : [];
+          var index = -1, result2 = isArrayLike(collection) ? Array2(collection.length) : [];
           baseEach(collection, function(value, key, collection2) {
-            result2[++index2] = iteratee2(value, key, collection2);
+            result2[++index] = iteratee2(value, key, collection2);
           });
           return result2;
         }
@@ -14670,7 +14671,7 @@ var require_lodash4 = __commonJS({
             return matchesStrictComparable(toKey(path), srcValue);
           }
           return function(object) {
-            var objValue = get(object, path);
+            var objValue = get2(object, path);
             return objValue === undefined2 && objValue === srcValue ? hasIn(object, path) : baseIsEqual(srcValue, objValue, COMPARE_PARTIAL_FLAG | COMPARE_UNORDERED_FLAG);
           };
         }
@@ -14716,7 +14717,7 @@ var require_lodash4 = __commonJS({
               } else {
                 newValue = [];
               }
-            } else if (isPlainObject(srcValue) || isArguments(srcValue)) {
+            } else if (isPlainObject2(srcValue) || isArguments(srcValue)) {
               newValue = objValue;
               if (isArguments(objValue)) {
                 newValue = toPlainObject(objValue);
@@ -14755,13 +14756,13 @@ var require_lodash4 = __commonJS({
           } else {
             iteratees = [identity];
           }
-          var index2 = -1;
+          var index = -1;
           iteratees = arrayMap(iteratees, baseUnary(getIteratee()));
           var result2 = baseMap(collection, function(value, key, collection2) {
             var criteria = arrayMap(iteratees, function(iteratee2) {
               return iteratee2(value);
             });
-            return { "criteria": criteria, "index": ++index2, "value": value };
+            return { "criteria": criteria, "index": ++index, "value": value };
           });
           return baseSortBy(result2, function(object, other) {
             return compareMultiple(object, other, orders);
@@ -14773,9 +14774,9 @@ var require_lodash4 = __commonJS({
           });
         }
         function basePickBy(object, paths, predicate) {
-          var index2 = -1, length = paths.length, result2 = {};
-          while (++index2 < length) {
-            var path = paths[index2], value = baseGet(object, path);
+          var index = -1, length = paths.length, result2 = {};
+          while (++index < length) {
+            var path = paths[index], value = baseGet(object, path);
             if (predicate(value, path)) {
               baseSet(result2, castPath(path, object), value);
             }
@@ -14788,15 +14789,15 @@ var require_lodash4 = __commonJS({
           };
         }
         function basePullAll(array, values2, iteratee2, comparator) {
-          var indexOf2 = comparator ? baseIndexOfWith : baseIndexOf, index2 = -1, length = values2.length, seen = array;
+          var indexOf2 = comparator ? baseIndexOfWith : baseIndexOf, index = -1, length = values2.length, seen = array;
           if (array === values2) {
             values2 = copyArray(values2);
           }
           if (iteratee2) {
             seen = arrayMap(array, baseUnary(iteratee2));
           }
-          while (++index2 < length) {
-            var fromIndex = 0, value = values2[index2], computed = iteratee2 ? iteratee2(value) : value;
+          while (++index < length) {
+            var fromIndex = 0, value = values2[index], computed = iteratee2 ? iteratee2(value) : value;
             while ((fromIndex = indexOf2(seen, computed, fromIndex, comparator)) > -1) {
               if (seen !== array) {
                 splice.call(seen, fromIndex, 1);
@@ -14809,13 +14810,13 @@ var require_lodash4 = __commonJS({
         function basePullAt(array, indexes) {
           var length = array ? indexes.length : 0, lastIndex = length - 1;
           while (length--) {
-            var index2 = indexes[length];
-            if (length == lastIndex || index2 !== previous) {
-              var previous = index2;
-              if (isIndex(index2)) {
-                splice.call(array, index2, 1);
+            var index = indexes[length];
+            if (length == lastIndex || index !== previous) {
+              var previous = index;
+              if (isIndex(index)) {
+                splice.call(array, index, 1);
               } else {
-                baseUnset(array, index2);
+                baseUnset(array, index);
               }
             }
           }
@@ -14825,9 +14826,9 @@ var require_lodash4 = __commonJS({
           return lower + nativeFloor(nativeRandom() * (upper - lower + 1));
         }
         function baseRange(start, end, step, fromRight) {
-          var index2 = -1, length = nativeMax(nativeCeil((end - start) / (step || 1)), 0), result2 = Array2(length);
+          var index = -1, length = nativeMax(nativeCeil((end - start) / (step || 1)), 0), result2 = Array2(length);
           while (length--) {
-            result2[fromRight ? length : ++index2] = start;
+            result2[fromRight ? length : ++index] = start;
             start += step;
           }
           return result2;
@@ -14863,17 +14864,17 @@ var require_lodash4 = __commonJS({
             return object;
           }
           path = castPath(path, object);
-          var index2 = -1, length = path.length, lastIndex = length - 1, nested = object;
-          while (nested != null && ++index2 < length) {
-            var key = toKey(path[index2]), newValue = value;
+          var index = -1, length = path.length, lastIndex = length - 1, nested = object;
+          while (nested != null && ++index < length) {
+            var key = toKey(path[index]), newValue = value;
             if (key === "__proto__" || key === "constructor" || key === "prototype") {
               return object;
             }
-            if (index2 != lastIndex) {
+            if (index != lastIndex) {
               var objValue = nested[key];
               newValue = customizer ? customizer(objValue, key, nested) : undefined2;
               if (newValue === undefined2) {
-                newValue = isObject(objValue) ? objValue : isIndex(path[index2 + 1]) ? [] : {};
+                newValue = isObject(objValue) ? objValue : isIndex(path[index + 1]) ? [] : {};
               }
             }
             assignValue(nested, key, newValue);
@@ -14897,7 +14898,7 @@ var require_lodash4 = __commonJS({
           return shuffleSelf(values(collection));
         }
         function baseSlice(array, start, end) {
-          var index2 = -1, length = array.length;
+          var index = -1, length = array.length;
           if (start < 0) {
             start = -start > length ? 0 : length + start;
           }
@@ -14908,15 +14909,15 @@ var require_lodash4 = __commonJS({
           length = start > end ? 0 : end - start >>> 0;
           start >>>= 0;
           var result2 = Array2(length);
-          while (++index2 < length) {
-            result2[index2] = array[index2 + start];
+          while (++index < length) {
+            result2[index] = array[index + start];
           }
           return result2;
         }
         function baseSome(collection, predicate) {
           var result2;
-          baseEach(collection, function(value, index2, collection2) {
-            result2 = predicate(value, index2, collection2);
+          baseEach(collection, function(value, index, collection2) {
+            result2 = predicate(value, index, collection2);
             return !result2;
           });
           return !!result2;
@@ -14967,10 +14968,10 @@ var require_lodash4 = __commonJS({
           return nativeMin(high, MAX_ARRAY_INDEX);
         }
         function baseSortedUniq(array, iteratee2) {
-          var index2 = -1, length = array.length, resIndex = 0, result2 = [];
-          while (++index2 < length) {
-            var value = array[index2], computed = iteratee2 ? iteratee2(value) : value;
-            if (!index2 || !eq(computed, seen)) {
+          var index = -1, length = array.length, resIndex = 0, result2 = [];
+          while (++index < length) {
+            var value = array[index], computed = iteratee2 ? iteratee2(value) : value;
+            if (!index || !eq(computed, seen)) {
               var seen = computed;
               result2[resIndex++] = value === 0 ? 0 : value;
             }
@@ -15000,7 +15001,7 @@ var require_lodash4 = __commonJS({
           return result2 == "0" && 1 / value == -INFINITY ? "-0" : result2;
         }
         function baseUniq(array, iteratee2, comparator) {
-          var index2 = -1, includes2 = arrayIncludes, length = array.length, isCommon = true, result2 = [], seen = result2;
+          var index = -1, includes2 = arrayIncludes, length = array.length, isCommon = true, result2 = [], seen = result2;
           if (comparator) {
             isCommon = false;
             includes2 = arrayIncludesWith;
@@ -15016,8 +15017,8 @@ var require_lodash4 = __commonJS({
             seen = iteratee2 ? [] : result2;
           }
           outer:
-            while (++index2 < length) {
-              var value = array[index2], computed = iteratee2 ? iteratee2(value) : value;
+            while (++index < length) {
+              var value = array[index], computed = iteratee2 ? iteratee2(value) : value;
               value = comparator || value !== 0 ? value : 0;
               if (isCommon && computed === computed) {
                 var seenIndex = seen.length;
@@ -15048,10 +15049,10 @@ var require_lodash4 = __commonJS({
           return baseSet(object, path, updater(baseGet(object, path)), customizer);
         }
         function baseWhile(array, predicate, isDrop, fromRight) {
-          var length = array.length, index2 = fromRight ? length : -1;
-          while ((fromRight ? index2-- : ++index2 < length) && predicate(array[index2], index2, array)) {
+          var length = array.length, index = fromRight ? length : -1;
+          while ((fromRight ? index-- : ++index < length) && predicate(array[index], index, array)) {
           }
-          return isDrop ? baseSlice(array, fromRight ? 0 : index2, fromRight ? index2 + 1 : length) : baseSlice(array, fromRight ? index2 + 1 : 0, fromRight ? length : index2);
+          return isDrop ? baseSlice(array, fromRight ? 0 : index, fromRight ? index + 1 : length) : baseSlice(array, fromRight ? index + 1 : 0, fromRight ? length : index);
         }
         function baseWrapperValue(value, actions) {
           var result2 = value;
@@ -15067,22 +15068,22 @@ var require_lodash4 = __commonJS({
           if (length < 2) {
             return length ? baseUniq(arrays[0]) : [];
           }
-          var index2 = -1, result2 = Array2(length);
-          while (++index2 < length) {
-            var array = arrays[index2], othIndex = -1;
+          var index = -1, result2 = Array2(length);
+          while (++index < length) {
+            var array = arrays[index], othIndex = -1;
             while (++othIndex < length) {
-              if (othIndex != index2) {
-                result2[index2] = baseDifference(result2[index2] || array, arrays[othIndex], iteratee2, comparator);
+              if (othIndex != index) {
+                result2[index] = baseDifference(result2[index] || array, arrays[othIndex], iteratee2, comparator);
               }
             }
           }
           return baseUniq(baseFlatten(result2, 1), iteratee2, comparator);
         }
         function baseZipObject(props, values2, assignFunc) {
-          var index2 = -1, length = props.length, valsLength = values2.length, result2 = {};
-          while (++index2 < length) {
-            var value = index2 < valsLength ? values2[index2] : undefined2;
-            assignFunc(result2, props[index2], value);
+          var index = -1, length = props.length, valsLength = values2.length, result2 = {};
+          while (++index < length) {
+            var value = index < valsLength ? values2[index] : undefined2;
+            assignFunc(result2, props[index], value);
           }
           return result2;
         }
@@ -15150,14 +15151,14 @@ var require_lodash4 = __commonJS({
           return 0;
         }
         function compareMultiple(object, other, orders) {
-          var index2 = -1, objCriteria = object.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
-          while (++index2 < length) {
-            var result2 = compareAscending(objCriteria[index2], othCriteria[index2]);
+          var index = -1, objCriteria = object.criteria, othCriteria = other.criteria, length = objCriteria.length, ordersLength = orders.length;
+          while (++index < length) {
+            var result2 = compareAscending(objCriteria[index], othCriteria[index]);
             if (result2) {
-              if (index2 >= ordersLength) {
+              if (index >= ordersLength) {
                 return result2;
               }
-              var order = orders[index2];
+              var order = orders[index];
               return result2 * (order == "desc" ? -1 : 1);
             }
           }
@@ -15195,19 +15196,19 @@ var require_lodash4 = __commonJS({
           return result2;
         }
         function copyArray(source, array) {
-          var index2 = -1, length = source.length;
+          var index = -1, length = source.length;
           array || (array = Array2(length));
-          while (++index2 < length) {
-            array[index2] = source[index2];
+          while (++index < length) {
+            array[index] = source[index];
           }
           return array;
         }
         function copyObject(source, props, object, customizer) {
           var isNew = !object;
           object || (object = {});
-          var index2 = -1, length = props.length;
-          while (++index2 < length) {
-            var key = props[index2];
+          var index = -1, length = props.length;
+          while (++index < length) {
+            var key = props[index];
             var newValue = customizer ? customizer(object[key], source[key], key, object, source) : undefined2;
             if (newValue === undefined2) {
               newValue = source[key];
@@ -15234,17 +15235,17 @@ var require_lodash4 = __commonJS({
         }
         function createAssigner(assigner) {
           return baseRest(function(object, sources) {
-            var index2 = -1, length = sources.length, customizer = length > 1 ? sources[length - 1] : undefined2, guard = length > 2 ? sources[2] : undefined2;
+            var index = -1, length = sources.length, customizer = length > 1 ? sources[length - 1] : undefined2, guard = length > 2 ? sources[2] : undefined2;
             customizer = assigner.length > 3 && typeof customizer == "function" ? (length--, customizer) : undefined2;
             if (guard && isIterateeCall(sources[0], sources[1], guard)) {
               customizer = length < 3 ? undefined2 : customizer;
               length = 1;
             }
             object = Object2(object);
-            while (++index2 < length) {
-              var source = sources[index2];
+            while (++index < length) {
+              var source = sources[index];
               if (source) {
-                assigner(object, source, index2, customizer);
+                assigner(object, source, index, customizer);
               }
             }
             return object;
@@ -15258,9 +15259,9 @@ var require_lodash4 = __commonJS({
             if (!isArrayLike(collection)) {
               return eachFunc(collection, iteratee2);
             }
-            var length = collection.length, index2 = fromRight ? length : -1, iterable = Object2(collection);
-            while (fromRight ? index2-- : ++index2 < length) {
-              if (iteratee2(iterable[index2], index2, iterable) === false) {
+            var length = collection.length, index = fromRight ? length : -1, iterable = Object2(collection);
+            while (fromRight ? index-- : ++index < length) {
+              if (iteratee2(iterable[index], index, iterable) === false) {
                 break;
               }
             }
@@ -15269,9 +15270,9 @@ var require_lodash4 = __commonJS({
         }
         function createBaseFor(fromRight) {
           return function(object, iteratee2, keysFunc) {
-            var index2 = -1, iterable = Object2(object), props = keysFunc(object), length = props.length;
+            var index = -1, iterable = Object2(object), props = keysFunc(object), length = props.length;
             while (length--) {
-              var key = props[fromRight ? length : ++index2];
+              var key = props[fromRight ? length : ++index];
               if (iteratee2(iterable[key], key, iterable) === false) {
                 break;
               }
@@ -15329,9 +15330,9 @@ var require_lodash4 = __commonJS({
         function createCurry(func, bitmask, arity) {
           var Ctor = createCtor(func);
           function wrapper() {
-            var length = arguments.length, args = Array2(length), index2 = length, placeholder = getHolder(wrapper);
-            while (index2--) {
-              args[index2] = arguments[index2];
+            var length = arguments.length, args = Array2(length), index = length, placeholder = getHolder(wrapper);
+            while (index--) {
+              args[index] = arguments[index];
             }
             var holders = length < 3 && args[0] !== placeholder && args[length - 1] !== placeholder ? [] : replaceHolders(args, placeholder);
             length -= holders.length;
@@ -15364,18 +15365,18 @@ var require_lodash4 = __commonJS({
                 return iteratee2(iterable[key], key, iterable);
               };
             }
-            var index2 = findIndexFunc(collection, predicate, fromIndex);
-            return index2 > -1 ? iterable[iteratee2 ? collection[index2] : index2] : undefined2;
+            var index = findIndexFunc(collection, predicate, fromIndex);
+            return index > -1 ? iterable[iteratee2 ? collection[index] : index] : undefined2;
           };
         }
         function createFlow(fromRight) {
           return flatRest(function(funcs) {
-            var length = funcs.length, index2 = length, prereq = LodashWrapper.prototype.thru;
+            var length = funcs.length, index = length, prereq = LodashWrapper.prototype.thru;
             if (fromRight) {
               funcs.reverse();
             }
-            while (index2--) {
-              var func = funcs[index2];
+            while (index--) {
+              var func = funcs[index];
               if (typeof func != "function") {
                 throw new TypeError2(FUNC_ERROR_TEXT);
               }
@@ -15383,9 +15384,9 @@ var require_lodash4 = __commonJS({
                 var wrapper = new LodashWrapper([], true);
               }
             }
-            index2 = wrapper ? index2 : length;
-            while (++index2 < length) {
-              func = funcs[index2];
+            index = wrapper ? index : length;
+            while (++index < length) {
+              func = funcs[index];
               var funcName = getFuncName(func), data = funcName == "wrapper" ? getData(func) : undefined2;
               if (data && isLaziable(data[0]) && data[1] == (WRAP_ARY_FLAG | WRAP_CURRY_FLAG | WRAP_PARTIAL_FLAG | WRAP_REARG_FLAG) && !data[4].length && data[9] == 1) {
                 wrapper = wrapper[getFuncName(data[0])].apply(wrapper, data[3]);
@@ -15398,9 +15399,9 @@ var require_lodash4 = __commonJS({
               if (wrapper && args.length == 1 && isArray(value)) {
                 return wrapper.plant(value).value();
               }
-              var index3 = 0, result2 = length ? funcs[index3].apply(this, args) : value;
-              while (++index3 < length) {
-                result2 = funcs[index3].call(this, result2);
+              var index2 = 0, result2 = length ? funcs[index2].apply(this, args) : value;
+              while (++index2 < length) {
+                result2 = funcs[index2].call(this, result2);
               }
               return result2;
             };
@@ -15409,9 +15410,9 @@ var require_lodash4 = __commonJS({
         function createHybrid(func, bitmask, thisArg, partials, holders, partialsRight, holdersRight, argPos, ary2, arity) {
           var isAry = bitmask & WRAP_ARY_FLAG, isBind = bitmask & WRAP_BIND_FLAG, isBindKey = bitmask & WRAP_BIND_KEY_FLAG, isCurried = bitmask & (WRAP_CURRY_FLAG | WRAP_CURRY_RIGHT_FLAG), isFlip = bitmask & WRAP_FLIP_FLAG, Ctor = isBindKey ? undefined2 : createCtor(func);
           function wrapper() {
-            var length = arguments.length, args = Array2(length), index2 = length;
-            while (index2--) {
-              args[index2] = arguments[index2];
+            var length = arguments.length, args = Array2(length), index = length;
+            while (index--) {
+              args[index] = arguments[index];
             }
             if (isCurried) {
               var placeholder = getHolder(wrapper), holdersCount = countHolders(args, placeholder);
@@ -15667,7 +15668,7 @@ var require_lodash4 = __commonJS({
           return objValue;
         }
         function customOmitClone(value) {
-          return isPlainObject(value) ? undefined2 : value;
+          return isPlainObject2(value) ? undefined2 : value;
         }
         function equalArrays(array, other, bitmask, customizer, equalFunc, stack) {
           var isPartial = bitmask & COMPARE_PARTIAL_FLAG, arrLength = array.length, othLength = other.length;
@@ -15679,13 +15680,13 @@ var require_lodash4 = __commonJS({
           if (arrStacked && othStacked) {
             return arrStacked == other && othStacked == array;
           }
-          var index2 = -1, result2 = true, seen = bitmask & COMPARE_UNORDERED_FLAG ? new SetCache() : undefined2;
+          var index = -1, result2 = true, seen = bitmask & COMPARE_UNORDERED_FLAG ? new SetCache() : undefined2;
           stack.set(array, other);
           stack.set(other, array);
-          while (++index2 < arrLength) {
-            var arrValue = array[index2], othValue = other[index2];
+          while (++index < arrLength) {
+            var arrValue = array[index], othValue = other[index];
             if (customizer) {
-              var compared = isPartial ? customizer(othValue, arrValue, index2, other, array, stack) : customizer(arrValue, othValue, index2, array, other, stack);
+              var compared = isPartial ? customizer(othValue, arrValue, index, other, array, stack) : customizer(arrValue, othValue, index, array, other, stack);
             }
             if (compared !== undefined2) {
               if (compared) {
@@ -15763,9 +15764,9 @@ var require_lodash4 = __commonJS({
           if (objLength != othLength && !isPartial) {
             return false;
           }
-          var index2 = objLength;
-          while (index2--) {
-            var key = objProps[index2];
+          var index = objLength;
+          while (index--) {
+            var key = objProps[index];
             if (!(isPartial ? key in other : hasOwnProperty.call(other, key))) {
               return false;
             }
@@ -15779,8 +15780,8 @@ var require_lodash4 = __commonJS({
           stack.set(object, other);
           stack.set(other, object);
           var skipCtor = isPartial;
-          while (++index2 < objLength) {
-            key = objProps[index2];
+          while (++index < objLength) {
+            key = objProps[index];
             var objValue = object[key], othValue = other[key];
             if (customizer) {
               var compared = isPartial ? customizer(othValue, objValue, key, other, object, stack) : customizer(objValue, othValue, key, object, other, stack);
@@ -15904,9 +15905,9 @@ var require_lodash4 = __commonJS({
           };
         }
         function getView(start, end, transforms) {
-          var index2 = -1, length = transforms.length;
-          while (++index2 < length) {
-            var data = transforms[index2], size2 = data.size;
+          var index = -1, length = transforms.length;
+          while (++index < length) {
+            var data = transforms[index], size2 = data.size;
             switch (data.type) {
               case "drop":
                 start += size2;
@@ -15930,15 +15931,15 @@ var require_lodash4 = __commonJS({
         }
         function hasPath(object, path, hasFunc) {
           path = castPath(path, object);
-          var index2 = -1, length = path.length, result2 = false;
-          while (++index2 < length) {
-            var key = toKey(path[index2]);
+          var index = -1, length = path.length, result2 = false;
+          while (++index < length) {
+            var key = toKey(path[index]);
             if (!(result2 = object != null && hasFunc(object, key))) {
               break;
             }
             object = object[key];
           }
-          if (result2 || ++index2 != length) {
+          if (result2 || ++index != length) {
             return result2;
           }
           length = object == null ? 0 : object.length;
@@ -16006,13 +16007,13 @@ var require_lodash4 = __commonJS({
           length = length == null ? MAX_SAFE_INTEGER : length;
           return !!length && (type == "number" || type != "symbol" && reIsUint.test(value)) && (value > -1 && value % 1 == 0 && value < length);
         }
-        function isIterateeCall(value, index2, object) {
+        function isIterateeCall(value, index, object) {
           if (!isObject(object)) {
             return false;
           }
-          var type = typeof index2;
-          if (type == "number" ? isArrayLike(object) && isIndex(index2, object.length) : type == "string" && index2 in object) {
-            return eq(object[index2], value);
+          var type = typeof index;
+          if (type == "number" ? isArrayLike(object) && isIndex(index, object.length) : type == "string" && index in object) {
+            return eq(object[index], value);
           }
           return false;
         }
@@ -16121,14 +16122,14 @@ var require_lodash4 = __commonJS({
         function overRest(func, start, transform2) {
           start = nativeMax(start === undefined2 ? func.length - 1 : start, 0);
           return function() {
-            var args = arguments, index2 = -1, length = nativeMax(args.length - start, 0), array = Array2(length);
-            while (++index2 < length) {
-              array[index2] = args[start + index2];
+            var args = arguments, index = -1, length = nativeMax(args.length - start, 0), array = Array2(length);
+            while (++index < length) {
+              array[index] = args[start + index];
             }
-            index2 = -1;
+            index = -1;
             var otherArgs = Array2(start + 1);
-            while (++index2 < start) {
-              otherArgs[index2] = args[index2];
+            while (++index < start) {
+              otherArgs[index] = args[index];
             }
             otherArgs[start] = transform2(array);
             return apply(func, this, otherArgs);
@@ -16140,8 +16141,8 @@ var require_lodash4 = __commonJS({
         function reorder(array, indexes) {
           var arrLength = array.length, length = nativeMin(indexes.length, arrLength), oldArray = copyArray(array);
           while (length--) {
-            var index2 = indexes[length];
-            array[length] = isIndex(index2, arrLength) ? oldArray[index2] : undefined2;
+            var index = indexes[length];
+            array[length] = isIndex(index, arrLength) ? oldArray[index] : undefined2;
           }
           return array;
         }
@@ -16179,12 +16180,12 @@ var require_lodash4 = __commonJS({
           };
         }
         function shuffleSelf(array, size2) {
-          var index2 = -1, length = array.length, lastIndex = length - 1;
+          var index = -1, length = array.length, lastIndex = length - 1;
           size2 = size2 === undefined2 ? length : size2;
-          while (++index2 < size2) {
-            var rand = baseRandom(index2, lastIndex), value = array[rand];
-            array[rand] = array[index2];
-            array[index2] = value;
+          while (++index < size2) {
+            var rand = baseRandom(index, lastIndex), value = array[rand];
+            array[rand] = array[index];
+            array[index] = value;
           }
           array.length = size2;
           return array;
@@ -16248,16 +16249,16 @@ var require_lodash4 = __commonJS({
           if (!length || size2 < 1) {
             return [];
           }
-          var index2 = 0, resIndex = 0, result2 = Array2(nativeCeil(length / size2));
-          while (index2 < length) {
-            result2[resIndex++] = baseSlice(array, index2, index2 += size2);
+          var index = 0, resIndex = 0, result2 = Array2(nativeCeil(length / size2));
+          while (index < length) {
+            result2[resIndex++] = baseSlice(array, index, index += size2);
           }
           return result2;
         }
         function compact(array) {
-          var index2 = -1, length = array == null ? 0 : array.length, resIndex = 0, result2 = [];
-          while (++index2 < length) {
-            var value = array[index2];
+          var index = -1, length = array == null ? 0 : array.length, resIndex = 0, result2 = [];
+          while (++index < length) {
+            var value = array[index];
             if (value) {
               result2[resIndex++] = value;
             }
@@ -16269,9 +16270,9 @@ var require_lodash4 = __commonJS({
           if (!length) {
             return [];
           }
-          var args = Array2(length - 1), array = arguments[0], index2 = length;
-          while (index2--) {
-            args[index2 - 1] = arguments[index2];
+          var args = Array2(length - 1), array = arguments[0], index = length;
+          while (index--) {
+            args[index - 1] = arguments[index];
           }
           return arrayPush(isArray(array) ? copyArray(array) : [array], baseFlatten(args, 1));
         }
@@ -16331,23 +16332,23 @@ var require_lodash4 = __commonJS({
           if (!length) {
             return -1;
           }
-          var index2 = fromIndex == null ? 0 : toInteger(fromIndex);
-          if (index2 < 0) {
-            index2 = nativeMax(length + index2, 0);
+          var index = fromIndex == null ? 0 : toInteger(fromIndex);
+          if (index < 0) {
+            index = nativeMax(length + index, 0);
           }
-          return baseFindIndex(array, getIteratee(predicate, 3), index2);
+          return baseFindIndex(array, getIteratee(predicate, 3), index);
         }
         function findLastIndex(array, predicate, fromIndex) {
           var length = array == null ? 0 : array.length;
           if (!length) {
             return -1;
           }
-          var index2 = length - 1;
+          var index = length - 1;
           if (fromIndex !== undefined2) {
-            index2 = toInteger(fromIndex);
-            index2 = fromIndex < 0 ? nativeMax(length + index2, 0) : nativeMin(index2, length - 1);
+            index = toInteger(fromIndex);
+            index = fromIndex < 0 ? nativeMax(length + index, 0) : nativeMin(index, length - 1);
           }
-          return baseFindIndex(array, getIteratee(predicate, 3), index2, true);
+          return baseFindIndex(array, getIteratee(predicate, 3), index, true);
         }
         function flatten(array) {
           var length = array == null ? 0 : array.length;
@@ -16366,14 +16367,14 @@ var require_lodash4 = __commonJS({
           return baseFlatten(array, depth);
         }
         function fromPairs(pairs) {
-          var index2 = -1, length = pairs == null ? 0 : pairs.length, result2 = {};
-          while (++index2 < length) {
-            var pair = pairs[index2];
+          var index = -1, length = pairs == null ? 0 : pairs.length, result2 = {};
+          while (++index < length) {
+            var pair = pairs[index];
             result2[pair[0]] = pair[1];
           }
           return result2;
         }
-        function head(array) {
+        function head2(array) {
           return array && array.length ? array[0] : undefined2;
         }
         function indexOf(array, value, fromIndex) {
@@ -16381,11 +16382,11 @@ var require_lodash4 = __commonJS({
           if (!length) {
             return -1;
           }
-          var index2 = fromIndex == null ? 0 : toInteger(fromIndex);
-          if (index2 < 0) {
-            index2 = nativeMax(length + index2, 0);
+          var index = fromIndex == null ? 0 : toInteger(fromIndex);
+          if (index < 0) {
+            index = nativeMax(length + index, 0);
           }
-          return baseIndexOf(array, value, index2);
+          return baseIndexOf(array, value, index);
         }
         function initial(array) {
           var length = array == null ? 0 : array.length;
@@ -16424,12 +16425,12 @@ var require_lodash4 = __commonJS({
           if (!length) {
             return -1;
           }
-          var index2 = length;
+          var index = length;
           if (fromIndex !== undefined2) {
-            index2 = toInteger(fromIndex);
-            index2 = index2 < 0 ? nativeMax(length + index2, 0) : nativeMin(index2, length - 1);
+            index = toInteger(fromIndex);
+            index = index < 0 ? nativeMax(length + index, 0) : nativeMin(index, length - 1);
           }
-          return value === value ? strictLastIndexOf(array, value, index2) : baseFindIndex(array, baseIsNaN, index2, true);
+          return value === value ? strictLastIndexOf(array, value, index) : baseFindIndex(array, baseIsNaN, index, true);
         }
         function nth(array, n) {
           return array && array.length ? baseNth(array, toInteger(n)) : undefined2;
@@ -16446,23 +16447,23 @@ var require_lodash4 = __commonJS({
         }
         var pullAt = flatRest(function(array, indexes) {
           var length = array == null ? 0 : array.length, result2 = baseAt(array, indexes);
-          basePullAt(array, arrayMap(indexes, function(index2) {
-            return isIndex(index2, length) ? +index2 : index2;
+          basePullAt(array, arrayMap(indexes, function(index) {
+            return isIndex(index, length) ? +index : index;
           }).sort(compareAscending));
           return result2;
         });
-        function remove(array, predicate) {
+        function remove2(array, predicate) {
           var result2 = [];
           if (!(array && array.length)) {
             return result2;
           }
-          var index2 = -1, indexes = [], length = array.length;
+          var index = -1, indexes = [], length = array.length;
           predicate = getIteratee(predicate, 3);
-          while (++index2 < length) {
-            var value = array[index2];
-            if (predicate(value, index2, array)) {
+          while (++index < length) {
+            var value = array[index];
+            if (predicate(value, index, array)) {
               result2.push(value);
-              indexes.push(index2);
+              indexes.push(index);
             }
           }
           basePullAt(array, indexes);
@@ -16494,9 +16495,9 @@ var require_lodash4 = __commonJS({
         function sortedIndexOf(array, value) {
           var length = array == null ? 0 : array.length;
           if (length) {
-            var index2 = baseSortedIndex(array, value);
-            if (index2 < length && eq(array[index2], value)) {
-              return index2;
+            var index = baseSortedIndex(array, value);
+            if (index < length && eq(array[index], value)) {
+              return index;
             }
           }
           return -1;
@@ -16510,9 +16511,9 @@ var require_lodash4 = __commonJS({
         function sortedLastIndexOf(array, value) {
           var length = array == null ? 0 : array.length;
           if (length) {
-            var index2 = baseSortedIndex(array, value, true) - 1;
-            if (eq(array[index2], value)) {
-              return index2;
+            var index = baseSortedIndex(array, value, true) - 1;
+            if (eq(array[index], value)) {
+              return index;
             }
           }
           return -1;
@@ -16585,8 +16586,8 @@ var require_lodash4 = __commonJS({
               return true;
             }
           });
-          return baseTimes(length, function(index2) {
-            return arrayMap(array, baseProperty(index2));
+          return baseTimes(length, function(index) {
+            return arrayMap(array, baseProperty(index));
           });
         }
         function unzipWith(array, iteratee2) {
@@ -16771,9 +16772,9 @@ var require_lodash4 = __commonJS({
           return isString(collection) ? fromIndex <= length && collection.indexOf(value, fromIndex) > -1 : !!length && baseIndexOf(collection, value, fromIndex) > -1;
         }
         var invokeMap = baseRest(function(collection, path, args) {
-          var index2 = -1, isFunc = typeof path == "function", result2 = isArrayLike(collection) ? Array2(collection.length) : [];
+          var index = -1, isFunc = typeof path == "function", result2 = isArrayLike(collection) ? Array2(collection.length) : [];
           baseEach(collection, function(value) {
-            result2[++index2] = isFunc ? apply(path, value, args) : baseInvoke(value, path, args);
+            result2[++index] = isFunc ? apply(path, value, args) : baseInvoke(value, path, args);
           });
           return result2;
         });
@@ -17059,9 +17060,9 @@ var require_lodash4 = __commonJS({
           transforms = transforms.length == 1 && isArray(transforms[0]) ? arrayMap(transforms[0], baseUnary(getIteratee())) : arrayMap(baseFlatten(transforms, 1), baseUnary(getIteratee()));
           var funcsLength = transforms.length;
           return baseRest(function(args) {
-            var index2 = -1, length = nativeMin(args.length, funcsLength);
-            while (++index2 < length) {
-              args[index2] = transforms[index2].call(this, args[index2]);
+            var index = -1, length = nativeMin(args.length, funcsLength);
+            while (++index < length) {
+              args[index] = transforms[index].call(this, args[index]);
             }
             return apply(func, this, args);
           });
@@ -17168,7 +17169,7 @@ var require_lodash4 = __commonJS({
         var isBuffer = nativeIsBuffer || stubFalse;
         var isDate = nodeIsDate ? baseUnary(nodeIsDate) : baseIsDate;
         function isElement(value) {
-          return isObjectLike(value) && value.nodeType === 1 && !isPlainObject(value);
+          return isObjectLike(value) && value.nodeType === 1 && !isPlainObject2(value);
         }
         function isEmpty(value) {
           if (value == null) {
@@ -17204,7 +17205,7 @@ var require_lodash4 = __commonJS({
             return false;
           }
           var tag = baseGetTag(value);
-          return tag == errorTag || tag == domExcTag || typeof value.message == "string" && typeof value.name == "string" && !isPlainObject(value);
+          return tag == errorTag || tag == domExcTag || typeof value.message == "string" && typeof value.name == "string" && !isPlainObject2(value);
         }
         function isFinite2(value) {
           return typeof value == "number" && nativeIsFinite(value);
@@ -17255,7 +17256,7 @@ var require_lodash4 = __commonJS({
         function isNumber(value) {
           return typeof value == "number" || isObjectLike(value) && baseGetTag(value) == numberTag;
         }
-        function isPlainObject(value) {
+        function isPlainObject2(value) {
           if (!isObjectLike(value) || baseGetTag(value) != objectTag) {
             return false;
           }
@@ -17376,14 +17377,14 @@ var require_lodash4 = __commonJS({
         }
         var defaults = baseRest(function(object, sources) {
           object = Object2(object);
-          var index2 = -1;
+          var index = -1;
           var length = sources.length;
           var guard = length > 2 ? sources[2] : undefined2;
           if (guard && isIterateeCall(sources[0], sources[1], guard)) {
             length = 1;
           }
-          while (++index2 < length) {
-            var source = sources[index2];
+          while (++index < length) {
+            var source = sources[index];
             var props = keysIn(source);
             var propsIndex = -1;
             var propsLength = props.length;
@@ -17425,7 +17426,7 @@ var require_lodash4 = __commonJS({
         function functionsIn(object) {
           return object == null ? [] : baseFunctions(object, keysIn(object));
         }
-        function get(object, path, defaultValue) {
+        function get2(object, path, defaultValue) {
           var result2 = object == null ? undefined2 : baseGet(object, path);
           return result2 === undefined2 ? defaultValue : result2;
         }
@@ -17521,15 +17522,15 @@ var require_lodash4 = __commonJS({
         }
         function result(object, path, defaultValue) {
           path = castPath(path, object);
-          var index2 = -1, length = path.length;
+          var index = -1, length = path.length;
           if (!length) {
             length = 1;
             object = undefined2;
           }
-          while (++index2 < length) {
-            var value = object == null ? undefined2 : object[toKey(path[index2])];
+          while (++index < length) {
+            var value = object == null ? undefined2 : object[toKey(path[index])];
             if (value === undefined2) {
-              index2 = length;
+              index = length;
               value = defaultValue;
             }
             object = isFunction(value) ? value.call(object) : value;
@@ -17558,8 +17559,8 @@ var require_lodash4 = __commonJS({
               accumulator = {};
             }
           }
-          (isArrLike ? arrayEach : baseForOwn)(object, function(value, index2, object2) {
-            return iteratee2(accumulator, value, index2, object2);
+          (isArrLike ? arrayEach : baseForOwn)(object, function(value, index, object2) {
+            return iteratee2(accumulator, value, index, object2);
           });
           return accumulator;
         }
@@ -17641,9 +17642,9 @@ var require_lodash4 = __commonJS({
           }
           return baseRandom(lower, upper);
         }
-        var camelCase = createCompounder(function(result2, word, index2) {
+        var camelCase = createCompounder(function(result2, word, index) {
           word = word.toLowerCase();
-          return result2 + (index2 ? capitalize(word) : word);
+          return result2 + (index ? capitalize(word) : word);
         });
         function capitalize(string) {
           return upperFirst(toString(string).toLowerCase());
@@ -17669,11 +17670,11 @@ var require_lodash4 = __commonJS({
           string = toString(string);
           return string && reHasRegExpChar.test(string) ? string.replace(reRegExpChar, "\\$&") : string;
         }
-        var kebabCase = createCompounder(function(result2, word, index2) {
-          return result2 + (index2 ? "-" : "") + word.toLowerCase();
+        var kebabCase = createCompounder(function(result2, word, index) {
+          return result2 + (index ? "-" : "") + word.toLowerCase();
         });
-        var lowerCase = createCompounder(function(result2, word, index2) {
-          return result2 + (index2 ? " " : "") + word.toLowerCase();
+        var lowerCase = createCompounder(function(result2, word, index) {
+          return result2 + (index ? " " : "") + word.toLowerCase();
         });
         var lowerFirst = createCaseFirst("toLowerCase");
         function pad(string, length, chars) {
@@ -17718,8 +17719,8 @@ var require_lodash4 = __commonJS({
           var args = arguments, string = toString(args[0]);
           return args.length < 3 ? string : string.replace(args[1], args[2]);
         }
-        var snakeCase = createCompounder(function(result2, word, index2) {
-          return result2 + (index2 ? "_" : "") + word.toLowerCase();
+        var snakeCase = createCompounder(function(result2, word, index) {
+          return result2 + (index ? "_" : "") + word.toLowerCase();
         });
         function split(string, separator, limit) {
           if (limit && typeof limit != "number" && isIterateeCall(string, separator, limit)) {
@@ -17738,8 +17739,8 @@ var require_lodash4 = __commonJS({
           }
           return string.split(separator, limit);
         }
-        var startCase = createCompounder(function(result2, word, index2) {
-          return result2 + (index2 ? " " : "") + upperFirst(word);
+        var startCase = createCompounder(function(result2, word, index) {
+          return result2 + (index ? " " : "") + upperFirst(word);
         });
         function startsWith(string, target, position) {
           string = toString(string);
@@ -17755,7 +17756,7 @@ var require_lodash4 = __commonJS({
           string = toString(string);
           options = assignInWith({}, options, settings, customDefaultsAssignIn);
           var imports = assignInWith({}, options.imports, settings.imports, customDefaultsAssignIn), importsKeys = keys(imports), importsValues = baseValues(imports, importsKeys);
-          var isEscaping, isEvaluating, index2 = 0, interpolate = options.interpolate || reNoMatch, source = "__p += '";
+          var isEscaping, isEvaluating, index = 0, interpolate = options.interpolate || reNoMatch, source = "__p += '";
           var reDelimiters = RegExp2(
             (options.escape || reNoMatch).source + "|" + interpolate.source + "|" + (interpolate === reInterpolate ? reEsTemplate : reNoMatch).source + "|" + (options.evaluate || reNoMatch).source + "|$",
             "g"
@@ -17763,7 +17764,7 @@ var require_lodash4 = __commonJS({
           var sourceURL = "//# sourceURL=" + (hasOwnProperty.call(options, "sourceURL") ? (options.sourceURL + "").replace(/\s/g, " ") : "lodash.templateSources[" + ++templateCounter + "]") + "\n";
           string.replace(reDelimiters, function(match, escapeValue, interpolateValue, esTemplateValue, evaluateValue, offset) {
             interpolateValue || (interpolateValue = esTemplateValue);
-            source += string.slice(index2, offset).replace(reUnescapedString, escapeStringChar);
+            source += string.slice(index, offset).replace(reUnescapedString, escapeStringChar);
             if (escapeValue) {
               isEscaping = true;
               source += "' +\n__e(" + escapeValue + ") +\n'";
@@ -17775,7 +17776,7 @@ var require_lodash4 = __commonJS({
             if (interpolateValue) {
               source += "' +\n((__t = (" + interpolateValue + ")) == null ? '' : __t) +\n'";
             }
-            index2 = offset + match.length;
+            index = offset + match.length;
             return match;
           });
           source += "';\n";
@@ -17875,9 +17876,9 @@ var require_lodash4 = __commonJS({
               result2 = result2.slice(0, newEnd === undefined2 ? end : newEnd);
             }
           } else if (string.indexOf(baseToString(separator), end) != end) {
-            var index2 = result2.lastIndexOf(separator);
-            if (index2 > -1) {
-              result2 = result2.slice(0, index2);
+            var index = result2.lastIndexOf(separator);
+            if (index > -1) {
+              result2 = result2.slice(0, index);
             }
           }
           return result2 + omission;
@@ -17886,8 +17887,8 @@ var require_lodash4 = __commonJS({
           string = toString(string);
           return string && reHasEscapedHtml.test(string) ? string.replace(reEscapedHtml, unescapeHtmlChar) : string;
         }
-        var upperCase = createCompounder(function(result2, word, index2) {
-          return result2 + (index2 ? " " : "") + word.toUpperCase();
+        var upperCase = createCompounder(function(result2, word, index) {
+          return result2 + (index ? " " : "") + word.toUpperCase();
         });
         var upperFirst = createCaseFirst("toUpperCase");
         function words(string, pattern, guard) {
@@ -17921,9 +17922,9 @@ var require_lodash4 = __commonJS({
             return [toIteratee(pair[0]), pair[1]];
           });
           return baseRest(function(args) {
-            var index2 = -1;
-            while (++index2 < length) {
-              var pair = pairs[index2];
+            var index = -1;
+            while (++index < length) {
+              var pair = pairs[index];
               if (apply(pair[0], this, args)) {
                 return apply(pair[1], this, args);
               }
@@ -18039,12 +18040,12 @@ var require_lodash4 = __commonJS({
           if (n < 1 || n > MAX_SAFE_INTEGER) {
             return [];
           }
-          var index2 = MAX_ARRAY_LENGTH, length = nativeMin(n, MAX_ARRAY_LENGTH);
+          var index = MAX_ARRAY_LENGTH, length = nativeMin(n, MAX_ARRAY_LENGTH);
           iteratee2 = getIteratee(iteratee2);
           n -= MAX_ARRAY_LENGTH;
           var result2 = baseTimes(length, iteratee2);
-          while (++index2 < n) {
-            iteratee2(index2);
+          while (++index < n) {
+            iteratee2(index);
           }
           return result2;
         }
@@ -18195,7 +18196,7 @@ var require_lodash4 = __commonJS({
         lodash.rangeRight = rangeRight;
         lodash.rearg = rearg;
         lodash.reject = reject;
-        lodash.remove = remove;
+        lodash.remove = remove2;
         lodash.rest = rest;
         lodash.reverse = reverse;
         lodash.sampleSize = sampleSize;
@@ -18283,12 +18284,12 @@ var require_lodash4 = __commonJS({
         lodash.forInRight = forInRight;
         lodash.forOwn = forOwn;
         lodash.forOwnRight = forOwnRight;
-        lodash.get = get;
+        lodash.get = get2;
         lodash.gt = gt;
         lodash.gte = gte;
         lodash.has = has;
         lodash.hasIn = hasIn;
-        lodash.head = head;
+        lodash.head = head2;
         lodash.identity = identity;
         lodash.includes = includes;
         lodash.indexOf = indexOf;
@@ -18321,7 +18322,7 @@ var require_lodash4 = __commonJS({
         lodash.isNumber = isNumber;
         lodash.isObject = isObject;
         lodash.isObjectLike = isObjectLike;
-        lodash.isPlainObject = isPlainObject;
+        lodash.isPlainObject = isPlainObject2;
         lodash.isRegExp = isRegExp;
         lodash.isSafeInteger = isSafeInteger;
         lodash.isSet = isSet;
@@ -18402,7 +18403,7 @@ var require_lodash4 = __commonJS({
         lodash.upperFirst = upperFirst;
         lodash.each = forEach;
         lodash.eachRight = forEachRight;
-        lodash.first = head;
+        lodash.first = head2;
         mixin(lodash, function() {
           var source = {};
           baseForOwn(lodash, function(func, methodName) {
@@ -18416,10 +18417,10 @@ var require_lodash4 = __commonJS({
         arrayEach(["bind", "bindKey", "curry", "curryRight", "partial", "partialRight"], function(methodName) {
           lodash[methodName].placeholder = lodash;
         });
-        arrayEach(["drop", "take"], function(methodName, index2) {
+        arrayEach(["drop", "take"], function(methodName, index) {
           LazyWrapper.prototype[methodName] = function(n) {
             n = n === undefined2 ? 1 : nativeMax(toInteger(n), 0);
-            var result2 = this.__filtered__ && !index2 ? new LazyWrapper(this) : this.clone();
+            var result2 = this.__filtered__ && !index ? new LazyWrapper(this) : this.clone();
             if (result2.__filtered__) {
               result2.__takeCount__ = nativeMin(n, result2.__takeCount__);
             } else {
@@ -18434,8 +18435,8 @@ var require_lodash4 = __commonJS({
             return this.reverse()[methodName](n).reverse();
           };
         });
-        arrayEach(["filter", "map", "takeWhile"], function(methodName, index2) {
-          var type = index2 + 1, isFilter = type == LAZY_FILTER_FLAG || type == LAZY_WHILE_FLAG;
+        arrayEach(["filter", "map", "takeWhile"], function(methodName, index) {
+          var type = index + 1, isFilter = type == LAZY_FILTER_FLAG || type == LAZY_WHILE_FLAG;
           LazyWrapper.prototype[methodName] = function(iteratee2) {
             var result2 = this.clone();
             result2.__iteratees__.push({
@@ -18446,14 +18447,14 @@ var require_lodash4 = __commonJS({
             return result2;
           };
         });
-        arrayEach(["head", "last"], function(methodName, index2) {
-          var takeName = "take" + (index2 ? "Right" : "");
+        arrayEach(["head", "last"], function(methodName, index) {
+          var takeName = "take" + (index ? "Right" : "");
           LazyWrapper.prototype[methodName] = function() {
             return this[takeName](1).value()[0];
           };
         });
-        arrayEach(["initial", "tail"], function(methodName, index2) {
-          var dropName = "drop" + (index2 ? "" : "Right");
+        arrayEach(["initial", "tail"], function(methodName, index) {
+          var dropName = "drop" + (index ? "" : "Right");
           LazyWrapper.prototype[methodName] = function() {
             return this.__filtered__ ? new LazyWrapper(this) : this[dropName](1);
           };
@@ -18750,7 +18751,7 @@ function stringToBytes(str) {
   }
   return bytes;
 }
-function v35(name, version2, hashfunc) {
+function v35(name, version4, hashfunc) {
   function generateUUID(value, namespace, buf, offset) {
     var _namespace;
     if (typeof value === "string") {
@@ -18766,7 +18767,7 @@ function v35(name, version2, hashfunc) {
     bytes.set(namespace);
     bytes.set(value, namespace.length);
     bytes = hashfunc(bytes);
-    bytes[6] = bytes[6] & 15 | version2;
+    bytes[6] = bytes[6] & 15 | version4;
     bytes[8] = bytes[8] & 63 | 128;
     if (buf) {
       offset = offset || 0;
@@ -19253,33 +19254,33 @@ var require_detect_libc = __commonJS({
       }
       return null;
     };
-    var version2 = async () => {
-      let version3 = null;
+    var version4 = async () => {
+      let version5 = null;
       if (isLinux()) {
-        version3 = await versionFromFilesystem();
-        if (!version3) {
-          version3 = versionFromReport();
+        version5 = await versionFromFilesystem();
+        if (!version5) {
+          version5 = versionFromReport();
         }
-        if (!version3) {
+        if (!version5) {
           const out = await safeCommand();
-          version3 = versionFromCommand(out);
+          version5 = versionFromCommand(out);
         }
       }
-      return version3;
+      return version5;
     };
     var versionSync = () => {
-      let version3 = null;
+      let version5 = null;
       if (isLinux()) {
-        version3 = versionFromFilesystemSync();
-        if (!version3) {
-          version3 = versionFromReport();
+        version5 = versionFromFilesystemSync();
+        if (!version5) {
+          version5 = versionFromReport();
         }
-        if (!version3) {
+        if (!version5) {
           const out = safeCommandSync();
-          version3 = versionFromCommand(out);
+          version5 = versionFromCommand(out);
         }
       }
-      return version3;
+      return version5;
     };
     module2.exports = {
       GLIBC,
@@ -19288,7 +19289,7 @@ var require_detect_libc = __commonJS({
       familySync,
       isNonGlibcLinux,
       isNonGlibcLinuxSync,
-      version: version2,
+      version: version4,
       versionSync
     };
   }
@@ -20470,10 +20471,10 @@ var require_node2 = __commonJS({
     currentExtensions[0].noBuffer = true;
     currentExtensions[66] = (data) => {
       let headLength = data.byteLength % 8 || 8;
-      let head = BigInt(data[0] & 128 ? data[0] - 256 : data[0]);
+      let head2 = BigInt(data[0] & 128 ? data[0] - 256 : data[0]);
       for (let i = 1; i < headLength; i++) {
-        head <<= BigInt(8);
-        head += BigInt(data[i]);
+        head2 <<= BigInt(8);
+        head2 += BigInt(data[i]);
       }
       if (data.byteLength !== headLength) {
         let view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -20492,9 +20493,9 @@ var require_node2 = __commonJS({
           let right = decode2(middle, end);
           return left << BigInt((end - middle) * 8) | right;
         };
-        head = head << BigInt((view.byteLength - headLength) * 8) | decode2(headLength, view.byteLength);
+        head2 = head2 << BigInt((view.byteLength - headLength) * 8) | decode2(headLength, view.byteLength);
       }
-      return head;
+      return head2;
     };
     var errors = {
       Error,
@@ -22261,14 +22262,14 @@ var require_node2 = __commonJS({
           }
           property.getRef = getRef;
           currentOffset += size;
-          let get;
+          let get2;
           switch (type) {
             case ASCII:
               if (lastRefProperty && !lastRefProperty.next)
                 lastRefProperty.next = property;
               lastRefProperty = property;
               property.multiGetCount = 0;
-              get = function(source) {
+              get2 = function(source) {
                 let src3 = source.bytes;
                 let position3 = source.position;
                 let refStart = currentOffset + position3;
@@ -22297,7 +22298,7 @@ var require_node2 = __commonJS({
               if (lastRefProperty && !lastRefProperty.next)
                 lastRefProperty.next = property;
               lastRefProperty = property;
-              get = function(source) {
+              get2 = function(source) {
                 let position3 = source.position;
                 let refStart = currentOffset + position3;
                 let ref = getRef(source, position3);
@@ -22330,7 +22331,7 @@ var require_node2 = __commonJS({
             case NUMBER:
               switch (size) {
                 case 4:
-                  get = function(source) {
+                  get2 = function(source) {
                     let src3 = source.bytes;
                     let dataView2 = src3.dataView || (src3.dataView = new DataView(src3.buffer, src3.byteOffset, src3.byteLength));
                     let position3 = source.position + property.offset;
@@ -22347,7 +22348,7 @@ var require_node2 = __commonJS({
                   };
                   break;
                 case 8:
-                  get = function(source) {
+                  get2 = function(source) {
                     let src3 = source.bytes;
                     let dataView2 = src3.dataView || (src3.dataView = new DataView(src3.buffer, src3.byteOffset, src3.byteLength));
                     let value = dataView2.getFloat64(source.position + property.offset, true);
@@ -22360,7 +22361,7 @@ var require_node2 = __commonJS({
                   };
                   break;
                 case 1:
-                  get = function(source) {
+                  get2 = function(source) {
                     let src3 = source.bytes;
                     let value = src3[source.position + property.offset];
                     return value < 246 ? value : toConstant(value);
@@ -22369,14 +22370,14 @@ var require_node2 = __commonJS({
               }
               break;
             case DATE:
-              get = function(source) {
+              get2 = function(source) {
                 let src3 = source.bytes;
                 let dataView2 = src3.dataView || (src3.dataView = new DataView(src3.buffer, src3.byteOffset, src3.byteLength));
                 return new Date(dataView2.getFloat64(source.position + property.offset, true));
               };
               break;
           }
-          property.get = get;
+          property.get = get2;
         }
         if (evalSupported) {
           let objectLiteralProperties = [];
@@ -22438,9 +22439,9 @@ var require_node2 = __commonJS({
       }
       throw new Error("Unknown constant");
     }
-    function withSource(get) {
+    function withSource(get2) {
       return function() {
-        return get(this[sourceSymbol]);
+        return get2(this[sourceSymbol]);
       };
     }
     function saveState() {
@@ -23363,8 +23364,8 @@ var require_scripts = __commonJS({
         } while (cursor != "0" && page.length < pageSize);
         if (page.length && Array.isArray(page[0])) {
           const result = [];
-          for (let index2 = 0; index2 < page.length; index2++) {
-            const [id, value] = page[index2];
+          for (let index = 0; index < page.length; index++) {
+            const [id, value] = page[index];
             try {
               result.push({ id, v: JSON.parse(value) });
             } catch (err) {
@@ -23488,12 +23489,12 @@ var require_job = __commonJS({
           });
         }
         const results = await multi.exec();
-        for (let index2 = 0; index2 < results.length; ++index2) {
-          const [err, id] = results[index2];
+        for (let index = 0; index < results.length; ++index) {
+          const [err, id] = results[index];
           if (err) {
             throw err;
           }
-          jobInstances[index2].id = id;
+          jobInstances[index].id = id;
         }
         return jobInstances;
       }
@@ -23902,9 +23903,9 @@ var require_job = __commonJS({
           const [processedCursor, processed = []] = opts.processed ? result1[1] : [];
           const [unprocessedCursor, unprocessed = []] = opts.unprocessed ? opts.processed ? result2[1] : result1[1] : [];
           const transformedProcessed = {};
-          for (let index2 = 0; index2 < processed.length; ++index2) {
-            if (index2 % 2) {
-              transformedProcessed[processed[index2 - 1]] = JSON.parse(processed[index2]);
+          for (let index = 0; index < processed.length; ++index) {
+            if (index % 2) {
+              transformedProcessed[processed[index - 1]] = JSON.parse(processed[index]);
             }
           }
           return Object.assign(Object.assign({}, processedCursor ? {
@@ -29143,11 +29144,11 @@ var require_redis_connection = __commonJS({
         }
         let handleReady;
         let handleEnd;
-        let handleError;
+        let handleError2;
         try {
           await new Promise((resolve, reject) => {
             let lastError;
-            handleError = (err) => {
+            handleError2 = (err) => {
               lastError = err;
             };
             handleReady = () => {
@@ -29159,11 +29160,11 @@ var require_redis_connection = __commonJS({
             (0, utils_2.increaseMaxListeners)(client, 3);
             client.once("ready", handleReady);
             client.on("end", handleEnd);
-            client.once("error", handleError);
+            client.once("error", handleError2);
           });
         } finally {
           client.removeListener("end", handleEnd);
-          client.removeListener("error", handleError);
+          client.removeListener("error", handleError2);
           client.removeListener("ready", handleReady);
           (0, utils_2.decreaseMaxListeners)(client, 3);
         }
@@ -29171,10 +29172,10 @@ var require_redis_connection = __commonJS({
       get client() {
         return this.initializing;
       }
-      loadCommands(version2, providedScripts) {
+      loadCommands(version4, providedScripts) {
         const finalScripts = providedScripts || scripts;
         for (const property in finalScripts) {
-          const commandName = `${finalScripts[property].name}:${version2}`;
+          const commandName = `${finalScripts[property].name}:${version4}`;
           if (!this._client[commandName]) {
             this._client.defineCommand(commandName, {
               numberOfKeys: finalScripts[property].keys,
@@ -29923,8 +29924,8 @@ var require_queue_getters = __commonJS({
         const currentTypes = this.sanitizeJobTypes(types);
         const responses = await this.scripts.getCounts(currentTypes);
         const counts = {};
-        responses.forEach((res, index2) => {
-          counts[currentTypes[index2]] = res || 0;
+        responses.forEach((res, index) => {
+          counts[currentTypes[index]] = res || 0;
         });
         return counts;
       }
@@ -30079,9 +30080,9 @@ var require_queue_getters = __commonJS({
         });
         const responses = await this.scripts.getRanges(types, start, end, asc);
         let results = [];
-        responses.forEach((response, index2) => {
+        responses.forEach((response, index) => {
           const result = response || [];
-          if (asc && multiCommands[index2] === "lrange") {
+          if (asc && multiCommands[index] === "lrange") {
             results = results.concat(result.reverse());
           } else {
             results = results.concat(result);
@@ -30205,9 +30206,9 @@ var require_queue_getters = __commonJS({
           const client = {};
           const keyValues = line.split(" ");
           keyValues.forEach(function(keyValue) {
-            const index2 = keyValue.indexOf("=");
-            const key = keyValue.substring(0, index2);
-            const value = keyValue.substring(index2 + 1);
+            const index = keyValue.indexOf("=");
+            const key = keyValue.substring(0, index);
+            const value = keyValue.substring(index + 1);
             client[key] = value;
           });
           const name = client["name"];
@@ -34422,10 +34423,10 @@ var require_luxon = __commonJS({
       }
     }
     var MISSING_FTP = "missing Intl.DateTimeFormat.formatToParts support";
-    function intUnit(regex, post = (i) => i) {
+    function intUnit(regex, post2 = (i) => i) {
       return {
         regex,
-        deser: ([s2]) => post(parseDigits(s2))
+        deser: ([s2]) => post2(parseDigits(s2))
       };
     }
     var NBSP = String.fromCharCode(160);
@@ -37310,8 +37311,8 @@ var require_field_stringify = __commonJS({
         var multiplier = range.start == 0 ? range.count - 1 : range.count;
         if (range.step * multiplier > range.end) {
           result = result.concat(
-            Array.from({ length: range.end - range.start + 1 }).map(function(_, index2) {
-              var value = range.start + index2;
+            Array.from({ length: range.end - range.start + 1 }).map(function(_, index) {
+              var value = range.start + index;
               if ((value - range.start) % range.step === 0) {
                 return value;
               }
@@ -37548,11 +37549,11 @@ var require_expression = __commonJS({
           if (field === "dayOfWeek" && max % 7 === 0) {
             stack.push(0);
           }
-          for (var index2 = min, count = max; index2 <= count; index2++) {
-            var exists = stack.indexOf(index2) !== -1;
+          for (var index = min, count = max; index <= count; index++) {
+            var exists = stack.indexOf(index) !== -1;
             if (!exists && repeatIndex > 0 && repeatIndex % repeatInterval === 0) {
               repeatIndex = 1;
-              stack.push(index2);
+              stack.push(index);
             } else {
               repeatIndex++;
             }
@@ -39456,8 +39457,8 @@ var require_fs = __commonJS({
     var fs = require("fs");
     var origRealpath = fs.realpath;
     var origRealpathSync = fs.realpathSync;
-    var version2 = process.version;
-    var ok = /^v[0-5]\./.test(version2);
+    var version4 = process.version;
+    var ok = /^v[0-5]\./.test(version4);
     var old = require_old2();
     function newError(er) {
       return er && er.syscall === "realpath" && (er.code === "ELOOP" || er.code === "ENOMEM" || er.code === "ENAMETOOLONG");
@@ -39599,11 +39600,11 @@ var require_brace_expansion = __commonJS({
         return str.split(",");
       var pre = m.pre;
       var body = m.body;
-      var post = m.post;
+      var post2 = m.post;
       var p = pre.split(",");
       p[p.length - 1] += "{" + body + "}";
-      var postParts = parseCommaParts(post);
-      if (post.length) {
+      var postParts = parseCommaParts(post2);
+      if (post2.length) {
         p[p.length - 1] += postParts.shift();
         p.push.apply(p, postParts);
       }
@@ -39636,10 +39637,10 @@ var require_brace_expansion = __commonJS({
       if (!m)
         return [str];
       var pre = m.pre;
-      var post = m.post.length ? expand(m.post, false) : [""];
+      var post2 = m.post.length ? expand(m.post, false) : [""];
       if (/\$$/.test(m.pre)) {
-        for (var k = 0; k < post.length; k++) {
-          var expansion = pre + "{" + m.body + "}" + post[k];
+        for (var k = 0; k < post2.length; k++) {
+          var expansion = pre + "{" + m.body + "}" + post2[k];
           expansions.push(expansion);
         }
       } else {
@@ -39662,7 +39663,7 @@ var require_brace_expansion = __commonJS({
           if (n.length === 1) {
             n = expand(n[0], false).map(embrace);
             if (n.length === 1) {
-              return post.map(function(p) {
+              return post2.map(function(p) {
                 return m.pre + n[0] + p;
               });
             }
@@ -39710,8 +39711,8 @@ var require_brace_expansion = __commonJS({
           }
         }
         for (var j = 0; j < N.length; j++) {
-          for (var k = 0; k < post.length; k++) {
-            var expansion = pre + N[j] + post[k];
+          for (var k = 0; k < post2.length; k++) {
+            var expansion = pre + N[j] + post2[k];
             if (!isTop || isSequence || expansion)
               expansions.push(expansion);
           }
@@ -40582,8 +40583,8 @@ var require_sync = __commonJS({
       assert.ok(this instanceof GlobSync);
       if (this.realpath) {
         var self2 = this;
-        this.matches.forEach(function(matchset, index2) {
-          var set = self2.matches[index2] = /* @__PURE__ */ Object.create(null);
+        this.matches.forEach(function(matchset, index) {
+          var set = self2.matches[index] = /* @__PURE__ */ Object.create(null);
           for (var p in matchset) {
             try {
               p = self2._makeAbs(p);
@@ -40600,7 +40601,7 @@ var require_sync = __commonJS({
       }
       common.finish(this);
     };
-    GlobSync.prototype._process = function(pattern, index2, inGlobStar) {
+    GlobSync.prototype._process = function(pattern, index, inGlobStar) {
       assert.ok(this instanceof GlobSync);
       var n = 0;
       while (typeof pattern[n] === "string") {
@@ -40609,7 +40610,7 @@ var require_sync = __commonJS({
       var prefix;
       switch (n) {
         case pattern.length:
-          this._processSimple(pattern.join("/"), index2);
+          this._processSimple(pattern.join("/"), index);
           return;
         case 0:
           prefix = null;
@@ -40635,11 +40636,11 @@ var require_sync = __commonJS({
         return;
       var isGlobStar = remain[0] === minimatch.GLOBSTAR;
       if (isGlobStar)
-        this._processGlobStar(prefix, read, abs, remain, index2, inGlobStar);
+        this._processGlobStar(prefix, read, abs, remain, index, inGlobStar);
       else
-        this._processReaddir(prefix, read, abs, remain, index2, inGlobStar);
+        this._processReaddir(prefix, read, abs, remain, index, inGlobStar);
     };
-    GlobSync.prototype._processReaddir = function(prefix, read, abs, remain, index2, inGlobStar) {
+    GlobSync.prototype._processReaddir = function(prefix, read, abs, remain, index, inGlobStar) {
       var entries = this._readdir(abs, inGlobStar);
       if (!entries)
         return;
@@ -40665,8 +40666,8 @@ var require_sync = __commonJS({
       if (len === 0)
         return;
       if (remain.length === 1 && !this.mark && !this.stat) {
-        if (!this.matches[index2])
-          this.matches[index2] = /* @__PURE__ */ Object.create(null);
+        if (!this.matches[index])
+          this.matches[index] = /* @__PURE__ */ Object.create(null);
         for (var i = 0; i < len; i++) {
           var e = matchedEntries[i];
           if (prefix) {
@@ -40678,7 +40679,7 @@ var require_sync = __commonJS({
           if (e.charAt(0) === "/" && !this.nomount) {
             e = path.join(this.root, e);
           }
-          this._emitMatch(index2, e);
+          this._emitMatch(index, e);
         }
         return;
       }
@@ -40690,10 +40691,10 @@ var require_sync = __commonJS({
           newPattern = [prefix, e];
         else
           newPattern = [e];
-        this._process(newPattern.concat(remain), index2, inGlobStar);
+        this._process(newPattern.concat(remain), index, inGlobStar);
       }
     };
-    GlobSync.prototype._emitMatch = function(index2, e) {
+    GlobSync.prototype._emitMatch = function(index, e) {
       if (isIgnored(this, e))
         return;
       var abs = this._makeAbs(e);
@@ -40702,14 +40703,14 @@ var require_sync = __commonJS({
       if (this.absolute) {
         e = abs;
       }
-      if (this.matches[index2][e])
+      if (this.matches[index][e])
         return;
       if (this.nodir) {
         var c = this.cache[abs];
         if (c === "DIR" || Array.isArray(c))
           return;
       }
-      this.matches[index2][e] = true;
+      this.matches[index][e] = true;
       if (this.stat)
         this._stat(e);
     };
@@ -40794,14 +40795,14 @@ var require_sync = __commonJS({
           break;
       }
     };
-    GlobSync.prototype._processGlobStar = function(prefix, read, abs, remain, index2, inGlobStar) {
+    GlobSync.prototype._processGlobStar = function(prefix, read, abs, remain, index, inGlobStar) {
       var entries = this._readdir(abs, inGlobStar);
       if (!entries)
         return;
       var remainWithoutGlobStar = remain.slice(1);
       var gspref = prefix ? [prefix] : [];
       var noGlobStar = gspref.concat(remainWithoutGlobStar);
-      this._process(noGlobStar, index2, false);
+      this._process(noGlobStar, index, false);
       var len = entries.length;
       var isSym = this.symlinks[abs];
       if (isSym && inGlobStar)
@@ -40811,15 +40812,15 @@ var require_sync = __commonJS({
         if (e.charAt(0) === "." && !this.dot)
           continue;
         var instead = gspref.concat(entries[i], remainWithoutGlobStar);
-        this._process(instead, index2, true);
+        this._process(instead, index, true);
         var below = gspref.concat(entries[i], remain);
-        this._process(below, index2, true);
+        this._process(below, index, true);
       }
     };
-    GlobSync.prototype._processSimple = function(prefix, index2) {
+    GlobSync.prototype._processSimple = function(prefix, index) {
       var exists = this._stat(prefix);
-      if (!this.matches[index2])
-        this.matches[index2] = /* @__PURE__ */ Object.create(null);
+      if (!this.matches[index])
+        this.matches[index] = /* @__PURE__ */ Object.create(null);
       if (!exists)
         return;
       if (prefix && isAbsolute(prefix) && !this.nomount) {
@@ -40834,7 +40835,7 @@ var require_sync = __commonJS({
       }
       if (process.platform === "win32")
         prefix = prefix.replace(/\\/g, "/");
-      this._emitMatch(index2, prefix);
+      this._emitMatch(index, prefix);
     };
     GlobSync.prototype._stat = function(f) {
       var abs = this._makeAbs(f);
@@ -41151,8 +41152,8 @@ var require_glob = __commonJS({
           self2._finish();
       }
     };
-    Glob.prototype._realpathSet = function(index2, cb) {
-      var matchset = this.matches[index2];
+    Glob.prototype._realpathSet = function(index, cb) {
+      var matchset = this.matches[index];
       if (!matchset)
         return cb();
       var found = Object.keys(matchset);
@@ -41160,7 +41161,7 @@ var require_glob = __commonJS({
       var n = found.length;
       if (n === 0)
         return cb();
-      var set = this.matches[index2] = /* @__PURE__ */ Object.create(null);
+      var set = this.matches[index] = /* @__PURE__ */ Object.create(null);
       found.forEach(function(p, i) {
         p = self2._makeAbs(p);
         rp.realpath(p, self2.realpathCache, function(er, real) {
@@ -41171,7 +41172,7 @@ var require_glob = __commonJS({
           else
             self2.emit("error", er);
           if (--n === 0) {
-            self2.matches[index2] = set;
+            self2.matches[index] = set;
             cb();
           }
         });
@@ -41216,14 +41217,14 @@ var require_glob = __commonJS({
         }
       }
     };
-    Glob.prototype._process = function(pattern, index2, inGlobStar, cb) {
+    Glob.prototype._process = function(pattern, index, inGlobStar, cb) {
       assert(this instanceof Glob);
       assert(typeof cb === "function");
       if (this.aborted)
         return;
       this._processing++;
       if (this.paused) {
-        this._processQueue.push([pattern, index2, inGlobStar, cb]);
+        this._processQueue.push([pattern, index, inGlobStar, cb]);
         return;
       }
       var n = 0;
@@ -41233,7 +41234,7 @@ var require_glob = __commonJS({
       var prefix;
       switch (n) {
         case pattern.length:
-          this._processSimple(pattern.join("/"), index2, cb);
+          this._processSimple(pattern.join("/"), index, cb);
           return;
         case 0:
           prefix = null;
@@ -41259,17 +41260,17 @@ var require_glob = __commonJS({
         return cb();
       var isGlobStar = remain[0] === minimatch.GLOBSTAR;
       if (isGlobStar)
-        this._processGlobStar(prefix, read, abs, remain, index2, inGlobStar, cb);
+        this._processGlobStar(prefix, read, abs, remain, index, inGlobStar, cb);
       else
-        this._processReaddir(prefix, read, abs, remain, index2, inGlobStar, cb);
+        this._processReaddir(prefix, read, abs, remain, index, inGlobStar, cb);
     };
-    Glob.prototype._processReaddir = function(prefix, read, abs, remain, index2, inGlobStar, cb) {
+    Glob.prototype._processReaddir = function(prefix, read, abs, remain, index, inGlobStar, cb) {
       var self2 = this;
       this._readdir(abs, inGlobStar, function(er, entries) {
-        return self2._processReaddir2(prefix, read, abs, remain, index2, inGlobStar, entries, cb);
+        return self2._processReaddir2(prefix, read, abs, remain, index, inGlobStar, entries, cb);
       });
     };
-    Glob.prototype._processReaddir2 = function(prefix, read, abs, remain, index2, inGlobStar, entries, cb) {
+    Glob.prototype._processReaddir2 = function(prefix, read, abs, remain, index, inGlobStar, entries, cb) {
       if (!entries)
         return cb();
       var pn = remain[0];
@@ -41294,8 +41295,8 @@ var require_glob = __commonJS({
       if (len === 0)
         return cb();
       if (remain.length === 1 && !this.mark && !this.stat) {
-        if (!this.matches[index2])
-          this.matches[index2] = /* @__PURE__ */ Object.create(null);
+        if (!this.matches[index])
+          this.matches[index] = /* @__PURE__ */ Object.create(null);
         for (var i = 0; i < len; i++) {
           var e = matchedEntries[i];
           if (prefix) {
@@ -41307,7 +41308,7 @@ var require_glob = __commonJS({
           if (e.charAt(0) === "/" && !this.nomount) {
             e = path.join(this.root, e);
           }
-          this._emitMatch(index2, e);
+          this._emitMatch(index, e);
         }
         return cb();
       }
@@ -41321,17 +41322,17 @@ var require_glob = __commonJS({
           else
             e = prefix + e;
         }
-        this._process([e].concat(remain), index2, inGlobStar, cb);
+        this._process([e].concat(remain), index, inGlobStar, cb);
       }
       cb();
     };
-    Glob.prototype._emitMatch = function(index2, e) {
+    Glob.prototype._emitMatch = function(index, e) {
       if (this.aborted)
         return;
       if (isIgnored(this, e))
         return;
       if (this.paused) {
-        this._emitQueue.push([index2, e]);
+        this._emitQueue.push([index, e]);
         return;
       }
       var abs = isAbsolute(e) ? e : this._makeAbs(e);
@@ -41339,14 +41340,14 @@ var require_glob = __commonJS({
         e = this._mark(e);
       if (this.absolute)
         e = abs;
-      if (this.matches[index2][e])
+      if (this.matches[index][e])
         return;
       if (this.nodir) {
         var c = this.cache[abs];
         if (c === "DIR" || Array.isArray(c))
           return;
       }
-      this.matches[index2][e] = true;
+      this.matches[index][e] = true;
       var st = this.statCache[abs];
       if (st)
         this.emit("stat", e, st);
@@ -41450,19 +41451,19 @@ var require_glob = __commonJS({
       }
       return cb();
     };
-    Glob.prototype._processGlobStar = function(prefix, read, abs, remain, index2, inGlobStar, cb) {
+    Glob.prototype._processGlobStar = function(prefix, read, abs, remain, index, inGlobStar, cb) {
       var self2 = this;
       this._readdir(abs, inGlobStar, function(er, entries) {
-        self2._processGlobStar2(prefix, read, abs, remain, index2, inGlobStar, entries, cb);
+        self2._processGlobStar2(prefix, read, abs, remain, index, inGlobStar, entries, cb);
       });
     };
-    Glob.prototype._processGlobStar2 = function(prefix, read, abs, remain, index2, inGlobStar, entries, cb) {
+    Glob.prototype._processGlobStar2 = function(prefix, read, abs, remain, index, inGlobStar, entries, cb) {
       if (!entries)
         return cb();
       var remainWithoutGlobStar = remain.slice(1);
       var gspref = prefix ? [prefix] : [];
       var noGlobStar = gspref.concat(remainWithoutGlobStar);
-      this._process(noGlobStar, index2, false, cb);
+      this._process(noGlobStar, index, false, cb);
       var isSym = this.symlinks[abs];
       var len = entries.length;
       if (isSym && inGlobStar)
@@ -41472,21 +41473,21 @@ var require_glob = __commonJS({
         if (e.charAt(0) === "." && !this.dot)
           continue;
         var instead = gspref.concat(entries[i], remainWithoutGlobStar);
-        this._process(instead, index2, true, cb);
+        this._process(instead, index, true, cb);
         var below = gspref.concat(entries[i], remain);
-        this._process(below, index2, true, cb);
+        this._process(below, index, true, cb);
       }
       cb();
     };
-    Glob.prototype._processSimple = function(prefix, index2, cb) {
+    Glob.prototype._processSimple = function(prefix, index, cb) {
       var self2 = this;
       this._stat(prefix, function(er, exists) {
-        self2._processSimple2(prefix, index2, er, exists, cb);
+        self2._processSimple2(prefix, index, er, exists, cb);
       });
     };
-    Glob.prototype._processSimple2 = function(prefix, index2, er, exists, cb) {
-      if (!this.matches[index2])
-        this.matches[index2] = /* @__PURE__ */ Object.create(null);
+    Glob.prototype._processSimple2 = function(prefix, index, er, exists, cb) {
+      if (!this.matches[index])
+        this.matches[index] = /* @__PURE__ */ Object.create(null);
       if (!exists)
         return cb();
       if (prefix && isAbsolute(prefix) && !this.nomount) {
@@ -41501,7 +41502,7 @@ var require_glob = __commonJS({
       }
       if (process.platform === "win32")
         prefix = prefix.replace(/\\/g, "/");
-      this._emitMatch(index2, prefix);
+      this._emitMatch(index, prefix);
       cb();
     };
     Glob.prototype._stat = function(f, cb) {
@@ -42273,13 +42274,13 @@ var require_helper = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.resolveFetch = void 0;
-    var resolveFetch = (customFetch) => {
+    var resolveFetch3 = (customFetch) => {
       if (customFetch) {
         return (...args) => customFetch(...args);
       }
       return (...args) => fetch(...args);
     };
-    exports.resolveFetch = resolveFetch;
+    exports.resolveFetch = resolveFetch3;
   }
 });
 
@@ -42345,7 +42346,7 @@ var require_FunctionsClient = __commonJS({
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     var helper_1 = require_helper();
     var types_1 = require_types2();
-    var FunctionsClient = class {
+    var FunctionsClient2 = class {
       /**
        * Creates a new Functions client bound to an Edge Functions URL.
        *
@@ -42479,7 +42480,7 @@ var require_FunctionsClient = __commonJS({
         });
       }
     };
-    exports.FunctionsClient = FunctionsClient;
+    exports.FunctionsClient = FunctionsClient2;
   }
 });
 
@@ -42509,1354 +42510,6 @@ var require_main = __commonJS({
     Object.defineProperty(exports, "FunctionRegion", { enumerable: true, get: function() {
       return types_1.FunctionRegion;
     } });
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestError.js
-var require_PostgrestError = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestError.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var PostgrestError2 = class extends Error {
-      /**
-       * @example
-       * ```ts
-       * import PostgrestError from '@supabase/postgrest-js'
-       *
-       * throw new PostgrestError({
-       *   message: 'Row level security prevented the request',
-       *   details: 'RLS denied the insert',
-       *   hint: 'Check your policies',
-       *   code: 'PGRST301',
-       * })
-       * ```
-       */
-      constructor(context) {
-        super(context.message);
-        this.name = "PostgrestError";
-        this.details = context.details;
-        this.hint = context.hint;
-        this.code = context.code;
-      }
-    };
-    exports.default = PostgrestError2;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestBuilder.js
-var require_PostgrestBuilder = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestError_1 = tslib_1.__importDefault(require_PostgrestError());
-    var PostgrestBuilder = class {
-      /**
-       * Creates a builder configured for a specific PostgREST request.
-       *
-       * @example
-       * ```ts
-       * import PostgrestQueryBuilder from '@supabase/postgrest-js'
-       *
-       * const builder = new PostgrestQueryBuilder(
-       *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
-       *   { headers: new Headers({ apikey: 'public-anon-key' }) }
-       * )
-       * ```
-       */
-      constructor(builder) {
-        var _a, _b;
-        this.shouldThrowOnError = false;
-        this.method = builder.method;
-        this.url = builder.url;
-        this.headers = new Headers(builder.headers);
-        this.schema = builder.schema;
-        this.body = builder.body;
-        this.shouldThrowOnError = (_a = builder.shouldThrowOnError) !== null && _a !== void 0 ? _a : false;
-        this.signal = builder.signal;
-        this.isMaybeSingle = (_b = builder.isMaybeSingle) !== null && _b !== void 0 ? _b : false;
-        if (builder.fetch) {
-          this.fetch = builder.fetch;
-        } else {
-          this.fetch = fetch;
-        }
-      }
-      /**
-       * If there's an error with the query, throwOnError will reject the promise by
-       * throwing the error instead of returning it as part of a successful response.
-       *
-       * {@link https://github.com/supabase/supabase-js/issues/92}
-       */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /**
-       * Set an HTTP header for the request.
-       */
-      setHeader(name, value) {
-        this.headers = new Headers(this.headers);
-        this.headers.set(name, value);
-        return this;
-      }
-      then(onfulfilled, onrejected) {
-        if (this.schema === void 0) {
-        } else if (["GET", "HEAD"].includes(this.method)) {
-          this.headers.set("Accept-Profile", this.schema);
-        } else {
-          this.headers.set("Content-Profile", this.schema);
-        }
-        if (this.method !== "GET" && this.method !== "HEAD") {
-          this.headers.set("Content-Type", "application/json");
-        }
-        const _fetch = this.fetch;
-        let res = _fetch(this.url.toString(), {
-          method: this.method,
-          headers: this.headers,
-          body: JSON.stringify(this.body),
-          signal: this.signal
-        }).then(async (res2) => {
-          var _a, _b, _c, _d;
-          let error = null;
-          let data = null;
-          let count = null;
-          let status = res2.status;
-          let statusText = res2.statusText;
-          if (res2.ok) {
-            if (this.method !== "HEAD") {
-              const body = await res2.text();
-              if (body === "") {
-              } else if (this.headers.get("Accept") === "text/csv") {
-                data = body;
-              } else if (this.headers.get("Accept") && ((_a = this.headers.get("Accept")) === null || _a === void 0 ? void 0 : _a.includes("application/vnd.pgrst.plan+text"))) {
-                data = body;
-              } else {
-                data = JSON.parse(body);
-              }
-            }
-            const countHeader = (_b = this.headers.get("Prefer")) === null || _b === void 0 ? void 0 : _b.match(/count=(exact|planned|estimated)/);
-            const contentRange = (_c = res2.headers.get("content-range")) === null || _c === void 0 ? void 0 : _c.split("/");
-            if (countHeader && contentRange && contentRange.length > 1) {
-              count = parseInt(contentRange[1]);
-            }
-            if (this.isMaybeSingle && this.method === "GET" && Array.isArray(data)) {
-              if (data.length > 1) {
-                error = {
-                  // https://github.com/PostgREST/postgrest/blob/a867d79c42419af16c18c3fb019eba8df992626f/src/PostgREST/Error.hs#L553
-                  code: "PGRST116",
-                  details: `Results contain ${data.length} rows, application/vnd.pgrst.object+json requires 1 row`,
-                  hint: null,
-                  message: "JSON object requested, multiple (or no) rows returned"
-                };
-                data = null;
-                count = null;
-                status = 406;
-                statusText = "Not Acceptable";
-              } else if (data.length === 1) {
-                data = data[0];
-              } else {
-                data = null;
-              }
-            }
-          } else {
-            const body = await res2.text();
-            try {
-              error = JSON.parse(body);
-              if (Array.isArray(error) && res2.status === 404) {
-                data = [];
-                error = null;
-                status = 200;
-                statusText = "OK";
-              }
-            } catch (_e) {
-              if (res2.status === 404 && body === "") {
-                status = 204;
-                statusText = "No Content";
-              } else {
-                error = {
-                  message: body
-                };
-              }
-            }
-            if (error && this.isMaybeSingle && ((_d = error === null || error === void 0 ? void 0 : error.details) === null || _d === void 0 ? void 0 : _d.includes("0 rows"))) {
-              error = null;
-              status = 200;
-              statusText = "OK";
-            }
-            if (error && this.shouldThrowOnError) {
-              throw new PostgrestError_1.default(error);
-            }
-          }
-          const postgrestResponse = {
-            error,
-            data,
-            count,
-            status,
-            statusText
-          };
-          return postgrestResponse;
-        });
-        if (!this.shouldThrowOnError) {
-          res = res.catch((fetchError) => {
-            var _a, _b, _c, _d, _e, _f;
-            let errorDetails = "";
-            const cause = fetchError === null || fetchError === void 0 ? void 0 : fetchError.cause;
-            if (cause) {
-              const causeMessage = (_a = cause === null || cause === void 0 ? void 0 : cause.message) !== null && _a !== void 0 ? _a : "";
-              const causeCode = (_b = cause === null || cause === void 0 ? void 0 : cause.code) !== null && _b !== void 0 ? _b : "";
-              errorDetails = `${(_c = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _c !== void 0 ? _c : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`;
-              errorDetails += `
-
-Caused by: ${(_d = cause === null || cause === void 0 ? void 0 : cause.name) !== null && _d !== void 0 ? _d : "Error"}: ${causeMessage}`;
-              if (causeCode) {
-                errorDetails += ` (${causeCode})`;
-              }
-              if (cause === null || cause === void 0 ? void 0 : cause.stack) {
-                errorDetails += `
-${cause.stack}`;
-              }
-            } else {
-              errorDetails = (_e = fetchError === null || fetchError === void 0 ? void 0 : fetchError.stack) !== null && _e !== void 0 ? _e : "";
-            }
-            return {
-              error: {
-                message: `${(_f = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _f !== void 0 ? _f : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`,
-                details: errorDetails,
-                hint: "",
-                code: ""
-              },
-              data: null,
-              count: null,
-              status: 0,
-              statusText: ""
-            };
-          });
-        }
-        return res.then(onfulfilled, onrejected);
-      }
-      /**
-       * Override the type of the returned `data`.
-       *
-       * @typeParam NewResult - The new result type to override with
-       * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
-       */
-      returns() {
-        return this;
-      }
-      /**
-       * Override the type of the returned `data` field in the response.
-       *
-       * @typeParam NewResult - The new type to cast the response data to
-       * @typeParam Options - Optional type configuration (defaults to { merge: true })
-       * @typeParam Options.merge - When true, merges the new type with existing return type. When false, replaces the existing types entirely (defaults to true)
-       * @example
-       * ```typescript
-       * // Merge with existing types (default behavior)
-       * const query = supabase
-       *   .from('users')
-       *   .select()
-       *   .overrideTypes<{ custom_field: string }>()
-       *
-       * // Replace existing types completely
-       * const replaceQuery = supabase
-       *   .from('users')
-       *   .select()
-       *   .overrideTypes<{ id: number; name: string }, { merge: false }>()
-       * ```
-       * @returns A PostgrestBuilder instance with the new type
-       */
-      overrideTypes() {
-        return this;
-      }
-    };
-    exports.default = PostgrestBuilder;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestTransformBuilder.js
-var require_PostgrestTransformBuilder = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestTransformBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestBuilder_1 = tslib_1.__importDefault(require_PostgrestBuilder());
-    var PostgrestTransformBuilder = class extends PostgrestBuilder_1.default {
-      /**
-       * Perform a SELECT on the query result.
-       *
-       * By default, `.insert()`, `.update()`, `.upsert()`, and `.delete()` do not
-       * return modified rows. By calling this method, modified rows are returned in
-       * `data`.
-       *
-       * @param columns - The columns to retrieve, separated by commas
-       */
-      select(columns) {
-        let quoted = false;
-        const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
-          if (/\s/.test(c) && !quoted) {
-            return "";
-          }
-          if (c === '"') {
-            quoted = !quoted;
-          }
-          return c;
-        }).join("");
-        this.url.searchParams.set("select", cleanedColumns);
-        this.headers.append("Prefer", "return=representation");
-        return this;
-      }
-      /**
-       * Order the query result by `column`.
-       *
-       * You can call this method multiple times to order by multiple columns.
-       *
-       * You can order referenced tables, but it only affects the ordering of the
-       * parent table if you use `!inner` in the query.
-       *
-       * @param column - The column to order by
-       * @param options - Named parameters
-       * @param options.ascending - If `true`, the result will be in ascending order
-       * @param options.nullsFirst - If `true`, `null`s appear first. If `false`,
-       * `null`s appear last.
-       * @param options.referencedTable - Set this to order a referenced table by
-       * its columns
-       * @param options.foreignTable - Deprecated, use `options.referencedTable`
-       * instead
-       */
-      order(column, { ascending = true, nullsFirst, foreignTable, referencedTable = foreignTable } = {}) {
-        const key = referencedTable ? `${referencedTable}.order` : "order";
-        const existingOrder = this.url.searchParams.get(key);
-        this.url.searchParams.set(key, `${existingOrder ? `${existingOrder},` : ""}${column}.${ascending ? "asc" : "desc"}${nullsFirst === void 0 ? "" : nullsFirst ? ".nullsfirst" : ".nullslast"}`);
-        return this;
-      }
-      /**
-       * Limit the query result by `count`.
-       *
-       * @param count - The maximum number of rows to return
-       * @param options - Named parameters
-       * @param options.referencedTable - Set this to limit rows of referenced
-       * tables instead of the parent table
-       * @param options.foreignTable - Deprecated, use `options.referencedTable`
-       * instead
-       */
-      limit(count, { foreignTable, referencedTable = foreignTable } = {}) {
-        const key = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
-        this.url.searchParams.set(key, `${count}`);
-        return this;
-      }
-      /**
-       * Limit the query result by starting at an offset `from` and ending at the offset `to`.
-       * Only records within this range are returned.
-       * This respects the query order and if there is no order clause the range could behave unexpectedly.
-       * The `from` and `to` values are 0-based and inclusive: `range(1, 3)` will include the second, third
-       * and fourth rows of the query.
-       *
-       * @param from - The starting index from which to limit the result
-       * @param to - The last index to which to limit the result
-       * @param options - Named parameters
-       * @param options.referencedTable - Set this to limit rows of referenced
-       * tables instead of the parent table
-       * @param options.foreignTable - Deprecated, use `options.referencedTable`
-       * instead
-       */
-      range(from, to, { foreignTable, referencedTable = foreignTable } = {}) {
-        const keyOffset = typeof referencedTable === "undefined" ? "offset" : `${referencedTable}.offset`;
-        const keyLimit = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
-        this.url.searchParams.set(keyOffset, `${from}`);
-        this.url.searchParams.set(keyLimit, `${to - from + 1}`);
-        return this;
-      }
-      /**
-       * Set the AbortSignal for the fetch request.
-       *
-       * @param signal - The AbortSignal to use for the fetch request
-       */
-      abortSignal(signal) {
-        this.signal = signal;
-        return this;
-      }
-      /**
-       * Return `data` as a single object instead of an array of objects.
-       *
-       * Query result must be one row (e.g. using `.limit(1)`), otherwise this
-       * returns an error.
-       */
-      single() {
-        this.headers.set("Accept", "application/vnd.pgrst.object+json");
-        return this;
-      }
-      /**
-       * Return `data` as a single object instead of an array of objects.
-       *
-       * Query result must be zero or one row (e.g. using `.limit(1)`), otherwise
-       * this returns an error.
-       */
-      maybeSingle() {
-        if (this.method === "GET") {
-          this.headers.set("Accept", "application/json");
-        } else {
-          this.headers.set("Accept", "application/vnd.pgrst.object+json");
-        }
-        this.isMaybeSingle = true;
-        return this;
-      }
-      /**
-       * Return `data` as a string in CSV format.
-       */
-      csv() {
-        this.headers.set("Accept", "text/csv");
-        return this;
-      }
-      /**
-       * Return `data` as an object in [GeoJSON](https://geojson.org) format.
-       */
-      geojson() {
-        this.headers.set("Accept", "application/geo+json");
-        return this;
-      }
-      /**
-       * Return `data` as the EXPLAIN plan for the query.
-       *
-       * You need to enable the
-       * [db_plan_enabled](https://supabase.com/docs/guides/database/debugging-performance#enabling-explain)
-       * setting before using this method.
-       *
-       * @param options - Named parameters
-       *
-       * @param options.analyze - If `true`, the query will be executed and the
-       * actual run time will be returned
-       *
-       * @param options.verbose - If `true`, the query identifier will be returned
-       * and `data` will include the output columns of the query
-       *
-       * @param options.settings - If `true`, include information on configuration
-       * parameters that affect query planning
-       *
-       * @param options.buffers - If `true`, include information on buffer usage
-       *
-       * @param options.wal - If `true`, include information on WAL record generation
-       *
-       * @param options.format - The format of the output, can be `"text"` (default)
-       * or `"json"`
-       */
-      explain({ analyze = false, verbose = false, settings = false, buffers = false, wal = false, format = "text" } = {}) {
-        var _a;
-        const options = [
-          analyze ? "analyze" : null,
-          verbose ? "verbose" : null,
-          settings ? "settings" : null,
-          buffers ? "buffers" : null,
-          wal ? "wal" : null
-        ].filter(Boolean).join("|");
-        const forMediatype = (_a = this.headers.get("Accept")) !== null && _a !== void 0 ? _a : "application/json";
-        this.headers.set("Accept", `application/vnd.pgrst.plan+${format}; for="${forMediatype}"; options=${options};`);
-        if (format === "json") {
-          return this;
-        } else {
-          return this;
-        }
-      }
-      /**
-       * Rollback the query.
-       *
-       * `data` will still be returned, but the query is not committed.
-       */
-      rollback() {
-        this.headers.append("Prefer", "tx=rollback");
-        return this;
-      }
-      /**
-       * Override the type of the returned `data`.
-       *
-       * @typeParam NewResult - The new result type to override with
-       * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
-       */
-      returns() {
-        return this;
-      }
-      /**
-       * Set the maximum number of rows that can be affected by the query.
-       * Only available in PostgREST v13+ and only works with PATCH and DELETE methods.
-       *
-       * @param value - The maximum number of rows that can be affected
-       */
-      maxAffected(value) {
-        this.headers.append("Prefer", "handling=strict");
-        this.headers.append("Prefer", `max-affected=${value}`);
-        return this;
-      }
-    };
-    exports.default = PostgrestTransformBuilder;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestFilterBuilder.js
-var require_PostgrestFilterBuilder = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestFilterBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestTransformBuilder_1 = tslib_1.__importDefault(require_PostgrestTransformBuilder());
-    var PostgrestReservedCharsRegexp = new RegExp("[,()]");
-    var PostgrestFilterBuilder = class extends PostgrestTransformBuilder_1.default {
-      /**
-       * Match only rows where `column` is equal to `value`.
-       *
-       * To check if the value of `column` is NULL, you should use `.is()` instead.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      eq(column, value) {
-        this.url.searchParams.append(column, `eq.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is not equal to `value`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      neq(column, value) {
-        this.url.searchParams.append(column, `neq.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is greater than `value`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      gt(column, value) {
-        this.url.searchParams.append(column, `gt.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is greater than or equal to `value`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      gte(column, value) {
-        this.url.searchParams.append(column, `gte.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is less than `value`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      lt(column, value) {
-        this.url.searchParams.append(column, `lt.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is less than or equal to `value`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      lte(column, value) {
-        this.url.searchParams.append(column, `lte.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches `pattern` case-sensitively.
-       *
-       * @param column - The column to filter on
-       * @param pattern - The pattern to match with
-       */
-      like(column, pattern) {
-        this.url.searchParams.append(column, `like.${pattern}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches all of `patterns` case-sensitively.
-       *
-       * @param column - The column to filter on
-       * @param patterns - The patterns to match with
-       */
-      likeAllOf(column, patterns) {
-        this.url.searchParams.append(column, `like(all).{${patterns.join(",")}}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches any of `patterns` case-sensitively.
-       *
-       * @param column - The column to filter on
-       * @param patterns - The patterns to match with
-       */
-      likeAnyOf(column, patterns) {
-        this.url.searchParams.append(column, `like(any).{${patterns.join(",")}}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches `pattern` case-insensitively.
-       *
-       * @param column - The column to filter on
-       * @param pattern - The pattern to match with
-       */
-      ilike(column, pattern) {
-        this.url.searchParams.append(column, `ilike.${pattern}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches all of `patterns` case-insensitively.
-       *
-       * @param column - The column to filter on
-       * @param patterns - The patterns to match with
-       */
-      ilikeAllOf(column, patterns) {
-        this.url.searchParams.append(column, `ilike(all).{${patterns.join(",")}}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches any of `patterns` case-insensitively.
-       *
-       * @param column - The column to filter on
-       * @param patterns - The patterns to match with
-       */
-      ilikeAnyOf(column, patterns) {
-        this.url.searchParams.append(column, `ilike(any).{${patterns.join(",")}}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches the PostgreSQL regex `pattern`
-       * case-sensitively (using the `~` operator).
-       *
-       * @param column - The column to filter on
-       * @param pattern - The PostgreSQL regular expression pattern to match with
-       */
-      regexMatch(column, pattern) {
-        this.url.searchParams.append(column, `match.${pattern}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` matches the PostgreSQL regex `pattern`
-       * case-insensitively (using the `~*` operator).
-       *
-       * @param column - The column to filter on
-       * @param pattern - The PostgreSQL regular expression pattern to match with
-       */
-      regexIMatch(column, pattern) {
-        this.url.searchParams.append(column, `imatch.${pattern}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` IS `value`.
-       *
-       * For non-boolean columns, this is only relevant for checking if the value of
-       * `column` is NULL by setting `value` to `null`.
-       *
-       * For boolean columns, you can also set `value` to `true` or `false` and it
-       * will behave the same way as `.eq()`.
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      is(column, value) {
-        this.url.searchParams.append(column, `is.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` IS DISTINCT FROM `value`.
-       *
-       * Unlike `.neq()`, this treats `NULL` as a comparable value. Two `NULL` values
-       * are considered equal (not distinct), and comparing `NULL` with any non-NULL
-       * value returns true (distinct).
-       *
-       * @param column - The column to filter on
-       * @param value - The value to filter with
-       */
-      isDistinct(column, value) {
-        this.url.searchParams.append(column, `isdistinct.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows where `column` is included in the `values` array.
-       *
-       * @param column - The column to filter on
-       * @param values - The values array to filter with
-       */
-      in(column, values) {
-        const cleanedValues = Array.from(new Set(values)).map((s) => {
-          if (typeof s === "string" && PostgrestReservedCharsRegexp.test(s))
-            return `"${s}"`;
-          else
-            return `${s}`;
-        }).join(",");
-        this.url.searchParams.append(column, `in.(${cleanedValues})`);
-        return this;
-      }
-      /**
-       * Only relevant for jsonb, array, and range columns. Match only rows where
-       * `column` contains every element appearing in `value`.
-       *
-       * @param column - The jsonb, array, or range column to filter on
-       * @param value - The jsonb, array, or range value to filter with
-       */
-      contains(column, value) {
-        if (typeof value === "string") {
-          this.url.searchParams.append(column, `cs.${value}`);
-        } else if (Array.isArray(value)) {
-          this.url.searchParams.append(column, `cs.{${value.join(",")}}`);
-        } else {
-          this.url.searchParams.append(column, `cs.${JSON.stringify(value)}`);
-        }
-        return this;
-      }
-      /**
-       * Only relevant for jsonb, array, and range columns. Match only rows where
-       * every element appearing in `column` is contained by `value`.
-       *
-       * @param column - The jsonb, array, or range column to filter on
-       * @param value - The jsonb, array, or range value to filter with
-       */
-      containedBy(column, value) {
-        if (typeof value === "string") {
-          this.url.searchParams.append(column, `cd.${value}`);
-        } else if (Array.isArray(value)) {
-          this.url.searchParams.append(column, `cd.{${value.join(",")}}`);
-        } else {
-          this.url.searchParams.append(column, `cd.${JSON.stringify(value)}`);
-        }
-        return this;
-      }
-      /**
-       * Only relevant for range columns. Match only rows where every element in
-       * `column` is greater than any element in `range`.
-       *
-       * @param column - The range column to filter on
-       * @param range - The range to filter with
-       */
-      rangeGt(column, range) {
-        this.url.searchParams.append(column, `sr.${range}`);
-        return this;
-      }
-      /**
-       * Only relevant for range columns. Match only rows where every element in
-       * `column` is either contained in `range` or greater than any element in
-       * `range`.
-       *
-       * @param column - The range column to filter on
-       * @param range - The range to filter with
-       */
-      rangeGte(column, range) {
-        this.url.searchParams.append(column, `nxl.${range}`);
-        return this;
-      }
-      /**
-       * Only relevant for range columns. Match only rows where every element in
-       * `column` is less than any element in `range`.
-       *
-       * @param column - The range column to filter on
-       * @param range - The range to filter with
-       */
-      rangeLt(column, range) {
-        this.url.searchParams.append(column, `sl.${range}`);
-        return this;
-      }
-      /**
-       * Only relevant for range columns. Match only rows where every element in
-       * `column` is either contained in `range` or less than any element in
-       * `range`.
-       *
-       * @param column - The range column to filter on
-       * @param range - The range to filter with
-       */
-      rangeLte(column, range) {
-        this.url.searchParams.append(column, `nxr.${range}`);
-        return this;
-      }
-      /**
-       * Only relevant for range columns. Match only rows where `column` is
-       * mutually exclusive to `range` and there can be no element between the two
-       * ranges.
-       *
-       * @param column - The range column to filter on
-       * @param range - The range to filter with
-       */
-      rangeAdjacent(column, range) {
-        this.url.searchParams.append(column, `adj.${range}`);
-        return this;
-      }
-      /**
-       * Only relevant for array and range columns. Match only rows where
-       * `column` and `value` have an element in common.
-       *
-       * @param column - The array or range column to filter on
-       * @param value - The array or range value to filter with
-       */
-      overlaps(column, value) {
-        if (typeof value === "string") {
-          this.url.searchParams.append(column, `ov.${value}`);
-        } else {
-          this.url.searchParams.append(column, `ov.{${value.join(",")}}`);
-        }
-        return this;
-      }
-      /**
-       * Only relevant for text and tsvector columns. Match only rows where
-       * `column` matches the query string in `query`.
-       *
-       * @param column - The text or tsvector column to filter on
-       * @param query - The query text to match with
-       * @param options - Named parameters
-       * @param options.config - The text search configuration to use
-       * @param options.type - Change how the `query` text is interpreted
-       */
-      textSearch(column, query, { config, type } = {}) {
-        let typePart = "";
-        if (type === "plain") {
-          typePart = "pl";
-        } else if (type === "phrase") {
-          typePart = "ph";
-        } else if (type === "websearch") {
-          typePart = "w";
-        }
-        const configPart = config === void 0 ? "" : `(${config})`;
-        this.url.searchParams.append(column, `${typePart}fts${configPart}.${query}`);
-        return this;
-      }
-      /**
-       * Match only rows where each column in `query` keys is equal to its
-       * associated value. Shorthand for multiple `.eq()`s.
-       *
-       * @param query - The object to filter with, with column names as keys mapped
-       * to their filter values
-       */
-      match(query) {
-        Object.entries(query).forEach(([column, value]) => {
-          this.url.searchParams.append(column, `eq.${value}`);
-        });
-        return this;
-      }
-      /**
-       * Match only rows which doesn't satisfy the filter.
-       *
-       * Unlike most filters, `opearator` and `value` are used as-is and need to
-       * follow [PostgREST
-       * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
-       * to make sure they are properly sanitized.
-       *
-       * @param column - The column to filter on
-       * @param operator - The operator to be negated to filter with, following
-       * PostgREST syntax
-       * @param value - The value to filter with, following PostgREST syntax
-       */
-      not(column, operator, value) {
-        this.url.searchParams.append(column, `not.${operator}.${value}`);
-        return this;
-      }
-      /**
-       * Match only rows which satisfy at least one of the filters.
-       *
-       * Unlike most filters, `filters` is used as-is and needs to follow [PostgREST
-       * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
-       * to make sure it's properly sanitized.
-       *
-       * It's currently not possible to do an `.or()` filter across multiple tables.
-       *
-       * @param filters - The filters to use, following PostgREST syntax
-       * @param options - Named parameters
-       * @param options.referencedTable - Set this to filter on referenced tables
-       * instead of the parent table
-       * @param options.foreignTable - Deprecated, use `referencedTable` instead
-       */
-      or(filters, { foreignTable, referencedTable = foreignTable } = {}) {
-        const key = referencedTable ? `${referencedTable}.or` : "or";
-        this.url.searchParams.append(key, `(${filters})`);
-        return this;
-      }
-      /**
-       * Match only rows which satisfy the filter. This is an escape hatch - you
-       * should use the specific filter methods wherever possible.
-       *
-       * Unlike most filters, `opearator` and `value` are used as-is and need to
-       * follow [PostgREST
-       * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
-       * to make sure they are properly sanitized.
-       *
-       * @param column - The column to filter on
-       * @param operator - The operator to filter with, following PostgREST syntax
-       * @param value - The value to filter with, following PostgREST syntax
-       */
-      filter(column, operator, value) {
-        this.url.searchParams.append(column, `${operator}.${value}`);
-        return this;
-      }
-    };
-    exports.default = PostgrestFilterBuilder;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestQueryBuilder.js
-var require_PostgrestQueryBuilder = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestQueryBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestFilterBuilder_1 = tslib_1.__importDefault(require_PostgrestFilterBuilder());
-    var PostgrestQueryBuilder = class {
-      /**
-       * Creates a query builder scoped to a Postgres table or view.
-       *
-       * @example
-       * ```ts
-       * import PostgrestQueryBuilder from '@supabase/postgrest-js'
-       *
-       * const query = new PostgrestQueryBuilder(
-       *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
-       *   { headers: { apikey: 'public-anon-key' } }
-       * )
-       * ```
-       */
-      constructor(url, { headers = {}, schema, fetch: fetch2 }) {
-        this.url = url;
-        this.headers = new Headers(headers);
-        this.schema = schema;
-        this.fetch = fetch2;
-      }
-      /**
-       * Perform a SELECT query on the table or view.
-       *
-       * @param columns - The columns to retrieve, separated by commas. Columns can be renamed when returned with `customName:columnName`
-       *
-       * @param options - Named parameters
-       *
-       * @param options.head - When set to `true`, `data` will not be returned.
-       * Useful if you only need the count.
-       *
-       * @param options.count - Count algorithm to use to count rows in the table or view.
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       */
-      select(columns, options) {
-        const { head = false, count } = options !== null && options !== void 0 ? options : {};
-        const method = head ? "HEAD" : "GET";
-        let quoted = false;
-        const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
-          if (/\s/.test(c) && !quoted) {
-            return "";
-          }
-          if (c === '"') {
-            quoted = !quoted;
-          }
-          return c;
-        }).join("");
-        this.url.searchParams.set("select", cleanedColumns);
-        if (count) {
-          this.headers.append("Prefer", `count=${count}`);
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url: this.url,
-          headers: this.headers,
-          schema: this.schema,
-          fetch: this.fetch
-        });
-      }
-      /**
-       * Perform an INSERT into the table or view.
-       *
-       * By default, inserted rows are not returned. To return it, chain the call
-       * with `.select()`.
-       *
-       * @param values - The values to insert. Pass an object to insert a single row
-       * or an array to insert multiple rows.
-       *
-       * @param options - Named parameters
-       *
-       * @param options.count - Count algorithm to use to count inserted rows.
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       *
-       * @param options.defaultToNull - Make missing fields default to `null`.
-       * Otherwise, use the default value for the column. Only applies for bulk
-       * inserts.
-       */
-      insert(values, { count, defaultToNull = true } = {}) {
-        var _a;
-        const method = "POST";
-        if (count) {
-          this.headers.append("Prefer", `count=${count}`);
-        }
-        if (!defaultToNull) {
-          this.headers.append("Prefer", `missing=default`);
-        }
-        if (Array.isArray(values)) {
-          const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
-          if (columns.length > 0) {
-            const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
-            this.url.searchParams.set("columns", uniqueColumns.join(","));
-          }
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url: this.url,
-          headers: this.headers,
-          schema: this.schema,
-          body: values,
-          fetch: (_a = this.fetch) !== null && _a !== void 0 ? _a : fetch
-        });
-      }
-      /**
-      * Perform an UPSERT on the table or view. Depending on the column(s) passed
-      * to `onConflict`, `.upsert()` allows you to perform the equivalent of
-      * `.insert()` if a row with the corresponding `onConflict` columns doesn't
-      * exist, or if it does exist, perform an alternative action depending on
-      * `ignoreDuplicates`.
-      *
-      * By default, upserted rows are not returned. To return it, chain the call
-      * with `.select()`.
-      *
-      * @param values - The values to upsert with. Pass an object to upsert a
-      * single row or an array to upsert multiple rows.
-      *
-      * @param options - Named parameters
-      *
-      * @param options.onConflict - Comma-separated UNIQUE column(s) to specify how
-      * duplicate rows are determined. Two rows are duplicates if all the
-      * `onConflict` columns are equal.
-      *
-      * @param options.ignoreDuplicates - If `true`, duplicate rows are ignored. If
-      * `false`, duplicate rows are merged with existing rows.
-      *
-      * @param options.count - Count algorithm to use to count upserted rows.
-      *
-      * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-      * hood.
-      *
-      * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-      * statistics under the hood.
-      *
-      * `"estimated"`: Uses exact count for low numbers and planned count for high
-      * numbers.
-      *
-      * @param options.defaultToNull - Make missing fields default to `null`.
-      * Otherwise, use the default value for the column. This only applies when
-      * inserting new rows, not when merging with existing rows under
-      * `ignoreDuplicates: false`. This also only applies when doing bulk upserts.
-      *
-      * @example Upsert a single row using a unique key
-      * ```ts
-      * // Upserting a single row, overwriting based on the 'username' unique column
-      * const { data, error } = await supabase
-      *   .from('users')
-      *   .upsert({ username: 'supabot' }, { onConflict: 'username' })
-      *
-      * // Example response:
-      * // {
-      * //   data: [
-      * //     { id: 4, message: 'bar', username: 'supabot' }
-      * //   ],
-      * //   error: null
-      * // }
-      * ```
-      *
-      * @example Upsert with conflict resolution and exact row counting
-      * ```ts
-      * // Upserting and returning exact count
-      * const { data, error, count } = await supabase
-      *   .from('users')
-      *   .upsert(
-      *     {
-      *       id: 3,
-      *       message: 'foo',
-      *       username: 'supabot'
-      *     },
-      *     {
-      *       onConflict: 'username',
-      *       count: 'exact'
-      *     }
-      *   )
-      *
-      * // Example response:
-      * // {
-      * //   data: [
-      * //     {
-      * //       id: 42,
-      * //       handle: "saoirse",
-      * //       display_name: "Saoirse"
-      * //     }
-      * //   ],
-      * //   count: 1,
-      * //   error: null
-      * // }
-      * ```
-      */
-      upsert(values, { onConflict, ignoreDuplicates = false, count, defaultToNull = true } = {}) {
-        var _a;
-        const method = "POST";
-        this.headers.append("Prefer", `resolution=${ignoreDuplicates ? "ignore" : "merge"}-duplicates`);
-        if (onConflict !== void 0)
-          this.url.searchParams.set("on_conflict", onConflict);
-        if (count) {
-          this.headers.append("Prefer", `count=${count}`);
-        }
-        if (!defaultToNull) {
-          this.headers.append("Prefer", "missing=default");
-        }
-        if (Array.isArray(values)) {
-          const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
-          if (columns.length > 0) {
-            const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
-            this.url.searchParams.set("columns", uniqueColumns.join(","));
-          }
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url: this.url,
-          headers: this.headers,
-          schema: this.schema,
-          body: values,
-          fetch: (_a = this.fetch) !== null && _a !== void 0 ? _a : fetch
-        });
-      }
-      /**
-       * Perform an UPDATE on the table or view.
-       *
-       * By default, updated rows are not returned. To return it, chain the call
-       * with `.select()` after filters.
-       *
-       * @param values - The values to update with
-       *
-       * @param options - Named parameters
-       *
-       * @param options.count - Count algorithm to use to count updated rows.
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       */
-      update(values, { count } = {}) {
-        var _a;
-        const method = "PATCH";
-        if (count) {
-          this.headers.append("Prefer", `count=${count}`);
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url: this.url,
-          headers: this.headers,
-          schema: this.schema,
-          body: values,
-          fetch: (_a = this.fetch) !== null && _a !== void 0 ? _a : fetch
-        });
-      }
-      /**
-       * Perform a DELETE on the table or view.
-       *
-       * By default, deleted rows are not returned. To return it, chain the call
-       * with `.select()` after filters.
-       *
-       * @param options - Named parameters
-       *
-       * @param options.count - Count algorithm to use to count deleted rows.
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       */
-      delete({ count } = {}) {
-        var _a;
-        const method = "DELETE";
-        if (count) {
-          this.headers.append("Prefer", `count=${count}`);
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url: this.url,
-          headers: this.headers,
-          schema: this.schema,
-          fetch: (_a = this.fetch) !== null && _a !== void 0 ? _a : fetch
-        });
-      }
-    };
-    exports.default = PostgrestQueryBuilder;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/PostgrestClient.js
-var require_PostgrestClient = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/PostgrestClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestQueryBuilder_1 = tslib_1.__importDefault(require_PostgrestQueryBuilder());
-    var PostgrestFilterBuilder_1 = tslib_1.__importDefault(require_PostgrestFilterBuilder());
-    var PostgrestClient = class _PostgrestClient {
-      // TODO: Add back shouldThrowOnError once we figure out the typings
-      /**
-       * Creates a PostgREST client.
-       *
-       * @param url - URL of the PostgREST endpoint
-       * @param options - Named parameters
-       * @param options.headers - Custom headers
-       * @param options.schema - Postgres schema to switch to
-       * @param options.fetch - Custom fetch
-       * @example
-       * ```ts
-       * import PostgrestClient from '@supabase/postgrest-js'
-       *
-       * const postgrest = new PostgrestClient('https://xyzcompany.supabase.co/rest/v1', {
-       *   headers: { apikey: 'public-anon-key' },
-       *   schema: 'public',
-       * })
-       * ```
-       */
-      constructor(url, { headers = {}, schema, fetch: fetch2 } = {}) {
-        this.url = url;
-        this.headers = new Headers(headers);
-        this.schemaName = schema;
-        this.fetch = fetch2;
-      }
-      /**
-       * Perform a query on a table or a view.
-       *
-       * @param relation - The table or view name to query
-       */
-      from(relation) {
-        if (!relation || typeof relation !== "string" || relation.trim() === "") {
-          throw new Error("Invalid relation name: relation must be a non-empty string.");
-        }
-        const url = new URL(`${this.url}/${relation}`);
-        return new PostgrestQueryBuilder_1.default(url, {
-          headers: new Headers(this.headers),
-          schema: this.schemaName,
-          fetch: this.fetch
-        });
-      }
-      /**
-       * Select a schema to query or perform an function (rpc) call.
-       *
-       * The schema needs to be on the list of exposed schemas inside Supabase.
-       *
-       * @param schema - The schema to query
-       */
-      schema(schema) {
-        return new _PostgrestClient(this.url, {
-          headers: this.headers,
-          schema,
-          fetch: this.fetch
-        });
-      }
-      /**
-       * Perform a function call.
-       *
-       * @param fn - The function name to call
-       * @param args - The arguments to pass to the function call
-       * @param options - Named parameters
-       * @param options.head - When set to `true`, `data` will not be returned.
-       * Useful if you only need the count.
-       * @param options.get - When set to `true`, the function will be called with
-       * read-only access mode.
-       * @param options.count - Count algorithm to use to count rows returned by the
-       * function. Only applicable for [set-returning
-       * functions](https://www.postgresql.org/docs/current/functions-srf.html).
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       *
-       * @example
-       * ```ts
-       * // For cross-schema functions where type inference fails, use overrideTypes:
-       * const { data } = await supabase
-       *   .schema('schema_b')
-       *   .rpc('function_a', {})
-       *   .overrideTypes<{ id: string; user_id: string }[]>()
-       * ```
-       */
-      rpc(fn, args = {}, { head = false, get = false, count } = {}) {
-        var _a;
-        let method;
-        const url = new URL(`${this.url}/rpc/${fn}`);
-        let body;
-        if (head || get) {
-          method = head ? "HEAD" : "GET";
-          Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
-            url.searchParams.append(name, value);
-          });
-        } else {
-          method = "POST";
-          body = args;
-        }
-        const headers = new Headers(this.headers);
-        if (count) {
-          headers.set("Prefer", `count=${count}`);
-        }
-        return new PostgrestFilterBuilder_1.default({
-          method,
-          url,
-          headers,
-          schema: this.schemaName,
-          body,
-          fetch: (_a = this.fetch) !== null && _a !== void 0 ? _a : fetch
-        });
-      }
-    };
-    exports.default = PostgrestClient;
-  }
-});
-
-// node_modules/@supabase/postgrest-js/dist/cjs/index.js
-var require_cjs2 = __commonJS({
-  "node_modules/@supabase/postgrest-js/dist/cjs/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PostgrestError = exports.PostgrestBuilder = exports.PostgrestTransformBuilder = exports.PostgrestFilterBuilder = exports.PostgrestQueryBuilder = exports.PostgrestClient = void 0;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var PostgrestClient_1 = tslib_1.__importDefault(require_PostgrestClient());
-    exports.PostgrestClient = PostgrestClient_1.default;
-    var PostgrestQueryBuilder_1 = tslib_1.__importDefault(require_PostgrestQueryBuilder());
-    exports.PostgrestQueryBuilder = PostgrestQueryBuilder_1.default;
-    var PostgrestFilterBuilder_1 = tslib_1.__importDefault(require_PostgrestFilterBuilder());
-    exports.PostgrestFilterBuilder = PostgrestFilterBuilder_1.default;
-    var PostgrestTransformBuilder_1 = tslib_1.__importDefault(require_PostgrestTransformBuilder());
-    exports.PostgrestTransformBuilder = PostgrestTransformBuilder_1.default;
-    var PostgrestBuilder_1 = tslib_1.__importDefault(require_PostgrestBuilder());
-    exports.PostgrestBuilder = PostgrestBuilder_1.default;
-    var PostgrestError_1 = tslib_1.__importDefault(require_PostgrestError());
-    exports.PostgrestError = PostgrestError_1.default;
-    exports.default = {
-      PostgrestClient: PostgrestClient_1.default,
-      PostgrestQueryBuilder: PostgrestQueryBuilder_1.default,
-      PostgrestFilterBuilder: PostgrestFilterBuilder_1.default,
-      PostgrestTransformBuilder: PostgrestTransformBuilder_1.default,
-      PostgrestBuilder: PostgrestBuilder_1.default,
-      PostgrestError: PostgrestError_1.default
-    };
   }
 });
 
@@ -43989,7 +42642,7 @@ var require_version2 = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.version = void 0;
-    exports.version = "2.87.1";
+    exports.version = "2.89.0";
   }
 });
 
@@ -44348,8 +43001,7 @@ var require_transformers = __commonJS({
       if (typeof value === "string") {
         try {
           return JSON.parse(value);
-        } catch (error) {
-          console.log(`JSON parse error: ${error}`);
+        } catch (_a) {
           return value;
         }
       }
@@ -44511,13 +43163,13 @@ var require_RealtimePresence = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.REALTIME_PRESENCE_LISTEN_EVENTS = void 0;
-    var REALTIME_PRESENCE_LISTEN_EVENTS2;
-    (function(REALTIME_PRESENCE_LISTEN_EVENTS3) {
-      REALTIME_PRESENCE_LISTEN_EVENTS3["SYNC"] = "sync";
-      REALTIME_PRESENCE_LISTEN_EVENTS3["JOIN"] = "join";
-      REALTIME_PRESENCE_LISTEN_EVENTS3["LEAVE"] = "leave";
-    })(REALTIME_PRESENCE_LISTEN_EVENTS2 || (exports.REALTIME_PRESENCE_LISTEN_EVENTS = REALTIME_PRESENCE_LISTEN_EVENTS2 = {}));
-    var RealtimePresence2 = class _RealtimePresence {
+    var REALTIME_PRESENCE_LISTEN_EVENTS;
+    (function(REALTIME_PRESENCE_LISTEN_EVENTS2) {
+      REALTIME_PRESENCE_LISTEN_EVENTS2["SYNC"] = "sync";
+      REALTIME_PRESENCE_LISTEN_EVENTS2["JOIN"] = "join";
+      REALTIME_PRESENCE_LISTEN_EVENTS2["LEAVE"] = "leave";
+    })(REALTIME_PRESENCE_LISTEN_EVENTS || (exports.REALTIME_PRESENCE_LISTEN_EVENTS = REALTIME_PRESENCE_LISTEN_EVENTS = {}));
+    var RealtimePresence = class _RealtimePresence {
       /**
        * Creates a Presence helper that keeps the local presence state in sync with the server.
        *
@@ -44741,7 +43393,7 @@ var require_RealtimePresence = __commonJS({
         return !this.joinRef || this.joinRef !== this.channel._joinRef();
       }
     };
-    exports.default = RealtimePresence2;
+    exports.default = RealtimePresence;
   }
 });
 
@@ -44758,29 +43410,29 @@ var require_RealtimeChannel = __commonJS({
     var RealtimePresence_1 = tslib_1.__importDefault(require_RealtimePresence());
     var Transformers = tslib_1.__importStar(require_transformers());
     var transformers_1 = require_transformers();
-    var REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2;
-    (function(REALTIME_POSTGRES_CHANGES_LISTEN_EVENT3) {
-      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT3["ALL"] = "*";
-      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT3["INSERT"] = "INSERT";
-      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT3["UPDATE"] = "UPDATE";
-      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT3["DELETE"] = "DELETE";
-    })(REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2 || (exports.REALTIME_POSTGRES_CHANGES_LISTEN_EVENT = REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2 = {}));
-    var REALTIME_LISTEN_TYPES2;
-    (function(REALTIME_LISTEN_TYPES3) {
-      REALTIME_LISTEN_TYPES3["BROADCAST"] = "broadcast";
-      REALTIME_LISTEN_TYPES3["PRESENCE"] = "presence";
-      REALTIME_LISTEN_TYPES3["POSTGRES_CHANGES"] = "postgres_changes";
-      REALTIME_LISTEN_TYPES3["SYSTEM"] = "system";
-    })(REALTIME_LISTEN_TYPES2 || (exports.REALTIME_LISTEN_TYPES = REALTIME_LISTEN_TYPES2 = {}));
-    var REALTIME_SUBSCRIBE_STATES2;
-    (function(REALTIME_SUBSCRIBE_STATES3) {
-      REALTIME_SUBSCRIBE_STATES3["SUBSCRIBED"] = "SUBSCRIBED";
-      REALTIME_SUBSCRIBE_STATES3["TIMED_OUT"] = "TIMED_OUT";
-      REALTIME_SUBSCRIBE_STATES3["CLOSED"] = "CLOSED";
-      REALTIME_SUBSCRIBE_STATES3["CHANNEL_ERROR"] = "CHANNEL_ERROR";
-    })(REALTIME_SUBSCRIBE_STATES2 || (exports.REALTIME_SUBSCRIBE_STATES = REALTIME_SUBSCRIBE_STATES2 = {}));
+    var REALTIME_POSTGRES_CHANGES_LISTEN_EVENT;
+    (function(REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2) {
+      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2["ALL"] = "*";
+      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2["INSERT"] = "INSERT";
+      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2["UPDATE"] = "UPDATE";
+      REALTIME_POSTGRES_CHANGES_LISTEN_EVENT2["DELETE"] = "DELETE";
+    })(REALTIME_POSTGRES_CHANGES_LISTEN_EVENT || (exports.REALTIME_POSTGRES_CHANGES_LISTEN_EVENT = REALTIME_POSTGRES_CHANGES_LISTEN_EVENT = {}));
+    var REALTIME_LISTEN_TYPES;
+    (function(REALTIME_LISTEN_TYPES2) {
+      REALTIME_LISTEN_TYPES2["BROADCAST"] = "broadcast";
+      REALTIME_LISTEN_TYPES2["PRESENCE"] = "presence";
+      REALTIME_LISTEN_TYPES2["POSTGRES_CHANGES"] = "postgres_changes";
+      REALTIME_LISTEN_TYPES2["SYSTEM"] = "system";
+    })(REALTIME_LISTEN_TYPES || (exports.REALTIME_LISTEN_TYPES = REALTIME_LISTEN_TYPES = {}));
+    var REALTIME_SUBSCRIBE_STATES;
+    (function(REALTIME_SUBSCRIBE_STATES2) {
+      REALTIME_SUBSCRIBE_STATES2["SUBSCRIBED"] = "SUBSCRIBED";
+      REALTIME_SUBSCRIBE_STATES2["TIMED_OUT"] = "TIMED_OUT";
+      REALTIME_SUBSCRIBE_STATES2["CLOSED"] = "CLOSED";
+      REALTIME_SUBSCRIBE_STATES2["CHANNEL_ERROR"] = "CHANNEL_ERROR";
+    })(REALTIME_SUBSCRIBE_STATES || (exports.REALTIME_SUBSCRIBE_STATES = REALTIME_SUBSCRIBE_STATES = {}));
     exports.REALTIME_CHANNEL_STATES = constants_1.CHANNEL_STATES;
-    var RealtimeChannel2 = class _RealtimeChannel {
+    var RealtimeChannel = class _RealtimeChannel {
       /**
        * Creates a channel that can broadcast messages, sync presence, and listen to Postgres changes.
        *
@@ -44870,7 +43522,7 @@ var require_RealtimeChannel = __commonJS({
         if (this.state == constants_1.CHANNEL_STATES.closed) {
           const { config: { broadcast, presence, private: isPrivate } } = this.params;
           const postgres_changes = (_b = (_a = this.bindings.postgres_changes) === null || _a === void 0 ? void 0 : _a.map((r) => r.filter)) !== null && _b !== void 0 ? _b : [];
-          const presence_enabled = !!this.bindings[REALTIME_LISTEN_TYPES2.PRESENCE] && this.bindings[REALTIME_LISTEN_TYPES2.PRESENCE].length > 0 || ((_c = this.params.config.presence) === null || _c === void 0 ? void 0 : _c.enabled) === true;
+          const presence_enabled = !!this.bindings[REALTIME_LISTEN_TYPES.PRESENCE] && this.bindings[REALTIME_LISTEN_TYPES.PRESENCE].length > 0 || ((_c = this.params.config.presence) === null || _c === void 0 ? void 0 : _c.enabled) === true;
           const accessTokenPayload = {};
           const config = {
             broadcast,
@@ -44881,8 +43533,8 @@ var require_RealtimeChannel = __commonJS({
           if (this.socket.accessTokenValue) {
             accessTokenPayload.access_token = this.socket.accessTokenValue;
           }
-          this._onError((e) => callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.CHANNEL_ERROR, e));
-          this._onClose(() => callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.CLOSED));
+          this._onError((e) => callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR, e));
+          this._onClose(() => callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.CLOSED));
           this.updateJoinPayload(Object.assign({ config }, accessTokenPayload));
           this.joinedOnce = true;
           this._rejoin(timeout);
@@ -44892,7 +43544,7 @@ var require_RealtimeChannel = __commonJS({
               this.socket.setAuth();
             }
             if (postgres_changes2 === void 0) {
-              callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.SUBSCRIBED);
+              callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.SUBSCRIBED);
               return;
             } else {
               const clientPostgresBindings = this.bindings.postgres_changes;
@@ -44907,20 +43559,20 @@ var require_RealtimeChannel = __commonJS({
                 } else {
                   this.unsubscribe();
                   this.state = constants_1.CHANNEL_STATES.errored;
-                  callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.CHANNEL_ERROR, new Error("mismatch between server and client bindings for postgres changes"));
+                  callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR, new Error("mismatch between server and client bindings for postgres changes"));
                   return;
                 }
               }
               this.bindings.postgres_changes = newPostgresBindings;
-              callback && callback(REALTIME_SUBSCRIBE_STATES2.SUBSCRIBED);
+              callback && callback(REALTIME_SUBSCRIBE_STATES.SUBSCRIBED);
               return;
             }
           }).receive("error", (error) => {
             this.state = constants_1.CHANNEL_STATES.errored;
-            callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.CHANNEL_ERROR, new Error(JSON.stringify(Object.values(error).join(", ") || "error")));
+            callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.CHANNEL_ERROR, new Error(JSON.stringify(Object.values(error).join(", ") || "error")));
             return;
           }).receive("timeout", () => {
-            callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES2.TIMED_OUT);
+            callback === null || callback === void 0 ? void 0 : callback(REALTIME_SUBSCRIBE_STATES.TIMED_OUT);
             return;
           });
         }
@@ -44956,7 +43608,7 @@ var require_RealtimeChannel = __commonJS({
         }, opts);
       }
       on(type, filter, callback) {
-        if (this.state === constants_1.CHANNEL_STATES.joined && type === REALTIME_LISTEN_TYPES2.PRESENCE) {
+        if (this.state === constants_1.CHANNEL_STATES.joined && type === REALTIME_LISTEN_TYPES.PRESENCE) {
           this.socket.log("channel", `resubscribe to ${this.topic} due to change in presence callbacks on joined channel`);
           this.unsubscribe().then(async () => await this.subscribe());
         }
@@ -44975,17 +43627,19 @@ var require_RealtimeChannel = __commonJS({
        */
       async httpSend(event, payload, opts = {}) {
         var _a;
-        const authorization = this.socket.accessTokenValue ? `Bearer ${this.socket.accessTokenValue}` : "";
         if (payload === void 0 || payload === null) {
           return Promise.reject("Payload is required for httpSend()");
         }
+        const headers = {
+          apikey: this.socket.apiKey ? this.socket.apiKey : "",
+          "Content-Type": "application/json"
+        };
+        if (this.socket.accessTokenValue) {
+          headers["Authorization"] = `Bearer ${this.socket.accessTokenValue}`;
+        }
         const options = {
           method: "POST",
-          headers: {
-            Authorization: authorization,
-            apikey: this.socket.apiKey ? this.socket.apiKey : "",
-            "Content-Type": "application/json"
-          },
+          headers,
           body: JSON.stringify({
             messages: [
               {
@@ -45023,14 +43677,16 @@ var require_RealtimeChannel = __commonJS({
         if (!this._canPush() && args.type === "broadcast") {
           console.warn("Realtime send() is automatically falling back to REST API. This behavior will be deprecated in the future. Please use httpSend() explicitly for REST delivery.");
           const { event, payload: endpoint_payload } = args;
-          const authorization = this.socket.accessTokenValue ? `Bearer ${this.socket.accessTokenValue}` : "";
+          const headers = {
+            apikey: this.socket.apiKey ? this.socket.apiKey : "",
+            "Content-Type": "application/json"
+          };
+          if (this.socket.accessTokenValue) {
+            headers["Authorization"] = `Bearer ${this.socket.accessTokenValue}`;
+          }
           const options = {
             method: "POST",
-            headers: {
-              Authorization: authorization,
-              apikey: this.socket.apiKey ? this.socket.apiKey : "",
-              "Content-Type": "application/json"
-            },
+            headers,
             body: JSON.stringify({
               messages: [
                 {
@@ -45349,7 +44005,7 @@ var require_RealtimeChannel = __commonJS({
         return records;
       }
     };
-    exports.default = RealtimeChannel2;
+    exports.default = RealtimeChannel;
   }
 });
 
@@ -45831,6 +44487,9 @@ Option 2: Install and provide the "ws" package:
         this.conn.onerror = (error) => this._onConnError(error);
         this.conn.onmessage = (event) => this._onConnMessage(event);
         this.conn.onclose = (event) => this._onConnClose(event);
+        if (this.conn.readyState === constants_1.SOCKET_STATES.open) {
+          this._onConnOpen();
+        }
       }
       /**
        * Teardown connection and cleanup resources
@@ -45852,6 +44511,7 @@ Option 2: Install and provide the "ws" package:
           this.conn = null;
         }
         this._clearAllTimers();
+        this._terminateWorker();
         this.channels.forEach((channel) => channel.teardown());
       }
       /** @internal */
@@ -45891,7 +44551,7 @@ Option 2: Install and provide the "ws" package:
         this.workerRef = new Worker(objectUrl);
         this.workerRef.onerror = (error) => {
           this.log("worker", "worker error", error.message);
-          this.workerRef.terminate();
+          this._terminateWorker();
         };
         this.workerRef.onmessage = (event) => {
           if (event.data.event === "keepAlive") {
@@ -45902,6 +44562,17 @@ Option 2: Install and provide the "ws" package:
           event: "start",
           interval: this.heartbeatIntervalMs
         });
+      }
+      /**
+       * Terminate the Web Worker and clear the reference
+       * @internal
+       */
+      _terminateWorker() {
+        if (this.workerRef) {
+          this.log("worker", "terminating worker");
+          this.workerRef.terminate();
+          this.workerRef = void 0;
+        }
       }
       /** @internal */
       _onConnClose(event) {
@@ -46134,4020 +44805,23 @@ var require_main2 = __commonJS({
   }
 });
 
-// node_modules/@supabase/storage-js/dist/main/lib/errors.js
-var require_errors3 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/errors.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StorageUnknownError = exports.StorageApiError = exports.StorageError = void 0;
-    exports.isStorageError = isStorageError;
-    var StorageError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.__isStorageError = true;
-        this.name = "StorageError";
-      }
-    };
-    exports.StorageError = StorageError;
-    function isStorageError(error) {
-      return typeof error === "object" && error !== null && "__isStorageError" in error;
-    }
-    var StorageApiError = class extends StorageError {
-      constructor(message, status, statusCode) {
-        super(message);
-        this.name = "StorageApiError";
-        this.status = status;
-        this.statusCode = statusCode;
-      }
-      toJSON() {
-        return {
-          name: this.name,
-          message: this.message,
-          status: this.status,
-          statusCode: this.statusCode
-        };
-      }
-    };
-    exports.StorageApiError = StorageApiError;
-    var StorageUnknownError = class extends StorageError {
-      constructor(message, originalError) {
-        super(message);
-        this.name = "StorageUnknownError";
-        this.originalError = originalError;
-      }
-    };
-    exports.StorageUnknownError = StorageUnknownError;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/helpers.js
-var require_helpers = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/helpers.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isValidBucketName = exports.isPlainObject = exports.recursiveToCamel = exports.resolveResponse = exports.resolveFetch = void 0;
-    var resolveFetch = (customFetch) => {
-      if (customFetch) {
-        return (...args) => customFetch(...args);
-      }
-      return (...args) => fetch(...args);
-    };
-    exports.resolveFetch = resolveFetch;
-    var resolveResponse = () => {
-      return Response;
-    };
-    exports.resolveResponse = resolveResponse;
-    var recursiveToCamel = (item) => {
-      if (Array.isArray(item)) {
-        return item.map((el) => (0, exports.recursiveToCamel)(el));
-      } else if (typeof item === "function" || item !== Object(item)) {
-        return item;
-      }
-      const result = {};
-      Object.entries(item).forEach(([key, value]) => {
-        const newKey = key.replace(/([-_][a-z])/gi, (c) => c.toUpperCase().replace(/[-_]/g, ""));
-        result[newKey] = (0, exports.recursiveToCamel)(value);
-      });
-      return result;
-    };
-    exports.recursiveToCamel = recursiveToCamel;
-    var isPlainObject = (value) => {
-      if (typeof value !== "object" || value === null) {
-        return false;
-      }
-      const prototype = Object.getPrototypeOf(value);
-      return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
-    };
-    exports.isPlainObject = isPlainObject;
-    var isValidBucketName = (bucketName) => {
-      if (!bucketName || typeof bucketName !== "string") {
-        return false;
-      }
-      if (bucketName.length === 0 || bucketName.length > 100) {
-        return false;
-      }
-      if (bucketName.trim() !== bucketName) {
-        return false;
-      }
-      if (bucketName.includes("/") || bucketName.includes("\\")) {
-        return false;
-      }
-      const bucketNameRegex = /^[\w!.\*'() &$@=;:+,?-]+$/;
-      return bucketNameRegex.test(bucketName);
-    };
-    exports.isValidBucketName = isValidBucketName;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/fetch.js
-var require_fetch = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/fetch.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.get = get;
-    exports.post = post;
-    exports.put = put;
-    exports.head = head;
-    exports.remove = remove;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var errors_1 = require_errors3();
-    var helpers_1 = require_helpers();
-    var _getErrorMessage = (err) => {
-      var _a;
-      return err.msg || err.message || err.error_description || (typeof err.error === "string" ? err.error : (_a = err.error) === null || _a === void 0 ? void 0 : _a.message) || JSON.stringify(err);
-    };
-    var handleError = (error, reject, options) => tslib_1.__awaiter(void 0, void 0, void 0, function* () {
-      const Res = yield (0, helpers_1.resolveResponse)();
-      if (error instanceof Res && !(options === null || options === void 0 ? void 0 : options.noResolveJson)) {
-        error.json().then((err) => {
-          const status = error.status || 500;
-          const statusCode = (err === null || err === void 0 ? void 0 : err.statusCode) || status + "";
-          reject(new errors_1.StorageApiError(_getErrorMessage(err), status, statusCode));
-        }).catch((err) => {
-          reject(new errors_1.StorageUnknownError(_getErrorMessage(err), err));
-        });
-      } else {
-        reject(new errors_1.StorageUnknownError(_getErrorMessage(error), error));
-      }
-    });
-    var _getRequestParams = (method, options, parameters, body) => {
-      const params = { method, headers: (options === null || options === void 0 ? void 0 : options.headers) || {} };
-      if (method === "GET" || !body) {
-        return params;
-      }
-      if ((0, helpers_1.isPlainObject)(body)) {
-        params.headers = Object.assign({ "Content-Type": "application/json" }, options === null || options === void 0 ? void 0 : options.headers);
-        params.body = JSON.stringify(body);
-      } else {
-        params.body = body;
-      }
-      if (options === null || options === void 0 ? void 0 : options.duplex) {
-        params.duplex = options.duplex;
-      }
-      return Object.assign(Object.assign({}, params), parameters);
-    };
-    function _handleRequest(fetcher, method, url, options, parameters, body) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-          fetcher(url, _getRequestParams(method, options, parameters, body)).then((result) => {
-            if (!result.ok)
-              throw result;
-            if (options === null || options === void 0 ? void 0 : options.noResolveJson)
-              return result;
-            return result.json();
-          }).then((data) => resolve(data)).catch((error) => handleError(error, reject, options));
-        });
-      });
-    }
-    function get(fetcher, url, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "GET", url, options, parameters);
-      });
-    }
-    function post(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "POST", url, options, parameters, body);
-      });
-    }
-    function put(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "PUT", url, options, parameters, body);
-      });
-    }
-    function head(fetcher, url, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "HEAD", url, Object.assign(Object.assign({}, options), { noResolveJson: true }), parameters);
-      });
-    }
-    function remove(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "DELETE", url, options, parameters, body);
-      });
-    }
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/packages/StreamDownloadBuilder.js
-var require_StreamDownloadBuilder = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/packages/StreamDownloadBuilder.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var errors_1 = require_errors3();
-    var StreamDownloadBuilder = class {
-      constructor(downloadFn, shouldThrowOnError) {
-        this.downloadFn = downloadFn;
-        this.shouldThrowOnError = shouldThrowOnError;
-      }
-      then(onfulfilled, onrejected) {
-        return this.execute().then(onfulfilled, onrejected);
-      }
-      execute() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const result = yield this.downloadFn();
-            return {
-              data: result.body,
-              error: null
-            };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-    };
-    exports.default = StreamDownloadBuilder;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/packages/BlobDownloadBuilder.js
-var require_BlobDownloadBuilder = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/packages/BlobDownloadBuilder.js"(exports) {
-    "use strict";
-    var _a;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var errors_1 = require_errors3();
-    var StreamDownloadBuilder_1 = tslib_1.__importDefault(require_StreamDownloadBuilder());
-    var BlobDownloadBuilder = class {
-      constructor(downloadFn, shouldThrowOnError) {
-        this.downloadFn = downloadFn;
-        this.shouldThrowOnError = shouldThrowOnError;
-        this[_a] = "BlobDownloadBuilder";
-        this.promise = null;
-      }
-      asStream() {
-        return new StreamDownloadBuilder_1.default(this.downloadFn, this.shouldThrowOnError);
-      }
-      then(onfulfilled, onrejected) {
-        return this.getPromise().then(onfulfilled, onrejected);
-      }
-      catch(onrejected) {
-        return this.getPromise().catch(onrejected);
-      }
-      finally(onfinally) {
-        return this.getPromise().finally(onfinally);
-      }
-      getPromise() {
-        if (!this.promise) {
-          this.promise = this.execute();
-        }
-        return this.promise;
-      }
-      execute() {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const result = yield this.downloadFn();
-            return {
-              data: yield result.blob(),
-              error: null
-            };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-    };
-    _a = Symbol.toStringTag;
-    exports.default = BlobDownloadBuilder;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/packages/StorageFileApi.js
-var require_StorageFileApi = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/packages/StorageFileApi.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var errors_1 = require_errors3();
-    var fetch_1 = require_fetch();
-    var helpers_1 = require_helpers();
-    var BlobDownloadBuilder_1 = tslib_1.__importDefault(require_BlobDownloadBuilder());
-    var DEFAULT_SEARCH_OPTIONS = {
-      limit: 100,
-      offset: 0,
-      sortBy: {
-        column: "name",
-        order: "asc"
-      }
-    };
-    var DEFAULT_FILE_OPTIONS = {
-      cacheControl: "3600",
-      contentType: "text/plain;charset=UTF-8",
-      upsert: false
-    };
-    var StorageFileApi = class {
-      constructor(url, headers = {}, bucketId, fetch2) {
-        this.shouldThrowOnError = false;
-        this.url = url;
-        this.headers = headers;
-        this.bucketId = bucketId;
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /**
-       * Enable throwing errors instead of returning them.
-       *
-       * @category File Buckets
-       */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /**
-       * Uploads a file to an existing bucket or replaces an existing file at the specified path with a new one.
-       *
-       * @param method HTTP method.
-       * @param path The relative file path. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
-       * @param fileBody The body of the file to be stored in the bucket.
-       */
-      uploadOrUpdate(method, path, fileBody, fileOptions) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            let body;
-            const options = Object.assign(Object.assign({}, DEFAULT_FILE_OPTIONS), fileOptions);
-            let headers = Object.assign(Object.assign({}, this.headers), method === "POST" && { "x-upsert": String(options.upsert) });
-            const metadata = options.metadata;
-            if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
-              body = new FormData();
-              body.append("cacheControl", options.cacheControl);
-              if (metadata) {
-                body.append("metadata", this.encodeMetadata(metadata));
-              }
-              body.append("", fileBody);
-            } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
-              body = fileBody;
-              if (!body.has("cacheControl")) {
-                body.append("cacheControl", options.cacheControl);
-              }
-              if (metadata && !body.has("metadata")) {
-                body.append("metadata", this.encodeMetadata(metadata));
-              }
-            } else {
-              body = fileBody;
-              headers["cache-control"] = `max-age=${options.cacheControl}`;
-              headers["content-type"] = options.contentType;
-              if (metadata) {
-                headers["x-metadata"] = this.toBase64(this.encodeMetadata(metadata));
-              }
-              const isStream = typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function";
-              if (isStream && !options.duplex) {
-                options.duplex = "half";
-              }
-            }
-            if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers) {
-              headers = Object.assign(Object.assign({}, headers), fileOptions.headers);
-            }
-            const cleanPath = this._removeEmptyFolders(path);
-            const _path = this._getFinalPath(cleanPath);
-            const data = yield (method == "PUT" ? fetch_1.put : fetch_1.post)(this.fetch, `${this.url}/object/${_path}`, body, Object.assign({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}));
-            return {
-              data: { path: cleanPath, id: data.Id, fullPath: data.Key },
-              error: null
-            };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Uploads a file to an existing bucket.
-       *
-       * @category File Buckets
-       * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
-       * @param fileBody The body of the file to be stored in the bucket.
-       * @param fileOptions Optional file upload options including cacheControl, contentType, upsert, and metadata.
-       * @returns Promise with response containing file path, id, and fullPath or error
-       *
-       * @example Upload file
-       * ```js
-       * const avatarFile = event.target.files[0]
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .upload('public/avatar1.png', avatarFile, {
-       *     cacheControl: '3600',
-       *     upsert: false
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "path": "public/avatar1.png",
-       *     "fullPath": "avatars/public/avatar1.png"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       *
-       * @example Upload file using `ArrayBuffer` from base64 file data
-       * ```js
-       * import { decode } from 'base64-arraybuffer'
-       *
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .upload('public/avatar1.png', decode('base64FileData'), {
-       *     contentType: 'image/png'
-       *   })
-       * ```
-       */
-      upload(path, fileBody, fileOptions) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return this.uploadOrUpdate("POST", path, fileBody, fileOptions);
-        });
-      }
-      /**
-       * Upload a file with a token generated from `createSignedUploadUrl`.
-       *
-       * @category File Buckets
-       * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
-       * @param token The token generated from `createSignedUploadUrl`
-       * @param fileBody The body of the file to be stored in the bucket.
-       * @param fileOptions HTTP headers (cacheControl, contentType, etc.).
-       * **Note:** The `upsert` option has no effect here. To enable upsert behavior,
-       * pass `{ upsert: true }` when calling `createSignedUploadUrl()` instead.
-       * @returns Promise with response containing file path and fullPath or error
-       *
-       * @example Upload to a signed URL
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .uploadToSignedUrl('folder/cat.jpg', 'token-from-createSignedUploadUrl', file)
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "path": "folder/cat.jpg",
-       *     "fullPath": "avatars/folder/cat.jpg"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      uploadToSignedUrl(path, token, fileBody, fileOptions) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          const cleanPath = this._removeEmptyFolders(path);
-          const _path = this._getFinalPath(cleanPath);
-          const url = new URL(this.url + `/object/upload/sign/${_path}`);
-          url.searchParams.set("token", token);
-          try {
-            let body;
-            const options = Object.assign({ upsert: DEFAULT_FILE_OPTIONS.upsert }, fileOptions);
-            const headers = Object.assign(Object.assign({}, this.headers), { "x-upsert": String(options.upsert) });
-            if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
-              body = new FormData();
-              body.append("cacheControl", options.cacheControl);
-              body.append("", fileBody);
-            } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
-              body = fileBody;
-              body.append("cacheControl", options.cacheControl);
-            } else {
-              body = fileBody;
-              headers["cache-control"] = `max-age=${options.cacheControl}`;
-              headers["content-type"] = options.contentType;
-            }
-            const data = yield (0, fetch_1.put)(this.fetch, url.toString(), body, { headers });
-            return {
-              data: { path: cleanPath, fullPath: data.Key },
-              error: null
-            };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Creates a signed upload URL.
-       * Signed upload URLs can be used to upload files to the bucket without further authentication.
-       * They are valid for 2 hours.
-       *
-       * @category File Buckets
-       * @param path The file path, including the current file name. For example `folder/image.png`.
-       * @param options.upsert If set to true, allows the file to be overwritten if it already exists.
-       * @returns Promise with response containing signed upload URL, token, and path or error
-       *
-       * @example Create Signed Upload URL
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .createSignedUploadUrl('folder/cat.jpg')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "signedUrl": "https://example.supabase.co/storage/v1/object/upload/sign/avatars/folder/cat.jpg?token=<TOKEN>",
-       *     "path": "folder/cat.jpg",
-       *     "token": "<TOKEN>"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      createSignedUploadUrl(path, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            let _path = this._getFinalPath(path);
-            const headers = Object.assign({}, this.headers);
-            if (options === null || options === void 0 ? void 0 : options.upsert) {
-              headers["x-upsert"] = "true";
-            }
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/upload/sign/${_path}`, {}, { headers });
-            const url = new URL(this.url + data.url);
-            const token = url.searchParams.get("token");
-            if (!token) {
-              throw new errors_1.StorageError("No token returned by API");
-            }
-            return { data: { signedUrl: url.toString(), path, token }, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Replaces an existing file at the specified path with a new one.
-       *
-       * @category File Buckets
-       * @param path The relative file path. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to update.
-       * @param fileBody The body of the file to be stored in the bucket.
-       * @param fileOptions Optional file upload options including cacheControl, contentType, upsert, and metadata.
-       * @returns Promise with response containing file path, id, and fullPath or error
-       *
-       * @example Update file
-       * ```js
-       * const avatarFile = event.target.files[0]
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .update('public/avatar1.png', avatarFile, {
-       *     cacheControl: '3600',
-       *     upsert: true
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "path": "public/avatar1.png",
-       *     "fullPath": "avatars/public/avatar1.png"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       *
-       * @example Update file using `ArrayBuffer` from base64 file data
-       * ```js
-       * import {decode} from 'base64-arraybuffer'
-       *
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .update('public/avatar1.png', decode('base64FileData'), {
-       *     contentType: 'image/png'
-       *   })
-       * ```
-       */
-      update(path, fileBody, fileOptions) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return this.uploadOrUpdate("PUT", path, fileBody, fileOptions);
-        });
-      }
-      /**
-       * Moves an existing file to a new path in the same bucket.
-       *
-       * @category File Buckets
-       * @param fromPath The original file path, including the current file name. For example `folder/image.png`.
-       * @param toPath The new file path, including the new file name. For example `folder/image-new.png`.
-       * @param options The destination options.
-       * @returns Promise with response containing success message or error
-       *
-       * @example Move file
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .move('public/avatar1.png', 'private/avatar2.png')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "message": "Successfully moved"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      move(fromPath, toPath, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/move`, {
-              bucketId: this.bucketId,
-              sourceKey: fromPath,
-              destinationKey: toPath,
-              destinationBucket: options === null || options === void 0 ? void 0 : options.destinationBucket
-            }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Copies an existing file to a new path in the same bucket.
-       *
-       * @category File Buckets
-       * @param fromPath The original file path, including the current file name. For example `folder/image.png`.
-       * @param toPath The new file path, including the new file name. For example `folder/image-copy.png`.
-       * @param options The destination options.
-       * @returns Promise with response containing copied file path or error
-       *
-       * @example Copy file
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .copy('public/avatar1.png', 'private/avatar2.png')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "path": "avatars/private/avatar2.png"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      copy(fromPath, toPath, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/copy`, {
-              bucketId: this.bucketId,
-              sourceKey: fromPath,
-              destinationKey: toPath,
-              destinationBucket: options === null || options === void 0 ? void 0 : options.destinationBucket
-            }, { headers: this.headers });
-            return { data: { path: data.Key }, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Creates a signed URL. Use a signed URL to share a file for a fixed amount of time.
-       *
-       * @category File Buckets
-       * @param path The file path, including the current file name. For example `folder/image.png`.
-       * @param expiresIn The number of seconds until the signed URL expires. For example, `60` for a URL which is valid for one minute.
-       * @param options.download triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
-       * @param options.transform Transform the asset before serving it to the client.
-       * @returns Promise with response containing signed URL or error
-       *
-       * @example Create Signed URL
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .createSignedUrl('folder/avatar1.png', 60)
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar1.png?token=<TOKEN>"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       *
-       * @example Create a signed URL for an asset with transformations
-       * ```js
-       * const { data } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .createSignedUrl('folder/avatar1.png', 60, {
-       *     transform: {
-       *       width: 100,
-       *       height: 100,
-       *     }
-       *   })
-       * ```
-       *
-       * @example Create a signed URL which triggers the download of the asset
-       * ```js
-       * const { data } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .createSignedUrl('folder/avatar1.png', 60, {
-       *     download: true,
-       *   })
-       * ```
-       */
-      createSignedUrl(path, expiresIn, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            let _path = this._getFinalPath(path);
-            let data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/sign/${_path}`, Object.assign({ expiresIn }, (options === null || options === void 0 ? void 0 : options.transform) ? { transform: options.transform } : {}), { headers: this.headers });
-            const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `&download=${options.download === true ? "" : options.download}` : "";
-            const signedUrl = encodeURI(`${this.url}${data.signedURL}${downloadQueryParam}`);
-            data = { signedUrl };
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Creates multiple signed URLs. Use a signed URL to share a file for a fixed amount of time.
-       *
-       * @category File Buckets
-       * @param paths The file paths to be downloaded, including the current file names. For example `['folder/image.png', 'folder2/image2.png']`.
-       * @param expiresIn The number of seconds until the signed URLs expire. For example, `60` for URLs which are valid for one minute.
-       * @param options.download triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
-       * @returns Promise with response containing array of objects with signedUrl, path, and error or error
-       *
-       * @example Create Signed URLs
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .createSignedUrls(['folder/avatar1.png', 'folder/avatar2.png'], 60)
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": [
-       *     {
-       *       "error": null,
-       *       "path": "folder/avatar1.png",
-       *       "signedURL": "/object/sign/avatars/folder/avatar1.png?token=<TOKEN>",
-       *       "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar1.png?token=<TOKEN>"
-       *     },
-       *     {
-       *       "error": null,
-       *       "path": "folder/avatar2.png",
-       *       "signedURL": "/object/sign/avatars/folder/avatar2.png?token=<TOKEN>",
-       *       "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar2.png?token=<TOKEN>"
-       *     }
-       *   ],
-       *   "error": null
-       * }
-       * ```
-       */
-      createSignedUrls(paths, expiresIn, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/sign/${this.bucketId}`, { expiresIn, paths }, { headers: this.headers });
-            const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `&download=${options.download === true ? "" : options.download}` : "";
-            return {
-              data: data.map((datum) => Object.assign(Object.assign({}, datum), { signedUrl: datum.signedURL ? encodeURI(`${this.url}${datum.signedURL}${downloadQueryParam}`) : null })),
-              error: null
-            };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Downloads a file from a private bucket. For public buckets, make a request to the URL returned from `getPublicUrl` instead.
-       *
-       * @category File Buckets
-       * @param path The full path and file name of the file to be downloaded. For example `folder/image.png`.
-       * @param options.transform Transform the asset before serving it to the client.
-       * @returns BlobDownloadBuilder instance for downloading the file
-       *
-       * @example Download file
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .download('folder/avatar1.png')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": <BLOB>,
-       *   "error": null
-       * }
-       * ```
-       *
-       * @example Download file with transformations
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .download('folder/avatar1.png', {
-       *     transform: {
-       *       width: 100,
-       *       height: 100,
-       *       quality: 80
-       *     }
-       *   })
-       * ```
-       */
-      download(path, options) {
-        const wantsTransformation = typeof (options === null || options === void 0 ? void 0 : options.transform) !== "undefined";
-        const renderPath = wantsTransformation ? "render/image/authenticated" : "object";
-        const transformationQuery = this.transformOptsToQueryString((options === null || options === void 0 ? void 0 : options.transform) || {});
-        const queryString = transformationQuery ? `?${transformationQuery}` : "";
-        const _path = this._getFinalPath(path);
-        const downloadFn = () => (0, fetch_1.get)(this.fetch, `${this.url}/${renderPath}/${_path}${queryString}`, {
-          headers: this.headers,
-          noResolveJson: true
-        });
-        return new BlobDownloadBuilder_1.default(downloadFn, this.shouldThrowOnError);
-      }
-      /**
-       * Retrieves the details of an existing file.
-       *
-       * @category File Buckets
-       * @param path The file path, including the file name. For example `folder/image.png`.
-       * @returns Promise with response containing file metadata or error
-       *
-       * @example Get file info
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .info('folder/avatar1.png')
-       * ```
-       */
-      info(path) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          const _path = this._getFinalPath(path);
-          try {
-            const data = yield (0, fetch_1.get)(this.fetch, `${this.url}/object/info/${_path}`, {
-              headers: this.headers
-            });
-            return { data: (0, helpers_1.recursiveToCamel)(data), error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Checks the existence of a file.
-       *
-       * @category File Buckets
-       * @param path The file path, including the file name. For example `folder/image.png`.
-       * @returns Promise with response containing boolean indicating file existence or error
-       *
-       * @example Check file existence
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .exists('folder/avatar1.png')
-       * ```
-       */
-      exists(path) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          const _path = this._getFinalPath(path);
-          try {
-            yield (0, fetch_1.head)(this.fetch, `${this.url}/object/${_path}`, {
-              headers: this.headers
-            });
-            return { data: true, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error) && error instanceof errors_1.StorageUnknownError) {
-              const originalError = error.originalError;
-              if ([400, 404].includes(originalError === null || originalError === void 0 ? void 0 : originalError.status)) {
-                return { data: false, error };
-              }
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * A simple convenience function to get the URL for an asset in a public bucket. If you do not want to use this function, you can construct the public URL by concatenating the bucket URL with the path to the asset.
-       * This function does not verify if the bucket is public. If a public URL is created for a bucket which is not public, you will not be able to download the asset.
-       *
-       * @category File Buckets
-       * @param path The path and name of the file to generate the public URL for. For example `folder/image.png`.
-       * @param options.download Triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
-       * @param options.transform Transform the asset before serving it to the client.
-       * @returns Object with public URL
-       *
-       * @example Returns the URL for an asset in a public bucket
-       * ```js
-       * const { data } = supabase
-       *   .storage
-       *   .from('public-bucket')
-       *   .getPublicUrl('folder/avatar1.png')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "publicUrl": "https://example.supabase.co/storage/v1/object/public/public-bucket/folder/avatar1.png"
-       *   }
-       * }
-       * ```
-       *
-       * @example Returns the URL for an asset in a public bucket with transformations
-       * ```js
-       * const { data } = supabase
-       *   .storage
-       *   .from('public-bucket')
-       *   .getPublicUrl('folder/avatar1.png', {
-       *     transform: {
-       *       width: 100,
-       *       height: 100,
-       *     }
-       *   })
-       * ```
-       *
-       * @example Returns the URL which triggers the download of an asset in a public bucket
-       * ```js
-       * const { data } = supabase
-       *   .storage
-       *   .from('public-bucket')
-       *   .getPublicUrl('folder/avatar1.png', {
-       *     download: true,
-       *   })
-       * ```
-       */
-      getPublicUrl(path, options) {
-        const _path = this._getFinalPath(path);
-        const _queryString = [];
-        const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `download=${options.download === true ? "" : options.download}` : "";
-        if (downloadQueryParam !== "") {
-          _queryString.push(downloadQueryParam);
-        }
-        const wantsTransformation = typeof (options === null || options === void 0 ? void 0 : options.transform) !== "undefined";
-        const renderPath = wantsTransformation ? "render/image" : "object";
-        const transformationQuery = this.transformOptsToQueryString((options === null || options === void 0 ? void 0 : options.transform) || {});
-        if (transformationQuery !== "") {
-          _queryString.push(transformationQuery);
-        }
-        let queryString = _queryString.join("&");
-        if (queryString !== "") {
-          queryString = `?${queryString}`;
-        }
-        return {
-          data: { publicUrl: encodeURI(`${this.url}/${renderPath}/public/${_path}${queryString}`) }
-        };
-      }
-      /**
-       * Deletes files within the same bucket
-       *
-       * @category File Buckets
-       * @param paths An array of files to delete, including the path and file name. For example [`'folder/image.png'`].
-       * @returns Promise with response containing array of deleted file objects or error
-       *
-       * @example Delete file
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .remove(['folder/avatar1.png'])
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": [],
-       *   "error": null
-       * }
-       * ```
-       */
-      remove(paths) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.remove)(this.fetch, `${this.url}/object/${this.bucketId}`, { prefixes: paths }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Get file metadata
-       * @param id the file id to retrieve metadata
-       */
-      // async getMetadata(
-      //   id: string
-      // ): Promise<
-      //   | {
-      //       data: Metadata
-      //       error: null
-      //     }
-      //   | {
-      //       data: null
-      //       error: StorageError
-      //     }
-      // > {
-      //   try {
-      //     const data = await get(this.fetch, `${this.url}/metadata/${id}`, { headers: this.headers })
-      //     return { data, error: null }
-      //   } catch (error) {
-      //     if (isStorageError(error)) {
-      //       return { data: null, error }
-      //     }
-      //     throw error
-      //   }
-      // }
-      /**
-       * Update file metadata
-       * @param id the file id to update metadata
-       * @param meta the new file metadata
-       */
-      // async updateMetadata(
-      //   id: string,
-      //   meta: Metadata
-      // ): Promise<
-      //   | {
-      //       data: Metadata
-      //       error: null
-      //     }
-      //   | {
-      //       data: null
-      //       error: StorageError
-      //     }
-      // > {
-      //   try {
-      //     const data = await post(
-      //       this.fetch,
-      //       `${this.url}/metadata/${id}`,
-      //       { ...meta },
-      //       { headers: this.headers }
-      //     )
-      //     return { data, error: null }
-      //   } catch (error) {
-      //     if (isStorageError(error)) {
-      //       return { data: null, error }
-      //     }
-      //     throw error
-      //   }
-      // }
-      /**
-       * Lists all the files and folders within a path of the bucket.
-       *
-       * @category File Buckets
-       * @param path The folder path.
-       * @param options Search options including limit (defaults to 100), offset, sortBy, and search
-       * @param parameters Optional fetch parameters including signal for cancellation
-       * @returns Promise with response containing array of files or error
-       *
-       * @example List files in a bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .list('folder', {
-       *     limit: 100,
-       *     offset: 0,
-       *     sortBy: { column: 'name', order: 'asc' },
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": [
-       *     {
-       *       "name": "avatar1.png",
-       *       "id": "e668cf7f-821b-4a2f-9dce-7dfa5dd1cfd2",
-       *       "updated_at": "2024-05-22T23:06:05.580Z",
-       *       "created_at": "2024-05-22T23:04:34.443Z",
-       *       "last_accessed_at": "2024-05-22T23:04:34.443Z",
-       *       "metadata": {
-       *         "eTag": "\"c5e8c553235d9af30ef4f6e280790b92\"",
-       *         "size": 32175,
-       *         "mimetype": "image/png",
-       *         "cacheControl": "max-age=3600",
-       *         "lastModified": "2024-05-22T23:06:05.574Z",
-       *         "contentLength": 32175,
-       *         "httpStatusCode": 200
-       *       }
-       *     }
-       *   ],
-       *   "error": null
-       * }
-       * ```
-       *
-       * @example Search files in a bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .from('avatars')
-       *   .list('folder', {
-       *     limit: 100,
-       *     offset: 0,
-       *     sortBy: { column: 'name', order: 'asc' },
-       *     search: 'jon'
-       *   })
-       * ```
-       */
-      list(path, options, parameters) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const body = Object.assign(Object.assign(Object.assign({}, DEFAULT_SEARCH_OPTIONS), options), { prefix: path || "" });
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/list/${this.bucketId}`, body, { headers: this.headers }, parameters);
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * @experimental this method signature might change in the future
-       *
-       * @category File Buckets
-       * @param options search options
-       * @param parameters
-       */
-      listV2(options, parameters) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const body = Object.assign({}, options);
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/object/list-v2/${this.bucketId}`, body, { headers: this.headers }, parameters);
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      encodeMetadata(metadata) {
-        return JSON.stringify(metadata);
-      }
-      toBase64(data) {
-        if (typeof Buffer !== "undefined") {
-          return Buffer.from(data).toString("base64");
-        }
-        return btoa(data);
-      }
-      _getFinalPath(path) {
-        return `${this.bucketId}/${path.replace(/^\/+/, "")}`;
-      }
-      _removeEmptyFolders(path) {
-        return path.replace(/^\/|\/$/g, "").replace(/\/+/g, "/");
-      }
-      transformOptsToQueryString(transform) {
-        const params = [];
-        if (transform.width) {
-          params.push(`width=${transform.width}`);
-        }
-        if (transform.height) {
-          params.push(`height=${transform.height}`);
-        }
-        if (transform.resize) {
-          params.push(`resize=${transform.resize}`);
-        }
-        if (transform.format) {
-          params.push(`format=${transform.format}`);
-        }
-        if (transform.quality) {
-          params.push(`quality=${transform.quality}`);
-        }
-        return params.join("&");
-      }
-    };
-    exports.default = StorageFileApi;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/version.js
-var require_version3 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/version.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.version = void 0;
-    exports.version = "2.87.1";
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/constants.js
-var require_constants3 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/constants.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DEFAULT_HEADERS = void 0;
-    var version_1 = require_version3();
-    exports.DEFAULT_HEADERS = {
-      "X-Client-Info": `storage-js/${version_1.version}`
-    };
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/packages/StorageBucketApi.js
-var require_StorageBucketApi = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/packages/StorageBucketApi.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var constants_1 = require_constants3();
-    var errors_1 = require_errors3();
-    var fetch_1 = require_fetch();
-    var helpers_1 = require_helpers();
-    var StorageBucketApi = class {
-      constructor(url, headers = {}, fetch2, opts) {
-        this.shouldThrowOnError = false;
-        const baseUrl = new URL(url);
-        if (opts === null || opts === void 0 ? void 0 : opts.useNewHostname) {
-          const isSupabaseHost = /supabase\.(co|in|red)$/.test(baseUrl.hostname);
-          if (isSupabaseHost && !baseUrl.hostname.includes("storage.supabase.")) {
-            baseUrl.hostname = baseUrl.hostname.replace("supabase.", "storage.supabase.");
-          }
-        }
-        this.url = baseUrl.href.replace(/\/$/, "");
-        this.headers = Object.assign(Object.assign({}, constants_1.DEFAULT_HEADERS), headers);
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /**
-       * Enable throwing errors instead of returning them.
-       *
-       * @category File Buckets
-       */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /**
-       * Retrieves the details of all Storage buckets within an existing project.
-       *
-       * @category File Buckets
-       * @param options Query parameters for listing buckets
-       * @param options.limit Maximum number of buckets to return
-       * @param options.offset Number of buckets to skip
-       * @param options.sortColumn Column to sort by ('id', 'name', 'created_at', 'updated_at')
-       * @param options.sortOrder Sort order ('asc' or 'desc')
-       * @param options.search Search term to filter bucket names
-       * @returns Promise with response containing array of buckets or error
-       *
-       * @example List buckets
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .listBuckets()
-       * ```
-       *
-       * @example List buckets with options
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .listBuckets({
-       *     limit: 10,
-       *     offset: 0,
-       *     sortColumn: 'created_at',
-       *     sortOrder: 'desc',
-       *     search: 'prod'
-       *   })
-       * ```
-       */
-      listBuckets(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const queryString = this.listBucketOptionsToQueryString(options);
-            const data = yield (0, fetch_1.get)(this.fetch, `${this.url}/bucket${queryString}`, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Retrieves the details of an existing Storage bucket.
-       *
-       * @category File Buckets
-       * @param id The unique identifier of the bucket you would like to retrieve.
-       * @returns Promise with response containing bucket details or error
-       *
-       * @example Get bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .getBucket('avatars')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "id": "avatars",
-       *     "name": "avatars",
-       *     "owner": "",
-       *     "public": false,
-       *     "file_size_limit": 1024,
-       *     "allowed_mime_types": [
-       *       "image/png"
-       *     ],
-       *     "created_at": "2024-05-22T22:26:05.100Z",
-       *     "updated_at": "2024-05-22T22:26:05.100Z"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      getBucket(id) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.get)(this.fetch, `${this.url}/bucket/${id}`, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Creates a new Storage bucket
-       *
-       * @category File Buckets
-       * @param id A unique identifier for the bucket you are creating.
-       * @param options.public The visibility of the bucket. Public buckets don't require an authorization token to download objects, but still require a valid token for all other operations. By default, buckets are private.
-       * @param options.fileSizeLimit specifies the max file size in bytes that can be uploaded to this bucket.
-       * The global file size limit takes precedence over this value.
-       * The default value is null, which doesn't set a per bucket file size limit.
-       * @param options.allowedMimeTypes specifies the allowed mime types that this bucket can accept during upload.
-       * The default value is null, which allows files with all mime types to be uploaded.
-       * Each mime type specified can be a wildcard, e.g. image/*, or a specific mime type, e.g. image/png.
-       * @param options.type (private-beta) specifies the bucket type. see `BucketType` for more details.
-       *   - default bucket type is `STANDARD`
-       * @returns Promise with response containing newly created bucket name or error
-       *
-       * @example Create bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .createBucket('avatars', {
-       *     public: false,
-       *     allowedMimeTypes: ['image/png'],
-       *     fileSizeLimit: 1024
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "name": "avatars"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      createBucket(id_1) {
-        return tslib_1.__awaiter(this, arguments, void 0, function* (id, options = {
-          public: false
-        }) {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/bucket`, {
-              id,
-              name: id,
-              type: options.type,
-              public: options.public,
-              file_size_limit: options.fileSizeLimit,
-              allowed_mime_types: options.allowedMimeTypes
-            }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Updates a Storage bucket
-       *
-       * @category File Buckets
-       * @param id A unique identifier for the bucket you are updating.
-       * @param options.public The visibility of the bucket. Public buckets don't require an authorization token to download objects, but still require a valid token for all other operations.
-       * @param options.fileSizeLimit specifies the max file size in bytes that can be uploaded to this bucket.
-       * The global file size limit takes precedence over this value.
-       * The default value is null, which doesn't set a per bucket file size limit.
-       * @param options.allowedMimeTypes specifies the allowed mime types that this bucket can accept during upload.
-       * The default value is null, which allows files with all mime types to be uploaded.
-       * Each mime type specified can be a wildcard, e.g. image/*, or a specific mime type, e.g. image/png.
-       * @returns Promise with response containing success message or error
-       *
-       * @example Update bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .updateBucket('avatars', {
-       *     public: false,
-       *     allowedMimeTypes: ['image/png'],
-       *     fileSizeLimit: 1024
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "message": "Successfully updated"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      updateBucket(id, options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.put)(this.fetch, `${this.url}/bucket/${id}`, {
-              id,
-              name: id,
-              public: options.public,
-              file_size_limit: options.fileSizeLimit,
-              allowed_mime_types: options.allowedMimeTypes
-            }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Removes all objects inside a single bucket.
-       *
-       * @category File Buckets
-       * @param id The unique identifier of the bucket you would like to empty.
-       * @returns Promise with success message or error
-       *
-       * @example Empty bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .emptyBucket('avatars')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "message": "Successfully emptied"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      emptyBucket(id) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/bucket/${id}/empty`, {}, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * Deletes an existing bucket. A bucket can't be deleted with existing objects inside it.
-       * You must first `empty()` the bucket.
-       *
-       * @category File Buckets
-       * @param id The unique identifier of the bucket you would like to delete.
-       * @returns Promise with success message or error
-       *
-       * @example Delete bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .deleteBucket('avatars')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "message": "Successfully deleted"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      deleteBucket(id) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.remove)(this.fetch, `${this.url}/bucket/${id}`, {}, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      listBucketOptionsToQueryString(options) {
-        const params = {};
-        if (options) {
-          if ("limit" in options) {
-            params.limit = String(options.limit);
-          }
-          if ("offset" in options) {
-            params.offset = String(options.offset);
-          }
-          if (options.search) {
-            params.search = options.search;
-          }
-          if (options.sortColumn) {
-            params.sortColumn = options.sortColumn;
-          }
-          if (options.sortOrder) {
-            params.sortOrder = options.sortOrder;
-          }
-        }
-        return Object.keys(params).length > 0 ? "?" + new URLSearchParams(params).toString() : "";
-      }
-    };
-    exports.default = StorageBucketApi;
-  }
-});
-
-// node_modules/iceberg-js/dist/index.cjs
-var require_dist = __commonJS({
-  "node_modules/iceberg-js/dist/index.cjs"(exports) {
-    "use strict";
-    var IcebergError = class extends Error {
-      constructor(message, opts) {
-        super(message);
-        this.name = "IcebergError";
-        this.status = opts.status;
-        this.icebergType = opts.icebergType;
-        this.icebergCode = opts.icebergCode;
-        this.details = opts.details;
-        this.isCommitStateUnknown = opts.icebergType === "CommitStateUnknownException" || [500, 502, 504].includes(opts.status) && opts.icebergType?.includes("CommitState") === true;
-      }
-      /**
-       * Returns true if the error is a 404 Not Found error.
-       */
-      isNotFound() {
-        return this.status === 404;
-      }
-      /**
-       * Returns true if the error is a 409 Conflict error.
-       */
-      isConflict() {
-        return this.status === 409;
-      }
-      /**
-       * Returns true if the error is a 419 Authentication Timeout error.
-       */
-      isAuthenticationTimeout() {
-        return this.status === 419;
-      }
-    };
-    function buildUrl(baseUrl, path, query) {
-      const url = new URL(path, baseUrl);
-      if (query) {
-        for (const [key, value] of Object.entries(query)) {
-          if (value !== void 0) {
-            url.searchParams.set(key, value);
-          }
-        }
-      }
-      return url.toString();
-    }
-    async function buildAuthHeaders(auth) {
-      if (!auth || auth.type === "none") {
-        return {};
-      }
-      if (auth.type === "bearer") {
-        return { Authorization: `Bearer ${auth.token}` };
-      }
-      if (auth.type === "header") {
-        return { [auth.name]: auth.value };
-      }
-      if (auth.type === "custom") {
-        return await auth.getHeaders();
-      }
-      return {};
-    }
-    function createFetchClient(options) {
-      const fetchFn = options.fetchImpl ?? globalThis.fetch;
-      return {
-        async request({
-          method,
-          path,
-          query,
-          body,
-          headers
-        }) {
-          const url = buildUrl(options.baseUrl, path, query);
-          const authHeaders = await buildAuthHeaders(options.auth);
-          const res = await fetchFn(url, {
-            method,
-            headers: {
-              ...body ? { "Content-Type": "application/json" } : {},
-              ...authHeaders,
-              ...headers
-            },
-            body: body ? JSON.stringify(body) : void 0
-          });
-          const text = await res.text();
-          const isJson = (res.headers.get("content-type") || "").includes("application/json");
-          const data = isJson && text ? JSON.parse(text) : text;
-          if (!res.ok) {
-            const errBody = isJson ? data : void 0;
-            const errorDetail = errBody?.error;
-            throw new IcebergError(
-              errorDetail?.message ?? `Request failed with status ${res.status}`,
-              {
-                status: res.status,
-                icebergType: errorDetail?.type,
-                icebergCode: errorDetail?.code,
-                details: errBody
-              }
-            );
-          }
-          return { status: res.status, headers: res.headers, data };
-        }
-      };
-    }
-    function namespaceToPath(namespace) {
-      return namespace.join("");
-    }
-    var NamespaceOperations = class {
-      constructor(client, prefix = "") {
-        this.client = client;
-        this.prefix = prefix;
-      }
-      async listNamespaces(parent) {
-        const query = parent ? { parent: namespaceToPath(parent.namespace) } : void 0;
-        const response = await this.client.request({
-          method: "GET",
-          path: `${this.prefix}/namespaces`,
-          query
-        });
-        return response.data.namespaces.map((ns) => ({ namespace: ns }));
-      }
-      async createNamespace(id, metadata) {
-        const request = {
-          namespace: id.namespace,
-          properties: metadata?.properties
-        };
-        const response = await this.client.request({
-          method: "POST",
-          path: `${this.prefix}/namespaces`,
-          body: request
-        });
-        return response.data;
-      }
-      async dropNamespace(id) {
-        await this.client.request({
-          method: "DELETE",
-          path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
-        });
-      }
-      async loadNamespaceMetadata(id) {
-        const response = await this.client.request({
-          method: "GET",
-          path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
-        });
-        return {
-          properties: response.data.properties
-        };
-      }
-      async namespaceExists(id) {
-        try {
-          await this.client.request({
-            method: "HEAD",
-            path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
-          });
-          return true;
-        } catch (error) {
-          if (error instanceof IcebergError && error.status === 404) {
-            return false;
-          }
-          throw error;
-        }
-      }
-      async createNamespaceIfNotExists(id, metadata) {
-        try {
-          return await this.createNamespace(id, metadata);
-        } catch (error) {
-          if (error instanceof IcebergError && error.status === 409) {
-            return;
-          }
-          throw error;
-        }
-      }
-    };
-    function namespaceToPath2(namespace) {
-      return namespace.join("");
-    }
-    var TableOperations = class {
-      constructor(client, prefix = "", accessDelegation) {
-        this.client = client;
-        this.prefix = prefix;
-        this.accessDelegation = accessDelegation;
-      }
-      async listTables(namespace) {
-        const response = await this.client.request({
-          method: "GET",
-          path: `${this.prefix}/namespaces/${namespaceToPath2(namespace.namespace)}/tables`
-        });
-        return response.data.identifiers;
-      }
-      async createTable(namespace, request) {
-        const headers = {};
-        if (this.accessDelegation) {
-          headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
-        }
-        const response = await this.client.request({
-          method: "POST",
-          path: `${this.prefix}/namespaces/${namespaceToPath2(namespace.namespace)}/tables`,
-          body: request,
-          headers
-        });
-        return response.data.metadata;
-      }
-      async updateTable(id, request) {
-        const response = await this.client.request({
-          method: "POST",
-          path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
-          body: request
-        });
-        return {
-          "metadata-location": response.data["metadata-location"],
-          metadata: response.data.metadata
-        };
-      }
-      async dropTable(id, options) {
-        await this.client.request({
-          method: "DELETE",
-          path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
-          query: { purgeRequested: String(options?.purge ?? false) }
-        });
-      }
-      async loadTable(id) {
-        const headers = {};
-        if (this.accessDelegation) {
-          headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
-        }
-        const response = await this.client.request({
-          method: "GET",
-          path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
-          headers
-        });
-        return response.data.metadata;
-      }
-      async tableExists(id) {
-        const headers = {};
-        if (this.accessDelegation) {
-          headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
-        }
-        try {
-          await this.client.request({
-            method: "HEAD",
-            path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
-            headers
-          });
-          return true;
-        } catch (error) {
-          if (error instanceof IcebergError && error.status === 404) {
-            return false;
-          }
-          throw error;
-        }
-      }
-      async createTableIfNotExists(namespace, request) {
-        try {
-          return await this.createTable(namespace, request);
-        } catch (error) {
-          if (error instanceof IcebergError && error.status === 409) {
-            return await this.loadTable({ namespace: namespace.namespace, name: request.name });
-          }
-          throw error;
-        }
-      }
-    };
-    var IcebergRestCatalog = class {
-      /**
-       * Creates a new Iceberg REST Catalog client.
-       *
-       * @param options - Configuration options for the catalog client
-       */
-      constructor(options) {
-        let prefix = "v1";
-        if (options.catalogName) {
-          prefix += `/${options.catalogName}`;
-        }
-        const baseUrl = options.baseUrl.endsWith("/") ? options.baseUrl : `${options.baseUrl}/`;
-        this.client = createFetchClient({
-          baseUrl,
-          auth: options.auth,
-          fetchImpl: options.fetch
-        });
-        this.accessDelegation = options.accessDelegation?.join(",");
-        this.namespaceOps = new NamespaceOperations(this.client, prefix);
-        this.tableOps = new TableOperations(this.client, prefix, this.accessDelegation);
-      }
-      /**
-       * Lists all namespaces in the catalog.
-       *
-       * @param parent - Optional parent namespace to list children under
-       * @returns Array of namespace identifiers
-       *
-       * @example
-       * ```typescript
-       * // List all top-level namespaces
-       * const namespaces = await catalog.listNamespaces();
-       *
-       * // List namespaces under a parent
-       * const children = await catalog.listNamespaces({ namespace: ['analytics'] });
-       * ```
-       */
-      async listNamespaces(parent) {
-        return this.namespaceOps.listNamespaces(parent);
-      }
-      /**
-       * Creates a new namespace in the catalog.
-       *
-       * @param id - Namespace identifier to create
-       * @param metadata - Optional metadata properties for the namespace
-       * @returns Response containing the created namespace and its properties
-       *
-       * @example
-       * ```typescript
-       * const response = await catalog.createNamespace(
-       *   { namespace: ['analytics'] },
-       *   { properties: { owner: 'data-team' } }
-       * );
-       * console.log(response.namespace); // ['analytics']
-       * console.log(response.properties); // { owner: 'data-team', ... }
-       * ```
-       */
-      async createNamespace(id, metadata) {
-        return this.namespaceOps.createNamespace(id, metadata);
-      }
-      /**
-       * Drops a namespace from the catalog.
-       *
-       * The namespace must be empty (contain no tables) before it can be dropped.
-       *
-       * @param id - Namespace identifier to drop
-       *
-       * @example
-       * ```typescript
-       * await catalog.dropNamespace({ namespace: ['analytics'] });
-       * ```
-       */
-      async dropNamespace(id) {
-        await this.namespaceOps.dropNamespace(id);
-      }
-      /**
-       * Loads metadata for a namespace.
-       *
-       * @param id - Namespace identifier to load
-       * @returns Namespace metadata including properties
-       *
-       * @example
-       * ```typescript
-       * const metadata = await catalog.loadNamespaceMetadata({ namespace: ['analytics'] });
-       * console.log(metadata.properties);
-       * ```
-       */
-      async loadNamespaceMetadata(id) {
-        return this.namespaceOps.loadNamespaceMetadata(id);
-      }
-      /**
-       * Lists all tables in a namespace.
-       *
-       * @param namespace - Namespace identifier to list tables from
-       * @returns Array of table identifiers
-       *
-       * @example
-       * ```typescript
-       * const tables = await catalog.listTables({ namespace: ['analytics'] });
-       * console.log(tables); // [{ namespace: ['analytics'], name: 'events' }, ...]
-       * ```
-       */
-      async listTables(namespace) {
-        return this.tableOps.listTables(namespace);
-      }
-      /**
-       * Creates a new table in the catalog.
-       *
-       * @param namespace - Namespace to create the table in
-       * @param request - Table creation request including name, schema, partition spec, etc.
-       * @returns Table metadata for the created table
-       *
-       * @example
-       * ```typescript
-       * const metadata = await catalog.createTable(
-       *   { namespace: ['analytics'] },
-       *   {
-       *     name: 'events',
-       *     schema: {
-       *       type: 'struct',
-       *       fields: [
-       *         { id: 1, name: 'id', type: 'long', required: true },
-       *         { id: 2, name: 'timestamp', type: 'timestamp', required: true }
-       *       ],
-       *       'schema-id': 0
-       *     },
-       *     'partition-spec': {
-       *       'spec-id': 0,
-       *       fields: [
-       *         { source_id: 2, field_id: 1000, name: 'ts_day', transform: 'day' }
-       *       ]
-       *     }
-       *   }
-       * );
-       * ```
-       */
-      async createTable(namespace, request) {
-        return this.tableOps.createTable(namespace, request);
-      }
-      /**
-       * Updates an existing table's metadata.
-       *
-       * Can update the schema, partition spec, or properties of a table.
-       *
-       * @param id - Table identifier to update
-       * @param request - Update request with fields to modify
-       * @returns Response containing the metadata location and updated table metadata
-       *
-       * @example
-       * ```typescript
-       * const response = await catalog.updateTable(
-       *   { namespace: ['analytics'], name: 'events' },
-       *   {
-       *     properties: { 'read.split.target-size': '134217728' }
-       *   }
-       * );
-       * console.log(response['metadata-location']); // s3://...
-       * console.log(response.metadata); // TableMetadata object
-       * ```
-       */
-      async updateTable(id, request) {
-        return this.tableOps.updateTable(id, request);
-      }
-      /**
-       * Drops a table from the catalog.
-       *
-       * @param id - Table identifier to drop
-       *
-       * @example
-       * ```typescript
-       * await catalog.dropTable({ namespace: ['analytics'], name: 'events' });
-       * ```
-       */
-      async dropTable(id, options) {
-        await this.tableOps.dropTable(id, options);
-      }
-      /**
-       * Loads metadata for a table.
-       *
-       * @param id - Table identifier to load
-       * @returns Table metadata including schema, partition spec, location, etc.
-       *
-       * @example
-       * ```typescript
-       * const metadata = await catalog.loadTable({ namespace: ['analytics'], name: 'events' });
-       * console.log(metadata.schema);
-       * console.log(metadata.location);
-       * ```
-       */
-      async loadTable(id) {
-        return this.tableOps.loadTable(id);
-      }
-      /**
-       * Checks if a namespace exists in the catalog.
-       *
-       * @param id - Namespace identifier to check
-       * @returns True if the namespace exists, false otherwise
-       *
-       * @example
-       * ```typescript
-       * const exists = await catalog.namespaceExists({ namespace: ['analytics'] });
-       * console.log(exists); // true or false
-       * ```
-       */
-      async namespaceExists(id) {
-        return this.namespaceOps.namespaceExists(id);
-      }
-      /**
-       * Checks if a table exists in the catalog.
-       *
-       * @param id - Table identifier to check
-       * @returns True if the table exists, false otherwise
-       *
-       * @example
-       * ```typescript
-       * const exists = await catalog.tableExists({ namespace: ['analytics'], name: 'events' });
-       * console.log(exists); // true or false
-       * ```
-       */
-      async tableExists(id) {
-        return this.tableOps.tableExists(id);
-      }
-      /**
-       * Creates a namespace if it does not exist.
-       *
-       * If the namespace already exists, returns void. If created, returns the response.
-       *
-       * @param id - Namespace identifier to create
-       * @param metadata - Optional metadata properties for the namespace
-       * @returns Response containing the created namespace and its properties, or void if it already exists
-       *
-       * @example
-       * ```typescript
-       * const response = await catalog.createNamespaceIfNotExists(
-       *   { namespace: ['analytics'] },
-       *   { properties: { owner: 'data-team' } }
-       * );
-       * if (response) {
-       *   console.log('Created:', response.namespace);
-       * } else {
-       *   console.log('Already exists');
-       * }
-       * ```
-       */
-      async createNamespaceIfNotExists(id, metadata) {
-        return this.namespaceOps.createNamespaceIfNotExists(id, metadata);
-      }
-      /**
-       * Creates a table if it does not exist.
-       *
-       * If the table already exists, returns its metadata instead.
-       *
-       * @param namespace - Namespace to create the table in
-       * @param request - Table creation request including name, schema, partition spec, etc.
-       * @returns Table metadata for the created or existing table
-       *
-       * @example
-       * ```typescript
-       * const metadata = await catalog.createTableIfNotExists(
-       *   { namespace: ['analytics'] },
-       *   {
-       *     name: 'events',
-       *     schema: {
-       *       type: 'struct',
-       *       fields: [
-       *         { id: 1, name: 'id', type: 'long', required: true },
-       *         { id: 2, name: 'timestamp', type: 'timestamp', required: true }
-       *       ],
-       *       'schema-id': 0
-       *     }
-       *   }
-       * );
-       * ```
-       */
-      async createTableIfNotExists(namespace, request) {
-        return this.tableOps.createTableIfNotExists(namespace, request);
-      }
-    };
-    var DECIMAL_REGEX = /^decimal\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)$/;
-    var FIXED_REGEX = /^fixed\s*\[\s*(\d+)\s*\]$/;
-    function parseDecimalType(type) {
-      const match = type.match(DECIMAL_REGEX);
-      if (!match)
-        return null;
-      return {
-        precision: parseInt(match[1], 10),
-        scale: parseInt(match[2], 10)
-      };
-    }
-    function parseFixedType(type) {
-      const match = type.match(FIXED_REGEX);
-      if (!match)
-        return null;
-      return {
-        length: parseInt(match[1], 10)
-      };
-    }
-    function isDecimalType(type) {
-      return DECIMAL_REGEX.test(type);
-    }
-    function isFixedType(type) {
-      return FIXED_REGEX.test(type);
-    }
-    function typesEqual(a, b) {
-      const decimalA = parseDecimalType(a);
-      const decimalB = parseDecimalType(b);
-      if (decimalA && decimalB) {
-        return decimalA.precision === decimalB.precision && decimalA.scale === decimalB.scale;
-      }
-      const fixedA = parseFixedType(a);
-      const fixedB = parseFixedType(b);
-      if (fixedA && fixedB) {
-        return fixedA.length === fixedB.length;
-      }
-      return a === b;
-    }
-    function getCurrentSchema(metadata) {
-      return metadata.schemas.find((s) => s["schema-id"] === metadata["current-schema-id"]);
-    }
-    exports.IcebergError = IcebergError;
-    exports.IcebergRestCatalog = IcebergRestCatalog;
-    exports.getCurrentSchema = getCurrentSchema;
-    exports.isDecimalType = isDecimalType;
-    exports.isFixedType = isFixedType;
-    exports.parseDecimalType = parseDecimalType;
-    exports.parseFixedType = parseFixedType;
-    exports.typesEqual = typesEqual;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/packages/StorageAnalyticsClient.js
-var require_StorageAnalyticsClient = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/packages/StorageAnalyticsClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var iceberg_js_1 = require_dist();
-    var constants_1 = require_constants3();
-    var errors_1 = require_errors3();
-    var fetch_1 = require_fetch();
-    var helpers_1 = require_helpers();
-    var StorageAnalyticsClient = class {
-      /**
-       * @alpha
-       *
-       * Creates a new StorageAnalyticsClient instance
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @param url - The base URL for the storage API
-       * @param headers - HTTP headers to include in requests
-       * @param fetch - Optional custom fetch implementation
-       *
-       * @example
-       * ```typescript
-       * const client = new StorageAnalyticsClient(url, headers)
-       * ```
-       */
-      constructor(url, headers = {}, fetch2) {
-        this.shouldThrowOnError = false;
-        this.url = url.replace(/\/$/, "");
-        this.headers = Object.assign(Object.assign({}, constants_1.DEFAULT_HEADERS), headers);
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /**
-       * @alpha
-       *
-       * Enable throwing errors instead of returning them in the response
-       * When enabled, failed operations will throw instead of returning { data: null, error }
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @returns This instance for method chaining
-       */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /**
-       * @alpha
-       *
-       * Creates a new analytics bucket using Iceberg tables
-       * Analytics buckets are optimized for analytical queries and data processing
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @param name A unique name for the bucket you are creating
-       * @returns Promise with response containing newly created analytics bucket or error
-       *
-       * @example Create analytics bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .analytics
-       *   .createBucket('analytics-data')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "name": "analytics-data",
-       *     "type": "ANALYTICS",
-       *     "format": "iceberg",
-       *     "created_at": "2024-05-22T22:26:05.100Z",
-       *     "updated_at": "2024-05-22T22:26:05.100Z"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      createBucket(name) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/bucket`, { name }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * @alpha
-       *
-       * Retrieves the details of all Analytics Storage buckets within an existing project
-       * Only returns buckets of type 'ANALYTICS'
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @param options Query parameters for listing buckets
-       * @param options.limit Maximum number of buckets to return
-       * @param options.offset Number of buckets to skip
-       * @param options.sortColumn Column to sort by ('name', 'created_at', 'updated_at')
-       * @param options.sortOrder Sort order ('asc' or 'desc')
-       * @param options.search Search term to filter bucket names
-       * @returns Promise with response containing array of analytics buckets or error
-       *
-       * @example List analytics buckets
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .analytics
-       *   .listBuckets({
-       *     limit: 10,
-       *     offset: 0,
-       *     sortColumn: 'created_at',
-       *     sortOrder: 'desc'
-       *   })
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": [
-       *     {
-       *       "name": "analytics-data",
-       *       "type": "ANALYTICS",
-       *       "format": "iceberg",
-       *       "created_at": "2024-05-22T22:26:05.100Z",
-       *       "updated_at": "2024-05-22T22:26:05.100Z"
-       *     }
-       *   ],
-       *   "error": null
-       * }
-       * ```
-       */
-      listBuckets(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const queryParams = new URLSearchParams();
-            if ((options === null || options === void 0 ? void 0 : options.limit) !== void 0)
-              queryParams.set("limit", options.limit.toString());
-            if ((options === null || options === void 0 ? void 0 : options.offset) !== void 0)
-              queryParams.set("offset", options.offset.toString());
-            if (options === null || options === void 0 ? void 0 : options.sortColumn)
-              queryParams.set("sortColumn", options.sortColumn);
-            if (options === null || options === void 0 ? void 0 : options.sortOrder)
-              queryParams.set("sortOrder", options.sortOrder);
-            if (options === null || options === void 0 ? void 0 : options.search)
-              queryParams.set("search", options.search);
-            const queryString = queryParams.toString();
-            const url = queryString ? `${this.url}/bucket?${queryString}` : `${this.url}/bucket`;
-            const data = yield (0, fetch_1.get)(this.fetch, url, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * @alpha
-       *
-       * Deletes an existing analytics bucket
-       * A bucket can't be deleted with existing objects inside it
-       * You must first empty the bucket before deletion
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @param bucketName The unique identifier of the bucket you would like to delete
-       * @returns Promise with response containing success message or error
-       *
-       * @example Delete analytics bucket
-       * ```js
-       * const { data, error } = await supabase
-       *   .storage
-       *   .analytics
-       *   .deleteBucket('analytics-data')
-       * ```
-       *
-       * Response:
-       * ```json
-       * {
-       *   "data": {
-       *     "message": "Successfully deleted"
-       *   },
-       *   "error": null
-       * }
-       * ```
-       */
-      deleteBucket(bucketName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.remove)(this.fetch, `${this.url}/bucket/${bucketName}`, {}, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /**
-       * @alpha
-       *
-       * Get an Iceberg REST Catalog client configured for a specific analytics bucket
-       * Use this to perform advanced table and namespace operations within the bucket
-       * The returned client provides full access to the Apache Iceberg REST Catalog API
-       * with the Supabase `{ data, error }` pattern for consistent error handling on all operations.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @param bucketName - The name of the analytics bucket (warehouse) to connect to
-       * @returns The wrapped Iceberg catalog client
-       * @throws {StorageError} If the bucket name is invalid
-       *
-       * @example Get catalog and create table
-       * ```js
-       * // First, create an analytics bucket
-       * const { data: bucket, error: bucketError } = await supabase
-       *   .storage
-       *   .analytics
-       *   .createBucket('analytics-data')
-       *
-       * // Get the Iceberg catalog for that bucket
-       * const catalog = supabase.storage.analytics.from('analytics-data')
-       *
-       * // Create a namespace
-       * const { error: nsError } = await catalog.createNamespace({ namespace: ['default'] })
-       *
-       * // Create a table with schema
-       * const { data: tableMetadata, error: tableError } = await catalog.createTable(
-       *   { namespace: ['default'] },
-       *   {
-       *     name: 'events',
-       *     schema: {
-       *       type: 'struct',
-       *       fields: [
-       *         { id: 1, name: 'id', type: 'long', required: true },
-       *         { id: 2, name: 'timestamp', type: 'timestamp', required: true },
-       *         { id: 3, name: 'user_id', type: 'string', required: false }
-       *       ],
-       *       'schema-id': 0,
-       *       'identifier-field-ids': [1]
-       *     },
-       *     'partition-spec': {
-       *       'spec-id': 0,
-       *       fields: []
-       *     },
-       *     'write-order': {
-       *       'order-id': 0,
-       *       fields: []
-       *     },
-       *     properties: {
-       *       'write.format.default': 'parquet'
-       *     }
-       *   }
-       * )
-       * ```
-       *
-       * @example List tables in namespace
-       * ```js
-       * const catalog = supabase.storage.analytics.from('analytics-data')
-       *
-       * // List all tables in the default namespace
-       * const { data: tables, error: listError } = await catalog.listTables({ namespace: ['default'] })
-       * if (listError) {
-       *   if (listError.isNotFound()) {
-       *     console.log('Namespace not found')
-       *   }
-       *   return
-       * }
-       * console.log(tables) // [{ namespace: ['default'], name: 'events' }]
-       * ```
-       *
-       * @example Working with namespaces
-       * ```js
-       * const catalog = supabase.storage.analytics.from('analytics-data')
-       *
-       * // List all namespaces
-       * const { data: namespaces } = await catalog.listNamespaces()
-       *
-       * // Create namespace with properties
-       * await catalog.createNamespace(
-       *   { namespace: ['production'] },
-       *   { properties: { owner: 'data-team', env: 'prod' } }
-       * )
-       * ```
-       *
-       * @example Cleanup operations
-       * ```js
-       * const catalog = supabase.storage.analytics.from('analytics-data')
-       *
-       * // Drop table with purge option (removes all data)
-       * const { error: dropError } = await catalog.dropTable(
-       *   { namespace: ['default'], name: 'events' },
-       *   { purge: true }
-       * )
-       *
-       * if (dropError?.isNotFound()) {
-       *   console.log('Table does not exist')
-       * }
-       *
-       * // Drop namespace (must be empty)
-       * await catalog.dropNamespace({ namespace: ['default'] })
-       * ```
-       *
-       * @remarks
-       * This method provides a bridge between Supabase's bucket management and the standard
-       * Apache Iceberg REST Catalog API. The bucket name maps to the Iceberg warehouse parameter.
-       * All authentication and configuration is handled automatically using your Supabase credentials.
-       *
-       * **Error Handling**: Invalid bucket names throw immediately. All catalog
-       * operations return `{ data, error }` where errors are `IcebergError` instances from iceberg-js.
-       * Use helper methods like `error.isNotFound()` or check `error.status` for specific error handling.
-       * Use `.throwOnError()` on the analytics client if you prefer exceptions for catalog operations.
-       *
-       * **Cleanup Operations**: When using `dropTable`, the `purge: true` option permanently
-       * deletes all table data. Without it, the table is marked as deleted but data remains.
-       *
-       * **Library Dependency**: The returned catalog wraps `IcebergRestCatalog` from iceberg-js.
-       * For complete API documentation and advanced usage, refer to the
-       * [iceberg-js documentation](https://supabase.github.io/iceberg-js/).
-       */
-      from(bucketName) {
-        if (!(0, helpers_1.isValidBucketName)(bucketName)) {
-          throw new errors_1.StorageError("Invalid bucket name: File, folder, and bucket names must follow AWS object key naming guidelines and should avoid the use of any other characters.");
-        }
-        const catalog = new iceberg_js_1.IcebergRestCatalog({
-          baseUrl: this.url,
-          catalogName: bucketName,
-          // Maps to the warehouse parameter in Supabase's implementation
-          auth: {
-            type: "custom",
-            getHeaders: () => tslib_1.__awaiter(this, void 0, void 0, function* () {
-              return this.headers;
-            })
-          },
-          fetch: this.fetch
-        });
-        const shouldThrowOnError = this.shouldThrowOnError;
-        const wrappedCatalog = new Proxy(catalog, {
-          get(target, prop) {
-            const value = target[prop];
-            if (typeof value !== "function") {
-              return value;
-            }
-            return (...args) => tslib_1.__awaiter(this, void 0, void 0, function* () {
-              try {
-                const data = yield value.apply(target, args);
-                return { data, error: null };
-              } catch (error) {
-                if (shouldThrowOnError) {
-                  throw error;
-                }
-                return { data: null, error };
-              }
-            });
-          }
-        });
-        return wrappedCatalog;
-      }
-    };
-    exports.default = StorageAnalyticsClient;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/constants.js
-var require_constants4 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/constants.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DEFAULT_HEADERS = void 0;
-    var version_1 = require_version3();
-    exports.DEFAULT_HEADERS = {
-      "X-Client-Info": `storage-js/${version_1.version}`,
-      "Content-Type": "application/json"
-    };
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/errors.js
-var require_errors4 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/errors.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StorageVectorsErrorCode = exports.StorageVectorsUnknownError = exports.StorageVectorsApiError = exports.StorageVectorsError = void 0;
-    exports.isStorageVectorsError = isStorageVectorsError;
-    var StorageVectorsError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.__isStorageVectorsError = true;
-        this.name = "StorageVectorsError";
-      }
-    };
-    exports.StorageVectorsError = StorageVectorsError;
-    function isStorageVectorsError(error) {
-      return typeof error === "object" && error !== null && "__isStorageVectorsError" in error;
-    }
-    var StorageVectorsApiError = class extends StorageVectorsError {
-      constructor(message, status, statusCode) {
-        super(message);
-        this.name = "StorageVectorsApiError";
-        this.status = status;
-        this.statusCode = statusCode;
-      }
-      toJSON() {
-        return {
-          name: this.name,
-          message: this.message,
-          status: this.status,
-          statusCode: this.statusCode
-        };
-      }
-    };
-    exports.StorageVectorsApiError = StorageVectorsApiError;
-    var StorageVectorsUnknownError = class extends StorageVectorsError {
-      constructor(message, originalError) {
-        super(message);
-        this.name = "StorageVectorsUnknownError";
-        this.originalError = originalError;
-      }
-    };
-    exports.StorageVectorsUnknownError = StorageVectorsUnknownError;
-    var StorageVectorsErrorCode;
-    (function(StorageVectorsErrorCode2) {
-      StorageVectorsErrorCode2["InternalError"] = "InternalError";
-      StorageVectorsErrorCode2["S3VectorConflictException"] = "S3VectorConflictException";
-      StorageVectorsErrorCode2["S3VectorNotFoundException"] = "S3VectorNotFoundException";
-      StorageVectorsErrorCode2["S3VectorBucketNotEmpty"] = "S3VectorBucketNotEmpty";
-      StorageVectorsErrorCode2["S3VectorMaxBucketsExceeded"] = "S3VectorMaxBucketsExceeded";
-      StorageVectorsErrorCode2["S3VectorMaxIndexesExceeded"] = "S3VectorMaxIndexesExceeded";
-    })(StorageVectorsErrorCode || (exports.StorageVectorsErrorCode = StorageVectorsErrorCode = {}));
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/helpers.js
-var require_helpers2 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/helpers.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateVectorDimension = exports.normalizeToFloat32 = exports.isPlainObject = exports.resolveResponse = exports.resolveFetch = void 0;
-    var resolveFetch = (customFetch) => {
-      if (customFetch) {
-        return (...args) => customFetch(...args);
-      }
-      return (...args) => fetch(...args);
-    };
-    exports.resolveFetch = resolveFetch;
-    var resolveResponse = () => {
-      return Response;
-    };
-    exports.resolveResponse = resolveResponse;
-    var isPlainObject = (value) => {
-      if (typeof value !== "object" || value === null) {
-        return false;
-      }
-      const prototype = Object.getPrototypeOf(value);
-      return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
-    };
-    exports.isPlainObject = isPlainObject;
-    var normalizeToFloat32 = (values) => {
-      return Array.from(new Float32Array(values));
-    };
-    exports.normalizeToFloat32 = normalizeToFloat32;
-    var validateVectorDimension = (vector, expectedDimension) => {
-      if (expectedDimension !== void 0 && vector.float32.length !== expectedDimension) {
-        throw new Error(`Vector dimension mismatch: expected ${expectedDimension}, got ${vector.float32.length}`);
-      }
-    };
-    exports.validateVectorDimension = validateVectorDimension;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/fetch.js
-var require_fetch2 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/fetch.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.get = get;
-    exports.post = post;
-    exports.put = put;
-    exports.remove = remove;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var errors_1 = require_errors4();
-    var helpers_1 = require_helpers2();
-    var _getErrorMessage = (err) => err.msg || err.message || err.error_description || err.error || JSON.stringify(err);
-    var handleError = (error, reject, options) => tslib_1.__awaiter(void 0, void 0, void 0, function* () {
-      const isResponseLike = error && typeof error === "object" && "status" in error && "ok" in error && typeof error.status === "number";
-      if (isResponseLike && !(options === null || options === void 0 ? void 0 : options.noResolveJson)) {
-        const status = error.status || 500;
-        const responseError = error;
-        if (typeof responseError.json === "function") {
-          responseError.json().then((err) => {
-            const statusCode = (err === null || err === void 0 ? void 0 : err.statusCode) || (err === null || err === void 0 ? void 0 : err.code) || status + "";
-            reject(new errors_1.StorageVectorsApiError(_getErrorMessage(err), status, statusCode));
-          }).catch(() => {
-            const statusCode = status + "";
-            const message = responseError.statusText || `HTTP ${status} error`;
-            reject(new errors_1.StorageVectorsApiError(message, status, statusCode));
-          });
-        } else {
-          const statusCode = status + "";
-          const message = responseError.statusText || `HTTP ${status} error`;
-          reject(new errors_1.StorageVectorsApiError(message, status, statusCode));
-        }
-      } else {
-        reject(new errors_1.StorageVectorsUnknownError(_getErrorMessage(error), error));
-      }
-    });
-    var _getRequestParams = (method, options, parameters, body) => {
-      const params = { method, headers: (options === null || options === void 0 ? void 0 : options.headers) || {} };
-      if (method === "GET" || !body) {
-        return params;
-      }
-      if ((0, helpers_1.isPlainObject)(body)) {
-        params.headers = Object.assign({ "Content-Type": "application/json" }, options === null || options === void 0 ? void 0 : options.headers);
-        params.body = JSON.stringify(body);
-      } else {
-        params.body = body;
-      }
-      return Object.assign(Object.assign({}, params), parameters);
-    };
-    function _handleRequest(fetcher, method, url, options, parameters, body) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-          fetcher(url, _getRequestParams(method, options, parameters, body)).then((result) => {
-            if (!result.ok)
-              throw result;
-            if (options === null || options === void 0 ? void 0 : options.noResolveJson)
-              return result;
-            const contentType = result.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) {
-              return {};
-            }
-            return result.json();
-          }).then((data) => resolve(data)).catch((error) => handleError(error, reject, options));
-        });
-      });
-    }
-    function get(fetcher, url, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "GET", url, options, parameters);
-      });
-    }
-    function post(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "POST", url, options, parameters, body);
-      });
-    }
-    function put(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "PUT", url, options, parameters, body);
-      });
-    }
-    function remove(fetcher, url, body, options, parameters) {
-      return tslib_1.__awaiter(this, void 0, void 0, function* () {
-        return _handleRequest(fetcher, "DELETE", url, options, parameters, body);
-      });
-    }
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorIndexApi.js
-var require_VectorIndexApi = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorIndexApi.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var constants_1 = require_constants4();
-    var errors_1 = require_errors4();
-    var fetch_1 = require_fetch2();
-    var helpers_1 = require_helpers2();
-    var VectorIndexApi = class {
-      /** Creates a new VectorIndexApi instance */
-      constructor(url, headers = {}, fetch2) {
-        this.shouldThrowOnError = false;
-        this.url = url.replace(/\/$/, "");
-        this.headers = Object.assign(Object.assign({}, constants_1.DEFAULT_HEADERS), headers);
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /** Enable throwing errors instead of returning them in the response */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /** Creates a new vector index within a bucket */
-      createIndex(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/CreateIndex`, options, {
-              headers: this.headers
-            });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Retrieves metadata for a specific vector index */
-      getIndex(vectorBucketName, indexName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/GetIndex`, { vectorBucketName, indexName }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Lists vector indexes within a bucket with optional filtering and pagination */
-      listIndexes(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/ListIndexes`, options, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Deletes a vector index and all its data */
-      deleteIndex(vectorBucketName, indexName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/DeleteIndex`, { vectorBucketName, indexName }, { headers: this.headers });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-    };
-    exports.default = VectorIndexApi;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorDataApi.js
-var require_VectorDataApi = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorDataApi.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var constants_1 = require_constants4();
-    var errors_1 = require_errors4();
-    var fetch_1 = require_fetch2();
-    var helpers_1 = require_helpers2();
-    var VectorDataApi = class {
-      /** Creates a new VectorDataApi instance */
-      constructor(url, headers = {}, fetch2) {
-        this.shouldThrowOnError = false;
-        this.url = url.replace(/\/$/, "");
-        this.headers = Object.assign(Object.assign({}, constants_1.DEFAULT_HEADERS), headers);
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /** Enable throwing errors instead of returning them in the response */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /** Inserts or updates vectors in batch (1-500 per request) */
-      putVectors(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            if (options.vectors.length < 1 || options.vectors.length > 500) {
-              throw new Error("Vector batch size must be between 1 and 500 items");
-            }
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/PutVectors`, options, {
-              headers: this.headers
-            });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Retrieves vectors by their keys in batch */
-      getVectors(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/GetVectors`, options, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Lists vectors in an index with pagination */
-      listVectors(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            if (options.segmentCount !== void 0) {
-              if (options.segmentCount < 1 || options.segmentCount > 16) {
-                throw new Error("segmentCount must be between 1 and 16");
-              }
-              if (options.segmentIndex !== void 0) {
-                if (options.segmentIndex < 0 || options.segmentIndex >= options.segmentCount) {
-                  throw new Error(`segmentIndex must be between 0 and ${options.segmentCount - 1}`);
-                }
-              }
-            }
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/ListVectors`, options, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Queries for similar vectors using approximate nearest neighbor search */
-      queryVectors(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/QueryVectors`, options, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Deletes vectors by their keys in batch (1-500 per request) */
-      deleteVectors(options) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            if (options.keys.length < 1 || options.keys.length > 500) {
-              throw new Error("Keys batch size must be between 1 and 500 items");
-            }
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/DeleteVectors`, options, {
-              headers: this.headers
-            });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-    };
-    exports.default = VectorDataApi;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorBucketApi.js
-var require_VectorBucketApi = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/VectorBucketApi.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var constants_1 = require_constants4();
-    var errors_1 = require_errors4();
-    var fetch_1 = require_fetch2();
-    var helpers_1 = require_helpers2();
-    var VectorBucketApi = class {
-      /** Creates a new VectorBucketApi instance */
-      constructor(url, headers = {}, fetch2) {
-        this.shouldThrowOnError = false;
-        this.url = url.replace(/\/$/, "");
-        this.headers = Object.assign(Object.assign({}, constants_1.DEFAULT_HEADERS), headers);
-        this.fetch = (0, helpers_1.resolveFetch)(fetch2);
-      }
-      /** Enable throwing errors instead of returning them in the response */
-      throwOnError() {
-        this.shouldThrowOnError = true;
-        return this;
-      }
-      /** Creates a new vector bucket */
-      createBucket(vectorBucketName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/CreateVectorBucket`, { vectorBucketName }, { headers: this.headers });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Retrieves metadata for a specific vector bucket */
-      getBucket(vectorBucketName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/GetVectorBucket`, { vectorBucketName }, { headers: this.headers });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Lists vector buckets with optional filtering and pagination */
-      listBuckets() {
-        return tslib_1.__awaiter(this, arguments, void 0, function* (options = {}) {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/ListVectorBuckets`, options, {
-              headers: this.headers
-            });
-            return { data, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-      /** Deletes a vector bucket (must be empty first) */
-      deleteBucket(vectorBucketName) {
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          try {
-            const data = yield (0, fetch_1.post)(this.fetch, `${this.url}/DeleteVectorBucket`, { vectorBucketName }, { headers: this.headers });
-            return { data: data || {}, error: null };
-          } catch (error) {
-            if (this.shouldThrowOnError) {
-              throw error;
-            }
-            if ((0, errors_1.isStorageVectorsError)(error)) {
-              return { data: null, error };
-            }
-            throw error;
-          }
-        });
-      }
-    };
-    exports.default = VectorBucketApi;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/StorageVectorsClient.js
-var require_StorageVectorsClient = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/StorageVectorsClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.VectorIndexScope = exports.VectorBucketScope = exports.StorageVectorsClient = void 0;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var VectorIndexApi_1 = tslib_1.__importDefault(require_VectorIndexApi());
-    var VectorDataApi_1 = tslib_1.__importDefault(require_VectorDataApi());
-    var VectorBucketApi_1 = tslib_1.__importDefault(require_VectorBucketApi());
-    var StorageVectorsClient = class extends VectorBucketApi_1.default {
-      /**
-       * @alpha
-       *
-       * Creates a StorageVectorsClient that can manage buckets, indexes, and vectors.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param url - Base URL of the Storage Vectors REST API.
-       * @param options.headers - Optional headers (for example `Authorization`) applied to every request.
-       * @param options.fetch - Optional custom `fetch` implementation for non-browser runtimes.
-       *
-       * @example
-       * ```typescript
-       * const client = new StorageVectorsClient(url, options)
-       * ```
-       */
-      constructor(url, options = {}) {
-        super(url, options.headers || {}, options.fetch);
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Access operations for a specific vector bucket
-       * Returns a scoped client for index and vector operations within the bucket
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param vectorBucketName - Name of the vector bucket
-       * @returns Bucket-scoped client with index and vector operations
-       *
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * ```
-       */
-      from(vectorBucketName) {
-        return new VectorBucketScope(this.url, this.headers, vectorBucketName, this.fetch);
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Creates a new vector bucket
-       * Vector buckets are containers for vector indexes and their data
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param vectorBucketName - Unique name for the vector bucket
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const { data, error } = await supabase
-       *   .storage
-       *   .vectors
-       *   .createBucket('embeddings-prod')
-       * ```
-       */
-      createBucket(vectorBucketName) {
-        const _super = Object.create(null, {
-          createBucket: { get: () => super.createBucket }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.createBucket.call(this, vectorBucketName);
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Retrieves metadata for a specific vector bucket
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param vectorBucketName - Name of the vector bucket
-       * @returns Promise with bucket metadata or error
-       *
-       * @example
-       * ```typescript
-       * const { data, error } = await supabase
-       *   .storage
-       *   .vectors
-       *   .getBucket('embeddings-prod')
-       *
-       * console.log('Bucket created:', data?.vectorBucket.creationTime)
-       * ```
-       */
-      getBucket(vectorBucketName) {
-        const _super = Object.create(null, {
-          getBucket: { get: () => super.getBucket }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.getBucket.call(this, vectorBucketName);
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Lists all vector buckets with optional filtering and pagination
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Optional filters (prefix, maxResults, nextToken)
-       * @returns Promise with list of buckets or error
-       *
-       * @example
-       * ```typescript
-       * const { data, error } = await supabase
-       *   .storage
-       *   .vectors
-       *   .listBuckets({ prefix: 'embeddings-' })
-       *
-       * data?.vectorBuckets.forEach(bucket => {
-       *   console.log(bucket.vectorBucketName)
-       * })
-       * ```
-       */
-      listBuckets() {
-        const _super = Object.create(null, {
-          listBuckets: { get: () => super.listBuckets }
-        });
-        return tslib_1.__awaiter(this, arguments, void 0, function* (options = {}) {
-          return _super.listBuckets.call(this, options);
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Deletes a vector bucket (bucket must be empty)
-       * All indexes must be deleted before deleting the bucket
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param vectorBucketName - Name of the vector bucket to delete
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const { data, error } = await supabase
-       *   .storage
-       *   .vectors
-       *   .deleteBucket('embeddings-old')
-       * ```
-       */
-      deleteBucket(vectorBucketName) {
-        const _super = Object.create(null, {
-          deleteBucket: { get: () => super.deleteBucket }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.deleteBucket.call(this, vectorBucketName);
-        });
-      }
-    };
-    exports.StorageVectorsClient = StorageVectorsClient;
-    var VectorBucketScope = class extends VectorIndexApi_1.default {
-      /**
-       * @alpha
-       *
-       * Creates a helper that automatically scopes all index operations to the provided bucket.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * ```
-       */
-      constructor(url, headers, vectorBucketName, fetch2) {
-        super(url, headers, fetch2);
-        this.vectorBucketName = vectorBucketName;
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Creates a new vector index in this bucket
-       * Convenience method that automatically includes the bucket name
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Index configuration (vectorBucketName is automatically set)
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * await bucket.createIndex({
-       *   indexName: 'documents-openai',
-       *   dataType: 'float32',
-       *   dimension: 1536,
-       *   distanceMetric: 'cosine',
-       *   metadataConfiguration: {
-       *     nonFilterableMetadataKeys: ['raw_text']
-       *   }
-       * })
-       * ```
-       */
-      createIndex(options) {
-        const _super = Object.create(null, {
-          createIndex: { get: () => super.createIndex }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.createIndex.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Lists indexes in this bucket
-       * Convenience method that automatically includes the bucket name
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Listing options (vectorBucketName is automatically set)
-       * @returns Promise with response containing indexes array and pagination token or error
-       *
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * const { data } = await bucket.listIndexes({ prefix: 'documents-' })
-       * ```
-       */
-      listIndexes() {
-        const _super = Object.create(null, {
-          listIndexes: { get: () => super.listIndexes }
-        });
-        return tslib_1.__awaiter(this, arguments, void 0, function* (options = {}) {
-          return _super.listIndexes.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Retrieves metadata for a specific index in this bucket
-       * Convenience method that automatically includes the bucket name
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param indexName - Name of the index to retrieve
-       * @returns Promise with index metadata or error
-       *
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * const { data } = await bucket.getIndex('documents-openai')
-       * console.log('Dimension:', data?.index.dimension)
-       * ```
-       */
-      getIndex(indexName) {
-        const _super = Object.create(null, {
-          getIndex: { get: () => super.getIndex }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.getIndex.call(this, this.vectorBucketName, indexName);
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Deletes an index from this bucket
-       * Convenience method that automatically includes the bucket name
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param indexName - Name of the index to delete
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const bucket = supabase.storage.vectors.from('embeddings-prod')
-       * await bucket.deleteIndex('old-index')
-       * ```
-       */
-      deleteIndex(indexName) {
-        const _super = Object.create(null, {
-          deleteIndex: { get: () => super.deleteIndex }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.deleteIndex.call(this, this.vectorBucketName, indexName);
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Access operations for a specific index within this bucket
-       * Returns a scoped client for vector data operations
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param indexName - Name of the index
-       * @returns Index-scoped client with vector data operations
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       *
-       * // Insert vectors
-       * await index.putVectors({
-       *   vectors: [
-       *     { key: 'doc-1', data: { float32: [...] }, metadata: { title: 'Intro' } }
-       *   ]
-       * })
-       *
-       * // Query similar vectors
-       * const { data } = await index.queryVectors({
-       *   queryVector: { float32: [...] },
-       *   topK: 5
-       * })
-       * ```
-       */
-      index(indexName) {
-        return new VectorIndexScope(this.url, this.headers, this.vectorBucketName, indexName, this.fetch);
-      }
-    };
-    exports.VectorBucketScope = VectorBucketScope;
-    var VectorIndexScope = class extends VectorDataApi_1.default {
-      /**
-       *
-       * @alpha
-       *
-       * Creates a helper that automatically scopes all vector operations to the provided bucket/index names.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * ```
-       */
-      constructor(url, headers, vectorBucketName, indexName, fetch2) {
-        super(url, headers, fetch2);
-        this.vectorBucketName = vectorBucketName;
-        this.indexName = indexName;
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Inserts or updates vectors in this index
-       * Convenience method that automatically includes bucket and index names
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Vector insertion options (bucket and index names automatically set)
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * await index.putVectors({
-       *   vectors: [
-       *     {
-       *       key: 'doc-1',
-       *       data: { float32: [0.1, 0.2, ...] },
-       *       metadata: { title: 'Introduction', page: 1 }
-       *     }
-       *   ]
-       * })
-       * ```
-       */
-      putVectors(options) {
-        const _super = Object.create(null, {
-          putVectors: { get: () => super.putVectors }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.putVectors.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName, indexName: this.indexName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Retrieves vectors by keys from this index
-       * Convenience method that automatically includes bucket and index names
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Vector retrieval options (bucket and index names automatically set)
-       * @returns Promise with response containing vectors array or error
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * const { data } = await index.getVectors({
-       *   keys: ['doc-1', 'doc-2'],
-       *   returnMetadata: true
-       * })
-       * ```
-       */
-      getVectors(options) {
-        const _super = Object.create(null, {
-          getVectors: { get: () => super.getVectors }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.getVectors.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName, indexName: this.indexName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Lists vectors in this index with pagination
-       * Convenience method that automatically includes bucket and index names
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Listing options (bucket and index names automatically set)
-       * @returns Promise with response containing vectors array and pagination token or error
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * const { data } = await index.listVectors({
-       *   maxResults: 500,
-       *   returnMetadata: true
-       * })
-       * ```
-       */
-      listVectors() {
-        const _super = Object.create(null, {
-          listVectors: { get: () => super.listVectors }
-        });
-        return tslib_1.__awaiter(this, arguments, void 0, function* (options = {}) {
-          return _super.listVectors.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName, indexName: this.indexName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Queries for similar vectors in this index
-       * Convenience method that automatically includes bucket and index names
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Query options (bucket and index names automatically set)
-       * @returns Promise with response containing matches array of similar vectors ordered by distance or error
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * const { data } = await index.queryVectors({
-       *   queryVector: { float32: [0.1, 0.2, ...] },
-       *   topK: 5,
-       *   filter: { category: 'technical' },
-       *   returnDistance: true,
-       *   returnMetadata: true
-       * })
-       * ```
-       */
-      queryVectors(options) {
-        const _super = Object.create(null, {
-          queryVectors: { get: () => super.queryVectors }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.queryVectors.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName, indexName: this.indexName }));
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Deletes vectors by keys from this index
-       * Convenience method that automatically includes bucket and index names
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @param options - Deletion options (bucket and index names automatically set)
-       * @returns Promise with empty response on success or error
-       *
-       * @example
-       * ```typescript
-       * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
-       * await index.deleteVectors({
-       *   keys: ['doc-1', 'doc-2', 'doc-3']
-       * })
-       * ```
-       */
-      deleteVectors(options) {
-        const _super = Object.create(null, {
-          deleteVectors: { get: () => super.deleteVectors }
-        });
-        return tslib_1.__awaiter(this, void 0, void 0, function* () {
-          return _super.deleteVectors.call(this, Object.assign(Object.assign({}, options), { vectorBucketName: this.vectorBucketName, indexName: this.indexName }));
-        });
-      }
-    };
-    exports.VectorIndexScope = VectorIndexScope;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/vectors/index.js
-var require_vectors = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/vectors/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateVectorDimension = exports.normalizeToFloat32 = exports.isPlainObject = exports.resolveResponse = exports.resolveFetch = exports.isStorageVectorsError = exports.StorageVectorsErrorCode = exports.StorageVectorsUnknownError = exports.StorageVectorsApiError = exports.StorageVectorsError = exports.VectorDataApi = exports.VectorIndexApi = exports.VectorBucketApi = exports.VectorIndexScope = exports.VectorBucketScope = exports.StorageVectorsClient = void 0;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var StorageVectorsClient_1 = require_StorageVectorsClient();
-    Object.defineProperty(exports, "StorageVectorsClient", { enumerable: true, get: function() {
-      return StorageVectorsClient_1.StorageVectorsClient;
-    } });
-    Object.defineProperty(exports, "VectorBucketScope", { enumerable: true, get: function() {
-      return StorageVectorsClient_1.VectorBucketScope;
-    } });
-    Object.defineProperty(exports, "VectorIndexScope", { enumerable: true, get: function() {
-      return StorageVectorsClient_1.VectorIndexScope;
-    } });
-    var VectorBucketApi_1 = require_VectorBucketApi();
-    Object.defineProperty(exports, "VectorBucketApi", { enumerable: true, get: function() {
-      return tslib_1.__importDefault(VectorBucketApi_1).default;
-    } });
-    var VectorIndexApi_1 = require_VectorIndexApi();
-    Object.defineProperty(exports, "VectorIndexApi", { enumerable: true, get: function() {
-      return tslib_1.__importDefault(VectorIndexApi_1).default;
-    } });
-    var VectorDataApi_1 = require_VectorDataApi();
-    Object.defineProperty(exports, "VectorDataApi", { enumerable: true, get: function() {
-      return tslib_1.__importDefault(VectorDataApi_1).default;
-    } });
-    var errors_1 = require_errors4();
-    Object.defineProperty(exports, "StorageVectorsError", { enumerable: true, get: function() {
-      return errors_1.StorageVectorsError;
-    } });
-    Object.defineProperty(exports, "StorageVectorsApiError", { enumerable: true, get: function() {
-      return errors_1.StorageVectorsApiError;
-    } });
-    Object.defineProperty(exports, "StorageVectorsUnknownError", { enumerable: true, get: function() {
-      return errors_1.StorageVectorsUnknownError;
-    } });
-    Object.defineProperty(exports, "StorageVectorsErrorCode", { enumerable: true, get: function() {
-      return errors_1.StorageVectorsErrorCode;
-    } });
-    Object.defineProperty(exports, "isStorageVectorsError", { enumerable: true, get: function() {
-      return errors_1.isStorageVectorsError;
-    } });
-    var helpers_1 = require_helpers2();
-    Object.defineProperty(exports, "resolveFetch", { enumerable: true, get: function() {
-      return helpers_1.resolveFetch;
-    } });
-    Object.defineProperty(exports, "resolveResponse", { enumerable: true, get: function() {
-      return helpers_1.resolveResponse;
-    } });
-    Object.defineProperty(exports, "isPlainObject", { enumerable: true, get: function() {
-      return helpers_1.isPlainObject;
-    } });
-    Object.defineProperty(exports, "normalizeToFloat32", { enumerable: true, get: function() {
-      return helpers_1.normalizeToFloat32;
-    } });
-    Object.defineProperty(exports, "validateVectorDimension", { enumerable: true, get: function() {
-      return helpers_1.validateVectorDimension;
-    } });
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/StorageClient.js
-var require_StorageClient = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/StorageClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StorageClient = void 0;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var StorageFileApi_1 = tslib_1.__importDefault(require_StorageFileApi());
-    var StorageBucketApi_1 = tslib_1.__importDefault(require_StorageBucketApi());
-    var StorageAnalyticsClient_1 = tslib_1.__importDefault(require_StorageAnalyticsClient());
-    var vectors_1 = require_vectors();
-    var StorageClient = class extends StorageBucketApi_1.default {
-      /**
-       * Creates a client for Storage buckets, files, analytics, and vectors.
-       *
-       * @category File Buckets
-       * @example
-       * ```ts
-       * import { StorageClient } from '@supabase/storage-js'
-       *
-       * const storage = new StorageClient('https://xyzcompany.supabase.co/storage/v1', {
-       *   apikey: 'public-anon-key',
-       * })
-       * const avatars = storage.from('avatars')
-       * ```
-       */
-      constructor(url, headers = {}, fetch2, opts) {
-        super(url, headers, fetch2, opts);
-      }
-      /**
-       * Perform file operation in a bucket.
-       *
-       * @category File Buckets
-       * @param id The bucket id to operate on.
-       *
-       * @example
-       * ```typescript
-       * const avatars = supabase.storage.from('avatars')
-       * ```
-       */
-      from(id) {
-        return new StorageFileApi_1.default(this.url, this.headers, id, this.fetch);
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Access vector storage operations.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Vector Buckets
-       * @returns A StorageVectorsClient instance configured with the current storage settings.
-       */
-      get vectors() {
-        return new vectors_1.StorageVectorsClient(this.url + "/vector", {
-          headers: this.headers,
-          fetch: this.fetch
-        });
-      }
-      /**
-       *
-       * @alpha
-       *
-       * Access analytics storage operations using Iceberg tables.
-       *
-       * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
-       *
-       * @category Analytics Buckets
-       * @returns A StorageAnalyticsClient instance configured with the current storage settings.
-       */
-      get analytics() {
-        return new StorageAnalyticsClient_1.default(this.url + "/iceberg", this.headers, this.fetch);
-      }
-    };
-    exports.StorageClient = StorageClient;
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/lib/types.js
-var require_types3 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/lib/types.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-  }
-});
-
-// node_modules/@supabase/storage-js/dist/main/index.js
-var require_main3 = __commonJS({
-  "node_modules/@supabase/storage-js/dist/main/index.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StorageAnalyticsClient = exports.StorageClient = void 0;
-    var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var StorageClient_1 = require_StorageClient();
-    Object.defineProperty(exports, "StorageClient", { enumerable: true, get: function() {
-      return StorageClient_1.StorageClient;
-    } });
-    var StorageAnalyticsClient_1 = require_StorageAnalyticsClient();
-    Object.defineProperty(exports, "StorageAnalyticsClient", { enumerable: true, get: function() {
-      return tslib_1.__importDefault(StorageAnalyticsClient_1).default;
-    } });
-    tslib_1.__exportStar(require_types3(), exports);
-    tslib_1.__exportStar(require_errors3(), exports);
-    tslib_1.__exportStar(require_vectors(), exports);
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/lib/version.js
-var require_version4 = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/lib/version.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.version = void 0;
-    exports.version = "2.87.1";
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/lib/constants.js
-var require_constants5 = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/lib/constants.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DEFAULT_REALTIME_OPTIONS = exports.DEFAULT_AUTH_OPTIONS = exports.DEFAULT_DB_OPTIONS = exports.DEFAULT_GLOBAL_OPTIONS = exports.DEFAULT_HEADERS = void 0;
-    var version_1 = require_version4();
-    var JS_ENV = "";
-    if (typeof Deno !== "undefined") {
-      JS_ENV = "deno";
-    } else if (typeof document !== "undefined") {
-      JS_ENV = "web";
-    } else if (typeof navigator !== "undefined" && navigator.product === "ReactNative") {
-      JS_ENV = "react-native";
-    } else {
-      JS_ENV = "node";
-    }
-    exports.DEFAULT_HEADERS = { "X-Client-Info": `supabase-js-${JS_ENV}/${version_1.version}` };
-    exports.DEFAULT_GLOBAL_OPTIONS = {
-      headers: exports.DEFAULT_HEADERS
-    };
-    exports.DEFAULT_DB_OPTIONS = {
-      schema: "public"
-    };
-    exports.DEFAULT_AUTH_OPTIONS = {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-      flowType: "implicit"
-    };
-    exports.DEFAULT_REALTIME_OPTIONS = {};
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/lib/fetch.js
-var require_fetch3 = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/lib/fetch.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.fetchWithAuth = exports.resolveHeadersConstructor = exports.resolveFetch = void 0;
-    var resolveFetch = (customFetch) => {
-      if (customFetch) {
-        return (...args) => customFetch(...args);
-      }
-      return (...args) => fetch(...args);
-    };
-    exports.resolveFetch = resolveFetch;
-    var resolveHeadersConstructor = () => {
-      return Headers;
-    };
-    exports.resolveHeadersConstructor = resolveHeadersConstructor;
-    var fetchWithAuth = (supabaseKey2, getAccessToken, customFetch) => {
-      const fetch2 = (0, exports.resolveFetch)(customFetch);
-      const HeadersConstructor = (0, exports.resolveHeadersConstructor)();
-      return async (input, init) => {
-        var _a;
-        const accessToken = (_a = await getAccessToken()) !== null && _a !== void 0 ? _a : supabaseKey2;
-        let headers = new HeadersConstructor(init === null || init === void 0 ? void 0 : init.headers);
-        if (!headers.has("apikey")) {
-          headers.set("apikey", supabaseKey2);
-        }
-        if (!headers.has("Authorization")) {
-          headers.set("Authorization", `Bearer ${accessToken}`);
-        }
-        return fetch2(input, Object.assign(Object.assign({}, init), { headers }));
-      };
-    };
-    exports.fetchWithAuth = fetchWithAuth;
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/lib/helpers.js
-var require_helpers3 = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/lib/helpers.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.isBrowser = void 0;
-    exports.uuid = uuid;
-    exports.ensureTrailingSlash = ensureTrailingSlash;
-    exports.applySettingDefaults = applySettingDefaults;
-    exports.validateSupabaseUrl = validateSupabaseUrl;
-    function uuid() {
-      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == "x" ? r : r & 3 | 8;
-        return v.toString(16);
-      });
-    }
-    function ensureTrailingSlash(url) {
-      return url.endsWith("/") ? url : url + "/";
-    }
-    var isBrowser = () => typeof window !== "undefined";
-    exports.isBrowser = isBrowser;
-    function applySettingDefaults(options, defaults) {
-      var _a, _b;
-      const { db: dbOptions, auth: authOptions, realtime: realtimeOptions, global: globalOptions } = options;
-      const { db: DEFAULT_DB_OPTIONS, auth: DEFAULT_AUTH_OPTIONS, realtime: DEFAULT_REALTIME_OPTIONS, global: DEFAULT_GLOBAL_OPTIONS } = defaults;
-      const result = {
-        db: Object.assign(Object.assign({}, DEFAULT_DB_OPTIONS), dbOptions),
-        auth: Object.assign(Object.assign({}, DEFAULT_AUTH_OPTIONS), authOptions),
-        realtime: Object.assign(Object.assign({}, DEFAULT_REALTIME_OPTIONS), realtimeOptions),
-        storage: {},
-        global: Object.assign(Object.assign(Object.assign({}, DEFAULT_GLOBAL_OPTIONS), globalOptions), { headers: Object.assign(Object.assign({}, (_a = DEFAULT_GLOBAL_OPTIONS === null || DEFAULT_GLOBAL_OPTIONS === void 0 ? void 0 : DEFAULT_GLOBAL_OPTIONS.headers) !== null && _a !== void 0 ? _a : {}), (_b = globalOptions === null || globalOptions === void 0 ? void 0 : globalOptions.headers) !== null && _b !== void 0 ? _b : {}) }),
-        accessToken: async () => ""
-      };
-      if (options.accessToken) {
-        result.accessToken = options.accessToken;
-      } else {
-        delete result.accessToken;
-      }
-      return result;
-    }
-    function validateSupabaseUrl(supabaseUrl2) {
-      const trimmedUrl = supabaseUrl2 === null || supabaseUrl2 === void 0 ? void 0 : supabaseUrl2.trim();
-      if (!trimmedUrl) {
-        throw new Error("supabaseUrl is required.");
-      }
-      if (!trimmedUrl.match(/^https?:\/\//i)) {
-        throw new Error("Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.");
-      }
-      try {
-        return new URL(ensureTrailingSlash(trimmedUrl));
-      } catch (_a) {
-        throw Error("Invalid supabaseUrl: Provided URL is malformed.");
-      }
-    }
-  }
-});
-
 // node_modules/@supabase/auth-js/dist/main/lib/version.js
-var require_version5 = __commonJS({
+var require_version3 = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/version.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.version = void 0;
-    exports.version = "2.87.1";
+    exports.version = "2.89.0";
   }
 });
 
 // node_modules/@supabase/auth-js/dist/main/lib/constants.js
-var require_constants6 = __commonJS({
+var require_constants3 = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/constants.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.JWKS_TTL = exports.BASE64URL_REGEX = exports.API_VERSIONS = exports.API_VERSION_HEADER_NAME = exports.NETWORK_FAILURE = exports.DEFAULT_HEADERS = exports.AUDIENCE = exports.STORAGE_KEY = exports.GOTRUE_URL = exports.EXPIRY_MARGIN_MS = exports.AUTO_REFRESH_TICK_THRESHOLD = exports.AUTO_REFRESH_TICK_DURATION_MS = void 0;
-    var version_1 = require_version5();
+    var version_1 = require_version3();
     exports.AUTO_REFRESH_TICK_DURATION_MS = 30 * 1e3;
     exports.AUTO_REFRESH_TICK_THRESHOLD = 3;
     exports.EXPIRY_MARGIN_MS = exports.AUTO_REFRESH_TICK_THRESHOLD * exports.AUTO_REFRESH_TICK_DURATION_MS;
@@ -50173,18 +44847,19 @@ var require_constants6 = __commonJS({
 });
 
 // node_modules/@supabase/auth-js/dist/main/lib/errors.js
-var require_errors5 = __commonJS({
+var require_errors3 = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/errors.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.AuthInvalidJwtError = exports.AuthWeakPasswordError = exports.AuthRetryableFetchError = exports.AuthPKCEGrantCodeExchangeError = exports.AuthImplicitGrantRedirectError = exports.AuthInvalidCredentialsError = exports.AuthInvalidTokenResponseError = exports.AuthSessionMissingError = exports.CustomAuthError = exports.AuthUnknownError = exports.AuthApiError = exports.AuthError = void 0;
-    exports.isAuthError = isAuthError2;
-    exports.isAuthApiError = isAuthApiError2;
-    exports.isAuthSessionMissingError = isAuthSessionMissingError2;
-    exports.isAuthImplicitGrantRedirectError = isAuthImplicitGrantRedirectError2;
-    exports.isAuthRetryableFetchError = isAuthRetryableFetchError2;
-    exports.isAuthWeakPasswordError = isAuthWeakPasswordError2;
-    var AuthError2 = class extends Error {
+    exports.AuthInvalidJwtError = exports.AuthWeakPasswordError = exports.AuthRetryableFetchError = exports.AuthPKCECodeVerifierMissingError = exports.AuthPKCEGrantCodeExchangeError = exports.AuthImplicitGrantRedirectError = exports.AuthInvalidCredentialsError = exports.AuthInvalidTokenResponseError = exports.AuthSessionMissingError = exports.CustomAuthError = exports.AuthUnknownError = exports.AuthApiError = exports.AuthError = void 0;
+    exports.isAuthError = isAuthError;
+    exports.isAuthApiError = isAuthApiError;
+    exports.isAuthSessionMissingError = isAuthSessionMissingError;
+    exports.isAuthImplicitGrantRedirectError = isAuthImplicitGrantRedirectError;
+    exports.isAuthPKCECodeVerifierMissingError = isAuthPKCECodeVerifierMissingError;
+    exports.isAuthRetryableFetchError = isAuthRetryableFetchError;
+    exports.isAuthWeakPasswordError = isAuthWeakPasswordError;
+    var AuthError = class extends Error {
       constructor(message, status, code) {
         super(message);
         this.__isAuthError = true;
@@ -50193,11 +44868,11 @@ var require_errors5 = __commonJS({
         this.code = code;
       }
     };
-    exports.AuthError = AuthError2;
-    function isAuthError2(error) {
+    exports.AuthError = AuthError;
+    function isAuthError(error) {
       return typeof error === "object" && error !== null && "__isAuthError" in error;
     }
-    var AuthApiError2 = class extends AuthError2 {
+    var AuthApiError = class extends AuthError {
       constructor(message, status, code) {
         super(message, status, code);
         this.name = "AuthApiError";
@@ -50205,48 +44880,48 @@ var require_errors5 = __commonJS({
         this.code = code;
       }
     };
-    exports.AuthApiError = AuthApiError2;
-    function isAuthApiError2(error) {
-      return isAuthError2(error) && error.name === "AuthApiError";
+    exports.AuthApiError = AuthApiError;
+    function isAuthApiError(error) {
+      return isAuthError(error) && error.name === "AuthApiError";
     }
-    var AuthUnknownError2 = class extends AuthError2 {
+    var AuthUnknownError = class extends AuthError {
       constructor(message, originalError) {
         super(message);
         this.name = "AuthUnknownError";
         this.originalError = originalError;
       }
     };
-    exports.AuthUnknownError = AuthUnknownError2;
-    var CustomAuthError2 = class extends AuthError2 {
+    exports.AuthUnknownError = AuthUnknownError;
+    var CustomAuthError = class extends AuthError {
       constructor(message, name, status, code) {
         super(message, status, code);
         this.name = name;
         this.status = status;
       }
     };
-    exports.CustomAuthError = CustomAuthError2;
-    var AuthSessionMissingError2 = class extends CustomAuthError2 {
+    exports.CustomAuthError = CustomAuthError;
+    var AuthSessionMissingError = class extends CustomAuthError {
       constructor() {
         super("Auth session missing!", "AuthSessionMissingError", 400, void 0);
       }
     };
-    exports.AuthSessionMissingError = AuthSessionMissingError2;
-    function isAuthSessionMissingError2(error) {
-      return isAuthError2(error) && error.name === "AuthSessionMissingError";
+    exports.AuthSessionMissingError = AuthSessionMissingError;
+    function isAuthSessionMissingError(error) {
+      return isAuthError(error) && error.name === "AuthSessionMissingError";
     }
-    var AuthInvalidTokenResponseError2 = class extends CustomAuthError2 {
+    var AuthInvalidTokenResponseError = class extends CustomAuthError {
       constructor() {
         super("Auth session or user missing", "AuthInvalidTokenResponseError", 500, void 0);
       }
     };
-    exports.AuthInvalidTokenResponseError = AuthInvalidTokenResponseError2;
-    var AuthInvalidCredentialsError2 = class extends CustomAuthError2 {
+    exports.AuthInvalidTokenResponseError = AuthInvalidTokenResponseError;
+    var AuthInvalidCredentialsError = class extends CustomAuthError {
       constructor(message) {
         super(message, "AuthInvalidCredentialsError", 400, void 0);
       }
     };
-    exports.AuthInvalidCredentialsError = AuthInvalidCredentialsError2;
-    var AuthImplicitGrantRedirectError2 = class extends CustomAuthError2 {
+    exports.AuthInvalidCredentialsError = AuthInvalidCredentialsError;
+    var AuthImplicitGrantRedirectError = class extends CustomAuthError {
       constructor(message, details = null) {
         super(message, "AuthImplicitGrantRedirectError", 500, void 0);
         this.details = null;
@@ -50261,11 +44936,11 @@ var require_errors5 = __commonJS({
         };
       }
     };
-    exports.AuthImplicitGrantRedirectError = AuthImplicitGrantRedirectError2;
-    function isAuthImplicitGrantRedirectError2(error) {
-      return isAuthError2(error) && error.name === "AuthImplicitGrantRedirectError";
+    exports.AuthImplicitGrantRedirectError = AuthImplicitGrantRedirectError;
+    function isAuthImplicitGrantRedirectError(error) {
+      return isAuthError(error) && error.name === "AuthImplicitGrantRedirectError";
     }
-    var AuthPKCEGrantCodeExchangeError2 = class extends CustomAuthError2 {
+    var AuthPKCEGrantCodeExchangeError = class extends CustomAuthError {
       constructor(message, details = null) {
         super(message, "AuthPKCEGrantCodeExchangeError", 500, void 0);
         this.details = null;
@@ -50280,32 +44955,41 @@ var require_errors5 = __commonJS({
         };
       }
     };
-    exports.AuthPKCEGrantCodeExchangeError = AuthPKCEGrantCodeExchangeError2;
-    var AuthRetryableFetchError2 = class extends CustomAuthError2 {
+    exports.AuthPKCEGrantCodeExchangeError = AuthPKCEGrantCodeExchangeError;
+    var AuthPKCECodeVerifierMissingError = class extends CustomAuthError {
+      constructor() {
+        super("PKCE code verifier not found in storage. This can happen if the auth flow was initiated in a different browser or device, or if the storage was cleared. For SSR frameworks (Next.js, SvelteKit, etc.), use @supabase/ssr on both the server and client to store the code verifier in cookies.", "AuthPKCECodeVerifierMissingError", 400, "pkce_code_verifier_not_found");
+      }
+    };
+    exports.AuthPKCECodeVerifierMissingError = AuthPKCECodeVerifierMissingError;
+    function isAuthPKCECodeVerifierMissingError(error) {
+      return isAuthError(error) && error.name === "AuthPKCECodeVerifierMissingError";
+    }
+    var AuthRetryableFetchError = class extends CustomAuthError {
       constructor(message, status) {
         super(message, "AuthRetryableFetchError", status, void 0);
       }
     };
-    exports.AuthRetryableFetchError = AuthRetryableFetchError2;
-    function isAuthRetryableFetchError2(error) {
-      return isAuthError2(error) && error.name === "AuthRetryableFetchError";
+    exports.AuthRetryableFetchError = AuthRetryableFetchError;
+    function isAuthRetryableFetchError(error) {
+      return isAuthError(error) && error.name === "AuthRetryableFetchError";
     }
-    var AuthWeakPasswordError2 = class extends CustomAuthError2 {
+    var AuthWeakPasswordError = class extends CustomAuthError {
       constructor(message, status, reasons) {
         super(message, "AuthWeakPasswordError", status, "weak_password");
         this.reasons = reasons;
       }
     };
-    exports.AuthWeakPasswordError = AuthWeakPasswordError2;
-    function isAuthWeakPasswordError2(error) {
-      return isAuthError2(error) && error.name === "AuthWeakPasswordError";
+    exports.AuthWeakPasswordError = AuthWeakPasswordError;
+    function isAuthWeakPasswordError(error) {
+      return isAuthError(error) && error.name === "AuthWeakPasswordError";
     }
-    var AuthInvalidJwtError2 = class extends CustomAuthError2 {
+    var AuthInvalidJwtError = class extends CustomAuthError {
       constructor(message) {
         super(message, "AuthInvalidJwtError", 400, "invalid_jwt");
       }
     };
-    exports.AuthInvalidJwtError = AuthInvalidJwtError2;
+    exports.AuthInvalidJwtError = AuthInvalidJwtError;
   }
 });
 
@@ -50500,7 +45184,7 @@ var require_base64url = __commonJS({
 });
 
 // node_modules/@supabase/auth-js/dist/main/lib/helpers.js
-var require_helpers4 = __commonJS({
+var require_helpers = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/helpers.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -50521,8 +45205,8 @@ var require_helpers4 = __commonJS({
     exports.userNotAvailableProxy = userNotAvailableProxy;
     exports.insecureUserWarningProxy = insecureUserWarningProxy;
     exports.deepClone = deepClone;
-    var constants_1 = require_constants6();
-    var errors_1 = require_errors5();
+    var constants_1 = require_constants3();
+    var errors_1 = require_errors3();
     var base64url_1 = require_base64url();
     function expiresAt(expiresIn) {
       const timeNow = Math.round(Date.now() / 1e3);
@@ -50581,13 +45265,13 @@ var require_helpers4 = __commonJS({
       });
       return result;
     }
-    var resolveFetch = (customFetch) => {
+    var resolveFetch3 = (customFetch) => {
       if (customFetch) {
         return (...args) => customFetch(...args);
       }
       return (...args) => fetch(...args);
     };
-    exports.resolveFetch = resolveFetch;
+    exports.resolveFetch = resolveFetch3;
     var looksLikeFetchResponse = (maybeResponse) => {
       return typeof maybeResponse === "object" && maybeResponse !== null && "status" in maybeResponse && "ok" in maybeResponse && "json" in maybeResponse && typeof maybeResponse.json === "function";
     };
@@ -50816,11 +45500,11 @@ var require_helpers4 = __commonJS({
 });
 
 // node_modules/@supabase/auth-js/dist/main/lib/fetch.js
-var require_fetch4 = __commonJS({
+var require_fetch = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/fetch.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.handleError = handleError;
+    exports.handleError = handleError2;
     exports._request = _request;
     exports._sessionResponse = _sessionResponse;
     exports._sessionResponsePassword = _sessionResponsePassword;
@@ -50829,24 +45513,24 @@ var require_fetch4 = __commonJS({
     exports._generateLinkResponse = _generateLinkResponse;
     exports._noResolveJsonResponse = _noResolveJsonResponse;
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var constants_1 = require_constants6();
-    var helpers_1 = require_helpers4();
-    var errors_1 = require_errors5();
-    var _getErrorMessage = (err) => err.msg || err.message || err.error_description || err.error || JSON.stringify(err);
+    var constants_1 = require_constants3();
+    var helpers_1 = require_helpers();
+    var errors_1 = require_errors3();
+    var _getErrorMessage2 = (err) => err.msg || err.message || err.error_description || err.error || JSON.stringify(err);
     var NETWORK_ERROR_CODES = [502, 503, 504];
-    async function handleError(error) {
+    async function handleError2(error) {
       var _a;
       if (!(0, helpers_1.looksLikeFetchResponse)(error)) {
-        throw new errors_1.AuthRetryableFetchError(_getErrorMessage(error), 0);
+        throw new errors_1.AuthRetryableFetchError(_getErrorMessage2(error), 0);
       }
       if (NETWORK_ERROR_CODES.includes(error.status)) {
-        throw new errors_1.AuthRetryableFetchError(_getErrorMessage(error), error.status);
+        throw new errors_1.AuthRetryableFetchError(_getErrorMessage2(error), error.status);
       }
       let data;
       try {
         data = await error.json();
       } catch (e) {
-        throw new errors_1.AuthUnknownError(_getErrorMessage(e), e);
+        throw new errors_1.AuthUnknownError(_getErrorMessage2(e), e);
       }
       let errorCode = void 0;
       const responseAPIVersion = (0, helpers_1.parseResponseAPIVersion)(error);
@@ -50857,16 +45541,16 @@ var require_fetch4 = __commonJS({
       }
       if (!errorCode) {
         if (typeof data === "object" && data && typeof data.weak_password === "object" && data.weak_password && Array.isArray(data.weak_password.reasons) && data.weak_password.reasons.length && data.weak_password.reasons.reduce((a, i) => a && typeof i === "string", true)) {
-          throw new errors_1.AuthWeakPasswordError(_getErrorMessage(data), error.status, data.weak_password.reasons);
+          throw new errors_1.AuthWeakPasswordError(_getErrorMessage2(data), error.status, data.weak_password.reasons);
         }
       } else if (errorCode === "weak_password") {
-        throw new errors_1.AuthWeakPasswordError(_getErrorMessage(data), error.status, ((_a = data.weak_password) === null || _a === void 0 ? void 0 : _a.reasons) || []);
+        throw new errors_1.AuthWeakPasswordError(_getErrorMessage2(data), error.status, ((_a = data.weak_password) === null || _a === void 0 ? void 0 : _a.reasons) || []);
       } else if (errorCode === "session_not_found") {
         throw new errors_1.AuthSessionMissingError();
       }
-      throw new errors_1.AuthApiError(_getErrorMessage(data), error.status || 500, errorCode);
+      throw new errors_1.AuthApiError(_getErrorMessage2(data), error.status || 500, errorCode);
     }
-    var _getRequestParams = (method, options, parameters, body) => {
+    var _getRequestParams2 = (method, options, parameters, body) => {
       const params = { method, headers: (options === null || options === void 0 ? void 0 : options.headers) || {} };
       if (method === "GET") {
         return params;
@@ -50889,23 +45573,23 @@ var require_fetch4 = __commonJS({
         qs["redirect_to"] = options.redirectTo;
       }
       const queryString = Object.keys(qs).length ? "?" + new URLSearchParams(qs).toString() : "";
-      const data = await _handleRequest(fetcher, method, url + queryString, {
+      const data = await _handleRequest2(fetcher, method, url + queryString, {
         headers,
         noResolveJson: options === null || options === void 0 ? void 0 : options.noResolveJson
       }, {}, options === null || options === void 0 ? void 0 : options.body);
       return (options === null || options === void 0 ? void 0 : options.xform) ? options === null || options === void 0 ? void 0 : options.xform(data) : { data: Object.assign({}, data), error: null };
     }
-    async function _handleRequest(fetcher, method, url, options, parameters, body) {
-      const requestParams = _getRequestParams(method, options, parameters, body);
+    async function _handleRequest2(fetcher, method, url, options, parameters, body) {
+      const requestParams = _getRequestParams2(method, options, parameters, body);
       let result;
       try {
         result = await fetcher(url, Object.assign({}, requestParams));
       } catch (e) {
         console.error(e);
-        throw new errors_1.AuthRetryableFetchError(_getErrorMessage(e), 0);
+        throw new errors_1.AuthRetryableFetchError(_getErrorMessage2(e), 0);
       }
       if (!result.ok) {
-        await handleError(result);
+        await handleError2(result);
       }
       if (options === null || options === void 0 ? void 0 : options.noResolveJson) {
         return result;
@@ -50913,7 +45597,7 @@ var require_fetch4 = __commonJS({
       try {
         return await result.json();
       } catch (e) {
-        await handleError(e);
+        await handleError2(e);
       }
     }
     function _sessionResponse(data) {
@@ -50971,7 +45655,7 @@ var require_fetch4 = __commonJS({
 });
 
 // node_modules/@supabase/auth-js/dist/main/lib/types.js
-var require_types4 = __commonJS({
+var require_types3 = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/lib/types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -50986,11 +45670,11 @@ var require_GoTrueAdminApi = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
-    var fetch_1 = require_fetch4();
-    var helpers_1 = require_helpers4();
-    var types_1 = require_types4();
-    var errors_1 = require_errors5();
-    var GoTrueAdminApi2 = class {
+    var fetch_1 = require_fetch();
+    var helpers_1 = require_helpers();
+    var types_1 = require_types3();
+    var errors_1 = require_errors3();
+    var GoTrueAdminApi = class {
       /**
        * Creates an admin API client that can be used to manage users and OAuth clients.
        *
@@ -51405,7 +46089,7 @@ var require_GoTrueAdminApi = __commonJS({
         }
       }
     };
-    exports.default = GoTrueAdminApi2;
+    exports.default = GoTrueAdminApi;
   }
 });
 
@@ -51437,9 +46121,9 @@ var require_locks = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ProcessLockAcquireTimeoutError = exports.NavigatorLockAcquireTimeoutError = exports.LockAcquireTimeoutError = exports.internals = void 0;
-    exports.navigatorLock = navigatorLock2;
-    exports.processLock = processLock2;
-    var helpers_1 = require_helpers4();
+    exports.navigatorLock = navigatorLock;
+    exports.processLock = processLock;
+    var helpers_1 = require_helpers();
     exports.internals = {
       /**
        * @experimental
@@ -51453,13 +46137,13 @@ var require_locks = __commonJS({
       }
     };
     exports.LockAcquireTimeoutError = LockAcquireTimeoutError;
-    var NavigatorLockAcquireTimeoutError2 = class extends LockAcquireTimeoutError {
+    var NavigatorLockAcquireTimeoutError = class extends LockAcquireTimeoutError {
     };
-    exports.NavigatorLockAcquireTimeoutError = NavigatorLockAcquireTimeoutError2;
+    exports.NavigatorLockAcquireTimeoutError = NavigatorLockAcquireTimeoutError;
     var ProcessLockAcquireTimeoutError = class extends LockAcquireTimeoutError {
     };
     exports.ProcessLockAcquireTimeoutError = ProcessLockAcquireTimeoutError;
-    async function navigatorLock2(name, acquireTimeout, fn) {
+    async function navigatorLock(name, acquireTimeout, fn) {
       if (exports.internals.debug) {
         console.log("@supabase/gotrue-js: navigatorLock: acquire lock", name, acquireTimeout);
       }
@@ -51495,7 +46179,7 @@ var require_locks = __commonJS({
             if (exports.internals.debug) {
               console.log("@supabase/gotrue-js: navigatorLock: not immediately available", name);
             }
-            throw new NavigatorLockAcquireTimeoutError2(`Acquiring an exclusive Navigator LockManager lock "${name}" immediately failed`);
+            throw new NavigatorLockAcquireTimeoutError(`Acquiring an exclusive Navigator LockManager lock "${name}" immediately failed`);
           } else {
             if (exports.internals.debug) {
               try {
@@ -51512,7 +46196,7 @@ var require_locks = __commonJS({
       }));
     }
     var PROCESS_LOCKS = {};
-    async function processLock2(name, acquireTimeout, fn) {
+    async function processLock(name, acquireTimeout, fn) {
       var _a;
       const previousOperation = (_a = PROCESS_LOCKS[name]) !== null && _a !== void 0 ? _a : Promise.resolve();
       const currentOperation = Promise.race([
@@ -51521,7 +46205,7 @@ var require_locks = __commonJS({
         }),
         acquireTimeout >= 0 ? new Promise((_, reject) => {
           setTimeout(() => {
-            reject(new ProcessLockAcquireTimeoutError(`Acquring process lock with name "${name}" timed out`));
+            reject(new ProcessLockAcquireTimeoutError(`Acquiring process lock with name "${name}" timed out`));
           }, acquireTimeout);
         }) : null
       ].filter((x) => x)).catch((e) => {
@@ -51596,7 +46280,7 @@ var require_ethereum = __commonJS({
     }
     function createSiweMessage(parameters) {
       var _a;
-      const { chainId, domain, expirationTime, issuedAt = /* @__PURE__ */ new Date(), nonce, notBefore, requestId, resources, scheme, uri, version: version2 } = parameters;
+      const { chainId, domain, expirationTime, issuedAt = /* @__PURE__ */ new Date(), nonce, notBefore, requestId, resources, scheme, uri, version: version4 } = parameters;
       {
         if (!Number.isInteger(chainId))
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "chainId". Chain ID must be a EIP-155 chain ID. Provided value: ${chainId}`);
@@ -51606,8 +46290,8 @@ var require_ethereum = __commonJS({
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "nonce". Nonce must be at least 8 characters. Provided value: ${nonce}`);
         if (!uri)
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "uri". URI must be provided.`);
-        if (version2 !== "1")
-          throw new Error(`@supabase/auth-js: Invalid SIWE message field "version". Version must be '1'. Provided value: ${version2}`);
+        if (version4 !== "1")
+          throw new Error(`@supabase/auth-js: Invalid SIWE message field "version". Version must be '1'. Provided value: ${version4}`);
         if ((_a = parameters.statement) === null || _a === void 0 ? void 0 : _a.includes("\n"))
           throw new Error(`@supabase/auth-js: Invalid SIWE message field "statement". Statement must not include '\\n'. Provided value: ${parameters.statement}`);
       }
@@ -51620,7 +46304,7 @@ ${address}
 
 ${statement}`;
       let suffix = `URI: ${uri}
-Version: ${version2}
+Version: ${version4}
 Chain ID: ${chainId}${nonce ? `
 Nonce: ${nonce}` : ""}
 Issued At: ${issuedAt.toISOString()}`;
@@ -51850,8 +46534,8 @@ var require_webauthn = __commonJS({
     exports.mergeCredentialRequestOptions = mergeCredentialRequestOptions;
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     var base64url_1 = require_base64url();
-    var errors_1 = require_errors5();
-    var helpers_1 = require_helpers4();
+    var errors_1 = require_errors3();
+    var helpers_1 = require_helpers();
     var webauthn_errors_1 = require_webauthn_errors();
     Object.defineProperty(exports, "identifyAuthenticationError", { enumerable: true, get: function() {
       return webauthn_errors_1.identifyAuthenticationError;
@@ -52389,14 +47073,14 @@ var require_GoTrueClient = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     var GoTrueAdminApi_1 = tslib_1.__importDefault(require_GoTrueAdminApi());
-    var constants_1 = require_constants6();
-    var errors_1 = require_errors5();
-    var fetch_1 = require_fetch4();
-    var helpers_1 = require_helpers4();
+    var constants_1 = require_constants3();
+    var errors_1 = require_errors3();
+    var fetch_1 = require_fetch();
+    var helpers_1 = require_helpers();
     var local_storage_1 = require_local_storage();
     var locks_1 = require_locks();
     var polyfills_1 = require_polyfills();
-    var version_1 = require_version5();
+    var version_1 = require_version3();
     var base64url_1 = require_base64url();
     var ethereum_1 = require_ethereum();
     var webauthn_1 = require_webauthn();
@@ -52417,7 +47101,7 @@ var require_GoTrueClient = __commonJS({
       return await fn();
     }
     var GLOBAL_JWKS = {};
-    var GoTrueClient2 = class _GoTrueClient {
+    var GoTrueClient = class _GoTrueClient {
       /**
        * The JWKS used for verifying asymmetric JWTs
        */
@@ -53052,6 +47736,9 @@ var require_GoTrueClient = __commonJS({
         const storageItem = await (0, helpers_1.getItemAsync)(this.storage, `${this.storageKey}-code-verifier`);
         const [codeVerifier, redirectType] = (storageItem !== null && storageItem !== void 0 ? storageItem : "").split("/");
         try {
+          if (!codeVerifier && this.flowType === "pkce") {
+            throw new errors_1.AuthPKCECodeVerifierMissingError();
+          }
           const { data, error } = await (0, fetch_1._request)(this.fetch, "POST", `${this.url}/token?grant_type=pkce`, {
             headers: this.headers,
             body: {
@@ -53766,8 +48453,15 @@ var require_GoTrueClient = __commonJS({
       }
       /**
        * Checks if the current URL contains parameters given by an implicit oauth grant flow (https://www.rfc-editor.org/rfc/rfc6749.html#section-4.2)
+       *
+       * If `detectSessionInUrl` is a function, it will be called with the URL and params to determine
+       * if the URL should be processed as a Supabase auth callback. This allows users to exclude
+       * URLs from other OAuth providers (e.g., Facebook Login) that also return access_token in the fragment.
        */
       _isImplicitGrantCallback(params) {
+        if (typeof this.detectSessionInUrl === "function") {
+          return this.detectSessionInUrl(new URL(window.location.href), params);
+        }
         return Boolean(params.access_token || params.error_description);
       }
       /**
@@ -54887,8 +49581,8 @@ var require_GoTrueClient = __commonJS({
         }
       }
     };
-    GoTrueClient2.nextInstanceID = {};
-    exports.default = GoTrueClient2;
+    GoTrueClient.nextInstanceID = {};
+    exports.default = GoTrueClient;
   }
 });
 
@@ -54899,8 +49593,8 @@ var require_AuthAdminApi = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var tslib_1 = (init_tslib_es6(), __toCommonJS(tslib_es6_exports));
     var GoTrueAdminApi_1 = tslib_1.__importDefault(require_GoTrueAdminApi());
-    var AuthAdminApi2 = GoTrueAdminApi_1.default;
-    exports.default = AuthAdminApi2;
+    var AuthAdminApi = GoTrueAdminApi_1.default;
+    exports.default = AuthAdminApi;
   }
 });
 
@@ -54917,7 +49611,7 @@ var require_AuthClient = __commonJS({
 });
 
 // node_modules/@supabase/auth-js/dist/main/index.js
-var require_main4 = __commonJS({
+var require_main3 = __commonJS({
   "node_modules/@supabase/auth-js/dist/main/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -54931,8 +49625,8 @@ var require_main4 = __commonJS({
     exports.AuthAdminApi = AuthAdminApi_1.default;
     var AuthClient_1 = tslib_1.__importDefault(require_AuthClient());
     exports.AuthClient = AuthClient_1.default;
-    tslib_1.__exportStar(require_types4(), exports);
-    tslib_1.__exportStar(require_errors5(), exports);
+    tslib_1.__exportStar(require_types3(), exports);
+    tslib_1.__exportStar(require_errors3(), exports);
     var locks_1 = require_locks();
     Object.defineProperty(exports, "navigatorLock", { enumerable: true, get: function() {
       return locks_1.navigatorLock;
@@ -54946,334 +49640,6 @@ var require_main4 = __commonJS({
     Object.defineProperty(exports, "processLock", { enumerable: true, get: function() {
       return locks_1.processLock;
     } });
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/lib/SupabaseAuthClient.js
-var require_SupabaseAuthClient = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/lib/SupabaseAuthClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.SupabaseAuthClient = void 0;
-    var auth_js_1 = require_main4();
-    var SupabaseAuthClient = class extends auth_js_1.AuthClient {
-      constructor(options) {
-        super(options);
-      }
-    };
-    exports.SupabaseAuthClient = SupabaseAuthClient;
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/SupabaseClient.js
-var require_SupabaseClient = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/SupabaseClient.js"(exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    var functions_js_1 = require_main();
-    var postgrest_js_1 = require_cjs2();
-    var realtime_js_1 = require_main2();
-    var storage_js_1 = require_main3();
-    var constants_1 = require_constants5();
-    var fetch_1 = require_fetch3();
-    var helpers_1 = require_helpers3();
-    var SupabaseAuthClient_1 = require_SupabaseAuthClient();
-    var SupabaseClient2 = class {
-      /**
-       * Create a new client for use in the browser.
-       * @param supabaseUrl The unique Supabase URL which is supplied when you create a new project in your project dashboard.
-       * @param supabaseKey The unique Supabase Key which is supplied when you create a new project in your project dashboard.
-       * @param options.db.schema You can switch in between schemas. The schema needs to be on the list of exposed schemas inside Supabase.
-       * @param options.auth.autoRefreshToken Set to "true" if you want to automatically refresh the token before expiring.
-       * @param options.auth.persistSession Set to "true" if you want to automatically save the user session into local storage.
-       * @param options.auth.detectSessionInUrl Set to "true" if you want to automatically detects OAuth grants in the URL and signs in the user.
-       * @param options.realtime Options passed along to realtime-js constructor.
-       * @param options.storage Options passed along to the storage-js constructor.
-       * @param options.global.fetch A custom fetch implementation.
-       * @param options.global.headers Any additional headers to send with each network request.
-       * @example
-       * ```ts
-       * import { createClient } from '@supabase/supabase-js'
-       *
-       * const supabase = createClient('https://xyzcompany.supabase.co', 'public-anon-key')
-       * const { data } = await supabase.from('profiles').select('*')
-       * ```
-       */
-      constructor(supabaseUrl2, supabaseKey2, options) {
-        var _a, _b, _c;
-        this.supabaseUrl = supabaseUrl2;
-        this.supabaseKey = supabaseKey2;
-        const baseUrl = (0, helpers_1.validateSupabaseUrl)(supabaseUrl2);
-        if (!supabaseKey2)
-          throw new Error("supabaseKey is required.");
-        this.realtimeUrl = new URL("realtime/v1", baseUrl);
-        this.realtimeUrl.protocol = this.realtimeUrl.protocol.replace("http", "ws");
-        this.authUrl = new URL("auth/v1", baseUrl);
-        this.storageUrl = new URL("storage/v1", baseUrl);
-        this.functionsUrl = new URL("functions/v1", baseUrl);
-        const defaultStorageKey = `sb-${baseUrl.hostname.split(".")[0]}-auth-token`;
-        const DEFAULTS = {
-          db: constants_1.DEFAULT_DB_OPTIONS,
-          realtime: constants_1.DEFAULT_REALTIME_OPTIONS,
-          auth: Object.assign(Object.assign({}, constants_1.DEFAULT_AUTH_OPTIONS), { storageKey: defaultStorageKey }),
-          global: constants_1.DEFAULT_GLOBAL_OPTIONS
-        };
-        const settings = (0, helpers_1.applySettingDefaults)(options !== null && options !== void 0 ? options : {}, DEFAULTS);
-        this.storageKey = (_a = settings.auth.storageKey) !== null && _a !== void 0 ? _a : "";
-        this.headers = (_b = settings.global.headers) !== null && _b !== void 0 ? _b : {};
-        if (!settings.accessToken) {
-          this.auth = this._initSupabaseAuthClient((_c = settings.auth) !== null && _c !== void 0 ? _c : {}, this.headers, settings.global.fetch);
-        } else {
-          this.accessToken = settings.accessToken;
-          this.auth = new Proxy({}, {
-            get: (_, prop) => {
-              throw new Error(`@supabase/supabase-js: Supabase Client is configured with the accessToken option, accessing supabase.auth.${String(prop)} is not possible`);
-            }
-          });
-        }
-        this.fetch = (0, fetch_1.fetchWithAuth)(supabaseKey2, this._getAccessToken.bind(this), settings.global.fetch);
-        this.realtime = this._initRealtimeClient(Object.assign({ headers: this.headers, accessToken: this._getAccessToken.bind(this) }, settings.realtime));
-        if (this.accessToken) {
-          this.accessToken().then((token) => this.realtime.setAuth(token)).catch((e) => console.warn("Failed to set initial Realtime auth token:", e));
-        }
-        this.rest = new postgrest_js_1.PostgrestClient(new URL("rest/v1", baseUrl).href, {
-          headers: this.headers,
-          schema: settings.db.schema,
-          fetch: this.fetch
-        });
-        this.storage = new storage_js_1.StorageClient(this.storageUrl.href, this.headers, this.fetch, options === null || options === void 0 ? void 0 : options.storage);
-        if (!settings.accessToken) {
-          this._listenForAuthEvents();
-        }
-      }
-      /**
-       * Supabase Functions allows you to deploy and invoke edge functions.
-       */
-      get functions() {
-        return new functions_js_1.FunctionsClient(this.functionsUrl.href, {
-          headers: this.headers,
-          customFetch: this.fetch
-        });
-      }
-      /**
-       * Perform a query on a table or a view.
-       *
-       * @param relation - The table or view name to query
-       */
-      from(relation) {
-        return this.rest.from(relation);
-      }
-      // NOTE: signatures must be kept in sync with PostgrestClient.schema
-      /**
-       * Select a schema to query or perform an function (rpc) call.
-       *
-       * The schema needs to be on the list of exposed schemas inside Supabase.
-       *
-       * @param schema - The schema to query
-       */
-      schema(schema) {
-        return this.rest.schema(schema);
-      }
-      // NOTE: signatures must be kept in sync with PostgrestClient.rpc
-      /**
-       * Perform a function call.
-       *
-       * @param fn - The function name to call
-       * @param args - The arguments to pass to the function call
-       * @param options - Named parameters
-       * @param options.head - When set to `true`, `data` will not be returned.
-       * Useful if you only need the count.
-       * @param options.get - When set to `true`, the function will be called with
-       * read-only access mode.
-       * @param options.count - Count algorithm to use to count rows returned by the
-       * function. Only applicable for [set-returning
-       * functions](https://www.postgresql.org/docs/current/functions-srf.html).
-       *
-       * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
-       * hood.
-       *
-       * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
-       * statistics under the hood.
-       *
-       * `"estimated"`: Uses exact count for low numbers and planned count for high
-       * numbers.
-       */
-      rpc(fn, args = {}, options = {
-        head: false,
-        get: false,
-        count: void 0
-      }) {
-        return this.rest.rpc(fn, args, options);
-      }
-      /**
-       * Creates a Realtime channel with Broadcast, Presence, and Postgres Changes.
-       *
-       * @param {string} name - The name of the Realtime channel.
-       * @param {Object} opts - The options to pass to the Realtime channel.
-       *
-       */
-      channel(name, opts = { config: {} }) {
-        return this.realtime.channel(name, opts);
-      }
-      /**
-       * Returns all Realtime channels.
-       */
-      getChannels() {
-        return this.realtime.getChannels();
-      }
-      /**
-       * Unsubscribes and removes Realtime channel from Realtime client.
-       *
-       * @param {RealtimeChannel} channel - The name of the Realtime channel.
-       *
-       */
-      removeChannel(channel) {
-        return this.realtime.removeChannel(channel);
-      }
-      /**
-       * Unsubscribes and removes all Realtime channels from Realtime client.
-       */
-      removeAllChannels() {
-        return this.realtime.removeAllChannels();
-      }
-      async _getAccessToken() {
-        var _a, _b;
-        if (this.accessToken) {
-          return await this.accessToken();
-        }
-        const { data } = await this.auth.getSession();
-        return (_b = (_a = data.session) === null || _a === void 0 ? void 0 : _a.access_token) !== null && _b !== void 0 ? _b : this.supabaseKey;
-      }
-      _initSupabaseAuthClient({ autoRefreshToken, persistSession, detectSessionInUrl, storage, userStorage, storageKey, flowType, lock, debug, throwOnError }, headers, fetch2) {
-        const authHeaders = {
-          Authorization: `Bearer ${this.supabaseKey}`,
-          apikey: `${this.supabaseKey}`
-        };
-        return new SupabaseAuthClient_1.SupabaseAuthClient({
-          url: this.authUrl.href,
-          headers: Object.assign(Object.assign({}, authHeaders), headers),
-          storageKey,
-          autoRefreshToken,
-          persistSession,
-          detectSessionInUrl,
-          storage,
-          userStorage,
-          flowType,
-          lock,
-          debug,
-          throwOnError,
-          fetch: fetch2,
-          // auth checks if there is a custom authorizaiton header using this flag
-          // so it knows whether to return an error when getUser is called with no session
-          hasCustomAuthorizationHeader: Object.keys(this.headers).some((key) => key.toLowerCase() === "authorization")
-        });
-      }
-      _initRealtimeClient(options) {
-        return new realtime_js_1.RealtimeClient(this.realtimeUrl.href, Object.assign(Object.assign({}, options), { params: Object.assign({ apikey: this.supabaseKey }, options === null || options === void 0 ? void 0 : options.params) }));
-      }
-      _listenForAuthEvents() {
-        const data = this.auth.onAuthStateChange((event, session) => {
-          this._handleTokenChanged(event, "CLIENT", session === null || session === void 0 ? void 0 : session.access_token);
-        });
-        return data;
-      }
-      _handleTokenChanged(event, source, token) {
-        if ((event === "TOKEN_REFRESHED" || event === "SIGNED_IN") && this.changedAccessToken !== token) {
-          this.changedAccessToken = token;
-          this.realtime.setAuth(token);
-        } else if (event === "SIGNED_OUT") {
-          this.realtime.setAuth();
-          if (source == "STORAGE")
-            this.auth.signOut();
-          this.changedAccessToken = void 0;
-        }
-      }
-    };
-    exports.default = SupabaseClient2;
-  }
-});
-
-// node_modules/@supabase/supabase-js/dist/main/index.js
-var require_main5 = __commonJS({
-  "node_modules/@supabase/supabase-js/dist/main/index.js"(exports) {
-    "use strict";
-    var __createBinding2 = exports && exports.__createBinding || (Object.create ? function(o, m, k, k2) {
-      if (k2 === void 0)
-        k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    } : function(o, m, k, k2) {
-      if (k2 === void 0)
-        k2 = k;
-      o[k2] = m[k];
-    });
-    var __exportStar2 = exports && exports.__exportStar || function(m, exports2) {
-      for (var p in m)
-        if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p))
-          __createBinding2(exports2, m, p);
-    };
-    var __importDefault2 = exports && exports.__importDefault || function(mod) {
-      return mod && mod.__esModule ? mod : { "default": mod };
-    };
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.createClient = exports.SupabaseClient = exports.FunctionRegion = exports.FunctionsError = exports.FunctionsRelayError = exports.FunctionsFetchError = exports.FunctionsHttpError = exports.PostgrestError = void 0;
-    var SupabaseClient_1 = __importDefault2(require_SupabaseClient());
-    __exportStar2(require_main4(), exports);
-    var postgrest_js_1 = require_cjs2();
-    Object.defineProperty(exports, "PostgrestError", { enumerable: true, get: function() {
-      return postgrest_js_1.PostgrestError;
-    } });
-    var functions_js_1 = require_main();
-    Object.defineProperty(exports, "FunctionsHttpError", { enumerable: true, get: function() {
-      return functions_js_1.FunctionsHttpError;
-    } });
-    Object.defineProperty(exports, "FunctionsFetchError", { enumerable: true, get: function() {
-      return functions_js_1.FunctionsFetchError;
-    } });
-    Object.defineProperty(exports, "FunctionsRelayError", { enumerable: true, get: function() {
-      return functions_js_1.FunctionsRelayError;
-    } });
-    Object.defineProperty(exports, "FunctionsError", { enumerable: true, get: function() {
-      return functions_js_1.FunctionsError;
-    } });
-    Object.defineProperty(exports, "FunctionRegion", { enumerable: true, get: function() {
-      return functions_js_1.FunctionRegion;
-    } });
-    __exportStar2(require_main2(), exports);
-    var SupabaseClient_2 = require_SupabaseClient();
-    Object.defineProperty(exports, "SupabaseClient", { enumerable: true, get: function() {
-      return __importDefault2(SupabaseClient_2).default;
-    } });
-    var createClient2 = (supabaseUrl2, supabaseKey2, options) => {
-      return new SupabaseClient_1.default(supabaseUrl2, supabaseKey2, options);
-    };
-    exports.createClient = createClient2;
-    function shouldShowDeprecationWarning() {
-      if (typeof window !== "undefined") {
-        return false;
-      }
-      if (typeof process === "undefined") {
-        return false;
-      }
-      const processVersion = process["version"];
-      if (processVersion === void 0 || processVersion === null) {
-        return false;
-      }
-      const versionMatch = processVersion.match(/^v(\d+)\./);
-      if (!versionMatch) {
-        return false;
-      }
-      const majorVersion = parseInt(versionMatch[1], 10);
-      return majorVersion <= 18;
-    }
-    if (shouldShowDeprecationWarning()) {
-      console.warn(`\u26A0\uFE0F  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217`);
-    }
   }
 });
 
@@ -55303,53 +49669,4997 @@ function getRedisConnection() {
   return getRedis();
 }
 
-// node_modules/@supabase/supabase-js/dist/esm/wrapper.mjs
-var index = __toESM(require_main5(), 1);
-var {
-  PostgrestError,
-  FunctionsHttpError,
-  FunctionsFetchError,
-  FunctionsRelayError,
-  FunctionsError,
-  FunctionRegion,
-  SupabaseClient,
-  createClient,
-  GoTrueAdminApi,
-  GoTrueClient,
-  AuthAdminApi,
-  AuthClient,
-  navigatorLock,
-  NavigatorLockAcquireTimeoutError,
-  lockInternals,
-  processLock,
-  SIGN_OUT_SCOPES,
-  AuthError,
-  AuthApiError,
-  AuthUnknownError,
-  CustomAuthError,
-  AuthSessionMissingError,
-  AuthInvalidTokenResponseError,
-  AuthInvalidCredentialsError,
-  AuthImplicitGrantRedirectError,
-  AuthPKCEGrantCodeExchangeError,
-  AuthRetryableFetchError,
-  AuthWeakPasswordError,
-  AuthInvalidJwtError,
-  isAuthError,
-  isAuthApiError,
-  isAuthSessionMissingError,
-  isAuthImplicitGrantRedirectError,
-  isAuthRetryableFetchError,
-  isAuthWeakPasswordError,
-  RealtimePresence,
-  RealtimeChannel,
-  RealtimeClient,
-  REALTIME_LISTEN_TYPES,
-  REALTIME_POSTGRES_CHANGES_LISTEN_EVENT,
-  REALTIME_PRESENCE_LISTEN_EVENTS,
-  REALTIME_SUBSCRIBE_STATES,
-  REALTIME_CHANNEL_STATES
-} = index.default || index;
+// node_modules/@supabase/supabase-js/dist/index.mjs
+var dist_exports = {};
+__export(dist_exports, {
+  FunctionRegion: () => import_functions_js.FunctionRegion,
+  FunctionsError: () => import_functions_js.FunctionsError,
+  FunctionsFetchError: () => import_functions_js.FunctionsFetchError,
+  FunctionsHttpError: () => import_functions_js.FunctionsHttpError,
+  FunctionsRelayError: () => import_functions_js.FunctionsRelayError,
+  PostgrestError: () => PostgrestError,
+  SupabaseClient: () => SupabaseClient,
+  createClient: () => createClient
+});
+var import_functions_js = __toESM(require_main(), 1);
+
+// node_modules/@supabase/postgrest-js/dist/index.mjs
+var PostgrestError = class extends Error {
+  /**
+  * @example
+  * ```ts
+  * import PostgrestError from '@supabase/postgrest-js'
+  *
+  * throw new PostgrestError({
+  *   message: 'Row level security prevented the request',
+  *   details: 'RLS denied the insert',
+  *   hint: 'Check your policies',
+  *   code: 'PGRST301',
+  * })
+  * ```
+  */
+  constructor(context) {
+    super(context.message);
+    this.name = "PostgrestError";
+    this.details = context.details;
+    this.hint = context.hint;
+    this.code = context.code;
+  }
+};
+var PostgrestBuilder = class {
+  /**
+  * Creates a builder configured for a specific PostgREST request.
+  *
+  * @example
+  * ```ts
+  * import PostgrestQueryBuilder from '@supabase/postgrest-js'
+  *
+  * const builder = new PostgrestQueryBuilder(
+  *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+  *   { headers: new Headers({ apikey: 'public-anon-key' }) }
+  * )
+  * ```
+  */
+  constructor(builder) {
+    var _builder$shouldThrowO, _builder$isMaybeSingl;
+    this.shouldThrowOnError = false;
+    this.method = builder.method;
+    this.url = builder.url;
+    this.headers = new Headers(builder.headers);
+    this.schema = builder.schema;
+    this.body = builder.body;
+    this.shouldThrowOnError = (_builder$shouldThrowO = builder.shouldThrowOnError) !== null && _builder$shouldThrowO !== void 0 ? _builder$shouldThrowO : false;
+    this.signal = builder.signal;
+    this.isMaybeSingle = (_builder$isMaybeSingl = builder.isMaybeSingle) !== null && _builder$isMaybeSingl !== void 0 ? _builder$isMaybeSingl : false;
+    if (builder.fetch)
+      this.fetch = builder.fetch;
+    else
+      this.fetch = fetch;
+  }
+  /**
+  * If there's an error with the query, throwOnError will reject the promise by
+  * throwing the error instead of returning it as part of a successful response.
+  *
+  * {@link https://github.com/supabase/supabase-js/issues/92}
+  */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /**
+  * Set an HTTP header for the request.
+  */
+  setHeader(name, value) {
+    this.headers = new Headers(this.headers);
+    this.headers.set(name, value);
+    return this;
+  }
+  then(onfulfilled, onrejected) {
+    var _this = this;
+    if (this.schema === void 0) {
+    } else if (["GET", "HEAD"].includes(this.method))
+      this.headers.set("Accept-Profile", this.schema);
+    else
+      this.headers.set("Content-Profile", this.schema);
+    if (this.method !== "GET" && this.method !== "HEAD")
+      this.headers.set("Content-Type", "application/json");
+    const _fetch = this.fetch;
+    let res = _fetch(this.url.toString(), {
+      method: this.method,
+      headers: this.headers,
+      body: JSON.stringify(this.body),
+      signal: this.signal
+    }).then(async (res$1) => {
+      let error = null;
+      let data = null;
+      let count = null;
+      let status = res$1.status;
+      let statusText = res$1.statusText;
+      if (res$1.ok) {
+        var _this$headers$get2, _res$headers$get;
+        if (_this.method !== "HEAD") {
+          var _this$headers$get;
+          const body = await res$1.text();
+          if (body === "") {
+          } else if (_this.headers.get("Accept") === "text/csv")
+            data = body;
+          else if (_this.headers.get("Accept") && ((_this$headers$get = _this.headers.get("Accept")) === null || _this$headers$get === void 0 ? void 0 : _this$headers$get.includes("application/vnd.pgrst.plan+text")))
+            data = body;
+          else
+            data = JSON.parse(body);
+        }
+        const countHeader = (_this$headers$get2 = _this.headers.get("Prefer")) === null || _this$headers$get2 === void 0 ? void 0 : _this$headers$get2.match(/count=(exact|planned|estimated)/);
+        const contentRange = (_res$headers$get = res$1.headers.get("content-range")) === null || _res$headers$get === void 0 ? void 0 : _res$headers$get.split("/");
+        if (countHeader && contentRange && contentRange.length > 1)
+          count = parseInt(contentRange[1]);
+        if (_this.isMaybeSingle && _this.method === "GET" && Array.isArray(data))
+          if (data.length > 1) {
+            error = {
+              code: "PGRST116",
+              details: `Results contain ${data.length} rows, application/vnd.pgrst.object+json requires 1 row`,
+              hint: null,
+              message: "JSON object requested, multiple (or no) rows returned"
+            };
+            data = null;
+            count = null;
+            status = 406;
+            statusText = "Not Acceptable";
+          } else if (data.length === 1)
+            data = data[0];
+          else
+            data = null;
+      } else {
+        var _error$details;
+        const body = await res$1.text();
+        try {
+          error = JSON.parse(body);
+          if (Array.isArray(error) && res$1.status === 404) {
+            data = [];
+            error = null;
+            status = 200;
+            statusText = "OK";
+          }
+        } catch (_unused) {
+          if (res$1.status === 404 && body === "") {
+            status = 204;
+            statusText = "No Content";
+          } else
+            error = { message: body };
+        }
+        if (error && _this.isMaybeSingle && (error === null || error === void 0 || (_error$details = error.details) === null || _error$details === void 0 ? void 0 : _error$details.includes("0 rows"))) {
+          error = null;
+          status = 200;
+          statusText = "OK";
+        }
+        if (error && _this.shouldThrowOnError)
+          throw new PostgrestError(error);
+      }
+      return {
+        error,
+        data,
+        count,
+        status,
+        statusText
+      };
+    });
+    if (!this.shouldThrowOnError)
+      res = res.catch((fetchError) => {
+        var _fetchError$name2;
+        let errorDetails = "";
+        const cause = fetchError === null || fetchError === void 0 ? void 0 : fetchError.cause;
+        if (cause) {
+          var _cause$message, _cause$code, _fetchError$name, _cause$name;
+          const causeMessage = (_cause$message = cause === null || cause === void 0 ? void 0 : cause.message) !== null && _cause$message !== void 0 ? _cause$message : "";
+          const causeCode = (_cause$code = cause === null || cause === void 0 ? void 0 : cause.code) !== null && _cause$code !== void 0 ? _cause$code : "";
+          errorDetails = `${(_fetchError$name = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _fetchError$name !== void 0 ? _fetchError$name : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`;
+          errorDetails += `
+
+Caused by: ${(_cause$name = cause === null || cause === void 0 ? void 0 : cause.name) !== null && _cause$name !== void 0 ? _cause$name : "Error"}: ${causeMessage}`;
+          if (causeCode)
+            errorDetails += ` (${causeCode})`;
+          if (cause === null || cause === void 0 ? void 0 : cause.stack)
+            errorDetails += `
+${cause.stack}`;
+        } else {
+          var _fetchError$stack;
+          errorDetails = (_fetchError$stack = fetchError === null || fetchError === void 0 ? void 0 : fetchError.stack) !== null && _fetchError$stack !== void 0 ? _fetchError$stack : "";
+        }
+        return {
+          error: {
+            message: `${(_fetchError$name2 = fetchError === null || fetchError === void 0 ? void 0 : fetchError.name) !== null && _fetchError$name2 !== void 0 ? _fetchError$name2 : "FetchError"}: ${fetchError === null || fetchError === void 0 ? void 0 : fetchError.message}`,
+            details: errorDetails,
+            hint: "",
+            code: ""
+          },
+          data: null,
+          count: null,
+          status: 0,
+          statusText: ""
+        };
+      });
+    return res.then(onfulfilled, onrejected);
+  }
+  /**
+  * Override the type of the returned `data`.
+  *
+  * @typeParam NewResult - The new result type to override with
+  * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
+  */
+  returns() {
+    return this;
+  }
+  /**
+  * Override the type of the returned `data` field in the response.
+  *
+  * @typeParam NewResult - The new type to cast the response data to
+  * @typeParam Options - Optional type configuration (defaults to { merge: true })
+  * @typeParam Options.merge - When true, merges the new type with existing return type. When false, replaces the existing types entirely (defaults to true)
+  * @example
+  * ```typescript
+  * // Merge with existing types (default behavior)
+  * const query = supabase
+  *   .from('users')
+  *   .select()
+  *   .overrideTypes<{ custom_field: string }>()
+  *
+  * // Replace existing types completely
+  * const replaceQuery = supabase
+  *   .from('users')
+  *   .select()
+  *   .overrideTypes<{ id: number; name: string }, { merge: false }>()
+  * ```
+  * @returns A PostgrestBuilder instance with the new type
+  */
+  overrideTypes() {
+    return this;
+  }
+};
+var PostgrestTransformBuilder = class extends PostgrestBuilder {
+  /**
+  * Perform a SELECT on the query result.
+  *
+  * By default, `.insert()`, `.update()`, `.upsert()`, and `.delete()` do not
+  * return modified rows. By calling this method, modified rows are returned in
+  * `data`.
+  *
+  * @param columns - The columns to retrieve, separated by commas
+  */
+  select(columns) {
+    let quoted = false;
+    const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
+      if (/\s/.test(c) && !quoted)
+        return "";
+      if (c === '"')
+        quoted = !quoted;
+      return c;
+    }).join("");
+    this.url.searchParams.set("select", cleanedColumns);
+    this.headers.append("Prefer", "return=representation");
+    return this;
+  }
+  /**
+  * Order the query result by `column`.
+  *
+  * You can call this method multiple times to order by multiple columns.
+  *
+  * You can order referenced tables, but it only affects the ordering of the
+  * parent table if you use `!inner` in the query.
+  *
+  * @param column - The column to order by
+  * @param options - Named parameters
+  * @param options.ascending - If `true`, the result will be in ascending order
+  * @param options.nullsFirst - If `true`, `null`s appear first. If `false`,
+  * `null`s appear last.
+  * @param options.referencedTable - Set this to order a referenced table by
+  * its columns
+  * @param options.foreignTable - Deprecated, use `options.referencedTable`
+  * instead
+  */
+  order(column, { ascending = true, nullsFirst, foreignTable, referencedTable = foreignTable } = {}) {
+    const key = referencedTable ? `${referencedTable}.order` : "order";
+    const existingOrder = this.url.searchParams.get(key);
+    this.url.searchParams.set(key, `${existingOrder ? `${existingOrder},` : ""}${column}.${ascending ? "asc" : "desc"}${nullsFirst === void 0 ? "" : nullsFirst ? ".nullsfirst" : ".nullslast"}`);
+    return this;
+  }
+  /**
+  * Limit the query result by `count`.
+  *
+  * @param count - The maximum number of rows to return
+  * @param options - Named parameters
+  * @param options.referencedTable - Set this to limit rows of referenced
+  * tables instead of the parent table
+  * @param options.foreignTable - Deprecated, use `options.referencedTable`
+  * instead
+  */
+  limit(count, { foreignTable, referencedTable = foreignTable } = {}) {
+    const key = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
+    this.url.searchParams.set(key, `${count}`);
+    return this;
+  }
+  /**
+  * Limit the query result by starting at an offset `from` and ending at the offset `to`.
+  * Only records within this range are returned.
+  * This respects the query order and if there is no order clause the range could behave unexpectedly.
+  * The `from` and `to` values are 0-based and inclusive: `range(1, 3)` will include the second, third
+  * and fourth rows of the query.
+  *
+  * @param from - The starting index from which to limit the result
+  * @param to - The last index to which to limit the result
+  * @param options - Named parameters
+  * @param options.referencedTable - Set this to limit rows of referenced
+  * tables instead of the parent table
+  * @param options.foreignTable - Deprecated, use `options.referencedTable`
+  * instead
+  */
+  range(from, to, { foreignTable, referencedTable = foreignTable } = {}) {
+    const keyOffset = typeof referencedTable === "undefined" ? "offset" : `${referencedTable}.offset`;
+    const keyLimit = typeof referencedTable === "undefined" ? "limit" : `${referencedTable}.limit`;
+    this.url.searchParams.set(keyOffset, `${from}`);
+    this.url.searchParams.set(keyLimit, `${to - from + 1}`);
+    return this;
+  }
+  /**
+  * Set the AbortSignal for the fetch request.
+  *
+  * @param signal - The AbortSignal to use for the fetch request
+  */
+  abortSignal(signal) {
+    this.signal = signal;
+    return this;
+  }
+  /**
+  * Return `data` as a single object instead of an array of objects.
+  *
+  * Query result must be one row (e.g. using `.limit(1)`), otherwise this
+  * returns an error.
+  */
+  single() {
+    this.headers.set("Accept", "application/vnd.pgrst.object+json");
+    return this;
+  }
+  /**
+  * Return `data` as a single object instead of an array of objects.
+  *
+  * Query result must be zero or one row (e.g. using `.limit(1)`), otherwise
+  * this returns an error.
+  */
+  maybeSingle() {
+    if (this.method === "GET")
+      this.headers.set("Accept", "application/json");
+    else
+      this.headers.set("Accept", "application/vnd.pgrst.object+json");
+    this.isMaybeSingle = true;
+    return this;
+  }
+  /**
+  * Return `data` as a string in CSV format.
+  */
+  csv() {
+    this.headers.set("Accept", "text/csv");
+    return this;
+  }
+  /**
+  * Return `data` as an object in [GeoJSON](https://geojson.org) format.
+  */
+  geojson() {
+    this.headers.set("Accept", "application/geo+json");
+    return this;
+  }
+  /**
+  * Return `data` as the EXPLAIN plan for the query.
+  *
+  * You need to enable the
+  * [db_plan_enabled](https://supabase.com/docs/guides/database/debugging-performance#enabling-explain)
+  * setting before using this method.
+  *
+  * @param options - Named parameters
+  *
+  * @param options.analyze - If `true`, the query will be executed and the
+  * actual run time will be returned
+  *
+  * @param options.verbose - If `true`, the query identifier will be returned
+  * and `data` will include the output columns of the query
+  *
+  * @param options.settings - If `true`, include information on configuration
+  * parameters that affect query planning
+  *
+  * @param options.buffers - If `true`, include information on buffer usage
+  *
+  * @param options.wal - If `true`, include information on WAL record generation
+  *
+  * @param options.format - The format of the output, can be `"text"` (default)
+  * or `"json"`
+  */
+  explain({ analyze = false, verbose = false, settings = false, buffers = false, wal = false, format = "text" } = {}) {
+    var _this$headers$get;
+    const options = [
+      analyze ? "analyze" : null,
+      verbose ? "verbose" : null,
+      settings ? "settings" : null,
+      buffers ? "buffers" : null,
+      wal ? "wal" : null
+    ].filter(Boolean).join("|");
+    const forMediatype = (_this$headers$get = this.headers.get("Accept")) !== null && _this$headers$get !== void 0 ? _this$headers$get : "application/json";
+    this.headers.set("Accept", `application/vnd.pgrst.plan+${format}; for="${forMediatype}"; options=${options};`);
+    if (format === "json")
+      return this;
+    else
+      return this;
+  }
+  /**
+  * Rollback the query.
+  *
+  * `data` will still be returned, but the query is not committed.
+  */
+  rollback() {
+    this.headers.append("Prefer", "tx=rollback");
+    return this;
+  }
+  /**
+  * Override the type of the returned `data`.
+  *
+  * @typeParam NewResult - The new result type to override with
+  * @deprecated Use overrideTypes<yourType, { merge: false }>() method at the end of your call chain instead
+  */
+  returns() {
+    return this;
+  }
+  /**
+  * Set the maximum number of rows that can be affected by the query.
+  * Only available in PostgREST v13+ and only works with PATCH and DELETE methods.
+  *
+  * @param value - The maximum number of rows that can be affected
+  */
+  maxAffected(value) {
+    this.headers.append("Prefer", "handling=strict");
+    this.headers.append("Prefer", `max-affected=${value}`);
+    return this;
+  }
+};
+var PostgrestReservedCharsRegexp = /* @__PURE__ */ new RegExp("[,()]");
+var PostgrestFilterBuilder = class extends PostgrestTransformBuilder {
+  /**
+  * Match only rows where `column` is equal to `value`.
+  *
+  * To check if the value of `column` is NULL, you should use `.is()` instead.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  eq(column, value) {
+    this.url.searchParams.append(column, `eq.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is not equal to `value`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  neq(column, value) {
+    this.url.searchParams.append(column, `neq.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is greater than `value`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  gt(column, value) {
+    this.url.searchParams.append(column, `gt.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is greater than or equal to `value`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  gte(column, value) {
+    this.url.searchParams.append(column, `gte.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is less than `value`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  lt(column, value) {
+    this.url.searchParams.append(column, `lt.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is less than or equal to `value`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  lte(column, value) {
+    this.url.searchParams.append(column, `lte.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches `pattern` case-sensitively.
+  *
+  * @param column - The column to filter on
+  * @param pattern - The pattern to match with
+  */
+  like(column, pattern) {
+    this.url.searchParams.append(column, `like.${pattern}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches all of `patterns` case-sensitively.
+  *
+  * @param column - The column to filter on
+  * @param patterns - The patterns to match with
+  */
+  likeAllOf(column, patterns) {
+    this.url.searchParams.append(column, `like(all).{${patterns.join(",")}}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches any of `patterns` case-sensitively.
+  *
+  * @param column - The column to filter on
+  * @param patterns - The patterns to match with
+  */
+  likeAnyOf(column, patterns) {
+    this.url.searchParams.append(column, `like(any).{${patterns.join(",")}}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches `pattern` case-insensitively.
+  *
+  * @param column - The column to filter on
+  * @param pattern - The pattern to match with
+  */
+  ilike(column, pattern) {
+    this.url.searchParams.append(column, `ilike.${pattern}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches all of `patterns` case-insensitively.
+  *
+  * @param column - The column to filter on
+  * @param patterns - The patterns to match with
+  */
+  ilikeAllOf(column, patterns) {
+    this.url.searchParams.append(column, `ilike(all).{${patterns.join(",")}}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches any of `patterns` case-insensitively.
+  *
+  * @param column - The column to filter on
+  * @param patterns - The patterns to match with
+  */
+  ilikeAnyOf(column, patterns) {
+    this.url.searchParams.append(column, `ilike(any).{${patterns.join(",")}}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches the PostgreSQL regex `pattern`
+  * case-sensitively (using the `~` operator).
+  *
+  * @param column - The column to filter on
+  * @param pattern - The PostgreSQL regular expression pattern to match with
+  */
+  regexMatch(column, pattern) {
+    this.url.searchParams.append(column, `match.${pattern}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` matches the PostgreSQL regex `pattern`
+  * case-insensitively (using the `~*` operator).
+  *
+  * @param column - The column to filter on
+  * @param pattern - The PostgreSQL regular expression pattern to match with
+  */
+  regexIMatch(column, pattern) {
+    this.url.searchParams.append(column, `imatch.${pattern}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` IS `value`.
+  *
+  * For non-boolean columns, this is only relevant for checking if the value of
+  * `column` is NULL by setting `value` to `null`.
+  *
+  * For boolean columns, you can also set `value` to `true` or `false` and it
+  * will behave the same way as `.eq()`.
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  is(column, value) {
+    this.url.searchParams.append(column, `is.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` IS DISTINCT FROM `value`.
+  *
+  * Unlike `.neq()`, this treats `NULL` as a comparable value. Two `NULL` values
+  * are considered equal (not distinct), and comparing `NULL` with any non-NULL
+  * value returns true (distinct).
+  *
+  * @param column - The column to filter on
+  * @param value - The value to filter with
+  */
+  isDistinct(column, value) {
+    this.url.searchParams.append(column, `isdistinct.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is included in the `values` array.
+  *
+  * @param column - The column to filter on
+  * @param values - The values array to filter with
+  */
+  in(column, values) {
+    const cleanedValues = Array.from(new Set(values)).map((s) => {
+      if (typeof s === "string" && PostgrestReservedCharsRegexp.test(s))
+        return `"${s}"`;
+      else
+        return `${s}`;
+    }).join(",");
+    this.url.searchParams.append(column, `in.(${cleanedValues})`);
+    return this;
+  }
+  /**
+  * Match only rows where `column` is NOT included in the `values` array.
+  *
+  * @param column - The column to filter on
+  * @param values - The values array to filter with
+  */
+  notIn(column, values) {
+    const cleanedValues = Array.from(new Set(values)).map((s) => {
+      if (typeof s === "string" && PostgrestReservedCharsRegexp.test(s))
+        return `"${s}"`;
+      else
+        return `${s}`;
+    }).join(",");
+    this.url.searchParams.append(column, `not.in.(${cleanedValues})`);
+    return this;
+  }
+  /**
+  * Only relevant for jsonb, array, and range columns. Match only rows where
+  * `column` contains every element appearing in `value`.
+  *
+  * @param column - The jsonb, array, or range column to filter on
+  * @param value - The jsonb, array, or range value to filter with
+  */
+  contains(column, value) {
+    if (typeof value === "string")
+      this.url.searchParams.append(column, `cs.${value}`);
+    else if (Array.isArray(value))
+      this.url.searchParams.append(column, `cs.{${value.join(",")}}`);
+    else
+      this.url.searchParams.append(column, `cs.${JSON.stringify(value)}`);
+    return this;
+  }
+  /**
+  * Only relevant for jsonb, array, and range columns. Match only rows where
+  * every element appearing in `column` is contained by `value`.
+  *
+  * @param column - The jsonb, array, or range column to filter on
+  * @param value - The jsonb, array, or range value to filter with
+  */
+  containedBy(column, value) {
+    if (typeof value === "string")
+      this.url.searchParams.append(column, `cd.${value}`);
+    else if (Array.isArray(value))
+      this.url.searchParams.append(column, `cd.{${value.join(",")}}`);
+    else
+      this.url.searchParams.append(column, `cd.${JSON.stringify(value)}`);
+    return this;
+  }
+  /**
+  * Only relevant for range columns. Match only rows where every element in
+  * `column` is greater than any element in `range`.
+  *
+  * @param column - The range column to filter on
+  * @param range - The range to filter with
+  */
+  rangeGt(column, range) {
+    this.url.searchParams.append(column, `sr.${range}`);
+    return this;
+  }
+  /**
+  * Only relevant for range columns. Match only rows where every element in
+  * `column` is either contained in `range` or greater than any element in
+  * `range`.
+  *
+  * @param column - The range column to filter on
+  * @param range - The range to filter with
+  */
+  rangeGte(column, range) {
+    this.url.searchParams.append(column, `nxl.${range}`);
+    return this;
+  }
+  /**
+  * Only relevant for range columns. Match only rows where every element in
+  * `column` is less than any element in `range`.
+  *
+  * @param column - The range column to filter on
+  * @param range - The range to filter with
+  */
+  rangeLt(column, range) {
+    this.url.searchParams.append(column, `sl.${range}`);
+    return this;
+  }
+  /**
+  * Only relevant for range columns. Match only rows where every element in
+  * `column` is either contained in `range` or less than any element in
+  * `range`.
+  *
+  * @param column - The range column to filter on
+  * @param range - The range to filter with
+  */
+  rangeLte(column, range) {
+    this.url.searchParams.append(column, `nxr.${range}`);
+    return this;
+  }
+  /**
+  * Only relevant for range columns. Match only rows where `column` is
+  * mutually exclusive to `range` and there can be no element between the two
+  * ranges.
+  *
+  * @param column - The range column to filter on
+  * @param range - The range to filter with
+  */
+  rangeAdjacent(column, range) {
+    this.url.searchParams.append(column, `adj.${range}`);
+    return this;
+  }
+  /**
+  * Only relevant for array and range columns. Match only rows where
+  * `column` and `value` have an element in common.
+  *
+  * @param column - The array or range column to filter on
+  * @param value - The array or range value to filter with
+  */
+  overlaps(column, value) {
+    if (typeof value === "string")
+      this.url.searchParams.append(column, `ov.${value}`);
+    else
+      this.url.searchParams.append(column, `ov.{${value.join(",")}}`);
+    return this;
+  }
+  /**
+  * Only relevant for text and tsvector columns. Match only rows where
+  * `column` matches the query string in `query`.
+  *
+  * @param column - The text or tsvector column to filter on
+  * @param query - The query text to match with
+  * @param options - Named parameters
+  * @param options.config - The text search configuration to use
+  * @param options.type - Change how the `query` text is interpreted
+  */
+  textSearch(column, query, { config, type } = {}) {
+    let typePart = "";
+    if (type === "plain")
+      typePart = "pl";
+    else if (type === "phrase")
+      typePart = "ph";
+    else if (type === "websearch")
+      typePart = "w";
+    const configPart = config === void 0 ? "" : `(${config})`;
+    this.url.searchParams.append(column, `${typePart}fts${configPart}.${query}`);
+    return this;
+  }
+  /**
+  * Match only rows where each column in `query` keys is equal to its
+  * associated value. Shorthand for multiple `.eq()`s.
+  *
+  * @param query - The object to filter with, with column names as keys mapped
+  * to their filter values
+  */
+  match(query) {
+    Object.entries(query).forEach(([column, value]) => {
+      this.url.searchParams.append(column, `eq.${value}`);
+    });
+    return this;
+  }
+  /**
+  * Match only rows which doesn't satisfy the filter.
+  *
+  * Unlike most filters, `opearator` and `value` are used as-is and need to
+  * follow [PostgREST
+  * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+  * to make sure they are properly sanitized.
+  *
+  * @param column - The column to filter on
+  * @param operator - The operator to be negated to filter with, following
+  * PostgREST syntax
+  * @param value - The value to filter with, following PostgREST syntax
+  */
+  not(column, operator, value) {
+    this.url.searchParams.append(column, `not.${operator}.${value}`);
+    return this;
+  }
+  /**
+  * Match only rows which satisfy at least one of the filters.
+  *
+  * Unlike most filters, `filters` is used as-is and needs to follow [PostgREST
+  * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+  * to make sure it's properly sanitized.
+  *
+  * It's currently not possible to do an `.or()` filter across multiple tables.
+  *
+  * @param filters - The filters to use, following PostgREST syntax
+  * @param options - Named parameters
+  * @param options.referencedTable - Set this to filter on referenced tables
+  * instead of the parent table
+  * @param options.foreignTable - Deprecated, use `referencedTable` instead
+  */
+  or(filters, { foreignTable, referencedTable = foreignTable } = {}) {
+    const key = referencedTable ? `${referencedTable}.or` : "or";
+    this.url.searchParams.append(key, `(${filters})`);
+    return this;
+  }
+  /**
+  * Match only rows which satisfy the filter. This is an escape hatch - you
+  * should use the specific filter methods wherever possible.
+  *
+  * Unlike most filters, `opearator` and `value` are used as-is and need to
+  * follow [PostgREST
+  * syntax](https://postgrest.org/en/stable/api.html#operators). You also need
+  * to make sure they are properly sanitized.
+  *
+  * @param column - The column to filter on
+  * @param operator - The operator to filter with, following PostgREST syntax
+  * @param value - The value to filter with, following PostgREST syntax
+  */
+  filter(column, operator, value) {
+    this.url.searchParams.append(column, `${operator}.${value}`);
+    return this;
+  }
+};
+var PostgrestQueryBuilder = class {
+  /**
+  * Creates a query builder scoped to a Postgres table or view.
+  *
+  * @example
+  * ```ts
+  * import PostgrestQueryBuilder from '@supabase/postgrest-js'
+  *
+  * const query = new PostgrestQueryBuilder(
+  *   new URL('https://xyzcompany.supabase.co/rest/v1/users'),
+  *   { headers: { apikey: 'public-anon-key' } }
+  * )
+  * ```
+  */
+  constructor(url, { headers = {}, schema, fetch: fetch$1 }) {
+    this.url = url;
+    this.headers = new Headers(headers);
+    this.schema = schema;
+    this.fetch = fetch$1;
+  }
+  /**
+  * Perform a SELECT query on the table or view.
+  *
+  * @param columns - The columns to retrieve, separated by commas. Columns can be renamed when returned with `customName:columnName`
+  *
+  * @param options - Named parameters
+  *
+  * @param options.head - When set to `true`, `data` will not be returned.
+  * Useful if you only need the count.
+  *
+  * @param options.count - Count algorithm to use to count rows in the table or view.
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  */
+  select(columns, options) {
+    const { head: head2 = false, count } = options !== null && options !== void 0 ? options : {};
+    const method = head2 ? "HEAD" : "GET";
+    let quoted = false;
+    const cleanedColumns = (columns !== null && columns !== void 0 ? columns : "*").split("").map((c) => {
+      if (/\s/.test(c) && !quoted)
+        return "";
+      if (c === '"')
+        quoted = !quoted;
+      return c;
+    }).join("");
+    this.url.searchParams.set("select", cleanedColumns);
+    if (count)
+      this.headers.append("Prefer", `count=${count}`);
+    return new PostgrestFilterBuilder({
+      method,
+      url: this.url,
+      headers: this.headers,
+      schema: this.schema,
+      fetch: this.fetch
+    });
+  }
+  /**
+  * Perform an INSERT into the table or view.
+  *
+  * By default, inserted rows are not returned. To return it, chain the call
+  * with `.select()`.
+  *
+  * @param values - The values to insert. Pass an object to insert a single row
+  * or an array to insert multiple rows.
+  *
+  * @param options - Named parameters
+  *
+  * @param options.count - Count algorithm to use to count inserted rows.
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  *
+  * @param options.defaultToNull - Make missing fields default to `null`.
+  * Otherwise, use the default value for the column. Only applies for bulk
+  * inserts.
+  */
+  insert(values, { count, defaultToNull = true } = {}) {
+    var _this$fetch;
+    const method = "POST";
+    if (count)
+      this.headers.append("Prefer", `count=${count}`);
+    if (!defaultToNull)
+      this.headers.append("Prefer", `missing=default`);
+    if (Array.isArray(values)) {
+      const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
+      if (columns.length > 0) {
+        const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
+        this.url.searchParams.set("columns", uniqueColumns.join(","));
+      }
+    }
+    return new PostgrestFilterBuilder({
+      method,
+      url: this.url,
+      headers: this.headers,
+      schema: this.schema,
+      body: values,
+      fetch: (_this$fetch = this.fetch) !== null && _this$fetch !== void 0 ? _this$fetch : fetch
+    });
+  }
+  /**
+  * Perform an UPSERT on the table or view. Depending on the column(s) passed
+  * to `onConflict`, `.upsert()` allows you to perform the equivalent of
+  * `.insert()` if a row with the corresponding `onConflict` columns doesn't
+  * exist, or if it does exist, perform an alternative action depending on
+  * `ignoreDuplicates`.
+  *
+  * By default, upserted rows are not returned. To return it, chain the call
+  * with `.select()`.
+  *
+  * @param values - The values to upsert with. Pass an object to upsert a
+  * single row or an array to upsert multiple rows.
+  *
+  * @param options - Named parameters
+  *
+  * @param options.onConflict - Comma-separated UNIQUE column(s) to specify how
+  * duplicate rows are determined. Two rows are duplicates if all the
+  * `onConflict` columns are equal.
+  *
+  * @param options.ignoreDuplicates - If `true`, duplicate rows are ignored. If
+  * `false`, duplicate rows are merged with existing rows.
+  *
+  * @param options.count - Count algorithm to use to count upserted rows.
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  *
+  * @param options.defaultToNull - Make missing fields default to `null`.
+  * Otherwise, use the default value for the column. This only applies when
+  * inserting new rows, not when merging with existing rows under
+  * `ignoreDuplicates: false`. This also only applies when doing bulk upserts.
+  *
+  * @example Upsert a single row using a unique key
+  * ```ts
+  * // Upserting a single row, overwriting based on the 'username' unique column
+  * const { data, error } = await supabase
+  *   .from('users')
+  *   .upsert({ username: 'supabot' }, { onConflict: 'username' })
+  *
+  * // Example response:
+  * // {
+  * //   data: [
+  * //     { id: 4, message: 'bar', username: 'supabot' }
+  * //   ],
+  * //   error: null
+  * // }
+  * ```
+  *
+  * @example Upsert with conflict resolution and exact row counting
+  * ```ts
+  * // Upserting and returning exact count
+  * const { data, error, count } = await supabase
+  *   .from('users')
+  *   .upsert(
+  *     {
+  *       id: 3,
+  *       message: 'foo',
+  *       username: 'supabot'
+  *     },
+  *     {
+  *       onConflict: 'username',
+  *       count: 'exact'
+  *     }
+  *   )
+  *
+  * // Example response:
+  * // {
+  * //   data: [
+  * //     {
+  * //       id: 42,
+  * //       handle: "saoirse",
+  * //       display_name: "Saoirse"
+  * //     }
+  * //   ],
+  * //   count: 1,
+  * //   error: null
+  * // }
+  * ```
+  */
+  upsert(values, { onConflict, ignoreDuplicates = false, count, defaultToNull = true } = {}) {
+    var _this$fetch2;
+    const method = "POST";
+    this.headers.append("Prefer", `resolution=${ignoreDuplicates ? "ignore" : "merge"}-duplicates`);
+    if (onConflict !== void 0)
+      this.url.searchParams.set("on_conflict", onConflict);
+    if (count)
+      this.headers.append("Prefer", `count=${count}`);
+    if (!defaultToNull)
+      this.headers.append("Prefer", "missing=default");
+    if (Array.isArray(values)) {
+      const columns = values.reduce((acc, x) => acc.concat(Object.keys(x)), []);
+      if (columns.length > 0) {
+        const uniqueColumns = [...new Set(columns)].map((column) => `"${column}"`);
+        this.url.searchParams.set("columns", uniqueColumns.join(","));
+      }
+    }
+    return new PostgrestFilterBuilder({
+      method,
+      url: this.url,
+      headers: this.headers,
+      schema: this.schema,
+      body: values,
+      fetch: (_this$fetch2 = this.fetch) !== null && _this$fetch2 !== void 0 ? _this$fetch2 : fetch
+    });
+  }
+  /**
+  * Perform an UPDATE on the table or view.
+  *
+  * By default, updated rows are not returned. To return it, chain the call
+  * with `.select()` after filters.
+  *
+  * @param values - The values to update with
+  *
+  * @param options - Named parameters
+  *
+  * @param options.count - Count algorithm to use to count updated rows.
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  */
+  update(values, { count } = {}) {
+    var _this$fetch3;
+    const method = "PATCH";
+    if (count)
+      this.headers.append("Prefer", `count=${count}`);
+    return new PostgrestFilterBuilder({
+      method,
+      url: this.url,
+      headers: this.headers,
+      schema: this.schema,
+      body: values,
+      fetch: (_this$fetch3 = this.fetch) !== null && _this$fetch3 !== void 0 ? _this$fetch3 : fetch
+    });
+  }
+  /**
+  * Perform a DELETE on the table or view.
+  *
+  * By default, deleted rows are not returned. To return it, chain the call
+  * with `.select()` after filters.
+  *
+  * @param options - Named parameters
+  *
+  * @param options.count - Count algorithm to use to count deleted rows.
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  */
+  delete({ count } = {}) {
+    var _this$fetch4;
+    const method = "DELETE";
+    if (count)
+      this.headers.append("Prefer", `count=${count}`);
+    return new PostgrestFilterBuilder({
+      method,
+      url: this.url,
+      headers: this.headers,
+      schema: this.schema,
+      fetch: (_this$fetch4 = this.fetch) !== null && _this$fetch4 !== void 0 ? _this$fetch4 : fetch
+    });
+  }
+};
+var PostgrestClient = class PostgrestClient2 {
+  /**
+  * Creates a PostgREST client.
+  *
+  * @param url - URL of the PostgREST endpoint
+  * @param options - Named parameters
+  * @param options.headers - Custom headers
+  * @param options.schema - Postgres schema to switch to
+  * @param options.fetch - Custom fetch
+  * @example
+  * ```ts
+  * import PostgrestClient from '@supabase/postgrest-js'
+  *
+  * const postgrest = new PostgrestClient('https://xyzcompany.supabase.co/rest/v1', {
+  *   headers: { apikey: 'public-anon-key' },
+  *   schema: 'public',
+  * })
+  * ```
+  */
+  constructor(url, { headers = {}, schema, fetch: fetch$1 } = {}) {
+    this.url = url;
+    this.headers = new Headers(headers);
+    this.schemaName = schema;
+    this.fetch = fetch$1;
+  }
+  /**
+  * Perform a query on a table or a view.
+  *
+  * @param relation - The table or view name to query
+  */
+  from(relation) {
+    if (!relation || typeof relation !== "string" || relation.trim() === "")
+      throw new Error("Invalid relation name: relation must be a non-empty string.");
+    return new PostgrestQueryBuilder(new URL(`${this.url}/${relation}`), {
+      headers: new Headers(this.headers),
+      schema: this.schemaName,
+      fetch: this.fetch
+    });
+  }
+  /**
+  * Select a schema to query or perform an function (rpc) call.
+  *
+  * The schema needs to be on the list of exposed schemas inside Supabase.
+  *
+  * @param schema - The schema to query
+  */
+  schema(schema) {
+    return new PostgrestClient2(this.url, {
+      headers: this.headers,
+      schema,
+      fetch: this.fetch
+    });
+  }
+  /**
+  * Perform a function call.
+  *
+  * @param fn - The function name to call
+  * @param args - The arguments to pass to the function call
+  * @param options - Named parameters
+  * @param options.head - When set to `true`, `data` will not be returned.
+  * Useful if you only need the count.
+  * @param options.get - When set to `true`, the function will be called with
+  * read-only access mode.
+  * @param options.count - Count algorithm to use to count rows returned by the
+  * function. Only applicable for [set-returning
+  * functions](https://www.postgresql.org/docs/current/functions-srf.html).
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  *
+  * @example
+  * ```ts
+  * // For cross-schema functions where type inference fails, use overrideTypes:
+  * const { data } = await supabase
+  *   .schema('schema_b')
+  *   .rpc('function_a', {})
+  *   .overrideTypes<{ id: string; user_id: string }[]>()
+  * ```
+  */
+  rpc(fn, args = {}, { head: head2 = false, get: get2 = false, count } = {}) {
+    var _this$fetch;
+    let method;
+    const url = new URL(`${this.url}/rpc/${fn}`);
+    let body;
+    if (head2 || get2) {
+      method = head2 ? "HEAD" : "GET";
+      Object.entries(args).filter(([_, value]) => value !== void 0).map(([name, value]) => [name, Array.isArray(value) ? `{${value.join(",")}}` : `${value}`]).forEach(([name, value]) => {
+        url.searchParams.append(name, value);
+      });
+    } else {
+      method = "POST";
+      body = args;
+    }
+    const headers = new Headers(this.headers);
+    if (count)
+      headers.set("Prefer", `count=${count}`);
+    return new PostgrestFilterBuilder({
+      method,
+      url,
+      headers,
+      schema: this.schemaName,
+      body,
+      fetch: (_this$fetch = this.fetch) !== null && _this$fetch !== void 0 ? _this$fetch : fetch
+    });
+  }
+};
+
+// node_modules/@supabase/supabase-js/dist/index.mjs
+var import_realtime_js = __toESM(require_main2(), 1);
+
+// node_modules/iceberg-js/dist/index.mjs
+var IcebergError = class extends Error {
+  constructor(message, opts) {
+    super(message);
+    this.name = "IcebergError";
+    this.status = opts.status;
+    this.icebergType = opts.icebergType;
+    this.icebergCode = opts.icebergCode;
+    this.details = opts.details;
+    this.isCommitStateUnknown = opts.icebergType === "CommitStateUnknownException" || [500, 502, 504].includes(opts.status) && opts.icebergType?.includes("CommitState") === true;
+  }
+  /**
+   * Returns true if the error is a 404 Not Found error.
+   */
+  isNotFound() {
+    return this.status === 404;
+  }
+  /**
+   * Returns true if the error is a 409 Conflict error.
+   */
+  isConflict() {
+    return this.status === 409;
+  }
+  /**
+   * Returns true if the error is a 419 Authentication Timeout error.
+   */
+  isAuthenticationTimeout() {
+    return this.status === 419;
+  }
+};
+function buildUrl(baseUrl, path, query) {
+  const url = new URL(path, baseUrl);
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== void 0) {
+        url.searchParams.set(key, value);
+      }
+    }
+  }
+  return url.toString();
+}
+async function buildAuthHeaders(auth) {
+  if (!auth || auth.type === "none") {
+    return {};
+  }
+  if (auth.type === "bearer") {
+    return { Authorization: `Bearer ${auth.token}` };
+  }
+  if (auth.type === "header") {
+    return { [auth.name]: auth.value };
+  }
+  if (auth.type === "custom") {
+    return await auth.getHeaders();
+  }
+  return {};
+}
+function createFetchClient(options) {
+  const fetchFn = options.fetchImpl ?? globalThis.fetch;
+  return {
+    async request({
+      method,
+      path,
+      query,
+      body,
+      headers
+    }) {
+      const url = buildUrl(options.baseUrl, path, query);
+      const authHeaders = await buildAuthHeaders(options.auth);
+      const res = await fetchFn(url, {
+        method,
+        headers: {
+          ...body ? { "Content-Type": "application/json" } : {},
+          ...authHeaders,
+          ...headers
+        },
+        body: body ? JSON.stringify(body) : void 0
+      });
+      const text = await res.text();
+      const isJson = (res.headers.get("content-type") || "").includes("application/json");
+      const data = isJson && text ? JSON.parse(text) : text;
+      if (!res.ok) {
+        const errBody = isJson ? data : void 0;
+        const errorDetail = errBody?.error;
+        throw new IcebergError(
+          errorDetail?.message ?? `Request failed with status ${res.status}`,
+          {
+            status: res.status,
+            icebergType: errorDetail?.type,
+            icebergCode: errorDetail?.code,
+            details: errBody
+          }
+        );
+      }
+      return { status: res.status, headers: res.headers, data };
+    }
+  };
+}
+function namespaceToPath(namespace) {
+  return namespace.join("");
+}
+var NamespaceOperations = class {
+  constructor(client, prefix = "") {
+    this.client = client;
+    this.prefix = prefix;
+  }
+  async listNamespaces(parent) {
+    const query = parent ? { parent: namespaceToPath(parent.namespace) } : void 0;
+    const response = await this.client.request({
+      method: "GET",
+      path: `${this.prefix}/namespaces`,
+      query
+    });
+    return response.data.namespaces.map((ns) => ({ namespace: ns }));
+  }
+  async createNamespace(id, metadata) {
+    const request = {
+      namespace: id.namespace,
+      properties: metadata?.properties
+    };
+    const response = await this.client.request({
+      method: "POST",
+      path: `${this.prefix}/namespaces`,
+      body: request
+    });
+    return response.data;
+  }
+  async dropNamespace(id) {
+    await this.client.request({
+      method: "DELETE",
+      path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
+    });
+  }
+  async loadNamespaceMetadata(id) {
+    const response = await this.client.request({
+      method: "GET",
+      path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
+    });
+    return {
+      properties: response.data.properties
+    };
+  }
+  async namespaceExists(id) {
+    try {
+      await this.client.request({
+        method: "HEAD",
+        path: `${this.prefix}/namespaces/${namespaceToPath(id.namespace)}`
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof IcebergError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
+  async createNamespaceIfNotExists(id, metadata) {
+    try {
+      return await this.createNamespace(id, metadata);
+    } catch (error) {
+      if (error instanceof IcebergError && error.status === 409) {
+        return;
+      }
+      throw error;
+    }
+  }
+};
+function namespaceToPath2(namespace) {
+  return namespace.join("");
+}
+var TableOperations = class {
+  constructor(client, prefix = "", accessDelegation) {
+    this.client = client;
+    this.prefix = prefix;
+    this.accessDelegation = accessDelegation;
+  }
+  async listTables(namespace) {
+    const response = await this.client.request({
+      method: "GET",
+      path: `${this.prefix}/namespaces/${namespaceToPath2(namespace.namespace)}/tables`
+    });
+    return response.data.identifiers;
+  }
+  async createTable(namespace, request) {
+    const headers = {};
+    if (this.accessDelegation) {
+      headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
+    }
+    const response = await this.client.request({
+      method: "POST",
+      path: `${this.prefix}/namespaces/${namespaceToPath2(namespace.namespace)}/tables`,
+      body: request,
+      headers
+    });
+    return response.data.metadata;
+  }
+  async updateTable(id, request) {
+    const response = await this.client.request({
+      method: "POST",
+      path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
+      body: request
+    });
+    return {
+      "metadata-location": response.data["metadata-location"],
+      metadata: response.data.metadata
+    };
+  }
+  async dropTable(id, options) {
+    await this.client.request({
+      method: "DELETE",
+      path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
+      query: { purgeRequested: String(options?.purge ?? false) }
+    });
+  }
+  async loadTable(id) {
+    const headers = {};
+    if (this.accessDelegation) {
+      headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
+    }
+    const response = await this.client.request({
+      method: "GET",
+      path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
+      headers
+    });
+    return response.data.metadata;
+  }
+  async tableExists(id) {
+    const headers = {};
+    if (this.accessDelegation) {
+      headers["X-Iceberg-Access-Delegation"] = this.accessDelegation;
+    }
+    try {
+      await this.client.request({
+        method: "HEAD",
+        path: `${this.prefix}/namespaces/${namespaceToPath2(id.namespace)}/tables/${id.name}`,
+        headers
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof IcebergError && error.status === 404) {
+        return false;
+      }
+      throw error;
+    }
+  }
+  async createTableIfNotExists(namespace, request) {
+    try {
+      return await this.createTable(namespace, request);
+    } catch (error) {
+      if (error instanceof IcebergError && error.status === 409) {
+        return await this.loadTable({ namespace: namespace.namespace, name: request.name });
+      }
+      throw error;
+    }
+  }
+};
+var IcebergRestCatalog = class {
+  /**
+   * Creates a new Iceberg REST Catalog client.
+   *
+   * @param options - Configuration options for the catalog client
+   */
+  constructor(options) {
+    let prefix = "v1";
+    if (options.catalogName) {
+      prefix += `/${options.catalogName}`;
+    }
+    const baseUrl = options.baseUrl.endsWith("/") ? options.baseUrl : `${options.baseUrl}/`;
+    this.client = createFetchClient({
+      baseUrl,
+      auth: options.auth,
+      fetchImpl: options.fetch
+    });
+    this.accessDelegation = options.accessDelegation?.join(",");
+    this.namespaceOps = new NamespaceOperations(this.client, prefix);
+    this.tableOps = new TableOperations(this.client, prefix, this.accessDelegation);
+  }
+  /**
+   * Lists all namespaces in the catalog.
+   *
+   * @param parent - Optional parent namespace to list children under
+   * @returns Array of namespace identifiers
+   *
+   * @example
+   * ```typescript
+   * // List all top-level namespaces
+   * const namespaces = await catalog.listNamespaces();
+   *
+   * // List namespaces under a parent
+   * const children = await catalog.listNamespaces({ namespace: ['analytics'] });
+   * ```
+   */
+  async listNamespaces(parent) {
+    return this.namespaceOps.listNamespaces(parent);
+  }
+  /**
+   * Creates a new namespace in the catalog.
+   *
+   * @param id - Namespace identifier to create
+   * @param metadata - Optional metadata properties for the namespace
+   * @returns Response containing the created namespace and its properties
+   *
+   * @example
+   * ```typescript
+   * const response = await catalog.createNamespace(
+   *   { namespace: ['analytics'] },
+   *   { properties: { owner: 'data-team' } }
+   * );
+   * console.log(response.namespace); // ['analytics']
+   * console.log(response.properties); // { owner: 'data-team', ... }
+   * ```
+   */
+  async createNamespace(id, metadata) {
+    return this.namespaceOps.createNamespace(id, metadata);
+  }
+  /**
+   * Drops a namespace from the catalog.
+   *
+   * The namespace must be empty (contain no tables) before it can be dropped.
+   *
+   * @param id - Namespace identifier to drop
+   *
+   * @example
+   * ```typescript
+   * await catalog.dropNamespace({ namespace: ['analytics'] });
+   * ```
+   */
+  async dropNamespace(id) {
+    await this.namespaceOps.dropNamespace(id);
+  }
+  /**
+   * Loads metadata for a namespace.
+   *
+   * @param id - Namespace identifier to load
+   * @returns Namespace metadata including properties
+   *
+   * @example
+   * ```typescript
+   * const metadata = await catalog.loadNamespaceMetadata({ namespace: ['analytics'] });
+   * console.log(metadata.properties);
+   * ```
+   */
+  async loadNamespaceMetadata(id) {
+    return this.namespaceOps.loadNamespaceMetadata(id);
+  }
+  /**
+   * Lists all tables in a namespace.
+   *
+   * @param namespace - Namespace identifier to list tables from
+   * @returns Array of table identifiers
+   *
+   * @example
+   * ```typescript
+   * const tables = await catalog.listTables({ namespace: ['analytics'] });
+   * console.log(tables); // [{ namespace: ['analytics'], name: 'events' }, ...]
+   * ```
+   */
+  async listTables(namespace) {
+    return this.tableOps.listTables(namespace);
+  }
+  /**
+   * Creates a new table in the catalog.
+   *
+   * @param namespace - Namespace to create the table in
+   * @param request - Table creation request including name, schema, partition spec, etc.
+   * @returns Table metadata for the created table
+   *
+   * @example
+   * ```typescript
+   * const metadata = await catalog.createTable(
+   *   { namespace: ['analytics'] },
+   *   {
+   *     name: 'events',
+   *     schema: {
+   *       type: 'struct',
+   *       fields: [
+   *         { id: 1, name: 'id', type: 'long', required: true },
+   *         { id: 2, name: 'timestamp', type: 'timestamp', required: true }
+   *       ],
+   *       'schema-id': 0
+   *     },
+   *     'partition-spec': {
+   *       'spec-id': 0,
+   *       fields: [
+   *         { source_id: 2, field_id: 1000, name: 'ts_day', transform: 'day' }
+   *       ]
+   *     }
+   *   }
+   * );
+   * ```
+   */
+  async createTable(namespace, request) {
+    return this.tableOps.createTable(namespace, request);
+  }
+  /**
+   * Updates an existing table's metadata.
+   *
+   * Can update the schema, partition spec, or properties of a table.
+   *
+   * @param id - Table identifier to update
+   * @param request - Update request with fields to modify
+   * @returns Response containing the metadata location and updated table metadata
+   *
+   * @example
+   * ```typescript
+   * const response = await catalog.updateTable(
+   *   { namespace: ['analytics'], name: 'events' },
+   *   {
+   *     properties: { 'read.split.target-size': '134217728' }
+   *   }
+   * );
+   * console.log(response['metadata-location']); // s3://...
+   * console.log(response.metadata); // TableMetadata object
+   * ```
+   */
+  async updateTable(id, request) {
+    return this.tableOps.updateTable(id, request);
+  }
+  /**
+   * Drops a table from the catalog.
+   *
+   * @param id - Table identifier to drop
+   *
+   * @example
+   * ```typescript
+   * await catalog.dropTable({ namespace: ['analytics'], name: 'events' });
+   * ```
+   */
+  async dropTable(id, options) {
+    await this.tableOps.dropTable(id, options);
+  }
+  /**
+   * Loads metadata for a table.
+   *
+   * @param id - Table identifier to load
+   * @returns Table metadata including schema, partition spec, location, etc.
+   *
+   * @example
+   * ```typescript
+   * const metadata = await catalog.loadTable({ namespace: ['analytics'], name: 'events' });
+   * console.log(metadata.schema);
+   * console.log(metadata.location);
+   * ```
+   */
+  async loadTable(id) {
+    return this.tableOps.loadTable(id);
+  }
+  /**
+   * Checks if a namespace exists in the catalog.
+   *
+   * @param id - Namespace identifier to check
+   * @returns True if the namespace exists, false otherwise
+   *
+   * @example
+   * ```typescript
+   * const exists = await catalog.namespaceExists({ namespace: ['analytics'] });
+   * console.log(exists); // true or false
+   * ```
+   */
+  async namespaceExists(id) {
+    return this.namespaceOps.namespaceExists(id);
+  }
+  /**
+   * Checks if a table exists in the catalog.
+   *
+   * @param id - Table identifier to check
+   * @returns True if the table exists, false otherwise
+   *
+   * @example
+   * ```typescript
+   * const exists = await catalog.tableExists({ namespace: ['analytics'], name: 'events' });
+   * console.log(exists); // true or false
+   * ```
+   */
+  async tableExists(id) {
+    return this.tableOps.tableExists(id);
+  }
+  /**
+   * Creates a namespace if it does not exist.
+   *
+   * If the namespace already exists, returns void. If created, returns the response.
+   *
+   * @param id - Namespace identifier to create
+   * @param metadata - Optional metadata properties for the namespace
+   * @returns Response containing the created namespace and its properties, or void if it already exists
+   *
+   * @example
+   * ```typescript
+   * const response = await catalog.createNamespaceIfNotExists(
+   *   { namespace: ['analytics'] },
+   *   { properties: { owner: 'data-team' } }
+   * );
+   * if (response) {
+   *   console.log('Created:', response.namespace);
+   * } else {
+   *   console.log('Already exists');
+   * }
+   * ```
+   */
+  async createNamespaceIfNotExists(id, metadata) {
+    return this.namespaceOps.createNamespaceIfNotExists(id, metadata);
+  }
+  /**
+   * Creates a table if it does not exist.
+   *
+   * If the table already exists, returns its metadata instead.
+   *
+   * @param namespace - Namespace to create the table in
+   * @param request - Table creation request including name, schema, partition spec, etc.
+   * @returns Table metadata for the created or existing table
+   *
+   * @example
+   * ```typescript
+   * const metadata = await catalog.createTableIfNotExists(
+   *   { namespace: ['analytics'] },
+   *   {
+   *     name: 'events',
+   *     schema: {
+   *       type: 'struct',
+   *       fields: [
+   *         { id: 1, name: 'id', type: 'long', required: true },
+   *         { id: 2, name: 'timestamp', type: 'timestamp', required: true }
+   *       ],
+   *       'schema-id': 0
+   *     }
+   *   }
+   * );
+   * ```
+   */
+  async createTableIfNotExists(namespace, request) {
+    return this.tableOps.createTableIfNotExists(namespace, request);
+  }
+};
+
+// node_modules/@supabase/storage-js/dist/index.mjs
+var StorageError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.__isStorageError = true;
+    this.name = "StorageError";
+  }
+};
+function isStorageError(error) {
+  return typeof error === "object" && error !== null && "__isStorageError" in error;
+}
+var StorageApiError = class extends StorageError {
+  constructor(message, status, statusCode) {
+    super(message);
+    this.name = "StorageApiError";
+    this.status = status;
+    this.statusCode = statusCode;
+  }
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      status: this.status,
+      statusCode: this.statusCode
+    };
+  }
+};
+var StorageUnknownError = class extends StorageError {
+  constructor(message, originalError) {
+    super(message);
+    this.name = "StorageUnknownError";
+    this.originalError = originalError;
+  }
+};
+var resolveFetch$1 = (customFetch) => {
+  if (customFetch)
+    return (...args) => customFetch(...args);
+  return (...args) => fetch(...args);
+};
+var resolveResponse$1 = () => {
+  return Response;
+};
+var recursiveToCamel = (item) => {
+  if (Array.isArray(item))
+    return item.map((el) => recursiveToCamel(el));
+  else if (typeof item === "function" || item !== Object(item))
+    return item;
+  const result = {};
+  Object.entries(item).forEach(([key, value]) => {
+    const newKey = key.replace(/([-_][a-z])/gi, (c) => c.toUpperCase().replace(/[-_]/g, ""));
+    result[newKey] = recursiveToCamel(value);
+  });
+  return result;
+};
+var isPlainObject$1 = (value) => {
+  if (typeof value !== "object" || value === null)
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
+};
+var isValidBucketName = (bucketName) => {
+  if (!bucketName || typeof bucketName !== "string")
+    return false;
+  if (bucketName.length === 0 || bucketName.length > 100)
+    return false;
+  if (bucketName.trim() !== bucketName)
+    return false;
+  if (bucketName.includes("/") || bucketName.includes("\\"))
+    return false;
+  return /^[\w!.\*'() &$@=;:+,?-]+$/.test(bucketName);
+};
+function _typeof(o) {
+  "@babel/helpers - typeof";
+  return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o$1) {
+    return typeof o$1;
+  } : function(o$1) {
+    return o$1 && "function" == typeof Symbol && o$1.constructor === Symbol && o$1 !== Symbol.prototype ? "symbol" : typeof o$1;
+  }, _typeof(o);
+}
+function toPrimitive(t, r) {
+  if ("object" != _typeof(t) || !t)
+    return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r || "default");
+    if ("object" != _typeof(i))
+      return i;
+    throw new TypeError("@@toPrimitive must return a primitive value.");
+  }
+  return ("string" === r ? String : Number)(t);
+}
+function toPropertyKey(t) {
+  var i = toPrimitive(t, "string");
+  return "symbol" == _typeof(i) ? i : i + "";
+}
+function _defineProperty(e, r, t) {
+  return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
+    value: t,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  }) : e[r] = t, e;
+}
+function ownKeys2(e, r) {
+  var t = Object.keys(e);
+  if (Object.getOwnPropertySymbols) {
+    var o = Object.getOwnPropertySymbols(e);
+    r && (o = o.filter(function(r$1) {
+      return Object.getOwnPropertyDescriptor(e, r$1).enumerable;
+    })), t.push.apply(t, o);
+  }
+  return t;
+}
+function _objectSpread2(e) {
+  for (var r = 1; r < arguments.length; r++) {
+    var t = null != arguments[r] ? arguments[r] : {};
+    r % 2 ? ownKeys2(Object(t), true).forEach(function(r$1) {
+      _defineProperty(e, r$1, t[r$1]);
+    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys2(Object(t)).forEach(function(r$1) {
+      Object.defineProperty(e, r$1, Object.getOwnPropertyDescriptor(t, r$1));
+    });
+  }
+  return e;
+}
+var _getErrorMessage$1 = (err) => {
+  var _err$error;
+  return err.msg || err.message || err.error_description || (typeof err.error === "string" ? err.error : (_err$error = err.error) === null || _err$error === void 0 ? void 0 : _err$error.message) || JSON.stringify(err);
+};
+var handleError$1 = async (error, reject, options) => {
+  if (error instanceof await resolveResponse$1() && !(options === null || options === void 0 ? void 0 : options.noResolveJson))
+    error.json().then((err) => {
+      const status = error.status || 500;
+      const statusCode = (err === null || err === void 0 ? void 0 : err.statusCode) || status + "";
+      reject(new StorageApiError(_getErrorMessage$1(err), status, statusCode));
+    }).catch((err) => {
+      reject(new StorageUnknownError(_getErrorMessage$1(err), err));
+    });
+  else
+    reject(new StorageUnknownError(_getErrorMessage$1(error), error));
+};
+var _getRequestParams$1 = (method, options, parameters, body) => {
+  const params = {
+    method,
+    headers: (options === null || options === void 0 ? void 0 : options.headers) || {}
+  };
+  if (method === "GET" || !body)
+    return params;
+  if (isPlainObject$1(body)) {
+    params.headers = _objectSpread2({ "Content-Type": "application/json" }, options === null || options === void 0 ? void 0 : options.headers);
+    params.body = JSON.stringify(body);
+  } else
+    params.body = body;
+  if (options === null || options === void 0 ? void 0 : options.duplex)
+    params.duplex = options.duplex;
+  return _objectSpread2(_objectSpread2({}, params), parameters);
+};
+async function _handleRequest$1(fetcher, method, url, options, parameters, body) {
+  return new Promise((resolve, reject) => {
+    fetcher(url, _getRequestParams$1(method, options, parameters, body)).then((result) => {
+      if (!result.ok)
+        throw result;
+      if (options === null || options === void 0 ? void 0 : options.noResolveJson)
+        return result;
+      return result.json();
+    }).then((data) => resolve(data)).catch((error) => handleError$1(error, reject, options));
+  });
+}
+async function get(fetcher, url, options, parameters) {
+  return _handleRequest$1(fetcher, "GET", url, options, parameters);
+}
+async function post$1(fetcher, url, body, options, parameters) {
+  return _handleRequest$1(fetcher, "POST", url, options, parameters, body);
+}
+async function put(fetcher, url, body, options, parameters) {
+  return _handleRequest$1(fetcher, "PUT", url, options, parameters, body);
+}
+async function head(fetcher, url, options, parameters) {
+  return _handleRequest$1(fetcher, "HEAD", url, _objectSpread2(_objectSpread2({}, options), {}, { noResolveJson: true }), parameters);
+}
+async function remove(fetcher, url, body, options, parameters) {
+  return _handleRequest$1(fetcher, "DELETE", url, options, parameters, body);
+}
+var StreamDownloadBuilder = class {
+  constructor(downloadFn, shouldThrowOnError) {
+    this.downloadFn = downloadFn;
+    this.shouldThrowOnError = shouldThrowOnError;
+  }
+  then(onfulfilled, onrejected) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+  async execute() {
+    var _this = this;
+    try {
+      return {
+        data: (await _this.downloadFn()).body,
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+};
+var _Symbol$toStringTag;
+_Symbol$toStringTag = Symbol.toStringTag;
+var BlobDownloadBuilder = class {
+  constructor(downloadFn, shouldThrowOnError) {
+    this.downloadFn = downloadFn;
+    this.shouldThrowOnError = shouldThrowOnError;
+    this[_Symbol$toStringTag] = "BlobDownloadBuilder";
+    this.promise = null;
+  }
+  asStream() {
+    return new StreamDownloadBuilder(this.downloadFn, this.shouldThrowOnError);
+  }
+  then(onfulfilled, onrejected) {
+    return this.getPromise().then(onfulfilled, onrejected);
+  }
+  catch(onrejected) {
+    return this.getPromise().catch(onrejected);
+  }
+  finally(onfinally) {
+    return this.getPromise().finally(onfinally);
+  }
+  getPromise() {
+    if (!this.promise)
+      this.promise = this.execute();
+    return this.promise;
+  }
+  async execute() {
+    var _this = this;
+    try {
+      return {
+        data: await (await _this.downloadFn()).blob(),
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+};
+var DEFAULT_SEARCH_OPTIONS = {
+  limit: 100,
+  offset: 0,
+  sortBy: {
+    column: "name",
+    order: "asc"
+  }
+};
+var DEFAULT_FILE_OPTIONS = {
+  cacheControl: "3600",
+  contentType: "text/plain;charset=UTF-8",
+  upsert: false
+};
+var StorageFileApi = class {
+  constructor(url, headers = {}, bucketId, fetch$1) {
+    this.shouldThrowOnError = false;
+    this.url = url;
+    this.headers = headers;
+    this.bucketId = bucketId;
+    this.fetch = resolveFetch$1(fetch$1);
+  }
+  /**
+  * Enable throwing errors instead of returning them.
+  *
+  * @category File Buckets
+  */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /**
+  * Uploads a file to an existing bucket or replaces an existing file at the specified path with a new one.
+  *
+  * @param method HTTP method.
+  * @param path The relative file path. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
+  * @param fileBody The body of the file to be stored in the bucket.
+  */
+  async uploadOrUpdate(method, path, fileBody, fileOptions) {
+    var _this = this;
+    try {
+      let body;
+      const options = _objectSpread2(_objectSpread2({}, DEFAULT_FILE_OPTIONS), fileOptions);
+      let headers = _objectSpread2(_objectSpread2({}, _this.headers), method === "POST" && { "x-upsert": String(options.upsert) });
+      const metadata = options.metadata;
+      if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
+        body = new FormData();
+        body.append("cacheControl", options.cacheControl);
+        if (metadata)
+          body.append("metadata", _this.encodeMetadata(metadata));
+        body.append("", fileBody);
+      } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
+        body = fileBody;
+        if (!body.has("cacheControl"))
+          body.append("cacheControl", options.cacheControl);
+        if (metadata && !body.has("metadata"))
+          body.append("metadata", _this.encodeMetadata(metadata));
+      } else {
+        body = fileBody;
+        headers["cache-control"] = `max-age=${options.cacheControl}`;
+        headers["content-type"] = options.contentType;
+        if (metadata)
+          headers["x-metadata"] = _this.toBase64(_this.encodeMetadata(metadata));
+        if ((typeof ReadableStream !== "undefined" && body instanceof ReadableStream || body && typeof body === "object" && "pipe" in body && typeof body.pipe === "function") && !options.duplex)
+          options.duplex = "half";
+      }
+      if (fileOptions === null || fileOptions === void 0 ? void 0 : fileOptions.headers)
+        headers = _objectSpread2(_objectSpread2({}, headers), fileOptions.headers);
+      const cleanPath = _this._removeEmptyFolders(path);
+      const _path = _this._getFinalPath(cleanPath);
+      const data = await (method == "PUT" ? put : post$1)(_this.fetch, `${_this.url}/object/${_path}`, body, _objectSpread2({ headers }, (options === null || options === void 0 ? void 0 : options.duplex) ? { duplex: options.duplex } : {}));
+      return {
+        data: {
+          path: cleanPath,
+          id: data.Id,
+          fullPath: data.Key
+        },
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Uploads a file to an existing bucket.
+  *
+  * @category File Buckets
+  * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
+  * @param fileBody The body of the file to be stored in the bucket.
+  * @param fileOptions Optional file upload options including cacheControl, contentType, upsert, and metadata.
+  * @returns Promise with response containing file path, id, and fullPath or error
+  *
+  * @example Upload file
+  * ```js
+  * const avatarFile = event.target.files[0]
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .upload('public/avatar1.png', avatarFile, {
+  *     cacheControl: '3600',
+  *     upsert: false
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "path": "public/avatar1.png",
+  *     "fullPath": "avatars/public/avatar1.png"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  *
+  * @example Upload file using `ArrayBuffer` from base64 file data
+  * ```js
+  * import { decode } from 'base64-arraybuffer'
+  *
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .upload('public/avatar1.png', decode('base64FileData'), {
+  *     contentType: 'image/png'
+  *   })
+  * ```
+  */
+  async upload(path, fileBody, fileOptions) {
+    return this.uploadOrUpdate("POST", path, fileBody, fileOptions);
+  }
+  /**
+  * Upload a file with a token generated from `createSignedUploadUrl`.
+  *
+  * @category File Buckets
+  * @param path The file path, including the file name. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to upload.
+  * @param token The token generated from `createSignedUploadUrl`
+  * @param fileBody The body of the file to be stored in the bucket.
+  * @param fileOptions HTTP headers (cacheControl, contentType, etc.).
+  * **Note:** The `upsert` option has no effect here. To enable upsert behavior,
+  * pass `{ upsert: true }` when calling `createSignedUploadUrl()` instead.
+  * @returns Promise with response containing file path and fullPath or error
+  *
+  * @example Upload to a signed URL
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .uploadToSignedUrl('folder/cat.jpg', 'token-from-createSignedUploadUrl', file)
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "path": "folder/cat.jpg",
+  *     "fullPath": "avatars/folder/cat.jpg"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async uploadToSignedUrl(path, token, fileBody, fileOptions) {
+    var _this3 = this;
+    const cleanPath = _this3._removeEmptyFolders(path);
+    const _path = _this3._getFinalPath(cleanPath);
+    const url = new URL(_this3.url + `/object/upload/sign/${_path}`);
+    url.searchParams.set("token", token);
+    try {
+      let body;
+      const options = _objectSpread2({ upsert: DEFAULT_FILE_OPTIONS.upsert }, fileOptions);
+      const headers = _objectSpread2(_objectSpread2({}, _this3.headers), { "x-upsert": String(options.upsert) });
+      if (typeof Blob !== "undefined" && fileBody instanceof Blob) {
+        body = new FormData();
+        body.append("cacheControl", options.cacheControl);
+        body.append("", fileBody);
+      } else if (typeof FormData !== "undefined" && fileBody instanceof FormData) {
+        body = fileBody;
+        body.append("cacheControl", options.cacheControl);
+      } else {
+        body = fileBody;
+        headers["cache-control"] = `max-age=${options.cacheControl}`;
+        headers["content-type"] = options.contentType;
+      }
+      return {
+        data: {
+          path: cleanPath,
+          fullPath: (await put(_this3.fetch, url.toString(), body, { headers })).Key
+        },
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Creates a signed upload URL.
+  * Signed upload URLs can be used to upload files to the bucket without further authentication.
+  * They are valid for 2 hours.
+  *
+  * @category File Buckets
+  * @param path The file path, including the current file name. For example `folder/image.png`.
+  * @param options.upsert If set to true, allows the file to be overwritten if it already exists.
+  * @returns Promise with response containing signed upload URL, token, and path or error
+  *
+  * @example Create Signed Upload URL
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .createSignedUploadUrl('folder/cat.jpg')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "signedUrl": "https://example.supabase.co/storage/v1/object/upload/sign/avatars/folder/cat.jpg?token=<TOKEN>",
+  *     "path": "folder/cat.jpg",
+  *     "token": "<TOKEN>"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async createSignedUploadUrl(path, options) {
+    var _this4 = this;
+    try {
+      let _path = _this4._getFinalPath(path);
+      const headers = _objectSpread2({}, _this4.headers);
+      if (options === null || options === void 0 ? void 0 : options.upsert)
+        headers["x-upsert"] = "true";
+      const data = await post$1(_this4.fetch, `${_this4.url}/object/upload/sign/${_path}`, {}, { headers });
+      const url = new URL(_this4.url + data.url);
+      const token = url.searchParams.get("token");
+      if (!token)
+        throw new StorageError("No token returned by API");
+      return {
+        data: {
+          signedUrl: url.toString(),
+          path,
+          token
+        },
+        error: null
+      };
+    } catch (error) {
+      if (_this4.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Replaces an existing file at the specified path with a new one.
+  *
+  * @category File Buckets
+  * @param path The relative file path. Should be of the format `folder/subfolder/filename.png`. The bucket must already exist before attempting to update.
+  * @param fileBody The body of the file to be stored in the bucket.
+  * @param fileOptions Optional file upload options including cacheControl, contentType, upsert, and metadata.
+  * @returns Promise with response containing file path, id, and fullPath or error
+  *
+  * @example Update file
+  * ```js
+  * const avatarFile = event.target.files[0]
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .update('public/avatar1.png', avatarFile, {
+  *     cacheControl: '3600',
+  *     upsert: true
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "path": "public/avatar1.png",
+  *     "fullPath": "avatars/public/avatar1.png"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  *
+  * @example Update file using `ArrayBuffer` from base64 file data
+  * ```js
+  * import {decode} from 'base64-arraybuffer'
+  *
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .update('public/avatar1.png', decode('base64FileData'), {
+  *     contentType: 'image/png'
+  *   })
+  * ```
+  */
+  async update(path, fileBody, fileOptions) {
+    return this.uploadOrUpdate("PUT", path, fileBody, fileOptions);
+  }
+  /**
+  * Moves an existing file to a new path in the same bucket.
+  *
+  * @category File Buckets
+  * @param fromPath The original file path, including the current file name. For example `folder/image.png`.
+  * @param toPath The new file path, including the new file name. For example `folder/image-new.png`.
+  * @param options The destination options.
+  * @returns Promise with response containing success message or error
+  *
+  * @example Move file
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .move('public/avatar1.png', 'private/avatar2.png')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "message": "Successfully moved"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async move(fromPath, toPath, options) {
+    var _this6 = this;
+    try {
+      return {
+        data: await post$1(_this6.fetch, `${_this6.url}/object/move`, {
+          bucketId: _this6.bucketId,
+          sourceKey: fromPath,
+          destinationKey: toPath,
+          destinationBucket: options === null || options === void 0 ? void 0 : options.destinationBucket
+        }, { headers: _this6.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this6.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Copies an existing file to a new path in the same bucket.
+  *
+  * @category File Buckets
+  * @param fromPath The original file path, including the current file name. For example `folder/image.png`.
+  * @param toPath The new file path, including the new file name. For example `folder/image-copy.png`.
+  * @param options The destination options.
+  * @returns Promise with response containing copied file path or error
+  *
+  * @example Copy file
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .copy('public/avatar1.png', 'private/avatar2.png')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "path": "avatars/private/avatar2.png"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async copy(fromPath, toPath, options) {
+    var _this7 = this;
+    try {
+      return {
+        data: { path: (await post$1(_this7.fetch, `${_this7.url}/object/copy`, {
+          bucketId: _this7.bucketId,
+          sourceKey: fromPath,
+          destinationKey: toPath,
+          destinationBucket: options === null || options === void 0 ? void 0 : options.destinationBucket
+        }, { headers: _this7.headers })).Key },
+        error: null
+      };
+    } catch (error) {
+      if (_this7.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Creates a signed URL. Use a signed URL to share a file for a fixed amount of time.
+  *
+  * @category File Buckets
+  * @param path The file path, including the current file name. For example `folder/image.png`.
+  * @param expiresIn The number of seconds until the signed URL expires. For example, `60` for a URL which is valid for one minute.
+  * @param options.download triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
+  * @param options.transform Transform the asset before serving it to the client.
+  * @returns Promise with response containing signed URL or error
+  *
+  * @example Create Signed URL
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .createSignedUrl('folder/avatar1.png', 60)
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar1.png?token=<TOKEN>"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  *
+  * @example Create a signed URL for an asset with transformations
+  * ```js
+  * const { data } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .createSignedUrl('folder/avatar1.png', 60, {
+  *     transform: {
+  *       width: 100,
+  *       height: 100,
+  *     }
+  *   })
+  * ```
+  *
+  * @example Create a signed URL which triggers the download of the asset
+  * ```js
+  * const { data } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .createSignedUrl('folder/avatar1.png', 60, {
+  *     download: true,
+  *   })
+  * ```
+  */
+  async createSignedUrl(path, expiresIn, options) {
+    var _this8 = this;
+    try {
+      let _path = _this8._getFinalPath(path);
+      let data = await post$1(_this8.fetch, `${_this8.url}/object/sign/${_path}`, _objectSpread2({ expiresIn }, (options === null || options === void 0 ? void 0 : options.transform) ? { transform: options.transform } : {}), { headers: _this8.headers });
+      const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `&download=${options.download === true ? "" : options.download}` : "";
+      data = { signedUrl: encodeURI(`${_this8.url}${data.signedURL}${downloadQueryParam}`) };
+      return {
+        data,
+        error: null
+      };
+    } catch (error) {
+      if (_this8.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Creates multiple signed URLs. Use a signed URL to share a file for a fixed amount of time.
+  *
+  * @category File Buckets
+  * @param paths The file paths to be downloaded, including the current file names. For example `['folder/image.png', 'folder2/image2.png']`.
+  * @param expiresIn The number of seconds until the signed URLs expire. For example, `60` for URLs which are valid for one minute.
+  * @param options.download triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
+  * @returns Promise with response containing array of objects with signedUrl, path, and error or error
+  *
+  * @example Create Signed URLs
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .createSignedUrls(['folder/avatar1.png', 'folder/avatar2.png'], 60)
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": [
+  *     {
+  *       "error": null,
+  *       "path": "folder/avatar1.png",
+  *       "signedURL": "/object/sign/avatars/folder/avatar1.png?token=<TOKEN>",
+  *       "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar1.png?token=<TOKEN>"
+  *     },
+  *     {
+  *       "error": null,
+  *       "path": "folder/avatar2.png",
+  *       "signedURL": "/object/sign/avatars/folder/avatar2.png?token=<TOKEN>",
+  *       "signedUrl": "https://example.supabase.co/storage/v1/object/sign/avatars/folder/avatar2.png?token=<TOKEN>"
+  *     }
+  *   ],
+  *   "error": null
+  * }
+  * ```
+  */
+  async createSignedUrls(paths, expiresIn, options) {
+    var _this9 = this;
+    try {
+      const data = await post$1(_this9.fetch, `${_this9.url}/object/sign/${_this9.bucketId}`, {
+        expiresIn,
+        paths
+      }, { headers: _this9.headers });
+      const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `&download=${options.download === true ? "" : options.download}` : "";
+      return {
+        data: data.map((datum) => _objectSpread2(_objectSpread2({}, datum), {}, { signedUrl: datum.signedURL ? encodeURI(`${_this9.url}${datum.signedURL}${downloadQueryParam}`) : null })),
+        error: null
+      };
+    } catch (error) {
+      if (_this9.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Downloads a file from a private bucket. For public buckets, make a request to the URL returned from `getPublicUrl` instead.
+  *
+  * @category File Buckets
+  * @param path The full path and file name of the file to be downloaded. For example `folder/image.png`.
+  * @param options.transform Transform the asset before serving it to the client.
+  * @returns BlobDownloadBuilder instance for downloading the file
+  *
+  * @example Download file
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .download('folder/avatar1.png')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": <BLOB>,
+  *   "error": null
+  * }
+  * ```
+  *
+  * @example Download file with transformations
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .download('folder/avatar1.png', {
+  *     transform: {
+  *       width: 100,
+  *       height: 100,
+  *       quality: 80
+  *     }
+  *   })
+  * ```
+  */
+  download(path, options) {
+    const renderPath = typeof (options === null || options === void 0 ? void 0 : options.transform) !== "undefined" ? "render/image/authenticated" : "object";
+    const transformationQuery = this.transformOptsToQueryString((options === null || options === void 0 ? void 0 : options.transform) || {});
+    const queryString = transformationQuery ? `?${transformationQuery}` : "";
+    const _path = this._getFinalPath(path);
+    const downloadFn = () => get(this.fetch, `${this.url}/${renderPath}/${_path}${queryString}`, {
+      headers: this.headers,
+      noResolveJson: true
+    });
+    return new BlobDownloadBuilder(downloadFn, this.shouldThrowOnError);
+  }
+  /**
+  * Retrieves the details of an existing file.
+  *
+  * @category File Buckets
+  * @param path The file path, including the file name. For example `folder/image.png`.
+  * @returns Promise with response containing file metadata or error
+  *
+  * @example Get file info
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .info('folder/avatar1.png')
+  * ```
+  */
+  async info(path) {
+    var _this10 = this;
+    const _path = _this10._getFinalPath(path);
+    try {
+      return {
+        data: recursiveToCamel(await get(_this10.fetch, `${_this10.url}/object/info/${_path}`, { headers: _this10.headers })),
+        error: null
+      };
+    } catch (error) {
+      if (_this10.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Checks the existence of a file.
+  *
+  * @category File Buckets
+  * @param path The file path, including the file name. For example `folder/image.png`.
+  * @returns Promise with response containing boolean indicating file existence or error
+  *
+  * @example Check file existence
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .exists('folder/avatar1.png')
+  * ```
+  */
+  async exists(path) {
+    var _this11 = this;
+    const _path = _this11._getFinalPath(path);
+    try {
+      await head(_this11.fetch, `${_this11.url}/object/${_path}`, { headers: _this11.headers });
+      return {
+        data: true,
+        error: null
+      };
+    } catch (error) {
+      if (_this11.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error) && error instanceof StorageUnknownError) {
+        const originalError = error.originalError;
+        if ([400, 404].includes(originalError === null || originalError === void 0 ? void 0 : originalError.status))
+          return {
+            data: false,
+            error
+          };
+      }
+      throw error;
+    }
+  }
+  /**
+  * A simple convenience function to get the URL for an asset in a public bucket. If you do not want to use this function, you can construct the public URL by concatenating the bucket URL with the path to the asset.
+  * This function does not verify if the bucket is public. If a public URL is created for a bucket which is not public, you will not be able to download the asset.
+  *
+  * @category File Buckets
+  * @param path The path and name of the file to generate the public URL for. For example `folder/image.png`.
+  * @param options.download Triggers the file as a download if set to true. Set this parameter as the name of the file if you want to trigger the download with a different filename.
+  * @param options.transform Transform the asset before serving it to the client.
+  * @returns Object with public URL
+  *
+  * @example Returns the URL for an asset in a public bucket
+  * ```js
+  * const { data } = supabase
+  *   .storage
+  *   .from('public-bucket')
+  *   .getPublicUrl('folder/avatar1.png')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "publicUrl": "https://example.supabase.co/storage/v1/object/public/public-bucket/folder/avatar1.png"
+  *   }
+  * }
+  * ```
+  *
+  * @example Returns the URL for an asset in a public bucket with transformations
+  * ```js
+  * const { data } = supabase
+  *   .storage
+  *   .from('public-bucket')
+  *   .getPublicUrl('folder/avatar1.png', {
+  *     transform: {
+  *       width: 100,
+  *       height: 100,
+  *     }
+  *   })
+  * ```
+  *
+  * @example Returns the URL which triggers the download of an asset in a public bucket
+  * ```js
+  * const { data } = supabase
+  *   .storage
+  *   .from('public-bucket')
+  *   .getPublicUrl('folder/avatar1.png', {
+  *     download: true,
+  *   })
+  * ```
+  */
+  getPublicUrl(path, options) {
+    const _path = this._getFinalPath(path);
+    const _queryString = [];
+    const downloadQueryParam = (options === null || options === void 0 ? void 0 : options.download) ? `download=${options.download === true ? "" : options.download}` : "";
+    if (downloadQueryParam !== "")
+      _queryString.push(downloadQueryParam);
+    const renderPath = typeof (options === null || options === void 0 ? void 0 : options.transform) !== "undefined" ? "render/image" : "object";
+    const transformationQuery = this.transformOptsToQueryString((options === null || options === void 0 ? void 0 : options.transform) || {});
+    if (transformationQuery !== "")
+      _queryString.push(transformationQuery);
+    let queryString = _queryString.join("&");
+    if (queryString !== "")
+      queryString = `?${queryString}`;
+    return { data: { publicUrl: encodeURI(`${this.url}/${renderPath}/public/${_path}${queryString}`) } };
+  }
+  /**
+  * Deletes files within the same bucket
+  *
+  * @category File Buckets
+  * @param paths An array of files to delete, including the path and file name. For example [`'folder/image.png'`].
+  * @returns Promise with response containing array of deleted file objects or error
+  *
+  * @example Delete file
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .remove(['folder/avatar1.png'])
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": [],
+  *   "error": null
+  * }
+  * ```
+  */
+  async remove(paths) {
+    var _this12 = this;
+    try {
+      return {
+        data: await remove(_this12.fetch, `${_this12.url}/object/${_this12.bucketId}`, { prefixes: paths }, { headers: _this12.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this12.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Get file metadata
+  * @param id the file id to retrieve metadata
+  */
+  /**
+  * Update file metadata
+  * @param id the file id to update metadata
+  * @param meta the new file metadata
+  */
+  /**
+  * Lists all the files and folders within a path of the bucket.
+  *
+  * @category File Buckets
+  * @param path The folder path.
+  * @param options Search options including limit (defaults to 100), offset, sortBy, and search
+  * @param parameters Optional fetch parameters including signal for cancellation
+  * @returns Promise with response containing array of files or error
+  *
+  * @example List files in a bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .list('folder', {
+  *     limit: 100,
+  *     offset: 0,
+  *     sortBy: { column: 'name', order: 'asc' },
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": [
+  *     {
+  *       "name": "avatar1.png",
+  *       "id": "e668cf7f-821b-4a2f-9dce-7dfa5dd1cfd2",
+  *       "updated_at": "2024-05-22T23:06:05.580Z",
+  *       "created_at": "2024-05-22T23:04:34.443Z",
+  *       "last_accessed_at": "2024-05-22T23:04:34.443Z",
+  *       "metadata": {
+  *         "eTag": "\"c5e8c553235d9af30ef4f6e280790b92\"",
+  *         "size": 32175,
+  *         "mimetype": "image/png",
+  *         "cacheControl": "max-age=3600",
+  *         "lastModified": "2024-05-22T23:06:05.574Z",
+  *         "contentLength": 32175,
+  *         "httpStatusCode": 200
+  *       }
+  *     }
+  *   ],
+  *   "error": null
+  * }
+  * ```
+  *
+  * @example Search files in a bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .from('avatars')
+  *   .list('folder', {
+  *     limit: 100,
+  *     offset: 0,
+  *     sortBy: { column: 'name', order: 'asc' },
+  *     search: 'jon'
+  *   })
+  * ```
+  */
+  async list(path, options, parameters) {
+    var _this13 = this;
+    try {
+      const body = _objectSpread2(_objectSpread2(_objectSpread2({}, DEFAULT_SEARCH_OPTIONS), options), {}, { prefix: path || "" });
+      return {
+        data: await post$1(_this13.fetch, `${_this13.url}/object/list/${_this13.bucketId}`, body, { headers: _this13.headers }, parameters),
+        error: null
+      };
+    } catch (error) {
+      if (_this13.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * @experimental this method signature might change in the future
+  *
+  * @category File Buckets
+  * @param options search options
+  * @param parameters
+  */
+  async listV2(options, parameters) {
+    var _this14 = this;
+    try {
+      const body = _objectSpread2({}, options);
+      return {
+        data: await post$1(_this14.fetch, `${_this14.url}/object/list-v2/${_this14.bucketId}`, body, { headers: _this14.headers }, parameters),
+        error: null
+      };
+    } catch (error) {
+      if (_this14.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  encodeMetadata(metadata) {
+    return JSON.stringify(metadata);
+  }
+  toBase64(data) {
+    if (typeof Buffer !== "undefined")
+      return Buffer.from(data).toString("base64");
+    return btoa(data);
+  }
+  _getFinalPath(path) {
+    return `${this.bucketId}/${path.replace(/^\/+/, "")}`;
+  }
+  _removeEmptyFolders(path) {
+    return path.replace(/^\/|\/$/g, "").replace(/\/+/g, "/");
+  }
+  transformOptsToQueryString(transform) {
+    const params = [];
+    if (transform.width)
+      params.push(`width=${transform.width}`);
+    if (transform.height)
+      params.push(`height=${transform.height}`);
+    if (transform.resize)
+      params.push(`resize=${transform.resize}`);
+    if (transform.format)
+      params.push(`format=${transform.format}`);
+    if (transform.quality)
+      params.push(`quality=${transform.quality}`);
+    return params.join("&");
+  }
+};
+var version2 = "2.89.0";
+var DEFAULT_HEADERS$1 = { "X-Client-Info": `storage-js/${version2}` };
+var StorageBucketApi = class {
+  constructor(url, headers = {}, fetch$1, opts) {
+    this.shouldThrowOnError = false;
+    const baseUrl = new URL(url);
+    if (opts === null || opts === void 0 ? void 0 : opts.useNewHostname) {
+      if (/supabase\.(co|in|red)$/.test(baseUrl.hostname) && !baseUrl.hostname.includes("storage.supabase."))
+        baseUrl.hostname = baseUrl.hostname.replace("supabase.", "storage.supabase.");
+    }
+    this.url = baseUrl.href.replace(/\/$/, "");
+    this.headers = _objectSpread2(_objectSpread2({}, DEFAULT_HEADERS$1), headers);
+    this.fetch = resolveFetch$1(fetch$1);
+  }
+  /**
+  * Enable throwing errors instead of returning them.
+  *
+  * @category File Buckets
+  */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /**
+  * Retrieves the details of all Storage buckets within an existing project.
+  *
+  * @category File Buckets
+  * @param options Query parameters for listing buckets
+  * @param options.limit Maximum number of buckets to return
+  * @param options.offset Number of buckets to skip
+  * @param options.sortColumn Column to sort by ('id', 'name', 'created_at', 'updated_at')
+  * @param options.sortOrder Sort order ('asc' or 'desc')
+  * @param options.search Search term to filter bucket names
+  * @returns Promise with response containing array of buckets or error
+  *
+  * @example List buckets
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .listBuckets()
+  * ```
+  *
+  * @example List buckets with options
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .listBuckets({
+  *     limit: 10,
+  *     offset: 0,
+  *     sortColumn: 'created_at',
+  *     sortOrder: 'desc',
+  *     search: 'prod'
+  *   })
+  * ```
+  */
+  async listBuckets(options) {
+    var _this = this;
+    try {
+      const queryString = _this.listBucketOptionsToQueryString(options);
+      return {
+        data: await get(_this.fetch, `${_this.url}/bucket${queryString}`, { headers: _this.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Retrieves the details of an existing Storage bucket.
+  *
+  * @category File Buckets
+  * @param id The unique identifier of the bucket you would like to retrieve.
+  * @returns Promise with response containing bucket details or error
+  *
+  * @example Get bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .getBucket('avatars')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "id": "avatars",
+  *     "name": "avatars",
+  *     "owner": "",
+  *     "public": false,
+  *     "file_size_limit": 1024,
+  *     "allowed_mime_types": [
+  *       "image/png"
+  *     ],
+  *     "created_at": "2024-05-22T22:26:05.100Z",
+  *     "updated_at": "2024-05-22T22:26:05.100Z"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async getBucket(id) {
+    var _this2 = this;
+    try {
+      return {
+        data: await get(_this2.fetch, `${_this2.url}/bucket/${id}`, { headers: _this2.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this2.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Creates a new Storage bucket
+  *
+  * @category File Buckets
+  * @param id A unique identifier for the bucket you are creating.
+  * @param options.public The visibility of the bucket. Public buckets don't require an authorization token to download objects, but still require a valid token for all other operations. By default, buckets are private.
+  * @param options.fileSizeLimit specifies the max file size in bytes that can be uploaded to this bucket.
+  * The global file size limit takes precedence over this value.
+  * The default value is null, which doesn't set a per bucket file size limit.
+  * @param options.allowedMimeTypes specifies the allowed mime types that this bucket can accept during upload.
+  * The default value is null, which allows files with all mime types to be uploaded.
+  * Each mime type specified can be a wildcard, e.g. image/*, or a specific mime type, e.g. image/png.
+  * @param options.type (private-beta) specifies the bucket type. see `BucketType` for more details.
+  *   - default bucket type is `STANDARD`
+  * @returns Promise with response containing newly created bucket name or error
+  *
+  * @example Create bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .createBucket('avatars', {
+  *     public: false,
+  *     allowedMimeTypes: ['image/png'],
+  *     fileSizeLimit: 1024
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "name": "avatars"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async createBucket(id, options = { public: false }) {
+    var _this3 = this;
+    try {
+      return {
+        data: await post$1(_this3.fetch, `${_this3.url}/bucket`, {
+          id,
+          name: id,
+          type: options.type,
+          public: options.public,
+          file_size_limit: options.fileSizeLimit,
+          allowed_mime_types: options.allowedMimeTypes
+        }, { headers: _this3.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Updates a Storage bucket
+  *
+  * @category File Buckets
+  * @param id A unique identifier for the bucket you are updating.
+  * @param options.public The visibility of the bucket. Public buckets don't require an authorization token to download objects, but still require a valid token for all other operations.
+  * @param options.fileSizeLimit specifies the max file size in bytes that can be uploaded to this bucket.
+  * The global file size limit takes precedence over this value.
+  * The default value is null, which doesn't set a per bucket file size limit.
+  * @param options.allowedMimeTypes specifies the allowed mime types that this bucket can accept during upload.
+  * The default value is null, which allows files with all mime types to be uploaded.
+  * Each mime type specified can be a wildcard, e.g. image/*, or a specific mime type, e.g. image/png.
+  * @returns Promise with response containing success message or error
+  *
+  * @example Update bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .updateBucket('avatars', {
+  *     public: false,
+  *     allowedMimeTypes: ['image/png'],
+  *     fileSizeLimit: 1024
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "message": "Successfully updated"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async updateBucket(id, options) {
+    var _this4 = this;
+    try {
+      return {
+        data: await put(_this4.fetch, `${_this4.url}/bucket/${id}`, {
+          id,
+          name: id,
+          public: options.public,
+          file_size_limit: options.fileSizeLimit,
+          allowed_mime_types: options.allowedMimeTypes
+        }, { headers: _this4.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this4.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Removes all objects inside a single bucket.
+  *
+  * @category File Buckets
+  * @param id The unique identifier of the bucket you would like to empty.
+  * @returns Promise with success message or error
+  *
+  * @example Empty bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .emptyBucket('avatars')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "message": "Successfully emptied"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async emptyBucket(id) {
+    var _this5 = this;
+    try {
+      return {
+        data: await post$1(_this5.fetch, `${_this5.url}/bucket/${id}/empty`, {}, { headers: _this5.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this5.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * Deletes an existing bucket. A bucket can't be deleted with existing objects inside it.
+  * You must first `empty()` the bucket.
+  *
+  * @category File Buckets
+  * @param id The unique identifier of the bucket you would like to delete.
+  * @returns Promise with success message or error
+  *
+  * @example Delete bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .deleteBucket('avatars')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "message": "Successfully deleted"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async deleteBucket(id) {
+    var _this6 = this;
+    try {
+      return {
+        data: await remove(_this6.fetch, `${_this6.url}/bucket/${id}`, {}, { headers: _this6.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this6.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  listBucketOptionsToQueryString(options) {
+    const params = {};
+    if (options) {
+      if ("limit" in options)
+        params.limit = String(options.limit);
+      if ("offset" in options)
+        params.offset = String(options.offset);
+      if (options.search)
+        params.search = options.search;
+      if (options.sortColumn)
+        params.sortColumn = options.sortColumn;
+      if (options.sortOrder)
+        params.sortOrder = options.sortOrder;
+    }
+    return Object.keys(params).length > 0 ? "?" + new URLSearchParams(params).toString() : "";
+  }
+};
+var StorageAnalyticsClient = class {
+  /**
+  * @alpha
+  *
+  * Creates a new StorageAnalyticsClient instance
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @param url - The base URL for the storage API
+  * @param headers - HTTP headers to include in requests
+  * @param fetch - Optional custom fetch implementation
+  *
+  * @example
+  * ```typescript
+  * const client = new StorageAnalyticsClient(url, headers)
+  * ```
+  */
+  constructor(url, headers = {}, fetch$1) {
+    this.shouldThrowOnError = false;
+    this.url = url.replace(/\/$/, "");
+    this.headers = _objectSpread2(_objectSpread2({}, DEFAULT_HEADERS$1), headers);
+    this.fetch = resolveFetch$1(fetch$1);
+  }
+  /**
+  * @alpha
+  *
+  * Enable throwing errors instead of returning them in the response
+  * When enabled, failed operations will throw instead of returning { data: null, error }
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @returns This instance for method chaining
+  */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /**
+  * @alpha
+  *
+  * Creates a new analytics bucket using Iceberg tables
+  * Analytics buckets are optimized for analytical queries and data processing
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @param name A unique name for the bucket you are creating
+  * @returns Promise with response containing newly created analytics bucket or error
+  *
+  * @example Create analytics bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .analytics
+  *   .createBucket('analytics-data')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "name": "analytics-data",
+  *     "type": "ANALYTICS",
+  *     "format": "iceberg",
+  *     "created_at": "2024-05-22T22:26:05.100Z",
+  *     "updated_at": "2024-05-22T22:26:05.100Z"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async createBucket(name) {
+    var _this = this;
+    try {
+      return {
+        data: await post$1(_this.fetch, `${_this.url}/bucket`, { name }, { headers: _this.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * @alpha
+  *
+  * Retrieves the details of all Analytics Storage buckets within an existing project
+  * Only returns buckets of type 'ANALYTICS'
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @param options Query parameters for listing buckets
+  * @param options.limit Maximum number of buckets to return
+  * @param options.offset Number of buckets to skip
+  * @param options.sortColumn Column to sort by ('name', 'created_at', 'updated_at')
+  * @param options.sortOrder Sort order ('asc' or 'desc')
+  * @param options.search Search term to filter bucket names
+  * @returns Promise with response containing array of analytics buckets or error
+  *
+  * @example List analytics buckets
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .analytics
+  *   .listBuckets({
+  *     limit: 10,
+  *     offset: 0,
+  *     sortColumn: 'created_at',
+  *     sortOrder: 'desc'
+  *   })
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": [
+  *     {
+  *       "name": "analytics-data",
+  *       "type": "ANALYTICS",
+  *       "format": "iceberg",
+  *       "created_at": "2024-05-22T22:26:05.100Z",
+  *       "updated_at": "2024-05-22T22:26:05.100Z"
+  *     }
+  *   ],
+  *   "error": null
+  * }
+  * ```
+  */
+  async listBuckets(options) {
+    var _this2 = this;
+    try {
+      const queryParams = new URLSearchParams();
+      if ((options === null || options === void 0 ? void 0 : options.limit) !== void 0)
+        queryParams.set("limit", options.limit.toString());
+      if ((options === null || options === void 0 ? void 0 : options.offset) !== void 0)
+        queryParams.set("offset", options.offset.toString());
+      if (options === null || options === void 0 ? void 0 : options.sortColumn)
+        queryParams.set("sortColumn", options.sortColumn);
+      if (options === null || options === void 0 ? void 0 : options.sortOrder)
+        queryParams.set("sortOrder", options.sortOrder);
+      if (options === null || options === void 0 ? void 0 : options.search)
+        queryParams.set("search", options.search);
+      const queryString = queryParams.toString();
+      const url = queryString ? `${_this2.url}/bucket?${queryString}` : `${_this2.url}/bucket`;
+      return {
+        data: await get(_this2.fetch, url, { headers: _this2.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this2.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * @alpha
+  *
+  * Deletes an existing analytics bucket
+  * A bucket can't be deleted with existing objects inside it
+  * You must first empty the bucket before deletion
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @param bucketName The unique identifier of the bucket you would like to delete
+  * @returns Promise with response containing success message or error
+  *
+  * @example Delete analytics bucket
+  * ```js
+  * const { data, error } = await supabase
+  *   .storage
+  *   .analytics
+  *   .deleteBucket('analytics-data')
+  * ```
+  *
+  * Response:
+  * ```json
+  * {
+  *   "data": {
+  *     "message": "Successfully deleted"
+  *   },
+  *   "error": null
+  * }
+  * ```
+  */
+  async deleteBucket(bucketName) {
+    var _this3 = this;
+    try {
+      return {
+        data: await remove(_this3.fetch, `${_this3.url}/bucket/${bucketName}`, {}, { headers: _this3.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /**
+  * @alpha
+  *
+  * Get an Iceberg REST Catalog client configured for a specific analytics bucket
+  * Use this to perform advanced table and namespace operations within the bucket
+  * The returned client provides full access to the Apache Iceberg REST Catalog API
+  * with the Supabase `{ data, error }` pattern for consistent error handling on all operations.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @param bucketName - The name of the analytics bucket (warehouse) to connect to
+  * @returns The wrapped Iceberg catalog client
+  * @throws {StorageError} If the bucket name is invalid
+  *
+  * @example Get catalog and create table
+  * ```js
+  * // First, create an analytics bucket
+  * const { data: bucket, error: bucketError } = await supabase
+  *   .storage
+  *   .analytics
+  *   .createBucket('analytics-data')
+  *
+  * // Get the Iceberg catalog for that bucket
+  * const catalog = supabase.storage.analytics.from('analytics-data')
+  *
+  * // Create a namespace
+  * const { error: nsError } = await catalog.createNamespace({ namespace: ['default'] })
+  *
+  * // Create a table with schema
+  * const { data: tableMetadata, error: tableError } = await catalog.createTable(
+  *   { namespace: ['default'] },
+  *   {
+  *     name: 'events',
+  *     schema: {
+  *       type: 'struct',
+  *       fields: [
+  *         { id: 1, name: 'id', type: 'long', required: true },
+  *         { id: 2, name: 'timestamp', type: 'timestamp', required: true },
+  *         { id: 3, name: 'user_id', type: 'string', required: false }
+  *       ],
+  *       'schema-id': 0,
+  *       'identifier-field-ids': [1]
+  *     },
+  *     'partition-spec': {
+  *       'spec-id': 0,
+  *       fields: []
+  *     },
+  *     'write-order': {
+  *       'order-id': 0,
+  *       fields: []
+  *     },
+  *     properties: {
+  *       'write.format.default': 'parquet'
+  *     }
+  *   }
+  * )
+  * ```
+  *
+  * @example List tables in namespace
+  * ```js
+  * const catalog = supabase.storage.analytics.from('analytics-data')
+  *
+  * // List all tables in the default namespace
+  * const { data: tables, error: listError } = await catalog.listTables({ namespace: ['default'] })
+  * if (listError) {
+  *   if (listError.isNotFound()) {
+  *     console.log('Namespace not found')
+  *   }
+  *   return
+  * }
+  * console.log(tables) // [{ namespace: ['default'], name: 'events' }]
+  * ```
+  *
+  * @example Working with namespaces
+  * ```js
+  * const catalog = supabase.storage.analytics.from('analytics-data')
+  *
+  * // List all namespaces
+  * const { data: namespaces } = await catalog.listNamespaces()
+  *
+  * // Create namespace with properties
+  * await catalog.createNamespace(
+  *   { namespace: ['production'] },
+  *   { properties: { owner: 'data-team', env: 'prod' } }
+  * )
+  * ```
+  *
+  * @example Cleanup operations
+  * ```js
+  * const catalog = supabase.storage.analytics.from('analytics-data')
+  *
+  * // Drop table with purge option (removes all data)
+  * const { error: dropError } = await catalog.dropTable(
+  *   { namespace: ['default'], name: 'events' },
+  *   { purge: true }
+  * )
+  *
+  * if (dropError?.isNotFound()) {
+  *   console.log('Table does not exist')
+  * }
+  *
+  * // Drop namespace (must be empty)
+  * await catalog.dropNamespace({ namespace: ['default'] })
+  * ```
+  *
+  * @remarks
+  * This method provides a bridge between Supabase's bucket management and the standard
+  * Apache Iceberg REST Catalog API. The bucket name maps to the Iceberg warehouse parameter.
+  * All authentication and configuration is handled automatically using your Supabase credentials.
+  *
+  * **Error Handling**: Invalid bucket names throw immediately. All catalog
+  * operations return `{ data, error }` where errors are `IcebergError` instances from iceberg-js.
+  * Use helper methods like `error.isNotFound()` or check `error.status` for specific error handling.
+  * Use `.throwOnError()` on the analytics client if you prefer exceptions for catalog operations.
+  *
+  * **Cleanup Operations**: When using `dropTable`, the `purge: true` option permanently
+  * deletes all table data. Without it, the table is marked as deleted but data remains.
+  *
+  * **Library Dependency**: The returned catalog wraps `IcebergRestCatalog` from iceberg-js.
+  * For complete API documentation and advanced usage, refer to the
+  * [iceberg-js documentation](https://supabase.github.io/iceberg-js/).
+  */
+  from(bucketName) {
+    var _this4 = this;
+    if (!isValidBucketName(bucketName))
+      throw new StorageError("Invalid bucket name: File, folder, and bucket names must follow AWS object key naming guidelines and should avoid the use of any other characters.");
+    const catalog = new IcebergRestCatalog({
+      baseUrl: this.url,
+      catalogName: bucketName,
+      auth: {
+        type: "custom",
+        getHeaders: async () => _this4.headers
+      },
+      fetch: this.fetch
+    });
+    const shouldThrowOnError = this.shouldThrowOnError;
+    return new Proxy(catalog, { get(target, prop) {
+      const value = target[prop];
+      if (typeof value !== "function")
+        return value;
+      return async (...args) => {
+        try {
+          return {
+            data: await value.apply(target, args),
+            error: null
+          };
+        } catch (error) {
+          if (shouldThrowOnError)
+            throw error;
+          return {
+            data: null,
+            error
+          };
+        }
+      };
+    } });
+  }
+};
+var DEFAULT_HEADERS = {
+  "X-Client-Info": `storage-js/${version2}`,
+  "Content-Type": "application/json"
+};
+var StorageVectorsError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.__isStorageVectorsError = true;
+    this.name = "StorageVectorsError";
+  }
+};
+function isStorageVectorsError(error) {
+  return typeof error === "object" && error !== null && "__isStorageVectorsError" in error;
+}
+var StorageVectorsApiError = class extends StorageVectorsError {
+  constructor(message, status, statusCode) {
+    super(message);
+    this.name = "StorageVectorsApiError";
+    this.status = status;
+    this.statusCode = statusCode;
+  }
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      status: this.status,
+      statusCode: this.statusCode
+    };
+  }
+};
+var StorageVectorsUnknownError = class extends StorageVectorsError {
+  constructor(message, originalError) {
+    super(message);
+    this.name = "StorageVectorsUnknownError";
+    this.originalError = originalError;
+  }
+};
+var resolveFetch = (customFetch) => {
+  if (customFetch)
+    return (...args) => customFetch(...args);
+  return (...args) => fetch(...args);
+};
+var isPlainObject = (value) => {
+  if (typeof value !== "object" || value === null)
+    return false;
+  const prototype = Object.getPrototypeOf(value);
+  return (prototype === null || prototype === Object.prototype || Object.getPrototypeOf(prototype) === null) && !(Symbol.toStringTag in value) && !(Symbol.iterator in value);
+};
+var _getErrorMessage = (err) => err.msg || err.message || err.error_description || err.error || JSON.stringify(err);
+var handleError = async (error, reject, options) => {
+  if (error && typeof error === "object" && "status" in error && "ok" in error && typeof error.status === "number" && !(options === null || options === void 0 ? void 0 : options.noResolveJson)) {
+    const status = error.status || 500;
+    const responseError = error;
+    if (typeof responseError.json === "function")
+      responseError.json().then((err) => {
+        const statusCode = (err === null || err === void 0 ? void 0 : err.statusCode) || (err === null || err === void 0 ? void 0 : err.code) || status + "";
+        reject(new StorageVectorsApiError(_getErrorMessage(err), status, statusCode));
+      }).catch(() => {
+        const statusCode = status + "";
+        reject(new StorageVectorsApiError(responseError.statusText || `HTTP ${status} error`, status, statusCode));
+      });
+    else {
+      const statusCode = status + "";
+      reject(new StorageVectorsApiError(responseError.statusText || `HTTP ${status} error`, status, statusCode));
+    }
+  } else
+    reject(new StorageVectorsUnknownError(_getErrorMessage(error), error));
+};
+var _getRequestParams = (method, options, parameters, body) => {
+  const params = {
+    method,
+    headers: (options === null || options === void 0 ? void 0 : options.headers) || {}
+  };
+  if (method === "GET" || !body)
+    return params;
+  if (isPlainObject(body)) {
+    params.headers = _objectSpread2({ "Content-Type": "application/json" }, options === null || options === void 0 ? void 0 : options.headers);
+    params.body = JSON.stringify(body);
+  } else
+    params.body = body;
+  return _objectSpread2(_objectSpread2({}, params), parameters);
+};
+async function _handleRequest(fetcher, method, url, options, parameters, body) {
+  return new Promise((resolve, reject) => {
+    fetcher(url, _getRequestParams(method, options, parameters, body)).then((result) => {
+      if (!result.ok)
+        throw result;
+      if (options === null || options === void 0 ? void 0 : options.noResolveJson)
+        return result;
+      const contentType = result.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json"))
+        return {};
+      return result.json();
+    }).then((data) => resolve(data)).catch((error) => handleError(error, reject, options));
+  });
+}
+async function post(fetcher, url, body, options, parameters) {
+  return _handleRequest(fetcher, "POST", url, options, parameters, body);
+}
+var VectorIndexApi = class {
+  /** Creates a new VectorIndexApi instance */
+  constructor(url, headers = {}, fetch$1) {
+    this.shouldThrowOnError = false;
+    this.url = url.replace(/\/$/, "");
+    this.headers = _objectSpread2(_objectSpread2({}, DEFAULT_HEADERS), headers);
+    this.fetch = resolveFetch(fetch$1);
+  }
+  /** Enable throwing errors instead of returning them in the response */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /** Creates a new vector index within a bucket */
+  async createIndex(options) {
+    var _this = this;
+    try {
+      return {
+        data: await post(_this.fetch, `${_this.url}/CreateIndex`, options, { headers: _this.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Retrieves metadata for a specific vector index */
+  async getIndex(vectorBucketName, indexName) {
+    var _this2 = this;
+    try {
+      return {
+        data: await post(_this2.fetch, `${_this2.url}/GetIndex`, {
+          vectorBucketName,
+          indexName
+        }, { headers: _this2.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this2.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Lists vector indexes within a bucket with optional filtering and pagination */
+  async listIndexes(options) {
+    var _this3 = this;
+    try {
+      return {
+        data: await post(_this3.fetch, `${_this3.url}/ListIndexes`, options, { headers: _this3.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Deletes a vector index and all its data */
+  async deleteIndex(vectorBucketName, indexName) {
+    var _this4 = this;
+    try {
+      return {
+        data: await post(_this4.fetch, `${_this4.url}/DeleteIndex`, {
+          vectorBucketName,
+          indexName
+        }, { headers: _this4.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this4.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+};
+var VectorDataApi = class {
+  /** Creates a new VectorDataApi instance */
+  constructor(url, headers = {}, fetch$1) {
+    this.shouldThrowOnError = false;
+    this.url = url.replace(/\/$/, "");
+    this.headers = _objectSpread2(_objectSpread2({}, DEFAULT_HEADERS), headers);
+    this.fetch = resolveFetch(fetch$1);
+  }
+  /** Enable throwing errors instead of returning them in the response */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /** Inserts or updates vectors in batch (1-500 per request) */
+  async putVectors(options) {
+    var _this = this;
+    try {
+      if (options.vectors.length < 1 || options.vectors.length > 500)
+        throw new Error("Vector batch size must be between 1 and 500 items");
+      return {
+        data: await post(_this.fetch, `${_this.url}/PutVectors`, options, { headers: _this.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Retrieves vectors by their keys in batch */
+  async getVectors(options) {
+    var _this2 = this;
+    try {
+      return {
+        data: await post(_this2.fetch, `${_this2.url}/GetVectors`, options, { headers: _this2.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this2.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Lists vectors in an index with pagination */
+  async listVectors(options) {
+    var _this3 = this;
+    try {
+      if (options.segmentCount !== void 0) {
+        if (options.segmentCount < 1 || options.segmentCount > 16)
+          throw new Error("segmentCount must be between 1 and 16");
+        if (options.segmentIndex !== void 0) {
+          if (options.segmentIndex < 0 || options.segmentIndex >= options.segmentCount)
+            throw new Error(`segmentIndex must be between 0 and ${options.segmentCount - 1}`);
+        }
+      }
+      return {
+        data: await post(_this3.fetch, `${_this3.url}/ListVectors`, options, { headers: _this3.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Queries for similar vectors using approximate nearest neighbor search */
+  async queryVectors(options) {
+    var _this4 = this;
+    try {
+      return {
+        data: await post(_this4.fetch, `${_this4.url}/QueryVectors`, options, { headers: _this4.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this4.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Deletes vectors by their keys in batch (1-500 per request) */
+  async deleteVectors(options) {
+    var _this5 = this;
+    try {
+      if (options.keys.length < 1 || options.keys.length > 500)
+        throw new Error("Keys batch size must be between 1 and 500 items");
+      return {
+        data: await post(_this5.fetch, `${_this5.url}/DeleteVectors`, options, { headers: _this5.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this5.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+};
+var VectorBucketApi = class {
+  /** Creates a new VectorBucketApi instance */
+  constructor(url, headers = {}, fetch$1) {
+    this.shouldThrowOnError = false;
+    this.url = url.replace(/\/$/, "");
+    this.headers = _objectSpread2(_objectSpread2({}, DEFAULT_HEADERS), headers);
+    this.fetch = resolveFetch(fetch$1);
+  }
+  /** Enable throwing errors instead of returning them in the response */
+  throwOnError() {
+    this.shouldThrowOnError = true;
+    return this;
+  }
+  /** Creates a new vector bucket */
+  async createBucket(vectorBucketName) {
+    var _this = this;
+    try {
+      return {
+        data: await post(_this.fetch, `${_this.url}/CreateVectorBucket`, { vectorBucketName }, { headers: _this.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Retrieves metadata for a specific vector bucket */
+  async getBucket(vectorBucketName) {
+    var _this2 = this;
+    try {
+      return {
+        data: await post(_this2.fetch, `${_this2.url}/GetVectorBucket`, { vectorBucketName }, { headers: _this2.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this2.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Lists vector buckets with optional filtering and pagination */
+  async listBuckets(options = {}) {
+    var _this3 = this;
+    try {
+      return {
+        data: await post(_this3.fetch, `${_this3.url}/ListVectorBuckets`, options, { headers: _this3.headers }),
+        error: null
+      };
+    } catch (error) {
+      if (_this3.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+  /** Deletes a vector bucket (must be empty first) */
+  async deleteBucket(vectorBucketName) {
+    var _this4 = this;
+    try {
+      return {
+        data: await post(_this4.fetch, `${_this4.url}/DeleteVectorBucket`, { vectorBucketName }, { headers: _this4.headers }) || {},
+        error: null
+      };
+    } catch (error) {
+      if (_this4.shouldThrowOnError)
+        throw error;
+      if (isStorageVectorsError(error))
+        return {
+          data: null,
+          error
+        };
+      throw error;
+    }
+  }
+};
+var StorageVectorsClient = class extends VectorBucketApi {
+  /**
+  * @alpha
+  *
+  * Creates a StorageVectorsClient that can manage buckets, indexes, and vectors.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param url - Base URL of the Storage Vectors REST API.
+  * @param options.headers - Optional headers (for example `Authorization`) applied to every request.
+  * @param options.fetch - Optional custom `fetch` implementation for non-browser runtimes.
+  *
+  * @example
+  * ```typescript
+  * const client = new StorageVectorsClient(url, options)
+  * ```
+  */
+  constructor(url, options = {}) {
+    super(url, options.headers || {}, options.fetch);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Access operations for a specific vector bucket
+  * Returns a scoped client for index and vector operations within the bucket
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param vectorBucketName - Name of the vector bucket
+  * @returns Bucket-scoped client with index and vector operations
+  *
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * ```
+  */
+  from(vectorBucketName) {
+    return new VectorBucketScope(this.url, this.headers, vectorBucketName, this.fetch);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Creates a new vector bucket
+  * Vector buckets are containers for vector indexes and their data
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param vectorBucketName - Unique name for the vector bucket
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const { data, error } = await supabase
+  *   .storage
+  *   .vectors
+  *   .createBucket('embeddings-prod')
+  * ```
+  */
+  async createBucket(vectorBucketName) {
+    var _superprop_getCreateBucket = () => super.createBucket, _this = this;
+    return _superprop_getCreateBucket().call(_this, vectorBucketName);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Retrieves metadata for a specific vector bucket
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param vectorBucketName - Name of the vector bucket
+  * @returns Promise with bucket metadata or error
+  *
+  * @example
+  * ```typescript
+  * const { data, error } = await supabase
+  *   .storage
+  *   .vectors
+  *   .getBucket('embeddings-prod')
+  *
+  * console.log('Bucket created:', data?.vectorBucket.creationTime)
+  * ```
+  */
+  async getBucket(vectorBucketName) {
+    var _superprop_getGetBucket = () => super.getBucket, _this2 = this;
+    return _superprop_getGetBucket().call(_this2, vectorBucketName);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Lists all vector buckets with optional filtering and pagination
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Optional filters (prefix, maxResults, nextToken)
+  * @returns Promise with list of buckets or error
+  *
+  * @example
+  * ```typescript
+  * const { data, error } = await supabase
+  *   .storage
+  *   .vectors
+  *   .listBuckets({ prefix: 'embeddings-' })
+  *
+  * data?.vectorBuckets.forEach(bucket => {
+  *   console.log(bucket.vectorBucketName)
+  * })
+  * ```
+  */
+  async listBuckets(options = {}) {
+    var _superprop_getListBuckets = () => super.listBuckets, _this3 = this;
+    return _superprop_getListBuckets().call(_this3, options);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Deletes a vector bucket (bucket must be empty)
+  * All indexes must be deleted before deleting the bucket
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param vectorBucketName - Name of the vector bucket to delete
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const { data, error } = await supabase
+  *   .storage
+  *   .vectors
+  *   .deleteBucket('embeddings-old')
+  * ```
+  */
+  async deleteBucket(vectorBucketName) {
+    var _superprop_getDeleteBucket = () => super.deleteBucket, _this4 = this;
+    return _superprop_getDeleteBucket().call(_this4, vectorBucketName);
+  }
+};
+var VectorBucketScope = class extends VectorIndexApi {
+  /**
+  * @alpha
+  *
+  * Creates a helper that automatically scopes all index operations to the provided bucket.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * ```
+  */
+  constructor(url, headers, vectorBucketName, fetch$1) {
+    super(url, headers, fetch$1);
+    this.vectorBucketName = vectorBucketName;
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Creates a new vector index in this bucket
+  * Convenience method that automatically includes the bucket name
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Index configuration (vectorBucketName is automatically set)
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * await bucket.createIndex({
+  *   indexName: 'documents-openai',
+  *   dataType: 'float32',
+  *   dimension: 1536,
+  *   distanceMetric: 'cosine',
+  *   metadataConfiguration: {
+  *     nonFilterableMetadataKeys: ['raw_text']
+  *   }
+  * })
+  * ```
+  */
+  async createIndex(options) {
+    var _superprop_getCreateIndex = () => super.createIndex, _this5 = this;
+    return _superprop_getCreateIndex().call(_this5, _objectSpread2(_objectSpread2({}, options), {}, { vectorBucketName: _this5.vectorBucketName }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Lists indexes in this bucket
+  * Convenience method that automatically includes the bucket name
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Listing options (vectorBucketName is automatically set)
+  * @returns Promise with response containing indexes array and pagination token or error
+  *
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * const { data } = await bucket.listIndexes({ prefix: 'documents-' })
+  * ```
+  */
+  async listIndexes(options = {}) {
+    var _superprop_getListIndexes = () => super.listIndexes, _this6 = this;
+    return _superprop_getListIndexes().call(_this6, _objectSpread2(_objectSpread2({}, options), {}, { vectorBucketName: _this6.vectorBucketName }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Retrieves metadata for a specific index in this bucket
+  * Convenience method that automatically includes the bucket name
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param indexName - Name of the index to retrieve
+  * @returns Promise with index metadata or error
+  *
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * const { data } = await bucket.getIndex('documents-openai')
+  * console.log('Dimension:', data?.index.dimension)
+  * ```
+  */
+  async getIndex(indexName) {
+    var _superprop_getGetIndex = () => super.getIndex, _this7 = this;
+    return _superprop_getGetIndex().call(_this7, _this7.vectorBucketName, indexName);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Deletes an index from this bucket
+  * Convenience method that automatically includes the bucket name
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param indexName - Name of the index to delete
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const bucket = supabase.storage.vectors.from('embeddings-prod')
+  * await bucket.deleteIndex('old-index')
+  * ```
+  */
+  async deleteIndex(indexName) {
+    var _superprop_getDeleteIndex = () => super.deleteIndex, _this8 = this;
+    return _superprop_getDeleteIndex().call(_this8, _this8.vectorBucketName, indexName);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Access operations for a specific index within this bucket
+  * Returns a scoped client for vector data operations
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param indexName - Name of the index
+  * @returns Index-scoped client with vector data operations
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  *
+  * // Insert vectors
+  * await index.putVectors({
+  *   vectors: [
+  *     { key: 'doc-1', data: { float32: [...] }, metadata: { title: 'Intro' } }
+  *   ]
+  * })
+  *
+  * // Query similar vectors
+  * const { data } = await index.queryVectors({
+  *   queryVector: { float32: [...] },
+  *   topK: 5
+  * })
+  * ```
+  */
+  index(indexName) {
+    return new VectorIndexScope(this.url, this.headers, this.vectorBucketName, indexName, this.fetch);
+  }
+};
+var VectorIndexScope = class extends VectorDataApi {
+  /**
+  *
+  * @alpha
+  *
+  * Creates a helper that automatically scopes all vector operations to the provided bucket/index names.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * ```
+  */
+  constructor(url, headers, vectorBucketName, indexName, fetch$1) {
+    super(url, headers, fetch$1);
+    this.vectorBucketName = vectorBucketName;
+    this.indexName = indexName;
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Inserts or updates vectors in this index
+  * Convenience method that automatically includes bucket and index names
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Vector insertion options (bucket and index names automatically set)
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * await index.putVectors({
+  *   vectors: [
+  *     {
+  *       key: 'doc-1',
+  *       data: { float32: [0.1, 0.2, ...] },
+  *       metadata: { title: 'Introduction', page: 1 }
+  *     }
+  *   ]
+  * })
+  * ```
+  */
+  async putVectors(options) {
+    var _superprop_getPutVectors = () => super.putVectors, _this9 = this;
+    return _superprop_getPutVectors().call(_this9, _objectSpread2(_objectSpread2({}, options), {}, {
+      vectorBucketName: _this9.vectorBucketName,
+      indexName: _this9.indexName
+    }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Retrieves vectors by keys from this index
+  * Convenience method that automatically includes bucket and index names
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Vector retrieval options (bucket and index names automatically set)
+  * @returns Promise with response containing vectors array or error
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * const { data } = await index.getVectors({
+  *   keys: ['doc-1', 'doc-2'],
+  *   returnMetadata: true
+  * })
+  * ```
+  */
+  async getVectors(options) {
+    var _superprop_getGetVectors = () => super.getVectors, _this10 = this;
+    return _superprop_getGetVectors().call(_this10, _objectSpread2(_objectSpread2({}, options), {}, {
+      vectorBucketName: _this10.vectorBucketName,
+      indexName: _this10.indexName
+    }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Lists vectors in this index with pagination
+  * Convenience method that automatically includes bucket and index names
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Listing options (bucket and index names automatically set)
+  * @returns Promise with response containing vectors array and pagination token or error
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * const { data } = await index.listVectors({
+  *   maxResults: 500,
+  *   returnMetadata: true
+  * })
+  * ```
+  */
+  async listVectors(options = {}) {
+    var _superprop_getListVectors = () => super.listVectors, _this11 = this;
+    return _superprop_getListVectors().call(_this11, _objectSpread2(_objectSpread2({}, options), {}, {
+      vectorBucketName: _this11.vectorBucketName,
+      indexName: _this11.indexName
+    }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Queries for similar vectors in this index
+  * Convenience method that automatically includes bucket and index names
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Query options (bucket and index names automatically set)
+  * @returns Promise with response containing matches array of similar vectors ordered by distance or error
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * const { data } = await index.queryVectors({
+  *   queryVector: { float32: [0.1, 0.2, ...] },
+  *   topK: 5,
+  *   filter: { category: 'technical' },
+  *   returnDistance: true,
+  *   returnMetadata: true
+  * })
+  * ```
+  */
+  async queryVectors(options) {
+    var _superprop_getQueryVectors = () => super.queryVectors, _this12 = this;
+    return _superprop_getQueryVectors().call(_this12, _objectSpread2(_objectSpread2({}, options), {}, {
+      vectorBucketName: _this12.vectorBucketName,
+      indexName: _this12.indexName
+    }));
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Deletes vectors by keys from this index
+  * Convenience method that automatically includes bucket and index names
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @param options - Deletion options (bucket and index names automatically set)
+  * @returns Promise with empty response on success or error
+  *
+  * @example
+  * ```typescript
+  * const index = supabase.storage.vectors.from('embeddings-prod').index('documents-openai')
+  * await index.deleteVectors({
+  *   keys: ['doc-1', 'doc-2', 'doc-3']
+  * })
+  * ```
+  */
+  async deleteVectors(options) {
+    var _superprop_getDeleteVectors = () => super.deleteVectors, _this13 = this;
+    return _superprop_getDeleteVectors().call(_this13, _objectSpread2(_objectSpread2({}, options), {}, {
+      vectorBucketName: _this13.vectorBucketName,
+      indexName: _this13.indexName
+    }));
+  }
+};
+var StorageClient = class extends StorageBucketApi {
+  /**
+  * Creates a client for Storage buckets, files, analytics, and vectors.
+  *
+  * @category File Buckets
+  * @example
+  * ```ts
+  * import { StorageClient } from '@supabase/storage-js'
+  *
+  * const storage = new StorageClient('https://xyzcompany.supabase.co/storage/v1', {
+  *   apikey: 'public-anon-key',
+  * })
+  * const avatars = storage.from('avatars')
+  * ```
+  */
+  constructor(url, headers = {}, fetch$1, opts) {
+    super(url, headers, fetch$1, opts);
+  }
+  /**
+  * Perform file operation in a bucket.
+  *
+  * @category File Buckets
+  * @param id The bucket id to operate on.
+  *
+  * @example
+  * ```typescript
+  * const avatars = supabase.storage.from('avatars')
+  * ```
+  */
+  from(id) {
+    return new StorageFileApi(this.url, this.headers, id, this.fetch);
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Access vector storage operations.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Vector Buckets
+  * @returns A StorageVectorsClient instance configured with the current storage settings.
+  */
+  get vectors() {
+    return new StorageVectorsClient(this.url + "/vector", {
+      headers: this.headers,
+      fetch: this.fetch
+    });
+  }
+  /**
+  *
+  * @alpha
+  *
+  * Access analytics storage operations using Iceberg tables.
+  *
+  * **Public alpha:** This API is part of a public alpha release and may not be available to your account type.
+  *
+  * @category Analytics Buckets
+  * @returns A StorageAnalyticsClient instance configured with the current storage settings.
+  */
+  get analytics() {
+    return new StorageAnalyticsClient(this.url + "/iceberg", this.headers, this.fetch);
+  }
+};
+
+// node_modules/@supabase/supabase-js/dist/index.mjs
+var import_auth_js = __toESM(require_main3(), 1);
+__reExport(dist_exports, __toESM(require_main2(), 1));
+__reExport(dist_exports, __toESM(require_main3(), 1));
+var version3 = "2.89.0";
+var JS_ENV = "";
+if (typeof Deno !== "undefined")
+  JS_ENV = "deno";
+else if (typeof document !== "undefined")
+  JS_ENV = "web";
+else if (typeof navigator !== "undefined" && navigator.product === "ReactNative")
+  JS_ENV = "react-native";
+else
+  JS_ENV = "node";
+var DEFAULT_HEADERS2 = { "X-Client-Info": `supabase-js-${JS_ENV}/${version3}` };
+var DEFAULT_GLOBAL_OPTIONS = { headers: DEFAULT_HEADERS2 };
+var DEFAULT_DB_OPTIONS = { schema: "public" };
+var DEFAULT_AUTH_OPTIONS = {
+  autoRefreshToken: true,
+  persistSession: true,
+  detectSessionInUrl: true,
+  flowType: "implicit"
+};
+var DEFAULT_REALTIME_OPTIONS = {};
+function _typeof2(o) {
+  "@babel/helpers - typeof";
+  return _typeof2 = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o$1) {
+    return typeof o$1;
+  } : function(o$1) {
+    return o$1 && "function" == typeof Symbol && o$1.constructor === Symbol && o$1 !== Symbol.prototype ? "symbol" : typeof o$1;
+  }, _typeof2(o);
+}
+function toPrimitive2(t, r) {
+  if ("object" != _typeof2(t) || !t)
+    return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r || "default");
+    if ("object" != _typeof2(i))
+      return i;
+    throw new TypeError("@@toPrimitive must return a primitive value.");
+  }
+  return ("string" === r ? String : Number)(t);
+}
+function toPropertyKey2(t) {
+  var i = toPrimitive2(t, "string");
+  return "symbol" == _typeof2(i) ? i : i + "";
+}
+function _defineProperty2(e, r, t) {
+  return (r = toPropertyKey2(r)) in e ? Object.defineProperty(e, r, {
+    value: t,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  }) : e[r] = t, e;
+}
+function ownKeys3(e, r) {
+  var t = Object.keys(e);
+  if (Object.getOwnPropertySymbols) {
+    var o = Object.getOwnPropertySymbols(e);
+    r && (o = o.filter(function(r$1) {
+      return Object.getOwnPropertyDescriptor(e, r$1).enumerable;
+    })), t.push.apply(t, o);
+  }
+  return t;
+}
+function _objectSpread22(e) {
+  for (var r = 1; r < arguments.length; r++) {
+    var t = null != arguments[r] ? arguments[r] : {};
+    r % 2 ? ownKeys3(Object(t), true).forEach(function(r$1) {
+      _defineProperty2(e, r$1, t[r$1]);
+    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys3(Object(t)).forEach(function(r$1) {
+      Object.defineProperty(e, r$1, Object.getOwnPropertyDescriptor(t, r$1));
+    });
+  }
+  return e;
+}
+var resolveFetch2 = (customFetch) => {
+  if (customFetch)
+    return (...args) => customFetch(...args);
+  return (...args) => fetch(...args);
+};
+var resolveHeadersConstructor = () => {
+  return Headers;
+};
+var fetchWithAuth = (supabaseKey2, getAccessToken, customFetch) => {
+  const fetch$1 = resolveFetch2(customFetch);
+  const HeadersConstructor = resolveHeadersConstructor();
+  return async (input, init) => {
+    var _await$getAccessToken;
+    const accessToken = (_await$getAccessToken = await getAccessToken()) !== null && _await$getAccessToken !== void 0 ? _await$getAccessToken : supabaseKey2;
+    let headers = new HeadersConstructor(init === null || init === void 0 ? void 0 : init.headers);
+    if (!headers.has("apikey"))
+      headers.set("apikey", supabaseKey2);
+    if (!headers.has("Authorization"))
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    return fetch$1(input, _objectSpread22(_objectSpread22({}, init), {}, { headers }));
+  };
+};
+function ensureTrailingSlash(url) {
+  return url.endsWith("/") ? url : url + "/";
+}
+function applySettingDefaults(options, defaults) {
+  var _DEFAULT_GLOBAL_OPTIO, _globalOptions$header;
+  const { db: dbOptions, auth: authOptions, realtime: realtimeOptions, global: globalOptions } = options;
+  const { db: DEFAULT_DB_OPTIONS$1, auth: DEFAULT_AUTH_OPTIONS$1, realtime: DEFAULT_REALTIME_OPTIONS$1, global: DEFAULT_GLOBAL_OPTIONS$1 } = defaults;
+  const result = {
+    db: _objectSpread22(_objectSpread22({}, DEFAULT_DB_OPTIONS$1), dbOptions),
+    auth: _objectSpread22(_objectSpread22({}, DEFAULT_AUTH_OPTIONS$1), authOptions),
+    realtime: _objectSpread22(_objectSpread22({}, DEFAULT_REALTIME_OPTIONS$1), realtimeOptions),
+    storage: {},
+    global: _objectSpread22(_objectSpread22(_objectSpread22({}, DEFAULT_GLOBAL_OPTIONS$1), globalOptions), {}, { headers: _objectSpread22(_objectSpread22({}, (_DEFAULT_GLOBAL_OPTIO = DEFAULT_GLOBAL_OPTIONS$1 === null || DEFAULT_GLOBAL_OPTIONS$1 === void 0 ? void 0 : DEFAULT_GLOBAL_OPTIONS$1.headers) !== null && _DEFAULT_GLOBAL_OPTIO !== void 0 ? _DEFAULT_GLOBAL_OPTIO : {}), (_globalOptions$header = globalOptions === null || globalOptions === void 0 ? void 0 : globalOptions.headers) !== null && _globalOptions$header !== void 0 ? _globalOptions$header : {}) }),
+    accessToken: async () => ""
+  };
+  if (options.accessToken)
+    result.accessToken = options.accessToken;
+  else
+    delete result.accessToken;
+  return result;
+}
+function validateSupabaseUrl(supabaseUrl2) {
+  const trimmedUrl = supabaseUrl2 === null || supabaseUrl2 === void 0 ? void 0 : supabaseUrl2.trim();
+  if (!trimmedUrl)
+    throw new Error("supabaseUrl is required.");
+  if (!trimmedUrl.match(/^https?:\/\//i))
+    throw new Error("Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL.");
+  try {
+    return new URL(ensureTrailingSlash(trimmedUrl));
+  } catch (_unused) {
+    throw Error("Invalid supabaseUrl: Provided URL is malformed.");
+  }
+}
+var SupabaseAuthClient = class extends import_auth_js.AuthClient {
+  constructor(options) {
+    super(options);
+  }
+};
+var SupabaseClient = class {
+  /**
+  * Create a new client for use in the browser.
+  * @param supabaseUrl The unique Supabase URL which is supplied when you create a new project in your project dashboard.
+  * @param supabaseKey The unique Supabase Key which is supplied when you create a new project in your project dashboard.
+  * @param options.db.schema You can switch in between schemas. The schema needs to be on the list of exposed schemas inside Supabase.
+  * @param options.auth.autoRefreshToken Set to "true" if you want to automatically refresh the token before expiring.
+  * @param options.auth.persistSession Set to "true" if you want to automatically save the user session into local storage.
+  * @param options.auth.detectSessionInUrl Set to "true" if you want to automatically detects OAuth grants in the URL and signs in the user.
+  * @param options.realtime Options passed along to realtime-js constructor.
+  * @param options.storage Options passed along to the storage-js constructor.
+  * @param options.global.fetch A custom fetch implementation.
+  * @param options.global.headers Any additional headers to send with each network request.
+  * @example
+  * ```ts
+  * import { createClient } from '@supabase/supabase-js'
+  *
+  * const supabase = createClient('https://xyzcompany.supabase.co', 'public-anon-key')
+  * const { data } = await supabase.from('profiles').select('*')
+  * ```
+  */
+  constructor(supabaseUrl2, supabaseKey2, options) {
+    var _settings$auth$storag, _settings$global$head;
+    this.supabaseUrl = supabaseUrl2;
+    this.supabaseKey = supabaseKey2;
+    const baseUrl = validateSupabaseUrl(supabaseUrl2);
+    if (!supabaseKey2)
+      throw new Error("supabaseKey is required.");
+    this.realtimeUrl = new URL("realtime/v1", baseUrl);
+    this.realtimeUrl.protocol = this.realtimeUrl.protocol.replace("http", "ws");
+    this.authUrl = new URL("auth/v1", baseUrl);
+    this.storageUrl = new URL("storage/v1", baseUrl);
+    this.functionsUrl = new URL("functions/v1", baseUrl);
+    const defaultStorageKey = `sb-${baseUrl.hostname.split(".")[0]}-auth-token`;
+    const DEFAULTS = {
+      db: DEFAULT_DB_OPTIONS,
+      realtime: DEFAULT_REALTIME_OPTIONS,
+      auth: _objectSpread22(_objectSpread22({}, DEFAULT_AUTH_OPTIONS), {}, { storageKey: defaultStorageKey }),
+      global: DEFAULT_GLOBAL_OPTIONS
+    };
+    const settings = applySettingDefaults(options !== null && options !== void 0 ? options : {}, DEFAULTS);
+    this.storageKey = (_settings$auth$storag = settings.auth.storageKey) !== null && _settings$auth$storag !== void 0 ? _settings$auth$storag : "";
+    this.headers = (_settings$global$head = settings.global.headers) !== null && _settings$global$head !== void 0 ? _settings$global$head : {};
+    if (!settings.accessToken) {
+      var _settings$auth;
+      this.auth = this._initSupabaseAuthClient((_settings$auth = settings.auth) !== null && _settings$auth !== void 0 ? _settings$auth : {}, this.headers, settings.global.fetch);
+    } else {
+      this.accessToken = settings.accessToken;
+      this.auth = new Proxy({}, { get: (_, prop) => {
+        throw new Error(`@supabase/supabase-js: Supabase Client is configured with the accessToken option, accessing supabase.auth.${String(prop)} is not possible`);
+      } });
+    }
+    this.fetch = fetchWithAuth(supabaseKey2, this._getAccessToken.bind(this), settings.global.fetch);
+    this.realtime = this._initRealtimeClient(_objectSpread22({
+      headers: this.headers,
+      accessToken: this._getAccessToken.bind(this)
+    }, settings.realtime));
+    if (this.accessToken)
+      this.accessToken().then((token) => this.realtime.setAuth(token)).catch((e) => console.warn("Failed to set initial Realtime auth token:", e));
+    this.rest = new PostgrestClient(new URL("rest/v1", baseUrl).href, {
+      headers: this.headers,
+      schema: settings.db.schema,
+      fetch: this.fetch
+    });
+    this.storage = new StorageClient(this.storageUrl.href, this.headers, this.fetch, options === null || options === void 0 ? void 0 : options.storage);
+    if (!settings.accessToken)
+      this._listenForAuthEvents();
+  }
+  /**
+  * Supabase Functions allows you to deploy and invoke edge functions.
+  */
+  get functions() {
+    return new import_functions_js.FunctionsClient(this.functionsUrl.href, {
+      headers: this.headers,
+      customFetch: this.fetch
+    });
+  }
+  /**
+  * Perform a query on a table or a view.
+  *
+  * @param relation - The table or view name to query
+  */
+  from(relation) {
+    return this.rest.from(relation);
+  }
+  /**
+  * Select a schema to query or perform an function (rpc) call.
+  *
+  * The schema needs to be on the list of exposed schemas inside Supabase.
+  *
+  * @param schema - The schema to query
+  */
+  schema(schema) {
+    return this.rest.schema(schema);
+  }
+  /**
+  * Perform a function call.
+  *
+  * @param fn - The function name to call
+  * @param args - The arguments to pass to the function call
+  * @param options - Named parameters
+  * @param options.head - When set to `true`, `data` will not be returned.
+  * Useful if you only need the count.
+  * @param options.get - When set to `true`, the function will be called with
+  * read-only access mode.
+  * @param options.count - Count algorithm to use to count rows returned by the
+  * function. Only applicable for [set-returning
+  * functions](https://www.postgresql.org/docs/current/functions-srf.html).
+  *
+  * `"exact"`: Exact but slow count algorithm. Performs a `COUNT(*)` under the
+  * hood.
+  *
+  * `"planned"`: Approximated but fast count algorithm. Uses the Postgres
+  * statistics under the hood.
+  *
+  * `"estimated"`: Uses exact count for low numbers and planned count for high
+  * numbers.
+  */
+  rpc(fn, args = {}, options = {
+    head: false,
+    get: false,
+    count: void 0
+  }) {
+    return this.rest.rpc(fn, args, options);
+  }
+  /**
+  * Creates a Realtime channel with Broadcast, Presence, and Postgres Changes.
+  *
+  * @param {string} name - The name of the Realtime channel.
+  * @param {Object} opts - The options to pass to the Realtime channel.
+  *
+  */
+  channel(name, opts = { config: {} }) {
+    return this.realtime.channel(name, opts);
+  }
+  /**
+  * Returns all Realtime channels.
+  */
+  getChannels() {
+    return this.realtime.getChannels();
+  }
+  /**
+  * Unsubscribes and removes Realtime channel from Realtime client.
+  *
+  * @param {RealtimeChannel} channel - The name of the Realtime channel.
+  *
+  */
+  removeChannel(channel) {
+    return this.realtime.removeChannel(channel);
+  }
+  /**
+  * Unsubscribes and removes all Realtime channels from Realtime client.
+  */
+  removeAllChannels() {
+    return this.realtime.removeAllChannels();
+  }
+  async _getAccessToken() {
+    var _this = this;
+    var _data$session$access_, _data$session;
+    if (_this.accessToken)
+      return await _this.accessToken();
+    const { data } = await _this.auth.getSession();
+    return (_data$session$access_ = (_data$session = data.session) === null || _data$session === void 0 ? void 0 : _data$session.access_token) !== null && _data$session$access_ !== void 0 ? _data$session$access_ : _this.supabaseKey;
+  }
+  _initSupabaseAuthClient({ autoRefreshToken, persistSession, detectSessionInUrl, storage, userStorage, storageKey, flowType, lock, debug, throwOnError }, headers, fetch$1) {
+    const authHeaders = {
+      Authorization: `Bearer ${this.supabaseKey}`,
+      apikey: `${this.supabaseKey}`
+    };
+    return new SupabaseAuthClient({
+      url: this.authUrl.href,
+      headers: _objectSpread22(_objectSpread22({}, authHeaders), headers),
+      storageKey,
+      autoRefreshToken,
+      persistSession,
+      detectSessionInUrl,
+      storage,
+      userStorage,
+      flowType,
+      lock,
+      debug,
+      throwOnError,
+      fetch: fetch$1,
+      hasCustomAuthorizationHeader: Object.keys(this.headers).some((key) => key.toLowerCase() === "authorization")
+    });
+  }
+  _initRealtimeClient(options) {
+    return new import_realtime_js.RealtimeClient(this.realtimeUrl.href, _objectSpread22(_objectSpread22({}, options), {}, { params: _objectSpread22(_objectSpread22({}, { apikey: this.supabaseKey }), options === null || options === void 0 ? void 0 : options.params) }));
+  }
+  _listenForAuthEvents() {
+    return this.auth.onAuthStateChange((event, session) => {
+      this._handleTokenChanged(event, "CLIENT", session === null || session === void 0 ? void 0 : session.access_token);
+    });
+  }
+  _handleTokenChanged(event, source, token) {
+    if ((event === "TOKEN_REFRESHED" || event === "SIGNED_IN") && this.changedAccessToken !== token) {
+      this.changedAccessToken = token;
+      this.realtime.setAuth(token);
+    } else if (event === "SIGNED_OUT") {
+      this.realtime.setAuth();
+      if (source == "STORAGE")
+        this.auth.signOut();
+      this.changedAccessToken = void 0;
+    }
+  }
+};
+var createClient = (supabaseUrl2, supabaseKey2, options) => {
+  return new SupabaseClient(supabaseUrl2, supabaseKey2, options);
+};
+function shouldShowDeprecationWarning() {
+  if (typeof window !== "undefined")
+    return false;
+  if (typeof process === "undefined")
+    return false;
+  const processVersion = process["version"];
+  if (processVersion === void 0 || processVersion === null)
+    return false;
+  const versionMatch = processVersion.match(/^v(\d+)\./);
+  if (!versionMatch)
+    return false;
+  return parseInt(versionMatch[1], 10) <= 18;
+}
+if (shouldShowDeprecationWarning())
+  console.warn("\u26A0\uFE0F  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217");
 
 // src/workers/bulkMasterWorker.ts
 var supabaseUrl = process.env.SUPABASE_URL;
