@@ -71572,27 +71572,41 @@ async function requireSubscriptionAndUsage({
 }
 
 // src/workers/bulkItemWorker.ts
+var ANSI_REGEX2 = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+function stripAnsiAndTrim(v) {
+  if (v == null)
+    return "";
+  return String(v).replace(ANSI_REGEX2, "").trim();
+}
 var supabaseUrl = process.env.SUPABASE_URL;
 var supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-var SERVICE_API_KEY = process.env.SERVICE_API_KEY || process.env.PIPELINE_INTERNAL_SECRET || process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+var RAW_PIPELINE_SECRET = process.env.PIPELINE_INTERNAL_SECRET || "";
+var RAW_SERVICE_API_KEY = process.env.SERVICE_API_KEY || "";
+var RAW_NEXT_PUBLIC_SERVICE_API_KEY = process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+var PIPELINE_INTERNAL_SECRET = stripAnsiAndTrim(RAW_PIPELINE_SECRET);
+var SERVICE_API_KEY = stripAnsiAndTrim(
+  PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY
+);
 var internalApiBase = process.env.INTERNAL_API_BASE || "";
 if (!supabaseUrl || !supabaseKey) {
-  console.error(
-    "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers"
-  );
+  console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
   process.exit(1);
 }
 if (!internalApiBase) {
-  console.error(
-    "[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart."
-  );
+  console.error("[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart.");
   process.exit(1);
 }
 if (!SERVICE_API_KEY) {
   console.error(
-    "[bulk-item] FATAL: service secret missing. Set SERVICE_API_KEY or PIPELINE_INTERNAL_SECRET and restart."
+    "[bulk-item] FATAL: service secret missing. Set PIPELINE_INTERNAL_SECRET (preferred) or SERVICE_API_KEY and restart."
   );
   process.exit(1);
+}
+if (process.env.DEBUG_BULK) {
+  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET raw len:", String(RAW_PIPELINE_SECRET || "").length);
+  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET clean len:", PIPELINE_INTERNAL_SECRET.length);
+  console.log("[bulk-item][debug] SERVICE_API_KEY raw len:", String(RAW_SERVICE_API_KEY || "").length);
+  console.log("[bulk-item][debug] SERVICE_API_KEY clean len:", SERVICE_API_KEY.length);
 }
 var supabase = createClient(supabaseUrl, supabaseKey);
 async function markItem(id, updates) {
@@ -71618,10 +71632,7 @@ function serviceHeaders() {
   if (SERVICE_API_KEY) {
     h["x-service-api-key"] = SERVICE_API_KEY;
     if (process.env.DEBUG_BULK) {
-      console.log(
-        "[bulk-item][debug] will send header 'x-service-api-key' length:",
-        SERVICE_API_KEY.length
-      );
+      console.log("[bulk-item][debug] will send header 'x-service-api-key' length:", SERVICE_API_KEY.length);
     }
   } else {
     if (process.env.DEBUG_BULK) {
@@ -71679,10 +71690,9 @@ async function startIngestAndReturnIngestionId(itemUrl) {
 async function pollForIngestionJob(jobId, timeoutMs = 12e4, intervalMs = 3e3) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await (0, import_node_fetch.default)(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await (0, import_node_fetch.default)(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
+      headers: serviceHeaders()
+    });
     const j2 = await res.json().catch(() => null);
     if (res.status === 200) {
       return j2?.ingestionId ?? j2?.id ?? null;
@@ -71721,10 +71731,9 @@ async function startPipeline(ingestionId, steps) {
 async function pollPipeline(runId, timeoutMs = 18e4, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await (0, import_node_fetch.default)(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await (0, import_node_fetch.default)(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
+      headers: serviceHeaders()
+    });
     const j2 = await res.json().catch(() => null);
     if (res.ok && j2?.run) {
       const status = j2.run.status;
@@ -71774,7 +71783,6 @@ async function handleJob(job) {
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantId ?? void 0,
-      // FIX: do not use bulkJob.options.source_tenant
       feature: "ingestion",
       increment: 1,
       userEmail: bulkJob.options?.requested_by_email ?? void 0
