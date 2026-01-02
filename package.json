@@ -15,7 +15,9 @@
     "worker:start": "node dist/worker/worker.js",
     "start:worker:master": "node ./dist/workers/bulkMasterWorker.js",
     "start:worker:item": "node ./dist/workers/bulkItemWorker.js",
-    "start:workers": "npm run start:worker:master & npm run start:worker:item"
+    "start:workers": "npm run start:worker:master & npm run start:worker:item",
+    "start:bulk-master": "node scripts/start-bulk-master.js",
+    "start:bulk-item": "node scripts/start-bulk-item.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.28.1",
