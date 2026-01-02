@@ -12,11 +12,27 @@ import Redis from "ioredis";
 let _redis: Redis | null = null;
 const queues: Record<string, any> = {};
 
+/**
+ * Strip ANSI escape codes and trim whitespace/newlines.
+ * This prevents env contamination (e.g. "\x1b[32mrediss://...\x1b[39m") from breaking ioredis URL parsing.
+ */
+function sanitizeEnv(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  return String(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .trim();
+}
+
 function getRedis() {
   if (_redis) return _redis;
-  const url = process.env.REDIS_URL;
+
+  const url = sanitizeEnv(process.env.REDIS_URL);
   if (!url) throw new Error("REDIS_URL not set for BullMQ queue helper");
-  _redis = new Redis(url);
+
+  // BullMQ requires maxRetriesPerRequest=null in ioredis options.
+  _redis = new Redis(url, { maxRetriesPerRequest: null });
+
   return _redis;
 }
 
