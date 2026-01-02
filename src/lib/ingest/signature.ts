@@ -5,9 +5,22 @@
 
 import crypto from "crypto";
 
+/**
+ * Normalize secrets coming from env managers:
+ * - trims whitespace/newlines
+ * - removes accidental ANSI escape codes (rare but observed)
+ */
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
+function cleanSecret(secret: string): string {
+  return String(secret || "").replace(ANSI_REGEX, "").trim();
+}
+
 export function signPayload(payload: string, secret: string): string {
-  if (!secret || !payload) return "";
-  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  const s = cleanSecret(secret);
+  if (!s || !payload) return "";
+  return crypto.createHmac("sha256", s).update(payload).digest("hex");
 }
 
 /**
@@ -29,16 +42,19 @@ function signatureToBuffer(sig?: string | null): Buffer | null {
   // try hex
   try {
     if (/^[0-9a-fA-F]+$/.test(sig)) {
+      // hex must have even length
+      if (sig.length % 2 !== 0) return null;
       return Buffer.from(sig, "hex");
     }
-  } catch (err) {
+  } catch {
     // ignore
   }
 
-  // try base64
+  // try base64 (only accept if it decodes to 32 bytes for sha256)
   try {
-    return Buffer.from(sig, "base64");
-  } catch (err) {
+    const buf = Buffer.from(sig, "base64");
+    if (buf.length === 32) return buf;
+  } catch {
     // ignore
   }
 
@@ -50,10 +66,12 @@ export function verifySignature(
   signature: string | undefined | null,
   secret: string
 ): boolean {
-  if (!secret) return false;
+  const s = cleanSecret(secret);
+  if (!s) return false;
   if (!signature) return false;
+
   try {
-    const expectedHex = signPayload(payload, secret);
+    const expectedHex = signPayload(payload, s);
     const expectedBuf = Buffer.from(expectedHex, "hex");
 
     const actualBuf = signatureToBuffer(signature);
@@ -63,7 +81,7 @@ export function verifySignature(
     if (expectedBuf.length !== actualBuf.length) return false;
 
     return crypto.timingSafeEqual(expectedBuf, actualBuf);
-  } catch (err) {
+  } catch {
     return false;
   }
 }
