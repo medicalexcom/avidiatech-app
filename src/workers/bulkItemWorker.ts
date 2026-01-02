@@ -11,6 +11,12 @@
 // - Sanitize internal service secret before sending it in x-service-api-key header.
 //   We have observed env contamination with ANSI escape codes and/or whitespace/newlines which
 //   caused middleware to return 401 {"error":"unauthorized"}.
+//
+// NEW (2026-01-02):
+// - On ingest polling timeout, auto-retry by re-POSTing /api/v1/ingest once (configurable) and
+//   include rich diagnostics in bulk_job_items.last_error.
+// - Persist ingestionId returned from polling if available.
+// - Increase default polling timeout to allow slower ingestion/callback paths.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -44,6 +50,12 @@ const SERVICE_API_KEY = stripAnsiAndTrim(
 // INTERNAL_API_BASE is required for the worker to call internal endpoints
 const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
 
+// Bulk ingest tuning
+const INGEST_POLL_TIMEOUT_MS = parseInt(process.env.BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
+const INGEST_POLL_INTERVAL_MS = parseInt(process.env.BULK_INGEST_POLL_INTERVAL_MS || "3000", 10);
+const INGEST_RETRY_ON_TIMEOUT = (process.env.BULK_INGEST_RETRY_ON_TIMEOUT || "true").toLowerCase() !== "false";
+const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env.BULK_INGEST_RETRY_MAX || "1", 10)); // number of re-POST attempts after timeout
+
 // Basic required env checks (fail-fast)
 if (!supabaseUrl || !supabaseKey) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
@@ -65,6 +77,9 @@ if (process.env.DEBUG_BULK) {
   console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET clean len:", PIPELINE_INTERNAL_SECRET.length);
   console.log("[bulk-item][debug] SERVICE_API_KEY raw len:", String(RAW_SERVICE_API_KEY || "").length);
   console.log("[bulk-item][debug] SERVICE_API_KEY clean len:", SERVICE_API_KEY.length);
+  console.log("[bulk-item][debug] INGEST_POLL_TIMEOUT_MS:", INGEST_POLL_TIMEOUT_MS);
+  console.log("[bulk-item][debug] INGEST_RETRY_ON_TIMEOUT:", INGEST_RETRY_ON_TIMEOUT);
+  console.log("[bulk-item][debug] INGEST_RETRY_MAX:", INGEST_RETRY_MAX);
 }
 
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
@@ -124,50 +139,47 @@ function normalizeAbsoluteUrl(input: string): string {
   }
 }
 
-async function startIngestAndReturnIngestionId(itemUrl: string) {
+async function postIngest(itemUrl: string) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
 
   if (process.env.DEBUG_BULK) {
-    console.log("[bulk-item][debug] startIngest POST", url, "payload.url=", normalized);
+    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized);
   }
 
   const res = await fetch(url, {
     method: "POST",
     headers: serviceHeaders(),
-    body: JSON.stringify({ url: normalized, persist: true, options: { includeSeo: true } }),
+    body: JSON.stringify({
+      url: normalized,
+      persist: true,
+      options: { includeSeo: true },
+    }),
   });
 
   const j = await res.json().catch(() => null);
-  if (!res.ok) {
-    const msg = j?.error ?? `ingest failed (${res.status})`;
-    throw new Error(msg);
-  }
-
-  const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
-
-  if (possibleIngestionId) {
-    if (j?.status === "accepted" || res.status === 202) {
-      const jobId = j?.jobId ?? j?.ingestionId ?? possibleIngestionId;
-      const ing = await pollForIngestionJob(jobId);
-      return ing;
-    }
-    return possibleIngestionId;
-  }
-
-  const jobId = j?.jobId ?? j?.job?.id ?? null;
-  if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
-  return await pollForIngestionJob(jobId);
+  return { res, json: j, normalizedUrl: normalized };
 }
 
-async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
+/**
+ * Poll ingest job status endpoint until:
+ * - 200 => returns ingestionId
+ * - 409 => throws terminal error
+ * - timeout => throws Error("ingest job timeout") with err.payload including last seen response
+ */
+async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOUT_MS, intervalMs = INGEST_POLL_INTERVAL_MS) {
   const start = Date.now();
+  let lastPayload: any = null;
+  let lastStatus: number | null = null;
+
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
       headers: serviceHeaders(),
     });
 
+    lastStatus = res.status;
     const j = await res.json().catch(() => null);
+    lastPayload = j;
 
     if (res.status === 200) {
       return j?.ingestionId ?? j?.id ?? null;
@@ -178,9 +190,112 @@ async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalM
       err.payload = j;
       throw err;
     }
+
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error("ingest job timeout");
+
+  const err: any = new Error("ingest job timeout");
+  err.payload = { jobId, lastStatus, lastPayload };
+  throw err;
+}
+
+/**
+ * Start ingest and return ingestionId (with one optional retry on timeout)
+ */
+async function startIngestAndReturnIngestionId(itemUrl: string) {
+  let attempt = 0;
+  let lastTimeoutPayload: any = null;
+
+  while (true) {
+    attempt++;
+
+    const { res, json: j } = await postIngest(itemUrl);
+
+    if (!res.ok) {
+      const msg = j?.error ?? `ingest failed (${res.status})`;
+      const err: any = new Error(msg);
+      err.payload = { status: res.status, body: j };
+      throw err;
+    }
+
+    const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
+
+    // If API returns accepted/202, we must poll
+    if (possibleIngestionId) {
+      if (j?.status === "accepted" || res.status === 202) {
+        const jobId = j?.jobId ?? j?.ingestionId ?? possibleIngestionId;
+
+        try {
+          const ing = await pollForIngestionJob(jobId);
+          return ing;
+        } catch (e: any) {
+          const msg = String(e?.message ?? e);
+
+          if (msg === "ingest job timeout") {
+            lastTimeoutPayload = e?.payload ?? null;
+
+            const canRetry =
+              INGEST_RETRY_ON_TIMEOUT &&
+              attempt <= (1 + INGEST_RETRY_MAX); // first attempt + retries
+
+            if (canRetry) {
+              console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
+                attempt,
+                jobId,
+                lastTimeoutPayload,
+              });
+              continue;
+            }
+
+            // no more retries
+            const err: any = new Error("ingest job timeout");
+            err.payload = {
+              attempts: attempt,
+              lastTimeoutPayload,
+              initialResponse: j,
+            };
+            throw err;
+          }
+
+          // terminal 409 or other error
+          throw e;
+        }
+      }
+
+      // immediate completion
+      return possibleIngestionId;
+    }
+
+    // Fallback: jobId shape
+    const jobId = j?.jobId ?? j?.job?.id ?? null;
+    if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
+
+    try {
+      return await pollForIngestionJob(jobId);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg === "ingest job timeout") {
+        lastTimeoutPayload = e?.payload ?? null;
+        const canRetry =
+          INGEST_RETRY_ON_TIMEOUT &&
+          attempt <= (1 + INGEST_RETRY_MAX);
+
+        if (canRetry) {
+          console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
+            attempt,
+            jobId,
+            lastTimeoutPayload,
+          });
+          continue;
+        }
+
+        const err: any = new Error("ingest job timeout");
+        err.payload = { attempts: attempt, lastTimeoutPayload, initialResponse: j };
+        throw err;
+      }
+      throw e;
+    }
+  }
 }
 
 async function startPipeline(ingestionId: string, steps: string[]) {
@@ -202,7 +317,9 @@ async function startPipeline(ingestionId: string, steps: string[]) {
 
   const j = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error(j?.error ?? `pipeline start failed (${res.status})`);
+    const err: any = new Error(j?.error ?? `pipeline start failed (${res.status})`);
+    err.payload = { status: res.status, body: j };
+    throw err;
   }
   return String(j.pipelineRunId);
 }
@@ -327,12 +444,21 @@ async function handleJob(job: any) {
       );
     }
   } catch (err: any) {
-    console.error("[bulk-item] processing error", { bulkJobItemId, error: err?.message ?? err });
+    // Include err.payload if present (timeouts & HTTP errors)
+    const payload = err?.payload ?? null;
+
+    console.error("[bulk-item] processing error", {
+      bulkJobItemId,
+      error: err?.message ?? err,
+      payload,
+    });
+
     await markItem(bulkJobItemId, {
       status: "failed",
       finished_at: new Date().toISOString(),
-      last_error: { message: String(err?.message || err) },
+      last_error: payload ? { message: String(err?.message || err), payload } : { message: String(err?.message || err) },
     });
+
     await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
       console.warn("incrementBulkCounters failed on exception", e)
     );
