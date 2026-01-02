@@ -17,6 +17,14 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  * Use for emergency/manual triggering if you cannot run a persistent master worker.
  */
 
+function sanitizeEnv(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  return String(value)
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "")
+    .trim();
+}
+
 function requireServiceKey(req: NextRequest) {
   const provided = req.headers.get("x-service-api-key") || "";
   const expected = process.env.SERVICE_API_KEY || "";
@@ -62,12 +70,13 @@ async function handle(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized - missing service key" }, { status: 401 });
     }
 
-    const redisUrl = process.env.REDIS_URL;
+    const redisUrl = sanitizeEnv(process.env.REDIS_URL);
     if (!redisUrl) {
       return NextResponse.json({ error: "Server misconfigured - REDIS_URL missing" }, { status: 500 });
     }
 
-    const redis = new Redis(redisUrl);
+    // BullMQ/ioredis compatibility: maxRetriesPerRequest must be null.
+    const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
 
     // Get all master wait job ids
     const jobIds = await redis.lrange("bull:bulk-master:wait", 0, -1);
