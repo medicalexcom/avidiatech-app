@@ -63020,18 +63020,35 @@ var import_node_fetch = __toESM(require_lib2());
 // src/lib/queue/bull.ts
 var import_ioredis = __toESM(require_built3());
 var _redis = null;
-function sanitizeEnv(value) {
-  if (value == null)
-    return void 0;
-  return String(value).replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "").trim();
+function sanitizeRedisUrl(raw) {
+  if (!raw)
+    return "";
+  let s2 = String(raw).replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "").trim();
+  if (s2.startsWith("//")) {
+    s2 = s2.slice(2);
+  }
+  if (!/^rediss?:\/\//i.test(s2) && s2.length > 0) {
+    s2 = `redis://${s2}`;
+  }
+  return s2;
 }
 function getRedis() {
   if (_redis)
     return _redis;
-  const url2 = sanitizeEnv(process.env.REDIS_URL);
+  const url2 = sanitizeRedisUrl(process.env.REDIS_URL);
   if (!url2)
     throw new Error("REDIS_URL not set for BullMQ queue helper");
-  _redis = new import_ioredis.default(url2, { maxRetriesPerRequest: null });
+  if (process.env.DEBUG_BULLMQ) {
+    const safePreview = url2.replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@");
+    console.log("[bullmq] using REDIS_URL:", safePreview.slice(0, 80));
+  }
+  _redis = new import_ioredis.default(url2, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  });
+  _redis.on("error", (err) => {
+    console.error("[bullmq] redis connection error:", err?.message ?? err);
+  });
   return _redis;
 }
 function getRedisConnection() {
