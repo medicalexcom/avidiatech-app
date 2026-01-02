@@ -49647,13 +49647,18 @@ var require_main3 = __commonJS({
 var import_ioredis = __toESM(require_built3());
 var _redis = null;
 var queues = {};
+function sanitizeEnv(value) {
+  if (value == null)
+    return void 0;
+  return String(value).replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "").trim();
+}
 function getRedis() {
   if (_redis)
     return _redis;
-  const url = process.env.REDIS_URL;
+  const url = sanitizeEnv(process.env.REDIS_URL);
   if (!url)
     throw new Error("REDIS_URL not set for BullMQ queue helper");
-  _redis = new import_ioredis.default(url);
+  _redis = new import_ioredis.default(url, { maxRetriesPerRequest: null });
   return _redis;
 }
 function getQueue(name) {

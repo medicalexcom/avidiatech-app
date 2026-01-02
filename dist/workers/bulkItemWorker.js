@@ -63020,13 +63020,18 @@ var import_node_fetch = __toESM(require_lib2());
 // src/lib/queue/bull.ts
 var import_ioredis = __toESM(require_built3());
 var _redis = null;
+function sanitizeEnv(value) {
+  if (value == null)
+    return void 0;
+  return String(value).replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "").trim();
+}
 function getRedis() {
   if (_redis)
     return _redis;
-  const url2 = process.env.REDIS_URL;
+  const url2 = sanitizeEnv(process.env.REDIS_URL);
   if (!url2)
     throw new Error("REDIS_URL not set for BullMQ queue helper");
-  _redis = new import_ioredis.default(url2);
+  _redis = new import_ioredis.default(url2, { maxRetriesPerRequest: null });
   return _redis;
 }
 function getRedisConnection() {
