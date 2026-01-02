@@ -60,18 +60,30 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get("x-avidiatech-signature") || "";
 
+    // High-signal operational log (no secrets)
+    console.info("[ingest_callback] received", {
+      requestId,
+      hasSignature: Boolean(signature),
+      signatureLen: signature?.length ?? 0,
+      rawBodyLen: rawBody?.length ?? 0,
+    });
+
     if (!INGEST_SECRET) {
-      console.error("INGEST_SECRET not configured on callback");
+      console.error("[ingest_callback] INGEST_SECRET not configured on callback", { requestId });
       return NextResponse.json(
-        { error: "server_misconfigured", detail: "INGEST_SECRET missing" },
+        { error: "server_misconfigured", detail: "INGEST_SECRET missing", requestId },
         { status: 500 }
       );
     }
 
     const valid = verifySignature(rawBody, signature, INGEST_SECRET);
     if (!valid) {
-      console.warn("ingest callback invalid signature");
-      return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+      console.warn("[ingest_callback] invalid signature", {
+        requestId,
+        signatureLen: signature?.length ?? 0,
+        bodyPreview: (rawBody || "").slice(0, 500),
+      });
+      return NextResponse.json({ error: "invalid_signature", requestId }, { status: 401 });
     }
 
     let body: IngestCallbackBody;
@@ -79,21 +91,27 @@ export async function POST(req: NextRequest) {
     try {
       body = JSON.parse(rawBody || "{}");
     } catch (e: any) {
+      console.warn("[ingest_callback] invalid_json", { requestId, error: String(e?.message || e) });
       return NextResponse.json(
-        { error: "invalid_json", detail: String(e?.message || e) },
+        { error: "invalid_json", detail: String(e?.message || e), requestId },
         { status: 400 }
       );
     }
 
     const jobId = body.job_id;
-    if (!jobId) return NextResponse.json({ error: "missing job_id" }, { status: 400 });
+    if (!jobId) {
+      console.warn("[ingest_callback] missing job_id", { requestId, bodyKeys: safeKeys(body) });
+      return NextResponse.json({ error: "missing_job_id", requestId }, { status: 400 });
+    }
 
     const supabase = getCallbackSupabase();
     if (!supabase) {
+      console.error("[ingest_callback] supabase_not_configured", { requestId });
       return NextResponse.json(
         {
           error: "supabase_not_configured",
           detail: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+          requestId,
         },
         { status: 500 }
       );
@@ -110,19 +128,20 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (loadErr) {
-      console.error(
-        "ingest callback: failed to load product_ingestions",
-        loadErr.message || loadErr
-      );
+      console.error("[ingest_callback] failed to load product_ingestions", {
+        requestId,
+        jobId,
+        error: loadErr.message || loadErr,
+      });
       return NextResponse.json(
-        { error: "db_error", detail: loadErr.message || String(loadErr) },
+        { error: "db_error", detail: loadErr.message || String(loadErr), requestId },
         { status: 500 }
       );
     }
 
     if (!existing) {
-      console.warn("ingest callback: no product_ingestions row found for job_id=", jobId);
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
+      console.warn("[ingest_callback] no product_ingestions row found", { requestId, jobId });
+      return NextResponse.json({ error: "not_found", requestId }, { status: 404 });
     }
 
     const nowIso = new Date().toISOString();
@@ -224,21 +243,30 @@ export async function POST(req: NextRequest) {
       .eq("id", existing.id);
 
     if (updErr) {
-      console.error(
-        "ingest callback: failed to update product_ingestions",
-        updErr.message || updErr
-      );
+      console.error("[ingest_callback] failed to update product_ingestions", {
+        requestId,
+        jobId,
+        ingestionId: existing.id,
+        error: updErr.message || updErr,
+      });
       return NextResponse.json(
-        { error: "db_update_failed", detail: updErr.message || String(updErr) },
+        { error: "db_update_failed", detail: updErr.message || String(updErr), requestId },
         { status: 500 }
       );
     }
 
+    console.info("[ingest_callback] persisted", {
+      requestId,
+      jobId,
+      ingestionId: existing.id,
+      inferredEngineStatus,
+    });
+
     return NextResponse.json({ ok: true, requestId }, { status: 200 });
   } catch (err: any) {
-    console.error("POST /api/v1/ingest/callback error:", err);
+    console.error("[ingest_callback] unexpected error", { requestId, error: err?.message ?? err });
     return NextResponse.json(
-      { error: err?.message || "internal_error" },
+      { error: err?.message || "internal_error", requestId },
       { status: 500 }
     );
   }
