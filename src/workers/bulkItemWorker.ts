@@ -6,6 +6,11 @@
 // - Uses bulkJob.org_id as requestedTenantId for billing (fixes "No tenant membership found").
 // - Owners bypass subscription/quota, but usage is still tracked (implemented in billing.ts).
 // - Normalizes input URLs to reduce "Invalid URL" / "Only absolute URLs" errors.
+//
+// Hardening (2026-01):
+// - Sanitize internal service secret before sending it in x-service-api-key header.
+//   We have observed env contamination with ANSI escape codes and/or whitespace/newlines which
+//   caused middleware to return 401 {"error":"unauthorized"}.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -14,37 +19,52 @@ import { incrementBulkCounters } from "@/lib/bulk/db";
 import { requireSubscriptionAndUsage } from "@/lib/billing";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
+function stripAnsiAndTrim(v: any): string {
+  if (v == null) return "";
+  return String(v).replace(ANSI_REGEX, "").trim();
+}
+
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Prefer canonical PIPELINE_INTERNAL_SECRET, but allow SERVICE_API_KEY or NEXT_PUBLIC_SERVICE_API_KEY as fallbacks
-const SERVICE_API_KEY =
-  process.env.SERVICE_API_KEY ||
-  process.env.PIPELINE_INTERNAL_SECRET ||
-  process.env.NEXT_PUBLIC_SERVICE_API_KEY ||
-  "";
+// Prefer canonical PIPELINE_INTERNAL_SECRET first (middleware expects this),
+// then SERVICE_API_KEY, then NEXT_PUBLIC_SERVICE_API_KEY as last-resort fallback.
+const RAW_PIPELINE_SECRET = process.env.PIPELINE_INTERNAL_SECRET || "";
+const RAW_SERVICE_API_KEY = process.env.SERVICE_API_KEY || "";
+const RAW_NEXT_PUBLIC_SERVICE_API_KEY = process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+
+const PIPELINE_INTERNAL_SECRET = stripAnsiAndTrim(RAW_PIPELINE_SECRET);
+const SERVICE_API_KEY = stripAnsiAndTrim(
+  PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY
+);
 
 // INTERNAL_API_BASE is required for the worker to call internal endpoints
 const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
 
 // Basic required env checks (fail-fast)
 if (!supabaseUrl || !supabaseKey) {
-  console.error(
-    "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers"
-  );
+  console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
   process.exit(1);
 }
 if (!internalApiBase) {
-  console.error(
-    "[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart."
-  );
+  console.error("[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart.");
   process.exit(1);
 }
 if (!SERVICE_API_KEY) {
   console.error(
-    "[bulk-item] FATAL: service secret missing. Set SERVICE_API_KEY or PIPELINE_INTERNAL_SECRET and restart."
+    "[bulk-item] FATAL: service secret missing. Set PIPELINE_INTERNAL_SECRET (preferred) or SERVICE_API_KEY and restart."
   );
   process.exit(1);
+}
+
+if (process.env.DEBUG_BULK) {
+  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET raw len:", String(RAW_PIPELINE_SECRET || "").length);
+  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET clean len:", PIPELINE_INTERNAL_SECRET.length);
+  console.log("[bulk-item][debug] SERVICE_API_KEY raw len:", String(RAW_SERVICE_API_KEY || "").length);
+  console.log("[bulk-item][debug] SERVICE_API_KEY clean len:", SERVICE_API_KEY.length);
 }
 
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
@@ -59,21 +79,13 @@ async function markItem(id: string, updates: Record<string, any>) {
 }
 
 async function fetchItemRow(bulkJobItemId: string) {
-  const { data, error } = await supabase
-    .from("bulk_job_items")
-    .select("*")
-    .eq("id", bulkJobItemId)
-    .maybeSingle();
+  const { data, error } = await supabase.from("bulk_job_items").select("*").eq("id", bulkJobItemId).maybeSingle();
   if (error) throw error;
   return data as any;
 }
 
 async function fetchBulkJob(bulkJobId: string) {
-  const { data, error } = await supabase
-    .from("bulk_jobs")
-    .select("*")
-    .eq("id", bulkJobId)
-    .maybeSingle();
+  const { data, error } = await supabase.from("bulk_jobs").select("*").eq("id", bulkJobId).maybeSingle();
   if (error) throw error;
   return data as any;
 }
@@ -83,10 +95,7 @@ function serviceHeaders() {
   if (SERVICE_API_KEY) {
     h["x-service-api-key"] = SERVICE_API_KEY;
     if (process.env.DEBUG_BULK) {
-      console.log(
-        "[bulk-item][debug] will send header 'x-service-api-key' length:",
-        SERVICE_API_KEY.length
-      );
+      console.log("[bulk-item][debug] will send header 'x-service-api-key' length:", SERVICE_API_KEY.length);
     }
   } else {
     if (process.env.DEBUG_BULK) {
@@ -135,8 +144,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
     throw new Error(msg);
   }
 
-  const possibleIngestionId =
-    j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
+  const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
 
   if (possibleIngestionId) {
     if (j?.status === "accepted" || res.status === 202) {
@@ -155,10 +163,9 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
 async function pollForIngestionJob(jobId: string, timeoutMs = 120_000, intervalMs = 3000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
+      headers: serviceHeaders(),
+    });
 
     const j = await res.json().catch(() => null);
 
@@ -203,10 +210,9 @@ async function startPipeline(ingestionId: string, steps: string[]) {
 async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
+      headers: serviceHeaders(),
+    });
     const j = await res.json().catch(() => null);
     if (res.ok && j?.run) {
       const status = j.run.status;
@@ -274,10 +280,9 @@ async function handleJob(job: any) {
 
     // Even if owner/admin, we still want USAGE tracked. With the updated billing.ts,
     // owners bypass quota/subscription but still increment usage counters.
-    // Therefore: always call requireSubscriptionAndUsage (it won't block owners).
     await requireSubscriptionAndUsage({
       userId,
-      requestedTenantId: tenantId ?? undefined, // FIX: do not use bulkJob.options.source_tenant
+      requestedTenantId: tenantId ?? undefined,
       feature: "ingestion" as any,
       increment: 1,
       userEmail: bulkJob.options?.requested_by_email ?? undefined,
