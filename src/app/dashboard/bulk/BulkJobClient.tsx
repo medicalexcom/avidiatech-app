@@ -3,19 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-/**
- * Bulk job inspector page (enhanced UI)
- *
- * Keeps the same route and existing API endpoints:
- *   GET  /api/v1/bulk/:id
- *   GET  /api/v1/bulk/:id/items?limit=...&offset=...
- *   GET  /api/v1/bulk/:id/items/errors     -> CSV
- *   POST /api/v1/bulk/:id/items/:itemId/retry
- *   POST /api/v1/bulk/:id/retry-failed
- *
- * This file is intentionally "client" to support live refresh, paging, filters, row expansion, and actions.
- */
-
 type BulkJob = {
   id: string;
   name?: string | null;
@@ -27,6 +14,46 @@ type BulkJob = {
   created_at?: string | null;
   updated_at?: string | null;
   options?: any;
+};
+
+type ModuleRunLite = {
+  module_index: number;
+  module_name: string;
+  status: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: any;
+  output_ref?: string | null;
+};
+
+type PipelineRunLite = {
+  id: string;
+  status: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at?: string | null;
+};
+
+type Telemetry = {
+  pipeline_run: PipelineRunLite | null;
+  modules: ModuleRunLite[];
+  module_summary: {
+    counts: Record<string, number>;
+    current: {
+      module_index: number;
+      module_name: string;
+      status: string;
+      started_at?: string | null;
+      finished_at?: string | null;
+      error?: any;
+    } | null;
+    failed: {
+      module_index: number;
+      module_name: string;
+      status: string;
+      error?: any;
+    } | null;
+  } | null;
 };
 
 type BulkItem = {
@@ -41,6 +68,7 @@ type BulkItem = {
   started_at?: string | null;
   finished_at?: string | null;
   tries?: number | null;
+  telemetry?: Telemetry;
 };
 
 function fmtDate(s?: string | null) {
@@ -92,7 +120,7 @@ function statusBadge(status?: string | null) {
       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
       : s === "failed"
         ? "bg-rose-50 text-rose-700 ring-rose-200"
-        : s === "in_progress"
+        : s === "running" || s === "in_progress"
           ? "bg-amber-50 text-amber-800 ring-amber-200"
           : s === "queued"
             ? "bg-slate-100 text-slate-700 ring-slate-200"
@@ -106,15 +134,6 @@ function extractErrorMessage(last_error: any): string | null {
   if (typeof last_error === "string") return last_error;
   if (typeof last_error?.message === "string") return last_error.message;
   return null;
-}
-
-function extractErrorType(last_error: any): string | null {
-  const msg = extractErrorMessage(last_error);
-  if (!msg) return null;
-  if (msg.includes("ingest job timeout")) return "ingest_timeout";
-  if (msg.includes("pipeline poll timeout")) return "pipeline_timeout";
-  if (msg.includes("pipeline start failed")) return "pipeline_start_failed";
-  return "other";
 }
 
 export default function BulkJobClient(props: {
@@ -148,6 +167,10 @@ export default function BulkJobClient(props: {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
+  const telemetryApi = useMemo(
+    () => `${jobApiBase}/items/telemetry?limit=${limit}&offset=${offset}`,
+    [jobApiBase, limit, offset]
+  );
 
   async function fetchJob() {
     if (!bulkJobId) return;
@@ -173,11 +196,18 @@ export default function BulkJobClient(props: {
     setLoadingItems(true);
     setError(null);
     try {
-      const url = `${jobApiBase}/items?limit=${limit}&offset=${offset}`;
-      const res = await fetch(url, { cache: "no-store" });
+      // Prefer telemetry endpoint; fall back to the old endpoint if telemetry isn’t deployed yet.
+      const res = await fetch(telemetryApi, { cache: "no-store" });
       if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Failed to fetch items (${res.status})`);
+        const fallbackUrl = `${jobApiBase}/items?limit=${limit}&offset=${offset}`;
+        const fallback = await fetch(fallbackUrl, { cache: "no-store" });
+        if (!fallback.ok) {
+          const j = await fallback.json().catch(() => null);
+          throw new Error(j?.error ?? `Failed to fetch items (${fallback.status})`);
+        }
+        const j = await fallback.json();
+        setItems(j?.data ?? j ?? []);
+        return;
       }
       const j = await res.json();
       setItems(j?.data ?? j ?? []);
@@ -216,33 +246,6 @@ export default function BulkJobClient(props: {
   const inProgress = items.filter((i) => i.status === "in_progress").length;
   const queued = Math.max(0, (total ?? 0) - (completed ?? 0) - (failed ?? 0) - (inProgress ?? 0));
   const pct = total ? Math.round(((completed ?? 0) / total) * 100) : 0;
-
-  const durations = useMemo(() => {
-    const ms = items
-      .map((it) => msBetween(it.started_at, it.finished_at))
-      .filter((x): x is number => typeof x === "number" && Number.isFinite(x));
-
-    ms.sort((a, b) => a - b);
-    const p50 = ms.length ? ms[Math.floor(ms.length * 0.5)] : null;
-    const p90 = ms.length ? ms[Math.floor(ms.length * 0.9)] : null;
-
-    return {
-      count: ms.length,
-      p50,
-      p90,
-      avg: ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length) : null,
-    };
-  }, [items]);
-
-  const errorBreakdown = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const it of items) {
-      if (it.status !== "failed") continue;
-      const t = extractErrorType(it.last_error) || "unknown";
-      counts[t] = (counts[t] || 0) + 1;
-    }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [items]);
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -322,7 +325,6 @@ export default function BulkJobClient(props: {
     if (!ingestionId) return;
     window.open(`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
   }
-
   function openPipelineOutput(pipelineRunId?: string | null, moduleIndex = 0) {
     if (!pipelineRunId) return;
     window.open(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, "_blank");
@@ -338,9 +340,33 @@ export default function BulkJobClient(props: {
     }
   }
 
+  function renderModuleStrip(mods: ModuleRunLite[]) {
+    if (!mods || mods.length === 0) return <span className="text-xs text-slate-400">—</span>;
+
+    return (
+      <div className="flex items-center gap-1">
+        {mods
+          .slice()
+          .sort((a, b) => a.module_index - b.module_index)
+          .map((m) => {
+            const cls =
+              m.status === "succeeded"
+                ? "bg-emerald-500"
+                : m.status === "failed"
+                  ? "bg-rose-500"
+                  : m.status === "running"
+                    ? "bg-amber-500"
+                    : m.status === "skipped"
+                      ? "bg-slate-300"
+                      : "bg-slate-200";
+            return <span key={m.module_index} className={classNames("h-2 w-4 rounded", cls)} title={`${m.module_index}:${m.module_name}:${m.status}`} />;
+          })}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
-      {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
@@ -351,9 +377,6 @@ export default function BulkJobClient(props: {
                 copy
               </button>
             ) : null}
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            Tip: filter by status, search by URL/ID, expand rows for raw payloads.
           </div>
         </div>
 
@@ -376,11 +399,7 @@ export default function BulkJobClient(props: {
 
           <label className="inline-flex items-center gap-2 text-sm">
             <span className="text-xs text-slate-600">Interval</span>
-            <select
-              className="rounded-md border bg-white px-2 py-2 text-sm"
-              value={pollIntervalMs}
-              onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}
-            >
+            <select className="rounded-md border bg-white px-2 py-2 text-sm" value={pollIntervalMs} onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}>
               <option value={1000}>1s</option>
               <option value={3000}>3s</option>
               <option value={5000}>5s</option>
@@ -388,12 +407,7 @@ export default function BulkJobClient(props: {
             </select>
           </label>
 
-          <button
-            onClick={downloadErrors}
-            className="rounded-md bg-rose-600 px-3 py-2 text-sm text-white"
-            disabled={!bulkJobId}
-            title="Download CSV of failed items"
-          >
+          <button onClick={downloadErrors} className="rounded-md bg-rose-600 px-3 py-2 text-sm text-white" disabled={!bulkJobId}>
             Download errors CSV
           </button>
         </div>
@@ -402,7 +416,6 @@ export default function BulkJobClient(props: {
       {error ? (
         <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>
       ) : null}
-
       {actionMessage ? (
         <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">{actionMessage}</div>
       ) : null}
@@ -416,18 +429,15 @@ export default function BulkJobClient(props: {
             <div className="text-xs text-slate-500">{completed}/{total} done</div>
           </div>
           <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400"
-              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-            />
+            <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            Status: {statusBadge(job?.status || (failed > 0 ? "failed" : inProgress > 0 ? "in_progress" : "queued"))}
+            Job status: {statusBadge(job?.status ?? "—")}
           </div>
         </div>
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Counts</div>
+          <div className="text-xs text-slate-500">Counts (page)</div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
             <div className="rounded-lg border p-2">
               <div className="text-xs text-slate-500">Succeeded</div>
@@ -449,64 +459,38 @@ export default function BulkJobClient(props: {
         </div>
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Timing (current page)</div>
+          <div className="text-xs text-slate-500">Telemetry</div>
           <div className="mt-2 text-sm text-slate-700">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">Avg</span>
-              <span className="font-mono">{fmtDuration(durations.avg)}</span>
+              <span className="text-xs text-slate-500">Endpoint</span>
+              <span className="font-mono text-xs">/items/telemetry</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">p50</span>
-              <span className="font-mono">{fmtDuration(durations.p50)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">p90</span>
-              <span className="font-mono">{fmtDuration(durations.p90)}</span>
+            <div className="mt-2 text-xs text-slate-500">
+              Adds pipeline + module status per item.
             </div>
           </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Based on {durations.count} items with timing data (started_at).
+          <div className="mt-3">
+            <button className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white" onClick={fetchItems} disabled={!bulkJobId}>
+              Refresh telemetry now
+            </button>
           </div>
         </div>
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Failures breakdown</div>
-          <div className="mt-2 space-y-2">
-            {errorBreakdown.length === 0 ? (
-              <div className="text-sm text-slate-600">No failures on this page.</div>
-            ) : (
-              errorBreakdown.slice(0, 5).map(([k, v]) => {
-                const pctLocal = total ? Math.round((v / total) * 100) : 0;
-                return (
-                  <div key={k} className="text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs">{k}</span>
-                      <span className="text-xs text-slate-600">{v} ({pctLocal}%)</span>
-                    </div>
-                    <div className="mt-1 h-2 w-full rounded-full bg-slate-100">
-                      <div className="h-2 rounded-full bg-rose-500" style={{ width: `${Math.min(100, pctLocal)}%` }} />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="mt-3">
-            <button
-              className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50"
-              onClick={retryFailedItems}
-              disabled={failed === 0}
-            >
+          <div className="text-xs text-slate-500">Actions</div>
+          <div className="mt-3 space-y-2">
+            <button className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={retryFailedItems} disabled={failed === 0}>
               Retry failed items
+            </button>
+            <button className="w-full rounded-md border bg-white px-3 py-2 text-sm" onClick={() => { fetchJob(); fetchItems(); }}>
+              Refresh now
             </button>
           </div>
         </div>
       </div>
 
-      {/* Controls + split view */}
+      {/* Main grid */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        {/* Table */}
         <div className="xl:col-span-8 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -517,18 +501,9 @@ export default function BulkJobClient(props: {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                className="rounded-md border px-3 py-2 text-sm w-[260px]"
-                placeholder="Search URL / ingestionId / pipelineId"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <input className="rounded-md border px-3 py-2 text-sm w-[260px]" placeholder="Search URL / IDs" value={search} onChange={(e) => setSearch(e.target.value)} />
 
-              <select
-                className="rounded-md border bg-white px-3 py-2 text-sm"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-              >
+              <select className="rounded-md border bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
                 <option value="all">All statuses</option>
                 <option value="failed">Failed</option>
                 <option value="in_progress">In progress</option>
@@ -551,11 +526,10 @@ export default function BulkJobClient(props: {
                 <tr className="text-left text-xs text-slate-500">
                   <th className="py-2 pr-3">#</th>
                   <th className="py-2 pr-3">URL</th>
-                  <th className="py-2 pr-3">Status</th>
-                  <th className="py-2 pr-3">Tries</th>
-                  <th className="py-2 pr-3">Timing</th>
-                  <th className="py-2 pr-3">Ingestion</th>
+                  <th className="py-2 pr-3">Item</th>
                   <th className="py-2 pr-3">Pipeline</th>
+                  <th className="py-2 pr-3">Modules</th>
+                  <th className="py-2 pr-3">Timing</th>
                   <th className="py-2 pr-3">Error</th>
                   <th className="py-2 pr-3">Actions</th>
                 </tr>
@@ -564,13 +538,13 @@ export default function BulkJobClient(props: {
               <tbody>
                 {loadingItems ? (
                   <tr>
-                    <td className="py-4 text-sm text-slate-500" colSpan={9}>
+                    <td className="py-4 text-sm text-slate-500" colSpan={8}>
                       Loading items…
                     </td>
                   </tr>
                 ) : filteredItems.length === 0 ? (
                   <tr>
-                    <td className="py-4 text-sm text-slate-500" colSpan={9}>
+                    <td className="py-4 text-sm text-slate-500" colSpan={8}>
                       No items found.
                     </td>
                   </tr>
@@ -580,13 +554,14 @@ export default function BulkJobClient(props: {
                     const isExpanded = Boolean(expanded[it.id]);
                     const isSelected = selectedId === it.id;
 
+                    const pipe = it.telemetry?.pipeline_run ?? null;
+                    const modSummary = it.telemetry?.module_summary ?? null;
+                    const mods = it.telemetry?.modules ?? [];
+
                     return (
                       <React.Fragment key={it.id}>
                         <tr
-                          className={classNames(
-                            "border-t hover:bg-slate-50 cursor-pointer",
-                            isSelected && "bg-sky-50"
-                          )}
+                          className={classNames("border-t hover:bg-slate-50 cursor-pointer", isSelected && "bg-sky-50")}
                           onClick={() => setSelectedId(it.id)}
                         >
                           <td className="py-2 pr-3 align-top">{it.item_index + 1}</td>
@@ -596,10 +571,61 @@ export default function BulkJobClient(props: {
                             <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
                           </td>
 
-                          <td className="py-2 pr-3 align-top">{statusBadge(it.status)}</td>
+                          <td className="py-2 pr-3 align-top">
+                            <div className="flex items-center gap-2">
+                              {statusBadge(it.status)}
+                              <span className="text-xs text-slate-500 font-mono">tries:{it.tries ?? "—"}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              ingestion:{" "}
+                              {it.ingestion_id ? (
+                                <button className="underline text-sky-700 font-mono" onClick={(e) => { e.stopPropagation(); openExtract(it.ingestion_id); }}>
+                                  {it.ingestion_id.slice(0, 10)}…
+                                </button>
+                              ) : (
+                                "—"
+                              )}
+                            </div>
+                          </td>
 
                           <td className="py-2 pr-3 align-top">
-                            <span className="font-mono text-xs">{it.tries ?? "—"}</span>
+                            {it.pipeline_run_id ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {statusBadge(pipe?.status ?? "—")}
+                                  <button
+                                    className="text-xs underline text-sky-700 font-mono"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openPipelineOutput(it.pipeline_run_id, 0);
+                                    }}
+                                  >
+                                    {it.pipeline_run_id.slice(0, 10)}…
+                                  </button>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  current:{" "}
+                                  <span className="font-mono">
+                                    {modSummary?.current ? `${modSummary.current.module_index}:${modSummary.current.module_name}:${modSummary.current.status}` : "—"}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-2 pr-3 align-top">
+                            {mods.length ? (
+                              <div className="space-y-2">
+                                {renderModuleStrip(mods)}
+                                <div className="text-[11px] text-slate-500 font-mono">
+                                  ok:{modSummary?.counts?.succeeded ?? 0} run:{modSummary?.counts?.running ?? 0} q:{modSummary?.counts?.queued ?? 0} fail:{modSummary?.counts?.failed ?? 0} skip:{modSummary?.counts?.skipped ?? 0}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
 
                           <td className="py-2 pr-3 align-top">
@@ -608,41 +634,13 @@ export default function BulkJobClient(props: {
                           </td>
 
                           <td className="py-2 pr-3 align-top">
-                            {it.ingestion_id ? (
-                              <button
-                                className="text-xs text-sky-700 underline font-mono"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openExtract(it.ingestion_id);
-                                }}
-                              >
-                                {it.ingestion_id.slice(0, 10)}…
-                              </button>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-2 pr-3 align-top">
-                            {it.pipeline_run_id ? (
-                              <button
-                                className="text-xs text-sky-700 underline font-mono"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openPipelineOutput(it.pipeline_run_id, 0);
-                                }}
-                              >
-                                {it.pipeline_run_id.slice(0, 10)}…
-                              </button>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-2 pr-3 align-top">
                             {it.last_error ? (
                               <div className="max-w-[34ch] truncate text-xs text-rose-700">
                                 {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
+                              </div>
+                            ) : modSummary?.failed?.error ? (
+                              <div className="max-w-[34ch] truncate text-xs text-rose-700">
+                                {safeStringify(modSummary.failed.error, 220)}
                               </div>
                             ) : (
                               <span className="text-slate-400">—</span>
@@ -651,48 +649,19 @@ export default function BulkJobClient(props: {
 
                           <td className="py-2 pr-3 align-top" onClick={(e) => e.stopPropagation()}>
                             <div className="flex flex-wrap gap-2">
-                              <button
-                                className="rounded px-2 py-1 text-xs border bg-white"
-                                onClick={() => openExtract(it.ingestion_id)}
-                                disabled={!it.ingestion_id}
-                              >
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openExtract(it.ingestion_id)} disabled={!it.ingestion_id}>
                                 Extract
                               </button>
-                              <button
-                                className="rounded px-2 py-1 text-xs border bg-white"
-                                onClick={() => openDescribe(it.ingestion_id)}
-                                disabled={!it.ingestion_id}
-                              >
-                                Describe
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 0)} disabled={!it.pipeline_run_id}>
+                                Out 0
                               </button>
-                              <button
-                                className="rounded px-2 py-1 text-xs border bg-white"
-                                onClick={() => openMonitor(it.ingestion_id)}
-                                disabled={!it.ingestion_id}
-                              >
-                                Monitor
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 1)} disabled={!it.pipeline_run_id}>
+                                Out 1
                               </button>
-                              <button
-                                className="rounded px-2 py-1 text-xs border bg-white"
-                                onClick={() => openPipelineOutput(it.pipeline_run_id, 1)}
-                                disabled={!it.pipeline_run_id}
-                                title="Open SEO output (module 1)"
-                              >
-                                SEO out
-                              </button>
-
-                              <button
-                                className="rounded px-2 py-1 text-xs border bg-white"
-                                onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}
-                              >
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
                                 {isExpanded ? "Hide" : "Details"}
                               </button>
-
-                              <button
-                                className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50"
-                                disabled={retryingIds[it.id] || it.status !== "failed"}
-                                onClick={() => retryItem(it.id)}
-                              >
+                              <button className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50" disabled={retryingIds[it.id] || it.status !== "failed"} onClick={() => retryItem(it.id)}>
                                 {retryingIds[it.id] ? "Retrying…" : "Retry"}
                               </button>
                             </div>
@@ -701,25 +670,17 @@ export default function BulkJobClient(props: {
 
                         {isExpanded ? (
                           <tr className="border-t bg-slate-50">
-                            <td colSpan={9} className="p-3">
+                            <td colSpan={8} className="p-3">
                               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <div className="rounded-lg border bg-white p-3">
-                                  <div className="text-xs text-slate-500 mb-2">Identifiers</div>
-                                  <div className="text-xs font-mono break-all">
-                                    <div><span className="text-slate-500">item.id:</span> {it.id}</div>
-                                    <div><span className="text-slate-500">ingestion_id:</span> {it.ingestion_id ?? "—"}</div>
-                                    <div><span className="text-slate-500">pipeline_run_id:</span> {it.pipeline_run_id ?? "—"}</div>
-                                  </div>
-                                  <div className="mt-2 flex gap-2">
-                                    <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(it.id)}>copy item id</button>
-                                    {it.ingestion_id ? <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(it.ingestion_id!)}>copy ingestion</button> : null}
-                                    {it.pipeline_run_id ? <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(it.pipeline_run_id!)}>copy pipeline</button> : null}
-                                  </div>
+                                  <div className="text-xs text-slate-500 mb-2">Telemetry (raw)</div>
+                                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
+                                    {it.telemetry ? safeStringify(it.telemetry) : "—"}
+                                  </pre>
                                 </div>
-
                                 <div className="rounded-lg border bg-white p-3">
                                   <div className="text-xs text-slate-500 mb-2">Last error (raw)</div>
-                                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[220px] overflow-auto rounded border bg-slate-50 p-2">
+                                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
                                     {it.last_error ? safeStringify(it.last_error) : "—"}
                                   </pre>
                                 </div>
@@ -735,7 +696,6 @@ export default function BulkJobClient(props: {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2 text-sm">
               <button className="rounded px-2 py-1 border" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
@@ -746,41 +706,23 @@ export default function BulkJobClient(props: {
               </button>
               <div className="text-xs text-slate-500">offset {offset}</div>
             </div>
-
             <div className="text-xs text-slate-500">
               Updated: {fmtDate(job?.updated_at)} {loadingJob || loadingItems ? "(refreshing…)" : ""}
             </div>
           </div>
         </div>
 
-        {/* Side panel */}
         <aside className="xl:col-span-4 space-y-4">
           <section className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Job details</h3>
-              <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(JSON.stringify(job ?? {}, null, 2))} disabled={!job}>
-                copy JSON
-              </button>
+              <h3 className="text-sm font-semibold">Selection</h3>
+              {selectedItem ? (
+                <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(selectedItem.id)}>
+                  copy item id
+                </button>
+              ) : null}
             </div>
 
-            <div className="mt-3 text-sm text-slate-700 space-y-1">
-              <div><span className="text-slate-500">Name:</span> {job?.name ?? "—"}</div>
-              <div><span className="text-slate-500">Status:</span> {job?.status ?? "—"}</div>
-              <div><span className="text-slate-500">Created by:</span> <span className="font-mono">{job?.created_by ?? "—"}</span></div>
-              <div><span className="text-slate-500">Created:</span> {fmtDate(job?.created_at)}</div>
-              <div><span className="text-slate-500">Updated:</span> {fmtDate(job?.updated_at)}</div>
-            </div>
-
-            <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-slate-600">Options / metadata</summary>
-              <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[220px] overflow-auto rounded border bg-slate-50 p-2">
-                {job?.options ? safeStringify(job.options) : "—"}
-              </pre>
-            </details>
-          </section>
-
-          <section className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Selection</h3>
             {selectedItem ? (
               <div className="mt-2 space-y-3">
                 <div className="text-sm">
@@ -790,31 +732,31 @@ export default function BulkJobClient(props: {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg border p-2">
-                    <div className="text-slate-500">Status</div>
+                    <div className="text-slate-500">Item</div>
                     <div className="mt-1">{statusBadge(selectedItem.status)}</div>
                   </div>
                   <div className="rounded-lg border p-2">
-                    <div className="text-slate-500">Duration</div>
-                    <div className="mt-1 font-mono">{fmtDuration(msBetween(selectedItem.started_at, selectedItem.finished_at))}</div>
+                    <div className="text-slate-500">Pipeline</div>
+                    <div className="mt-1">{statusBadge(selectedItem.telemetry?.pipeline_run?.status ?? (selectedItem.pipeline_run_id ? "—" : "—"))}</div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openExtract(selectedItem.ingestion_id)} disabled={!selectedItem.ingestion_id}>
-                    Open Extract
-                  </button>
-                  <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 0)} disabled={!selectedItem.pipeline_run_id}>
-                    Pipeline output 0
-                  </button>
-                  <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)} disabled={!selectedItem.pipeline_run_id}>
-                    Pipeline output 1
-                  </button>
-                </div>
+                <details>
+                  <summary className="cursor-pointer text-xs text-slate-600">Module runs</summary>
+                  <div className="mt-2 space-y-2">
+                    {(selectedItem.telemetry?.modules ?? []).map((m) => (
+                      <div key={m.module_index} className="flex items-center justify-between rounded border bg-white px-2 py-1">
+                        <span className="text-xs font-mono">{m.module_index}:{m.module_name}</span>
+                        <span>{statusBadge(m.status)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
 
                 <details>
-                  <summary className="cursor-pointer text-xs text-slate-600">Raw last_error</summary>
+                  <summary className="cursor-pointer text-xs text-slate-600">Raw telemetry</summary>
                   <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[320px] overflow-auto rounded border bg-slate-50 p-2">
-                    {selectedItem.last_error ? safeStringify(selectedItem.last_error) : "—"}
+                    {selectedItem.telemetry ? safeStringify(selectedItem.telemetry) : "—"}
                   </pre>
                 </details>
               </div>
@@ -824,18 +766,21 @@ export default function BulkJobClient(props: {
           </section>
 
           <section className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Quick actions</h3>
-            <div className="mt-3 space-y-2">
-              <button className="w-full rounded px-3 py-2 bg-white border text-sm" onClick={() => { fetchJob(); fetchItems(); }}>
-                Refresh now
-              </button>
-              <button className="w-full rounded px-3 py-2 bg-rose-600 text-white text-sm" onClick={downloadErrors} disabled={!bulkJobId}>
-                Download failed rows CSV
-              </button>
+            <h3 className="text-sm font-semibold">Job details</h3>
+            <div className="mt-3 text-sm text-slate-700 space-y-1">
+              <div><span className="text-slate-500">Name:</span> {job?.name ?? "—"}</div>
+              <div><span className="text-slate-500">Status:</span> {job?.status ?? "—"}</div>
+              <div><span className="text-slate-500">Created by:</span> <span className="font-mono">{job?.created_by ?? "—"}</span></div>
+              <div><span className="text-slate-500">Created:</span> {fmtDate(job?.created_at)}</div>
+              <div><span className="text-slate-500">Updated:</span> {fmtDate(job?.updated_at)}</div>
             </div>
-            <div className="mt-3 text-xs text-slate-500">
-              This page uses live polling; reduce interval if you’re watching many jobs.
-            </div>
+
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-slate-600">Options</summary>
+              <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[220px] overflow-auto rounded border bg-slate-50 p-2">
+                {job?.options ? safeStringify(job.options) : "—"}
+              </pre>
+            </details>
           </section>
         </aside>
       </div>
