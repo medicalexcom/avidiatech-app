@@ -340,7 +340,7 @@ async function startPipeline(ingestionId: string, steps: string[]) {
   return String(pipelineRunId);
 }
 
-async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2500) {
+async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
