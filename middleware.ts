@@ -9,21 +9,13 @@ import { clerkMiddleware, clerkClient } from "@clerk/nextjs/server";
     const candidate = process.env.CLERK_SECRET_KEY || process.env.CLERK_SECRET;
     if (candidate) {
       process.env.CLERK_SECRET = candidate;
-      if (
-        !process.env.CLERK_API_KEY &&
-        (process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY)
-      ) {
-        process.env.CLERK_API_KEY =
-          process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY;
+      if (!process.env.CLERK_API_KEY && (process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY)) {
+        process.env.CLERK_API_KEY = process.env.CLERK_API_KEY_KEY || process.env.CLERK_API_KEY;
       }
     }
   }
-  if (
-    !process.env.NEXT_PUBLIC_CLERK_FRONTEND_API &&
-    process.env.NEXT_PUBLIC_CLERK_FRONTEND
-  ) {
-    process.env.NEXT_PUBLIC_CLERK_FRONTEND_API =
-      process.env.NEXT_PUBLIC_CLERK_FRONTEND;
+  if (!process.env.NEXT_PUBLIC_CLERK_FRONTEND_API && process.env.NEXT_PUBLIC_CLERK_FRONTEND) {
+    process.env.NEXT_PUBLIC_CLERK_FRONTEND_API = process.env.NEXT_PUBLIC_CLERK_FRONTEND;
   }
 })();
 
@@ -36,17 +28,13 @@ function stripAnsiAndTrim(v: any): string {
 
 /* Stripe init (optional) */
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
-const stripe = STRIPE_SECRET
-  ? new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" })
-  : null;
+const stripe = STRIPE_SECRET ? new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" }) : null;
 
 /**
  * Public callback allowlist
  * Safe because callback endpoint validates HMAC signature.
  */
-const PUBLIC_CALLBACK_PATHS = new Set<string>([
-  "/api/v1/ingest/callback",
-]);
+const PUBLIC_CALLBACK_PATHS = new Set<string>(["/api/v1/ingest/callback"]);
 
 /* allowlist and helpers */
 const ALLOWLIST = [
@@ -63,14 +51,8 @@ const ALLOWLIST = [
 function isAllowedPath(pathname: string) {
   if (ALLOWLIST.includes(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
-  if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up"))
-    return true;
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/static") ||
-    pathname.startsWith("/favicon.ico")
-  )
-    return true;
+  if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) return true;
+  if (pathname.startsWith("/_next") || pathname.startsWith("/static") || pathname.startsWith("/favicon.ico")) return true;
   return false;
 }
 
@@ -99,14 +81,8 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     const ownerEmails = getOwnerEmailsSet();
     if (ownerEmails.size > 0 && clerkUser?.emailAddresses?.length) {
       for (const e of clerkUser.emailAddresses) {
-        if (
-          e?.emailAddress &&
-          ownerEmails.has(String(e.emailAddress).toLowerCase())
-        ) {
-          console.info(
-            "Owner detected by email list, bypassing Stripe:",
-            e.emailAddress
-          );
+        if (e?.emailAddress && ownerEmails.has(String(e.emailAddress).toLowerCase())) {
+          console.info("Owner detected by email list, bypassing Stripe:", e.emailAddress);
           return true;
         }
       }
@@ -119,10 +95,7 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     const privateMeta = (clerkUser?.privateMetadata as any) || {};
     const publicMeta = (clerkUser?.publicMetadata as any) || {};
     if (privateMeta?.role === "owner" || publicMeta?.role === "owner") {
-      console.info(
-        "Owner detected by Clerk metadata; bypassing Stripe for user:",
-        userId
-      );
+      console.info("Owner detected by Clerk metadata; bypassing Stripe for user:", userId);
       return true;
     }
   } catch (err) {
@@ -146,9 +119,7 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     if (email) {
       try {
         const customers = await stripe.customers.list({ email, limit: 1 });
-        if (customers.data && customers.data.length > 0) {
-          customerId = customers.data[0].id;
-        }
+        if (customers.data && customers.data.length > 0) customerId = customers.data[0].id;
       } catch (err) {
         console.warn("Stripe customer list by email failed:", err);
       }
@@ -158,15 +129,10 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
   if (!customerId) return false;
 
   try {
-    const subs = await stripe.subscriptions.list({
-      customer: customerId,
-      limit: 50,
-    });
+    const subs = await stripe.subscriptions.list({ customer: customerId, limit: 50 });
     if (subs.data && subs.data.length > 0) {
       for (const s of subs.data) {
-        if (s.status === "trialing" || s.status === "active") {
-          return true;
-        }
+        if (s.status === "trialing" || s.status === "active") return true;
       }
     }
   } catch (err) {
@@ -174,6 +140,21 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
   }
 
   return false;
+}
+
+/**
+ * Internal bypass:
+ * - bulk workers call with `x-service-api-key`
+ * - pipeline-runner edge function calls internal endpoints with `x-pipeline-secret`
+ *
+ * Both must map to PIPELINE_INTERNAL_SECRET.
+ */
+function getInternalProvidedSecret(req: NextRequest): string {
+  const a = stripAnsiAndTrim(req.headers.get("x-service-api-key") || "");
+  if (a) return a;
+  const b = stripAnsiAndTrim(req.headers.get("x-pipeline-secret") || "");
+  if (b) return b;
+  return "";
 }
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
@@ -186,21 +167,16 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return res;
   }
 
-  // 2) Internal bypass for ingest + pipeline routes
-  const isProbePath =
-    pathname.startsWith("/api/v1/ingest") ||
-    pathname.startsWith("/api/v1/pipeline");
+  // 2) Internal bypass for ingest + pipeline routes (supports both headers)
+  const isProbePath = pathname.startsWith("/api/v1/ingest") || pathname.startsWith("/api/v1/pipeline");
 
   if (isProbePath) {
-    const provided = stripAnsiAndTrim(req.headers.get("x-service-api-key") || "");
+    const provided = getInternalProvidedSecret(req);
     const expected = stripAnsiAndTrim(process.env.PIPELINE_INTERNAL_SECRET || "");
-    const marker = "middleware.ts::internal-bypass-probe::2026-01-03";
+    const marker = "middleware.ts::internal-bypass-probe::2026-01-03b";
 
     if (provided && !expected) {
-      const res = NextResponse.json(
-        { error: "server_misconfigured_internal_secret" },
-        { status: 500 }
-      );
+      const res = NextResponse.json({ error: "server_misconfigured_internal_secret" }, { status: 500 });
       res.headers.set("x-mw-version", marker);
       res.headers.set("x-mw-provided-key-len", String(provided.length));
       res.headers.set("x-mw-expected-key-len", String(expected.length));
@@ -230,11 +206,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   // 3) Only protect dashboard/settings/api; allow everything else
-  if (
-    !pathname.startsWith("/dashboard") &&
-    !pathname.startsWith("/settings") &&
-    !pathname.startsWith("/api")
-  ) {
+  if (!pathname.startsWith("/dashboard") && !pathname.startsWith("/settings") && !pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
