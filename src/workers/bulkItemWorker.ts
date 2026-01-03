@@ -12,11 +12,11 @@
 //   We have observed env contamination with ANSI escape codes and/or whitespace/newlines which
 //   caused middleware to return 401 {"error":"unauthorized"}.
 //
-// NEW (2026-01-02):
+// NEW (2026-01-03):
 // - On ingest polling timeout, auto-retry by re-POSTing /api/v1/ingest once (configurable) and
 //   include rich diagnostics in bulk_job_items.last_error.
-// - Persist ingestionId returned from polling if available.
-// - Increase default polling timeout to allow slower ingestion/callback paths.
+// - Improve pipeline start error capture (read text fallback; keep JSON if present).
+// - Increase default ingest polling timeout via envs.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -54,7 +54,7 @@ const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app
 const INGEST_POLL_TIMEOUT_MS = parseInt(process.env.BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
 const INGEST_POLL_INTERVAL_MS = parseInt(process.env.BULK_INGEST_POLL_INTERVAL_MS || "3000", 10);
 const INGEST_RETRY_ON_TIMEOUT = (process.env.BULK_INGEST_RETRY_ON_TIMEOUT || "true").toLowerCase() !== "false";
-const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env.BULK_INGEST_RETRY_MAX || "1", 10)); // number of re-POST attempts after timeout
+const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env.BULK_INGEST_RETRY_MAX || "1", 10)); // retries after timeout
 
 // Basic required env checks (fail-fast)
 if (!supabaseUrl || !supabaseKey) {
@@ -124,17 +124,15 @@ function normalizeAbsoluteUrl(input: string): string {
   const s = String(input || "").trim();
   if (!s) return s;
 
-  // If it already parses, keep as-is
   try {
     const u = new URL(s);
     return u.toString();
   } catch {
-    // If missing scheme, try https://
     try {
       const u = new URL(`https://${s}`);
       return u.toString();
     } catch {
-      return s; // let ingest validate and return a clear error
+      return s;
     }
   }
 }
@@ -157,16 +155,17 @@ async function postIngest(itemUrl: string) {
     }),
   });
 
-  const j = await res.json().catch(() => null);
-  return { res, json: j, normalizedUrl: normalized };
+  const text = await res.text().catch(() => "");
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  return { res, text, json, normalizedUrl: normalized };
 }
 
-/**
- * Poll ingest job status endpoint until:
- * - 200 => returns ingestionId
- * - 409 => throws terminal error
- * - timeout => throws Error("ingest job timeout") with err.payload including last seen response
- */
 async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOUT_MS, intervalMs = INGEST_POLL_INTERVAL_MS) {
   const start = Date.now();
   let lastPayload: any = null;
@@ -178,8 +177,14 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
     });
 
     lastStatus = res.status;
-    const j = await res.json().catch(() => null);
-    lastPayload = j;
+    const text = await res.text().catch(() => "");
+    let j: any = null;
+    try {
+      j = text ? JSON.parse(text) : null;
+    } catch {
+      j = null;
+    }
+    lastPayload = j ?? text ?? null;
 
     if (res.status === 200) {
       return j?.ingestionId ?? j?.id ?? null;
@@ -187,7 +192,7 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
     if (res.status === 409) {
       const msg = j?.error ?? j?.detail ?? "ingest_engine_error";
       const err: any = new Error(msg);
-      err.payload = j;
+      err.payload = j ?? { status: res.status, text };
       throw err;
     }
 
@@ -199,9 +204,6 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
   throw err;
 }
 
-/**
- * Start ingest and return ingestionId (with one optional retry on timeout)
- */
 async function startIngestAndReturnIngestionId(itemUrl: string) {
   let attempt = 0;
   let lastTimeoutPayload: any = null;
@@ -209,18 +211,17 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
   while (true) {
     attempt++;
 
-    const { res, json: j } = await postIngest(itemUrl);
+    const { res, text, json: j } = await postIngest(itemUrl);
 
     if (!res.ok) {
       const msg = j?.error ?? `ingest failed (${res.status})`;
       const err: any = new Error(msg);
-      err.payload = { status: res.status, body: j };
+      err.payload = { status: res.status, body: j, text };
       throw err;
     }
 
     const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
 
-    // If API returns accepted/202, we must poll
     if (possibleIngestionId) {
       if (j?.status === "accepted" || res.status === 202) {
         const jobId = j?.jobId ?? j?.ingestionId ?? possibleIngestionId;
@@ -236,7 +237,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
 
             const canRetry =
               INGEST_RETRY_ON_TIMEOUT &&
-              attempt <= (1 + INGEST_RETRY_MAX); // first attempt + retries
+              attempt <= (1 + INGEST_RETRY_MAX);
 
             if (canRetry) {
               console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
@@ -247,28 +248,27 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
               continue;
             }
 
-            // no more retries
             const err: any = new Error("ingest job timeout");
             err.payload = {
               attempts: attempt,
-              lastTimeoutPayload,
               initialResponse: j,
+              lastTimeoutPayload,
             };
             throw err;
           }
 
-          // terminal 409 or other error
           throw e;
         }
       }
-
-      // immediate completion
       return possibleIngestionId;
     }
 
-    // Fallback: jobId shape
     const jobId = j?.jobId ?? j?.job?.id ?? null;
-    if (!jobId) throw new Error("ingest did not return an ingestionId or jobId");
+    if (!jobId) {
+      const err: any = new Error("ingest did not return an ingestionId or jobId");
+      err.payload = { status: res.status, body: j, text };
+      throw err;
+    }
 
     try {
       return await pollForIngestionJob(jobId);
@@ -290,7 +290,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
         }
 
         const err: any = new Error("ingest job timeout");
-        err.payload = { attempts: attempt, lastTimeoutPayload, initialResponse: j };
+        err.payload = { attempts: attempt, initialResponse: j, lastTimeoutPayload };
         throw err;
       }
       throw e;
@@ -315,13 +315,29 @@ async function startPipeline(ingestionId: string, steps: string[]) {
     }),
   });
 
-  const j = await res.json().catch(() => null);
+  // Read text first to preserve non-JSON error bodies
+  const text = await res.text().catch(() => "");
+  let j: any = null;
+  try {
+    j = text ? JSON.parse(text) : null;
+  } catch {
+    j = null;
+  }
+
   if (!res.ok) {
     const err: any = new Error(j?.error ?? `pipeline start failed (${res.status})`);
-    err.payload = { status: res.status, body: j };
+    err.payload = { status: res.status, body: j, text: text || null };
     throw err;
   }
-  return String(j.pipelineRunId);
+
+  const pipelineRunId = j?.pipelineRunId;
+  if (!pipelineRunId) {
+    const err: any = new Error("pipeline start returned no pipelineRunId");
+    err.payload = { status: res.status, body: j, text: text || null };
+    throw err;
+  }
+
+  return String(pipelineRunId);
 }
 
 async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 2500) {
@@ -330,7 +346,15 @@ async function pollPipeline(runId: string, timeoutMs = 180_000, intervalMs = 250
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
       headers: serviceHeaders(),
     });
-    const j = await res.json().catch(() => null);
+
+    const text = await res.text().catch(() => "");
+    let j: any = null;
+    try {
+      j = text ? JSON.parse(text) : null;
+    } catch {
+      j = null;
+    }
+
     if (res.ok && j?.run) {
       const status = j.run.status;
       if (status === "succeeded" || status === "failed") return j;
@@ -366,7 +390,6 @@ async function handleJob(job: any) {
     let isOwner = false;
 
     try {
-      // Optional: if org_id missing, fall back to first membership
       if (!tenantId || tenantId === "<ORG_ID_FOUND>") {
         const { data: tm, error: tmErr } = await supabase
           .from("team_members")
@@ -395,8 +418,6 @@ async function handleJob(job: any) {
       console.warn("[bulk-item] tenant/role lookup failed, continuing:", lookupErr?.message ?? lookupErr);
     }
 
-    // Even if owner/admin, we still want USAGE tracked. With the updated billing.ts,
-    // owners bypass quota/subscription but still increment usage counters.
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantId ?? undefined,
@@ -444,7 +465,6 @@ async function handleJob(job: any) {
       );
     }
   } catch (err: any) {
-    // Include err.payload if present (timeouts & HTTP errors)
     const payload = err?.payload ?? null;
 
     console.error("[bulk-item] processing error", {
