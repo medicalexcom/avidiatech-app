@@ -33,6 +33,20 @@ const stripe = STRIPE_SECRET
   ? new Stripe(STRIPE_SECRET, { apiVersion: "2024-06-20" })
   : null;
 
+/**
+ * Public callback allowlist
+ *
+ * We intentionally allow unauthenticated access to the ingest callback endpoint because:
+ * - The endpoint is protected by an HMAC signature check (x-avidiatech-signature + INGEST_SECRET)
+ * - Requiring Clerk auth would block the ingest engine from calling back
+ *
+ * IMPORTANT:
+ * - Do NOT put other API endpoints here unless they have their own strong auth.
+ */
+const PUBLIC_CALLBACK_PATHS = new Set<string>([
+  "/api/v1/ingest/callback",
+]);
+
 /* allowlist and helpers (unchanged logic) */
 const ALLOWLIST = [
   "/dashboard",
@@ -164,6 +178,11 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
+  // Allow public callback paths to bypass Clerk entirely
+  if (PUBLIC_CALLBACK_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
   if (
     !pathname.startsWith("/dashboard") &&
     !pathname.startsWith("/settings") &&
@@ -200,6 +219,18 @@ const clerkWrappedHandler = clerkMiddleware(async (auth, req: NextRequest) => {
 
 export default async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+
+  /**
+   * Option A: allow unauthenticated access to /api/v1/ingest/callback
+   * (endpoint still verifies HMAC signature).
+   *
+   * We also attach the x-mw-version marker for debugging parity with other internal routes.
+   */
+  if (PUBLIC_CALLBACK_PATHS.has(pathname)) {
+    const res = NextResponse.next();
+    res.headers.set("x-mw-version", "src-middleware.ts::public-callback-allow::2026-01-03");
+    return res;
+  }
 
   /**
    * DEBUG / PROOF HEADER
