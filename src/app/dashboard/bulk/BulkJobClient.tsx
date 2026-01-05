@@ -749,613 +749,849 @@ export default function BulkJobClient(props: {
 
   const seoPreviewKey = useMemo(() => tinyHash(seoPreviewDoc || ""), [seoPreviewDoc]);
 
+  const BTN = "inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm hover:bg-slate-50 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+  const BTN_SM = "inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 shadow-sm hover:bg-slate-50 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+  const BTN_PRIMARY = "inline-flex items-center justify-center rounded-md bg-sky-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+  const BTN_DANGER = "inline-flex items-center justify-center rounded-md bg-rose-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-rose-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+  const CHIP = "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur";
+
   return (
-    <div className="mx-auto max-w-[1400px] p-4 space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
-          <div className="mt-1 text-sm text-slate-600">
-            Job id: <span className="font-mono">{bulkJobId || "—"}</span>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
+      <div className="mx-auto max-w-[1600px] p-4 space-y-4">
+        {/* Header */}
+        <div className="rounded-2xl border bg-white/70 p-4 shadow-sm backdrop-blur">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">Bulk job dashboard</h1>
+                {job?.status ? (
+                  <span className="ml-1">{statusBadge(job.status)}</span>
+                ) : null}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className={CHIP}>
+                  Job id: <span className="font-mono">{bulkJobId || "—"}</span>
+                </span>
+                <span className={CHIP}>
+                  Updated: <span className="font-mono">{fmtDate(job?.updated_at)}</span>
+                </span>
+                {(loadingJob || loadingItems || loadingPlainItems) ? (
+                  <span className="text-xs text-slate-500">refreshing…</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 lg:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    fetchJob();
+                    fetchTelemetryItems();
+                    if (showQueuedAccurate) fetchPlainItems();
+                  }}
+                  className={BTN}
+                  disabled={!bulkJobId || loadingJob || loadingItems || loadingPlainItems}
+                >
+                  Refresh
+                </button>
+
+                <button onClick={downloadErrors} className={BTN_DANGER} disabled={!bulkJobId}>
+                  Download errors CSV
+                </button>
+
+                <button
+                  className={BTN_PRIMARY}
+                  onClick={retryFailedItems}
+                  disabled={(jobFailed ?? pageCounts.failed) === 0}
+                  title="Retry all failed items (server-side)"
+                >
+                  Retry failed
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={autoPoll} onChange={(e) => setAutoPoll(e.target.checked)} />
+                  Auto refresh
+                </label>
+
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <span className="text-xs text-slate-600">Interval</span>
+                  <select
+                    className="rounded-md border border-slate-200 bg-white px-2 py-2 text-sm"
+                    value={pollIntervalMs}
+                    onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}
+                  >
+                    <option value={1000}>1s</option>
+                    <option value={3000}>3s</option>
+                    <option value={5000}>5s</option>
+                    <option value={10000}>10s</option>
+                  </select>
+                </label>
+
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={showQueuedAccurate} onChange={(e) => setShowQueuedAccurate(e.target.checked)} />
+                  Show queued accurately
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Alerts */}
+          <div className="mt-4 space-y-2">
+            {error ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                {error}
+              </div>
+            ) : null}
+
+            {actionMessage ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                {actionMessage}
+              </div>
+            ) : null}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => {
-              fetchJob();
-              fetchTelemetryItems();
-              if (showQueuedAccurate) fetchPlainItems();
-            }}
-            className="rounded-md border px-3 py-2 text-sm bg-white"
-            disabled={!bulkJobId || loadingJob || loadingItems || loadingPlainItems}
-          >
-            Refresh
-          </button>
+        {/* KPI row */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 auto-rows-fr">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs text-slate-500">Progress (job)</div>
+                <div className="mt-1 text-2xl font-semibold">{pct}%</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {jobCompleted ?? "—"}/{totalJob ?? "—"} done
+                </div>
+              </div>
+              <div className="text-xs text-slate-600">{statusBadge(job?.status ?? "—")}</div>
+            </div>
 
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={autoPoll} onChange={(e) => setAutoPoll(e.target.checked)} />
-            Auto refresh
-          </label>
+            <div className="mt-3 h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400"
+                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+              />
+            </div>
 
-          <label className="inline-flex items-center gap-2 text-sm">
-            <span className="text-xs text-slate-600">Interval</span>
-            <select className="rounded-md border bg-white px-2 py-2 text-sm" value={pollIntervalMs} onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}>
-              <option value={1000}>1s</option>
-              <option value={3000}>3s</option>
-              <option value={5000}>5s</option>
-              <option value={10000}>10s</option>
-            </select>
-          </label>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <div className="text-slate-500">queued</div>
+                <div className="font-semibold">{jobQueued ?? "—"}</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <div className="text-slate-500">failed</div>
+                <div className="font-semibold text-rose-700">{jobFailed ?? "—"}</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <div className="text-slate-500">total</div>
+                <div className="font-semibold">{totalJob ?? "—"}</div>
+              </div>
+            </div>
+          </div>
 
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={showQueuedAccurate} onChange={(e) => setShowQueuedAccurate(e.target.checked)} />
-            Show queued accurately (merge plain + telemetry)
-          </label>
+          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs text-slate-500">Counts (job-level)</div>
+                <div className="mt-1 text-sm text-slate-600">From job row counters (best signal)</div>
+              </div>
+            </div>
 
-          <button onClick={downloadErrors} className="rounded-md bg-rose-600 px-3 py-2 text-sm text-white" disabled={!bulkJobId}>
-            Download errors CSV
-          </button>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Succeeded</div>
+                <div className="text-xl font-semibold text-emerald-700">{jobCompleted ?? "—"}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Failed</div>
+                <div className="text-xl font-semibold text-rose-700">{jobFailed ?? "—"}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Queued (estimate)</div>
+                <div className="text-xl font-semibold text-slate-800">{jobQueued ?? "—"}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Total</div>
+                <div className="text-xl font-semibold text-slate-800">{totalJob ?? "—"}</div>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-3 text-xs text-slate-500">
+              Note: job-level queued excludes “in_progress” if your backend doesn’t track it in the job row.
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
+            <div className="text-xs text-slate-500">Counts (this page)</div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Succeeded</div>
+                <div className="text-xl font-semibold text-emerald-700">{pageCounts.succeeded}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Failed</div>
+                <div className="text-xl font-semibold text-rose-700">{pageCounts.failed}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">In progress</div>
+                <div className="text-xl font-semibold text-amber-700">{pageCounts.in_progress}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Queued</div>
+                <div className="text-xl font-semibold text-slate-800">{pageCounts.queued}</div>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-3 text-xs text-slate-500">
+              Showing: {showQueuedAccurate ? "merged plain + telemetry" : "telemetry only"}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
+            <div className="text-xs text-slate-500">Quick actions</div>
+
+            <div className="mt-3 space-y-2">
+              <button
+                className={classNames(BTN_PRIMARY, "w-full")}
+                onClick={retryFailedItems}
+                disabled={(jobFailed ?? pageCounts.failed) === 0}
+              >
+                Retry failed items
+              </button>
+
+              <button
+                className={classNames(BTN, "w-full")}
+                onClick={() => {
+                  fetchJob();
+                  fetchTelemetryItems();
+                  if (showQueuedAccurate) fetchPlainItems();
+                }}
+              >
+                Refresh now
+              </button>
+
+              <button
+                className={classNames(BTN, "w-full")}
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                  setOffset(0);
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+
+            <div className="mt-auto pt-3 text-xs text-slate-500">
+              Tip: click any row to open the right drawer (defaults to SEO preview).
+            </div>
+          </div>
         </div>
-      </div>
 
-      {error ? (
-        <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>
-      ) : null}
-      {actionMessage ? (
-        <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">{actionMessage}</div>
-      ) : null}
-
-      {/* KPI row */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Main table */}
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Progress (job)</div>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <div className="text-2xl font-semibold">{pct}%</div>
-            <div className="text-xs text-slate-500">
-              {jobCompleted ?? "—"}/{totalJob ?? "—"} done
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-xs text-slate-500">Items</div>
+              <div className="text-sm text-slate-700">
+                Showing <span className="font-semibold">{filteredItems.length}</span> / {mergedItems.length} (offset{" "}
+                {offset}, limit {limit})
+                <span className="ml-2 text-xs text-slate-500">
+                  {showQueuedAccurate ? "(merged plain+telemetry)" : "(telemetry only)"}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
-            <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Job status: {statusBadge(job?.status ?? "—")}
-          </div>
-        </div>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Counts (job-level)</div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Succeeded</div>
-              <div className="text-lg font-semibold text-emerald-700">{jobCompleted ?? "—"}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Failed</div>
-              <div className="text-lg font-semibold text-rose-700">{jobFailed ?? "—"}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Queued (estimate)</div>
-              <div className="text-lg font-semibold text-slate-700">{jobQueued ?? "—"}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Total</div>
-              <div className="text-lg font-semibold text-slate-700">{totalJob ?? "—"}</div>
-            </div>
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Note: job-level queued excludes “in_progress” if your backend doesn’t track it in the job row.
-          </div>
-        </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm w-[280px] max-w-full"
+                placeholder="Search URL / IDs"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <select
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+              >
+                <option value="all">All statuses</option>
+                <option value="queued">Queued</option>
+                <option value="in_progress">In progress</option>
+                <option value="failed">Failed</option>
+                <option value="succeeded">Succeeded</option>
+              </select>
+              <select
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={limit}
+                onChange={(e) => {
+                  setLimit(parseInt(e.target.value, 10));
+                  setOffset(0);
+                }}
+              >
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+              </select>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Counts (this page)</div>
-          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Succeeded</div>
-              <div className="text-lg font-semibold text-emerald-700">{pageCounts.succeeded}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Failed</div>
-              <div className="text-lg font-semibold text-rose-700">{pageCounts.failed}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">In progress</div>
-              <div className="text-lg font-semibold text-amber-700">{pageCounts.in_progress}</div>
-            </div>
-            <div className="rounded-lg border p-2">
-              <div className="text-xs text-slate-500">Queued</div>
-              <div className="text-lg font-semibold text-slate-700">{pageCounts.queued}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="text-xs text-slate-500">Actions</div>
-          <div className="mt-3 space-y-2">
-            <button className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={retryFailedItems} disabled={(jobFailed ?? pageCounts.failed) === 0}>
-              Retry failed items
-            </button>
-            <button className="w-full rounded-md border bg-white px-3 py-2 text-sm" onClick={() => { fetchJob(); fetchTelemetryItems(); if (showQueuedAccurate) fetchPlainItems(); }}>
-              Refresh now
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main table */}
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-xs text-slate-500">Items</div>
-            <div className="text-sm text-slate-700">
-              Showing <span className="font-semibold">{filteredItems.length}</span> / {mergedItems.length} (offset {offset}, limit {limit})
-              <span className="ml-2 text-xs text-slate-500">
-                {showQueuedAccurate ? "(merged plain+telemetry)" : "(telemetry only)"}
-              </span>
+              <button
+                className={BTN}
+                onClick={() => {
+                  fetchTelemetryItems();
+                  if (showQueuedAccurate) fetchPlainItems();
+                }}
+              >
+                Reload items
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <input className="rounded-md border px-3 py-2 text-sm w-[260px]" placeholder="Search URL / IDs" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <select className="rounded-md border bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
-              <option value="all">All statuses</option>
-              <option value="queued">Queued</option>
-              <option value="in_progress">In progress</option>
-              <option value="failed">Failed</option>
-              <option value="succeeded">Succeeded</option>
-            </select>
-            <select className="rounded-md border bg-white px-3 py-2 text-sm" value={limit} onChange={(e) => setLimit(parseInt(e.target.value, 10))}>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={200}>200</option>
-              <option value={500}>500</option>
-            </select>
-
-            <button className="rounded-md border bg-white px-3 py-2 text-sm" onClick={() => { fetchTelemetryItems(); if (showQueuedAccurate) fetchPlainItems(); }}>
-              Reload items
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 overflow-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-slate-500">
-                <th className="py-2 pr-3">#</th>
-                <th className="py-2 pr-3">URL</th>
-                <th className="py-2 pr-3">Item</th>
-                <th className="py-2 pr-3">Pipeline</th>
-                <th className="py-2 pr-3">Modules</th>
-                <th className="py-2 pr-3">Timing</th>
-                <th className="py-2 pr-3">Error</th>
-                <th className="py-2 pr-3">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {(loadingItems || (showQueuedAccurate && loadingPlainItems)) ? (
-                <tr>
-                  <td className="py-4 text-sm text-slate-500" colSpan={8}>
-                    Loading items…
-                  </td>
+          <div className="mt-4 overflow-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200">
+                <tr className="text-left text-xs text-slate-500">
+                  <th className="py-3 px-3">#</th>
+                  <th className="py-3 px-3">URL</th>
+                  <th className="py-3 px-3">Item</th>
+                  <th className="py-3 px-3">Pipeline</th>
+                  <th className="py-3 px-3">Modules</th>
+                  <th className="py-3 px-3">Timing</th>
+                  <th className="py-3 px-3">Error</th>
+                  <th className="py-3 px-3">Actions</th>
                 </tr>
-              ) : filteredItems.length === 0 ? (
-                <tr>
-                  <td className="py-4 text-sm text-slate-500" colSpan={8}>
-                    No items found.
-                  </td>
-                </tr>
-              ) : (
-                filteredItems.map((it) => {
-                  const dur = msBetween(it.started_at, it.finished_at);
-                  const isExpanded = Boolean(expanded[it.id]);
+              </thead>
 
-                  const pipe = it.telemetry?.pipeline_run ?? null;
-                  const modSummary = it.telemetry?.module_summary ?? null;
-                  const mods = it.telemetry?.modules ?? [];
+              <tbody>
+                {(loadingItems || (showQueuedAccurate && loadingPlainItems)) ? (
+                  <tr>
+                    <td className="py-6 px-3 text-sm text-slate-500" colSpan={8}>
+                      Loading items…
+                    </td>
+                  </tr>
+                ) : filteredItems.length === 0 ? (
+                  <tr>
+                    <td className="py-6 px-3 text-sm text-slate-500" colSpan={8}>
+                      No items found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredItems.map((it) => {
+                    const dur = msBetween(it.started_at, it.finished_at);
+                    const isExpanded = Boolean(expanded[it.id]);
 
-                  return (
-                    <React.Fragment key={it.id}>
-                      <tr className={classNames("border-t hover:bg-slate-50 cursor-pointer")} onClick={() => openDrawer(it.id, "seo")}>
-                        <td className="py-2 pr-3 align-top">{it.item_index + 1}</td>
+                    const pipe = it.telemetry?.pipeline_run ?? null;
+                    const modSummary = it.telemetry?.module_summary ?? null;
+                    const mods = it.telemetry?.modules ?? [];
 
-                        <td className="py-2 pr-3 align-top max-w-[52ch]">
-                          <div className="truncate">{it.input_url}</div>
-                          <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
-                        </td>
+                    return (
+                      <React.Fragment key={it.id}>
+                        <tr
+                          className="border-t hover:bg-slate-50 cursor-pointer"
+                          onClick={() => openDrawer(it.id, "seo")}
+                        >
+                          <td className="py-3 px-3 align-top text-slate-700">{it.item_index + 1}</td>
 
-                        <td className="py-2 pr-3 align-top">
-                          <div className="flex items-center gap-2">
-                            {statusBadge(it.status)}
-                            <span className="text-xs text-slate-500 font-mono">tries:{it.tries ?? "—"}</span>
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            ingestion: <span className="font-mono">{it.ingestion_id ? `${it.ingestion_id.slice(0, 10)}…` : "—"}</span>
-                          </div>
-                        </td>
+                          <td className="py-3 px-3 align-top max-w-[60ch]">
+                            <div className="truncate text-slate-900">{it.input_url}</div>
+                            <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
+                          </td>
 
-                        <td className="py-2 pr-3 align-top">
-                          {it.pipeline_run_id ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                {statusBadge(pipe?.status ?? "—")}
-                                <span className="text-xs font-mono">{it.pipeline_run_id.slice(0, 10)}…</span>
-                              </div>
-                              <div className="text-[11px] text-slate-500">
-                                current:{" "}
-                                <span className="font-mono">
-                                  {modSummary?.current ? `${modSummary.current.module_index}:${modSummary.current.module_name}:${modSummary.current.status}` : "—"}
-                                </span>
-                              </div>
+                          <td className="py-3 px-3 align-top">
+                            <div className="flex items-center gap-2">
+                              {statusBadge(it.status)}
+                              <span className="text-xs text-slate-500 font-mono">tries:{it.tries ?? "—"}</span>
                             </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-2 pr-3 align-top">
-                          {mods.length ? (
-                            <div className="space-y-2">
-                              {renderModuleStrip(mods)}
-                              <div className="text-[11px] text-slate-500 font-mono">
-                                ok:{modSummary?.counts?.succeeded ?? 0} run:{modSummary?.counts?.running ?? 0} q:{modSummary?.counts?.queued ?? 0} fail:{modSummary?.counts?.failed ?? 0} skip:{modSummary?.counts?.skipped ?? 0}
-                              </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              ingestion:{" "}
+                              <span className="font-mono">
+                                {it.ingestion_id ? `${it.ingestion_id.slice(0, 10)}…` : "—"}
+                              </span>
                             </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="py-2 pr-3 align-top">
-                          <div className="text-xs text-slate-700 font-mono">{fmtDuration(dur)}</div>
-                          <div className="text-[11px] text-slate-400">start: {fmtDate(it.started_at)}</div>
-                        </td>
-
-                        <td className="py-2 pr-3 align-top">
-                          {it.last_error ? (
-                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
-                              {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
-                            </div>
-                          ) : modSummary?.failed?.error ? (
-                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
-                              {safeStringify(modSummary.failed.error, 220)}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-2 pr-3 align-top" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex flex-wrap gap-2">
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
-                              SEO preview
-                            </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
-                              Extract full
-                            </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
-                              Output 0
-                            </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
-                              Output 1
-                            </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
-                              {isExpanded ? "Hide" : "Details"}
-                            </button>
-                            <button
-                              className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50"
-                              disabled={retryingIds[it.id] || it.status !== "failed"}
-                              onClick={() => retryItem(it.id)}
-                            >
-                              {retryingIds[it.id] ? "Retrying…" : "Retry"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {isExpanded ? (
-                        <tr className="border-t bg-slate-50">
-                          <td colSpan={8} className="p-3">
-                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                              <div className="rounded-lg border bg-white p-3">
-                                <div className="text-xs text-slate-500 mb-2">Telemetry (raw)</div>
-                                <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
-                                  {it.telemetry ? safeStringify(it.telemetry) : "—"}
-                                </pre>
+                          <td className="py-3 px-3 align-top">
+                            {it.pipeline_run_id ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {statusBadge(pipe?.status ?? "—")}
+                                  <span className="text-xs font-mono">{it.pipeline_run_id.slice(0, 10)}…</span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  current:{" "}
+                                  <span className="font-mono">
+                                    {modSummary?.current
+                                      ? `${modSummary.current.module_index}:${modSummary.current.module_name}:${modSummary.current.status}`
+                                      : "—"}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="rounded-lg border bg-white p-3">
-                                <div className="text-xs text-slate-500 mb-2">Last error (raw)</div>
-                                <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
-                                  {it.last_error ? safeStringify(it.last_error) : "—"}
-                                </pre>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 align-top">
+                            {mods.length ? (
+                              <div className="space-y-2">
+                                {renderModuleStrip(mods)}
+                                <div className="text-[11px] text-slate-500 font-mono">
+                                  ok:{modSummary?.counts?.succeeded ?? 0} run:{modSummary?.counts?.running ?? 0} q:
+                                  {modSummary?.counts?.queued ?? 0} fail:{modSummary?.counts?.failed ?? 0} skip:
+                                  {modSummary?.counts?.skipped ?? 0}
+                                </div>
                               </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 align-top">
+                            <div className="text-xs text-slate-800 font-mono">{fmtDuration(dur)}</div>
+                            <div className="text-[11px] text-slate-400">start: {fmtDate(it.started_at)}</div>
+                          </td>
+
+                          <td className="py-3 px-3 align-top">
+                            {it.last_error ? (
+                              <div className="max-w-[40ch] truncate text-xs text-rose-700">
+                                {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
+                              </div>
+                            ) : modSummary?.failed?.error ? (
+                              <div className="max-w-[40ch] truncate text-xs text-rose-700">
+                                {safeStringify(modSummary.failed.error, 220)}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 align-top" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex flex-wrap gap-2">
+                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
+                                SEO preview
+                              </button>
+                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
+                                Extract full
+                              </button>
+                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
+                                Output 0
+                              </button>
+                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
+                                Output 1
+                              </button>
+                              <button className={BTN_SM} onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
+                                {isExpanded ? "Hide" : "Details"}
+                              </button>
+                              <button
+                                className={classNames(
+                                  "inline-flex items-center justify-center rounded-md px-2 py-1 text-xs shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
+                                  it.status === "failed" ? "bg-amber-400 text-slate-900 hover:bg-amber-300" : "bg-slate-100 text-slate-500"
+                                )}
+                                disabled={retryingIds[it.id] || it.status !== "failed"}
+                                onClick={() => retryItem(it.id)}
+                              >
+                                {retryingIds[it.id] ? "Retrying…" : "Retry"}
+                              </button>
                             </div>
                           </td>
                         </tr>
-                      ) : null}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
 
-        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2 text-sm">
-            <button className="rounded px-2 py-1 border" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
-              Prev
-            </button>
-            <button className="rounded px-2 py-1 border" onClick={() => setOffset(offset + limit)} disabled={mergedItems.length < limit}>
-              Next
-            </button>
-            <div className="text-xs text-slate-500">offset {offset}</div>
+                        {isExpanded ? (
+                          <tr className="border-t bg-slate-50">
+                            <td colSpan={8} className="p-4">
+                              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                  <div className="text-xs text-slate-500 mb-2">Telemetry (raw)</div>
+                                  <pre className="text-xs whitespace-pre-wrap break-all h-[260px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                                    {it.telemetry ? safeStringify(it.telemetry) : "—"}
+                                  </pre>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                  <div className="text-xs text-slate-500 mb-2">Last error (raw)</div>
+                                  <pre className="text-xs whitespace-pre-wrap break-all h-[260px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+                                    {it.last_error ? safeStringify(it.last_error) : "—"}
+                                  </pre>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="text-xs text-slate-500">Updated: {fmtDate(job?.updated_at)} {loadingJob || loadingItems || loadingPlainItems ? "(refreshing…)" : ""}</div>
-        </div>
-      </div>
 
-      {/* Drawer */}
-      {drawerOpen && selectedItem ? (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-[860px] bg-white shadow-xl border-l flex flex-col">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div className="min-w-0">
-                <div className="text-xs text-slate-500">Bulk item</div>
-                <div className="font-semibold truncate">{selectedItem.input_url}</div>
-                <div className="mt-1 text-xs text-slate-500 font-mono">
-                  ingestion: {selectedItem.ingestion_id ?? "—"} • pipeline: {selectedItem.pipeline_run_id ?? "—"}
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <button className={BTN_SM} onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
+                Prev
+              </button>
+              <button className={BTN_SM} onClick={() => setOffset(offset + limit)} disabled={mergedItems.length < limit}>
+                Next
+              </button>
+              <div className="text-xs text-slate-500">offset {offset}</div>
+            </div>
+            <div className="text-xs text-slate-500">
+              Updated: {fmtDate(job?.updated_at)} {loadingJob || loadingItems || loadingPlainItems ? "(refreshing…)" : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Drawer */}
+        {drawerOpen && selectedItem ? (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
+
+            <div className="absolute right-0 top-0 h-full w-full max-w-[920px] bg-white shadow-2xl border-l flex flex-col">
+              {/* Drawer header */}
+              <div className="border-b bg-gradient-to-b from-slate-50 to-white">
+                <div className="p-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs text-slate-500">Bulk item</div>
+                    <div className="mt-1 font-semibold truncate text-slate-900">{selectedItem.input_url}</div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span className={CHIP}>
+                        ingestion: <span className="font-mono">{selectedItem.ingestion_id ?? "—"}</span>
+                      </span>
+                      <span className={CHIP}>
+                        pipeline: <span className="font-mono">{selectedItem.pipeline_run_id ?? "—"}</span>
+                      </span>
+                      <span className={CHIP}>
+                        status: <span>{statusBadge(selectedItem.status ?? "—")}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button className={BTN} onClick={() => setDrawerOpen(false)}>
+                    Close
+                  </button>
+                </div>
+
+                {/* Drawer tabs */}
+                <div className="px-4 pb-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className={classNames(
+                        "rounded-full border px-3 py-1 text-xs",
+                        drawerTab === "seo" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() => setDrawerTab("seo")}
+                      disabled={!selectedItem.ingestion_id}
+                    >
+                      SEO preview
+                    </button>
+                    <button
+                      className={classNames(
+                        "rounded-full border px-3 py-1 text-xs",
+                        drawerTab === "extract" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() => setDrawerTab("extract")}
+                      disabled={!selectedItem.ingestion_id}
+                    >
+                      Extract full
+                    </button>
+                    <button
+                      className={classNames(
+                        "rounded-full border px-3 py-1 text-xs",
+                        drawerTab === "out0" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() => setDrawerTab("out0")}
+                      disabled={!selectedItem.pipeline_run_id}
+                    >
+                      Output 0
+                    </button>
+                    <button
+                      className={classNames(
+                        "rounded-full border px-3 py-1 text-xs",
+                        drawerTab === "out1" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() => setDrawerTab("out1")}
+                      disabled={!selectedItem.pipeline_run_id}
+                    >
+                      Output 1
+                    </button>
+                    <button
+                      className={classNames(
+                        "rounded-full border px-3 py-1 text-xs",
+                        drawerTab === "telemetry" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                      )}
+                      onClick={() => setDrawerTab("telemetry")}
+                    >
+                      Telemetry
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setDrawerOpen(false)}>
-                Close
-              </button>
-            </div>
 
-            <div className="px-4 pt-3 flex flex-wrap gap-2">
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "seo" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("seo")} disabled={!selectedItem.ingestion_id}>
-                SEO preview
-              </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "extract" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("extract")} disabled={!selectedItem.ingestion_id}>
-                Extract full
-              </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out0" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out0")} disabled={!selectedItem.pipeline_run_id}>
-                Output 0
-              </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out1" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out1")} disabled={!selectedItem.pipeline_run_id}>
-                Output 1
-              </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "telemetry" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("telemetry")}>
-                Telemetry
-              </button>
-            </div>
+              {/* Drawer content (single scroll) */}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="h-full overflow-auto p-4">
+                  {/* SEO tab */}
+                  {drawerTab === "seo" ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-slate-900">SEO preview (live HTML)</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button className={BTN_SM} onClick={() => void copyToClipboard(seoPreviewDoc)} disabled={!seoPreviewDoc}>
+                            Copy HTML
+                          </button>
+                          <button
+                            className={BTN_SM}
+                            onClick={() => {
+                              const id = selectedItem.ingestion_id || "seo";
+                              downloadTextFile(`seo-preview-${id}.html`, seoPreviewDoc, "text/html");
+                            }}
+                            disabled={!seoPreviewDoc}
+                          >
+                            Download HTML
+                          </button>
+                          {selectedItem.ingestion_id ? (
+                            <button className="text-xs underline text-sky-700" onClick={() => void loadSeoPreview(selectedItem.ingestion_id!)}>
+                              refresh
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
 
-            <div className="p-4 overflow-auto flex-1">
-              {/* SEO tab */}
-              {drawerTab === "seo" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">SEO preview (live HTML)</div>
-                    <div className="flex items-center gap-2">
-                      <button className="rounded border bg-white px-2 py-1 text-xs" onClick={() => void copyToClipboard(seoPreviewDoc)} disabled={!seoPreviewDoc}>
-                        Copy HTML
-                      </button>
-                      <button
-                        className="rounded border bg-white px-2 py-1 text-xs"
-                        onClick={() => {
-                          const id = selectedItem.ingestion_id || "seo";
-                          downloadTextFile(`seo-preview-${id}.html`, seoPreviewDoc, "text/html");
-                        }}
-                        disabled={!seoPreviewDoc}
-                      >
-                        Download HTML
-                      </button>
-                      {selectedItem.ingestion_id ? (
-                        <button className="text-xs underline text-sky-700" onClick={() => void loadSeoPreview(selectedItem.ingestion_id!)}>
-                          refresh
+                      {seoPreviewIsLoading ? (
+                        <div className="text-sm text-slate-600">Loading SEO…</div>
+                      ) : seoPreview?.ok === false ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                          {seoPreview?.error ?? "Failed to load SEO preview"}
+                        </div>
+                      ) : seoPreview?.ok ? (
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+                          {/* Meta cards */}
+                          <div className="lg:col-span-2 space-y-3">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                              <div className="grid grid-cols-1 gap-2">
+                                <div>
+                                  <div className="text-xs text-slate-500">Title</div>
+                                  <div className="text-sm text-slate-900 break-words">{seoTitle ?? "—"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500">Meta description</div>
+                                  <div className="text-sm text-slate-900 break-words">{seoMeta ?? "—"}</div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div>
+                                    <div className="text-xs text-slate-500">H1</div>
+                                    <div className="text-sm text-slate-900 break-words">{seoH1 ?? "—"}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-slate-500">Short description</div>
+                                    <div className="text-sm text-slate-900 break-words">{seoShort ?? "—"}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                              <div className="text-xs text-slate-500 mb-2">Diagnostics</div>
+                              <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  <div className="text-slate-500">audit score</div>
+                                  <div className="font-semibold">
+                                    {typeof seoDiag?.audit_score === "number" ? seoDiag.audit_score : "—"}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  <div className="text-slate-500">model</div>
+                                  <div className="font-mono truncate">{seoDiag?.model ?? "—"}</div>
+                                </div>
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  <div className="text-slate-500">generated</div>
+                                  <div className="font-mono">
+                                    {seoPreview?.seo_generated_at ? fmtDate(seoPreview.seo_generated_at) : "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {engineSummaryLoading ? (
+                              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
+                                Loading engine summary…
+                              </div>
+                            ) : engineSummary?.ok === false ? (
+                              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                                {engineSummary?.error ?? "Failed to load engine summary"}
+                              </div>
+                            ) : engineSummary ? (
+                              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                                <div className="text-xs text-slate-500 mb-2">Engine summary</div>
+                                <pre className="text-xs whitespace-pre-wrap break-all rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                  {safeStringify(engineSummary, 5000)}
+                                </pre>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Live preview */}
+                          <div className="lg:col-span-3 min-h-0">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col min-h-[520px]">
+                              <div className="text-sm font-medium text-slate-900">Live preview</div>
+                              <div className="mt-2 flex-1 min-h-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
+                                <iframe
+                                  key={seoPreviewKey}
+                                  title="seo-preview"
+                                  className="w-full h-full"
+                                  sandbox=""
+                                  srcDoc={seoPreviewDoc}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-600">No SEO data loaded yet.</div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Extract full */}
+                  {drawerTab === "extract" ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-slate-900">Extract full (engine payload)</div>
+                        {selectedItem.ingestion_id ? (
+                          <button className="text-xs underline text-sky-700" onClick={() => void loadEnginePayloadFull(selectedItem.ingestion_id!)}>
+                            refresh
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {engineFullIsLoading ? (
+                        <div className="text-sm text-slate-600">Loading engine payload…</div>
+                      ) : engineFull?.ok === false ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                          {engineFull?.error ?? "Failed to load engine payload"}
+                        </div>
+                      ) : engineFull?.ok ? (
+                        <div className="space-y-3">
+                          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <div className="text-xs text-slate-500">Storage ref</div>
+                            <div className="mt-1 font-mono text-xs break-all">
+                              {engineFull.bucket}/{engineFull.ref}
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                <div className="text-slate-500">specs</div>
+                                <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                <div className="text-slate-500">features</div>
+                                <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                <div className="text-slate-500">images</div>
+                                <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                                <div className="text-slate-500">tabs</div>
+                                <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <details className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <summary className="cursor-pointer text-sm font-medium text-slate-900">
+                              View JSON
+                            </summary>
+                            <pre className="mt-3 text-xs whitespace-pre-wrap break-all overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+                              {safeStringify(engineFull.payload, 250000)}
+                            </pre>
+                          </details>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-slate-600">No payload available yet for this ingestion.</div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Output 0 */}
+                  {drawerTab === "out0" ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-slate-900">Output 0 (pipeline artifact)</div>
+                        {selectedItem.pipeline_run_id ? (
+                          <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 0)}>
+                            refresh
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {out0Loading ? (
+                        <div className="text-sm text-slate-600">Loading output/0…</div>
+                      ) : out0Err ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{out0Err}</div>
+                      ) : out0Data ? (
+                        <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          {safeStringify(out0Data, 250000)}
+                        </pre>
+                      ) : (
+                        <div className="text-sm text-slate-600">No output/0 available yet for this pipeline run.</div>
+                      )}
+
+                      {selectedItem.pipeline_run_id ? (
+                        <button className={BTN} onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 0)}>
+                          Open raw output/0 endpoint
                         </button>
                       ) : null}
                     </div>
-                  </div>
+                  ) : null}
 
-                  {seoPreviewIsLoading ? (
-                    <div className="text-sm text-slate-600">Loading SEO…</div>
-                  ) : seoPreview?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {seoPreview?.error ?? "Failed to load SEO preview"}
-                    </div>
-                  ) : seoPreview?.ok ? (
-                    <>
-                      <div className="rounded-xl border p-3 space-y-2">
-                        <div className="grid grid-cols-1 gap-2">
-                          <div>
-                            <div className="text-xs text-slate-500">Title</div>
-                            <div className="text-sm">{seoTitle ?? "—"}</div>
-                          </div>
-                          <div>
-                            <div className="text-xs text-slate-500">Meta description</div>
-                            <div className="text-sm">{seoMeta ?? "—"}</div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-xs text-slate-500">H1</div>
-                              <div className="text-sm">{seoH1 ?? "—"}</div>
-                            </div>
-                            <div>
-                              <div className="text-xs text-slate-500">Short description</div>
-                              <div className="text-sm">{seoShort ?? "—"}</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 grid grid-cols-3 gap-2 text-xs">
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">audit score</div>
-                            <div className="font-semibold">
-                              {typeof seoDiag?.audit_score === "number" ? seoDiag.audit_score : "—"}
-                            </div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">model</div>
-                            <div className="font-mono">{seoDiag?.model ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">generated</div>
-                            <div className="font-mono">{seoPreview?.seo_generated_at ? fmtDate(seoPreview.seo_generated_at) : "—"}</div>
-                          </div>
-                        </div>
+                  {/* Output 1 */}
+                  {drawerTab === "out1" ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-semibold text-slate-900">Output 1 (pipeline artifact)</div>
+                        {selectedItem.pipeline_run_id ? (
+                          <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 1)}>
+                            refresh
+                          </button>
+                        ) : null}
                       </div>
 
-                      <div className="rounded-xl border p-3">
-                        <div className="text-sm font-medium">Live preview</div>
-                        <div className="mt-2 rounded border bg-white overflow-hidden">
-                          <iframe key={seoPreviewKey} title="seo-preview" className="w-full h-[560px]" sandbox="" srcDoc={seoPreviewDoc} />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-sm text-slate-600">No SEO data loaded yet.</div>
-                  )}
-                </div>
-              ) : null}
-
-              {/* Extract full */}
-              {drawerTab === "extract" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Extract full (engine payload)</div>
-                    {selectedItem.ingestion_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => void loadEnginePayloadFull(selectedItem.ingestion_id!)}>
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {engineFullIsLoading ? (
-                    <div className="text-sm text-slate-600">Loading engine payload…</div>
-                  ) : engineFull?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {engineFull?.error ?? "Failed to load engine payload"}
-                    </div>
-                  ) : engineFull?.ok ? (
-                    <>
-                      <div className="rounded-xl border p-3">
-                        <div className="text-xs text-slate-500">Storage ref</div>
-                        <div className="mt-1 font-mono text-xs break-all">
-                          {engineFull.bucket}/{engineFull.ref}
-                        </div>
-                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">specs</div>
-                            <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">features</div>
-                            <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">images</div>
-                            <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">tabs</div>
-                            <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
-                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
-                          {safeStringify(engineFull.payload, 250000)}
+                      {out1Loading ? (
+                        <div className="text-sm text-slate-600">Loading output/1…</div>
+                      ) : out1Err ? (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{out1Err}</div>
+                      ) : out1Data ? (
+                        <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          {safeStringify(out1Data, 250000)}
                         </pre>
-                      </details>
-                    </>
-                  ) : (
-                    <div className="text-sm text-slate-600">No payload available yet for this ingestion.</div>
-                  )}
-                </div>
-              ) : null}
+                      ) : (
+                        <div className="text-sm text-slate-600">No output/1 available yet for this pipeline run.</div>
+                      )}
 
-              {/* Output 0 */}
-              {drawerTab === "out0" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Output 0 (pipeline artifact)</div>
-                    {selectedItem.pipeline_run_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 0)}>
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
+                      {selectedItem.pipeline_run_id ? (
+                        <button className={BTN} onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}>
+                          Open raw output/1 endpoint
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
 
-                  {out0Loading ? (
-                    <div className="text-sm text-slate-600">Loading output/0…</div>
-                  ) : out0Err ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{out0Err}</div>
-                  ) : out0Data ? (
-                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
-                      {safeStringify(out0Data, 250000)}
-                    </pre>
-                  ) : (
-                    <div className="text-sm text-slate-600">No output/0 available yet for this pipeline run.</div>
-                  )}
-
-                  {selectedItem.pipeline_run_id ? (
-                    <button className="rounded border bg-white px-3 py-2 text-sm" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 0)}>
-                      Open raw output/0 endpoint
-                    </button>
+                  {/* Telemetry */}
+                  {drawerTab === "telemetry" ? (
+                    <div className="space-y-4">
+                      <div className="text-sm font-semibold text-slate-900">Telemetry</div>
+                      <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        {selectedItem.telemetry ? safeStringify(selectedItem.telemetry, 250000) : "—"}
+                      </pre>
+                    </div>
                   ) : null}
                 </div>
-              ) : null}
-
-              {/* Output 1 */}
-              {drawerTab === "out1" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Output 1 (pipeline artifact)</div>
-                    {selectedItem.pipeline_run_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 1)}>
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {out1Loading ? (
-                    <div className="text-sm text-slate-600">Loading output/1…</div>
-                  ) : out1Err ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{out1Err}</div>
-                  ) : out1Data ? (
-                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
-                      {safeStringify(out1Data, 250000)}
-                    </pre>
-                  ) : (
-                    <div className="text-sm text-slate-600">No output/1 available yet for this pipeline run.</div>
-                  )}
-
-                  {selectedItem.pipeline_run_id ? (
-                    <button className="rounded border bg-white px-3 py-2 text-sm" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}>
-                      Open raw output/1 endpoint
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* Telemetry */}
-              {drawerTab === "telemetry" ? (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">Telemetry</div>
-                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
-                    {selectedItem.telemetry ? safeStringify(selectedItem.telemetry, 250000) : "—"}
-                  </pre>
-                </div>
-              ) : null}
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
