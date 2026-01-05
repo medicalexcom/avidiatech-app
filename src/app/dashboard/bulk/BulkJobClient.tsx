@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type BulkJob = {
@@ -61,7 +61,7 @@ type BulkItem = {
   item_index: number;
   input_url: string;
   metadata?: any;
-  status?: string; // "queued" | "in_progress" | "succeeded" | "failed" ...
+  status?: string;
   ingestion_id?: string | null;
   pipeline_run_id?: string | null;
   last_error?: any;
@@ -122,15 +122,11 @@ function statusBadge(status?: string | null) {
         ? "bg-rose-50 text-rose-700 ring-rose-200"
         : s === "running" || s === "in_progress"
           ? "bg-amber-50 text-amber-800 ring-amber-200"
-          : s === "queued"
+          : s === "queued" || s === "pending"
             ? "bg-slate-100 text-slate-700 ring-slate-200"
             : "bg-slate-100 text-slate-700 ring-slate-200";
 
-  return (
-    <span className={classNames("inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", cls)}>
-      {s}
-    </span>
-  );
+  return <span className={classNames("inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", cls)}>{s}</span>;
 }
 
 function extractErrorMessage(last_error: any): string | null {
@@ -138,27 +134,6 @@ function extractErrorMessage(last_error: any): string | null {
   if (typeof last_error === "string") return last_error;
   if (typeof last_error?.message === "string") return last_error.message;
   return null;
-}
-
-function jsonCounts(payload: any) {
-  const specsCount =
-    payload?.specs && typeof payload.specs === "object" ? Object.keys(payload.specs).length : null;
-  const featuresCount = Array.isArray(payload?.features_raw) ? payload.features_raw.length : null;
-  const imagesCount = Array.isArray(payload?.images) ? payload.images.length : null;
-  const tabsCount = Array.isArray(payload?.tabs) ? payload.tabs.length : null;
-
-  return { specsCount, featuresCount, imagesCount, tabsCount };
-}
-
-function getSeoField(seoPayload: any, path: string): string | null {
-  try {
-    const parts = path.split(".");
-    let cur = seoPayload;
-    for (const p of parts) cur = cur?.[p];
-    return typeof cur === "string" && cur.trim() ? cur : null;
-  } catch {
-    return null;
-  }
 }
 
 function escapeHtml(s: string) {
@@ -227,6 +202,12 @@ ${body}
 </html>`;
 }
 
+function tinyHash(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
+}
+
 function downloadTextFile(filename: string, text: string, mime = "text/plain") {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
@@ -239,10 +220,15 @@ function downloadTextFile(filename: string, text: string, mime = "text/plain") {
   URL.revokeObjectURL(url);
 }
 
-function tinyHash(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h.toString(16);
+function getSeoField(seoPayload: any, path: string): string | null {
+  try {
+    const parts = path.split(".");
+    let cur = seoPayload;
+    for (const p of parts) cur = cur?.[p];
+    return typeof cur === "string" && cur.trim() ? cur : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function BulkJobClient(props: {
@@ -255,18 +241,14 @@ export default function BulkJobClient(props: {
   const bulkJobId = params?.get("bulkJobId") || props.initialBulkJobId || "";
 
   const [job, setJob] = useState<BulkJob | null>(props.initialJob ?? null);
-
-  // NOTE: keep two lists:
-  // - itemsTelemetry: fast path, has module/pipeline info but might omit queued-only items depending on backend
-  // - itemsPlain: always includes queued items (fallback)
-  const [itemsTelemetry, setItemsTelemetry] = useState<BulkItem[]>(props.initialItems ?? []);
-  const [itemsPlain, setItemsPlain] = useState<BulkItem[]>([]);
-
+  const [items, setItems] = useState<BulkItem[]>(props.initialItems ?? []);
   const [loadingJob, setLoadingJob] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
-  const [loadingPlainItems, setLoadingPlainItems] = useState(false);
-
   const [error, setError] = useState<string | null>(props.initialError ?? null);
+
+  // authoritative stats
+  const [stats, setStats] = useState<any | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   const [limit, setLimit] = useState<number>(200);
   const [offset, setOffset] = useState<number>(0);
@@ -278,23 +260,19 @@ export default function BulkJobClient(props: {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<"all" | "failed" | "in_progress" | "queued" | "succeeded">("all");
+  const [showOnlyQueued, setShowOnlyQueued] = useState<boolean>(false);
   const [search, setSearch] = useState<string>("");
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Drawer: default tab is SEO Preview
+  // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // default should be SEO preview
   const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "telemetry">("seo");
 
-  // Toggle to show queued accurately
-  const [showQueuedAccurate, setShowQueuedAccurate] = useState<boolean>(true);
-
-  // caches
-  const [engineSummaryCache, setEngineSummaryCache] = useState<Record<string, any>>({});
+  // Caches: keyed strictly by ingestionId or pipelineRunId+moduleIndex
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
-  const [engineSummaryLoadingById, setEngineSummaryLoadingById] = useState<Record<string, boolean>>({});
   const [engineFullLoadingById, setEngineFullLoadingById] = useState<Record<string, boolean>>({});
 
   const [seoCache, setSeoCache] = useState<Record<string, any>>({});
@@ -302,17 +280,14 @@ export default function BulkJobClient(props: {
 
   const [pipelineOutCache, setPipelineOutCache] = useState<Record<string, any>>({});
   const [pipelineOutLoading, setPipelineOutLoading] = useState<Record<string, boolean>>({});
-  const [pipelineOutError, setPipelineOutError] = useState<Record<string, string>>({});
+
+  // to prevent stale fetch completion from overriding new selection (race protection)
+  const selectionNonceRef = useRef(0);
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
-  const telemetryApi = useMemo(
-    () => `${jobApiBase}/items/telemetry?limit=${limit}&offset=${offset}`,
-    [jobApiBase, limit, offset]
-  );
-  const plainApi = useMemo(
-    () => `${jobApiBase}/items?limit=${limit}&offset=${offset}`,
-    [jobApiBase, limit, offset]
-  );
+  const statsApi = useMemo(() => `${jobApiBase}/stats`, [jobApiBase]);
+  const telemetryApi = useMemo(() => `${jobApiBase}/items/telemetry?limit=${limit}&offset=${offset}`, [jobApiBase, limit, offset]);
+  const itemsApi = useMemo(() => `${jobApiBase}/items?limit=${limit}&offset=${offset}`, [jobApiBase, limit, offset]);
 
   async function fetchJob() {
     if (!bulkJobId) return;
@@ -320,11 +295,8 @@ export default function BulkJobClient(props: {
     setError(null);
     try {
       const res = await fetch(jobApiBase, { cache: "no-store" });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Failed to fetch job (${res.status})`);
-      }
-      const j = await res.json();
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `Failed to fetch job (${res.status})`);
       setJob(j?.data ?? j);
     } catch (e: any) {
       setError(String(e?.message || e));
@@ -333,18 +305,45 @@ export default function BulkJobClient(props: {
     }
   }
 
-  async function fetchTelemetryItems() {
+  async function fetchStats() {
+    if (!bulkJobId) return;
+    setLoadingStats(true);
+    try {
+      const res = await fetch(statsApi, { cache: "no-store" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `Failed to fetch stats (${res.status})`);
+      setStats(j?.data ?? j);
+    } catch (e: any) {
+      // stats failure should not break the page; fallback to job fields
+      setStats({ ok: false, error: String(e?.message || e) });
+    } finally {
+      setLoadingStats(false);
+    }
+  }
+
+  async function fetchItems() {
     if (!bulkJobId) return;
     setLoadingItems(true);
     setError(null);
+
+    // Rule: queued filter must work even without telemetry -> prefer non-telemetry endpoint.
+    const preferNonTelemetry = showOnlyQueued;
+
     try {
-      const res = await fetch(telemetryApi, { cache: "no-store" });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Failed to fetch items/telemetry (${res.status})`);
+      if (!preferNonTelemetry) {
+        const res = await fetch(telemetryApi, { cache: "no-store" });
+        if (res.ok) {
+          const j = await res.json().catch(() => null);
+          setItems(j?.data ?? j ?? []);
+          return;
+        }
       }
-      const j = await res.json();
-      setItemsTelemetry(j?.data ?? j ?? []);
+
+      // canonical fallback (and used for queued mode)
+      const fallback = await fetch(itemsApi, { cache: "no-store" });
+      const j = await fallback.json().catch(() => null);
+      if (!fallback.ok) throw new Error(j?.error ?? `Failed to fetch items (${fallback.status})`);
+      setItems(j?.data ?? j ?? []);
     } catch (e: any) {
       setError(String(e?.message || e));
     } finally {
@@ -352,34 +351,13 @@ export default function BulkJobClient(props: {
     }
   }
 
-  async function fetchPlainItems() {
-    if (!bulkJobId) return;
-    setLoadingPlainItems(true);
-    setError(null);
-    try {
-      const res = await fetch(plainApi, { cache: "no-store" });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Failed to fetch items (${res.status})`);
-      }
-      const j = await res.json();
-      setItemsPlain(j?.data ?? j ?? []);
-    } catch (e: any) {
-      setError(String(e?.message || e));
-    } finally {
-      setLoadingPlainItems(false);
-    }
-  }
-
-  // Always keep telemetry list fresh (fast UX)
   useEffect(() => {
     if (!bulkJobId) return;
     fetchJob();
-    fetchTelemetryItems();
-    // For accurate queued view, also fetch plain items (queued-only)
-    if (showQueuedAccurate) fetchPlainItems();
+    fetchStats();
+    fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkJobId, offset, limit, showQueuedAccurate]);
+  }, [bulkJobId, offset, limit, showOnlyQueued]);
 
   useEffect(() => {
     if (!bulkJobId || !autoPoll) return;
@@ -387,79 +365,46 @@ export default function BulkJobClient(props: {
     const t = setInterval(async () => {
       if (!mounted) return;
       await fetchJob();
-      await fetchTelemetryItems();
-      if (showQueuedAccurate) await fetchPlainItems();
+      await fetchStats();
+      await fetchItems();
     }, pollIntervalMs);
     return () => {
       mounted = false;
       clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkJobId, autoPoll, offset, limit, pollIntervalMs, showQueuedAccurate]);
+  }, [bulkJobId, autoPoll, offset, limit, pollIntervalMs, showOnlyQueued]);
 
-  // For UI rows: merge telemetry onto plain items when available so queued items still show.
-  const mergedItems: BulkItem[] = useMemo(() => {
-    if (!showQueuedAccurate) return itemsTelemetry;
-
-    const tMap = new Map(itemsTelemetry.map((it) => [it.id, it]));
-    const result: BulkItem[] = [];
-
-    // start with plain items (has queued), overlay telemetry when present
-    for (const p of itemsPlain) {
-      const t = tMap.get(p.id);
-      result.push(t ? { ...p, ...t } : p);
-    }
-
-    // if telemetry includes items not in plain page (shouldn't happen often), include them too
-    const pSet = new Set(itemsPlain.map((x) => x.id));
-    for (const t of itemsTelemetry) {
-      if (!pSet.has(t.id)) result.push(t);
-    }
-
-    return result;
-  }, [itemsTelemetry, itemsPlain, showQueuedAccurate]);
-
-  const totalJob = job?.total_items ?? null;
-
-  // Page-level counts should come ONLY from the current page items
-  const pageCounts = useMemo(() => {
-    const counts = { queued: 0, in_progress: 0, succeeded: 0, failed: 0, other: 0 };
-    for (const it of mergedItems) {
-      const s = it.status || "other";
-      if (s === "queued") counts.queued++;
-      else if (s === "in_progress") counts.in_progress++;
-      else if (s === "succeeded") counts.succeeded++;
-      else if (s === "failed") counts.failed++;
-      else counts.other++;
-    }
-    return counts;
-  }, [mergedItems]);
-
-  // Job-level counts should come from job counters when present (not from page)
-  const jobCompleted = job?.completed_items ?? null;
-  const jobFailed = job?.failed_items ?? null;
-  const jobQueued =
-    totalJob != null && jobCompleted != null && jobFailed != null
-      ? Math.max(0, totalJob - jobCompleted - jobFailed)
-      : null;
-
-  const pct =
-    totalJob && jobCompleted != null ? Math.round((jobCompleted / totalJob) * 100) : 0;
+  // prefer authoritative stats if available
+  const total = Number(stats?.total_items ?? job?.total_items ?? items?.length ?? 0);
+  const completed = Number(stats?.completed_items ?? job?.completed_items ?? 0);
+  const failed = Number(stats?.failed_items ?? job?.failed_items ?? 0);
+  const inProgress = Number(stats?.in_progress_items ?? 0);
+  const queued = Number(stats?.queued_items ?? Math.max(0, total - completed - failed - inProgress));
+  const pct = total ? Math.round(((completed ?? 0) / total) * 100) : 0;
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return mergedItems.filter((it) => {
-      if (statusFilter !== "all" && it.status !== statusFilter) return false;
+
+    return items.filter((it) => {
+      const status = String(it.status ?? "").toLowerCase();
+
+      if (showOnlyQueued) {
+        if (!(status === "queued" || status === "pending")) return false;
+      } else if (statusFilter !== "all") {
+        if (status !== statusFilter) return false;
+      }
+
       if (!q) return true;
       const hay = `${it.input_url} ${it.ingestion_id || ""} ${it.pipeline_run_id || ""}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [mergedItems, statusFilter, search]);
+  }, [items, statusFilter, search, showOnlyQueued]);
 
   const selectedItem = useMemo(() => {
     if (!selectedId) return null;
-    return mergedItems.find((i) => i.id === selectedId) || null;
-  }, [mergedItems, selectedId]);
+    return items.find((i) => i.id === selectedId) || null;
+  }, [items, selectedId]);
 
   async function retryItem(itemId: string) {
     if (!bulkJobId || !itemId) return;
@@ -468,14 +413,12 @@ export default function BulkJobClient(props: {
     try {
       const url = `${jobApiBase}/items/${encodeURIComponent(itemId)}/retry`;
       const res = await fetch(url, { method: "POST" });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Retry failed (${res.status})`);
-      }
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `Retry failed (${res.status})`);
       setActionMessage("Item re-enqueued");
-      await fetchTelemetryItems();
-      if (showQueuedAccurate) await fetchPlainItems();
+      await fetchItems();
       await fetchJob();
+      await fetchStats();
     } catch (e: any) {
       setActionMessage(String(e?.message || e));
     } finally {
@@ -494,29 +437,17 @@ export default function BulkJobClient(props: {
     try {
       const url = `${jobApiBase}/retry-failed`;
       const res = await fetch(url, { method: "POST" });
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        throw new Error(j?.error ?? `Retry failed (${res.status})`);
-      }
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `Retry failed (${res.status})`);
       setActionMessage("Failed items enqueued for retry");
-      await fetchTelemetryItems();
-      if (showQueuedAccurate) await fetchPlainItems();
+      await fetchItems();
       await fetchJob();
+      await fetchStats();
     } catch (e: any) {
       setActionMessage(String(e?.message || e));
     } finally {
       setTimeout(() => setActionMessage(null), 4000);
     }
-  }
-
-  async function downloadErrors() {
-    if (!bulkJobId) return;
-    window.open(`${jobApiBase}/items/errors`, "_blank");
-  }
-
-  function openPipelineOutput(pipelineRunId?: string | null, moduleIndex = 0) {
-    if (!pipelineRunId) return;
-    window.open(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, "_blank");
   }
 
   async function copyToClipboard(text: string) {
@@ -529,8 +460,22 @@ export default function BulkJobClient(props: {
     }
   }
 
+  function openExtract(ingestionId?: string | null, sourceUrl?: string | null) {
+    if (!ingestionId) return;
+    const qp = new URLSearchParams();
+    qp.set("ingestionId", ingestionId);
+    if (sourceUrl) qp.set("sourceUrl", sourceUrl);
+    window.open(`/dashboard/extract?${qp.toString()}`, "_blank");
+  }
+
+  function openPipelineOutput(pipelineRunId?: string | null, moduleIndex = 0) {
+    if (!pipelineRunId) return;
+    window.open(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, "_blank");
+  }
+
   function renderModuleStrip(mods: ModuleRunLite[]) {
     if (!mods || mods.length === 0) return <span className="text-xs text-slate-400">—</span>;
+
     return (
       <div className="flex items-center gap-1">
         {mods
@@ -547,165 +492,154 @@ export default function BulkJobClient(props: {
                     : m.status === "skipped"
                       ? "bg-slate-300"
                       : "bg-slate-200";
-            return (
-              <span
-                key={m.module_index}
-                className={classNames("h-2 w-4 rounded", cls)}
-                title={`${m.module_index}:${m.module_name}:${m.status}`}
-              />
-            );
+            return <span key={m.module_index} className={classNames("h-2 w-4 rounded", cls)} title={`${m.module_index}:${m.module_name}:${m.status}`} />;
           })}
       </div>
     );
   }
 
-  async function loadEngineSummary(ingestionId: string) {
+  async function loadEnginePayloadFull(ingestionId: string, nonce: number) {
     if (!ingestionId) return;
-    if (engineSummaryCache[ingestionId]) return;
-
-    setEngineSummaryLoadingById((s) => ({ ...s, [ingestionId]: true }));
-    try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`, { cache: "no-store" });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(j?.error ?? `engine summary fetch failed (${res.status})`);
-      setEngineSummaryCache((s) => ({ ...s, [ingestionId]: j }));
-    } catch (e: any) {
-      setEngineSummaryCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
-    } finally {
-      setEngineSummaryLoadingById((s) => {
-        const next = { ...s };
-        delete next[ingestionId];
-        return next;
-      });
-    }
-  }
-
-  async function loadEnginePayloadFull(ingestionId: string) {
-    if (!ingestionId) return;
+    if (enginePayloadCache[ingestionId]) return;
 
     setEngineFullLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
+      if (nonce !== selectionNonceRef.current) return; // stale selection
       if (!res.ok) throw new Error(j?.error ?? `engine payload fetch failed (${res.status})`);
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
+      if (nonce !== selectionNonceRef.current) return;
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setEngineFullLoadingById((s) => {
-        const next = { ...s };
-        delete next[ingestionId];
-        return next;
-      });
+      if (nonce === selectionNonceRef.current) {
+        setEngineFullLoadingById((s) => {
+          const next = { ...s };
+          delete next[ingestionId];
+          return next;
+        });
+      }
     }
   }
 
-  async function loadSeoPreview(ingestionId: string) {
+  async function loadSeoPreview(ingestionId: string, nonce: number) {
     if (!ingestionId) return;
+    if (seoCache[ingestionId]) return;
 
     setSeoLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
+      if (nonce !== selectionNonceRef.current) return;
       if (!res.ok) throw new Error(j?.error ?? `seo preview fetch failed (${res.status})`);
       setSeoCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
+      if (nonce !== selectionNonceRef.current) return;
       setSeoCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setSeoLoadingById((s) => {
-        const next = { ...s };
-        delete next[ingestionId];
-        return next;
-      });
+      if (nonce === selectionNonceRef.current) {
+        setSeoLoadingById((s) => {
+          const next = { ...s };
+          delete next[ingestionId];
+          return next;
+        });
+      }
     }
   }
 
-  function outKey(pipelineRunId: string, moduleIndex: number) {
-    return `${pipelineRunId}:${moduleIndex}`;
-  }
-
-  async function loadPipelineOutput(pipelineRunId: string, moduleIndex: number) {
-    const k = outKey(pipelineRunId, moduleIndex);
+  async function loadPipelineOutput(pipelineRunId: string, moduleIndex: number, nonce: number) {
+    const k = `${pipelineRunId}:${moduleIndex}`;
+    if (pipelineOutCache[k]) return;
 
     setPipelineOutLoading((s) => ({ ...s, [k]: true }));
-    setPipelineOutError((s) => {
-      const next = { ...s };
-      delete next[k];
-      return next;
-    });
-
     try {
       const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, { cache: "no-store" });
-      const text = await res.text().catch(() => "");
-      let parsed: any = null;
-      try {
-        parsed = text ? JSON.parse(text) : null;
-      } catch {
-        parsed = { _raw: text };
-      }
+      const j = await res.json().catch(() => null);
+      if (nonce !== selectionNonceRef.current) return;
 
+      // 404/409 should be treated as "no data available" (not stale substitution)
       if (!res.ok) {
-        const msg = parsed?.error ?? `output_${moduleIndex}_fetch_failed (${res.status})`;
-        throw new Error(msg);
+        setPipelineOutCache((s) => ({
+          ...s,
+          [k]: { ok: false, status: res.status, error: j?.error ?? `output fetch failed (${res.status})`, detail: j ?? null },
+        }));
+        return;
       }
 
-      setPipelineOutCache((s) => ({ ...s, [k]: parsed }));
+      setPipelineOutCache((s) => ({ ...s, [k]: j }));
     } catch (e: any) {
-      setPipelineOutError((s) => ({ ...s, [k]: String(e?.message || e) }));
-      setPipelineOutCache((s) => {
-        const next = { ...s };
-        delete next[k];
-        return next;
-      });
+      if (nonce !== selectionNonceRef.current) return;
+      setPipelineOutCache((s) => ({ ...s, [k]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setPipelineOutLoading((s) => {
-        const next = { ...s };
-        delete next[k];
-        return next;
-      });
+      if (nonce === selectionNonceRef.current) {
+        setPipelineOutLoading((s) => {
+          const next = { ...s };
+          delete next[k];
+          return next;
+        });
+      }
     }
   }
 
-  function openDrawer(itemId: string, tab: typeof drawerTab = "seo") {
-    const item = mergedItems.find((i) => i.id === itemId) || null;
+  function openDrawer(itemId: string, tab?: typeof drawerTab) {
+    const item = items.find((i) => i.id === itemId) || null;
+
+    // increment nonce to invalidate in-flight requests from previous selection
+    selectionNonceRef.current += 1;
+    const nonce = selectionNonceRef.current;
 
     setSelectedId(itemId);
-    setDrawerTab(tab);
     setDrawerOpen(true);
+
+    // default tab = seo (requirement #3)
+    const nextTab = tab ?? "seo";
+    setDrawerTab(nextTab);
+
+    // IMPORTANT: clear any per-selection transient display concerns
+    // (we keep caches by ingestionId/pipelineRunId, but we never display them unless ids match current selection)
 
     const ingestionId = item?.ingestion_id || null;
     const pipelineRunId = item?.pipeline_run_id || null;
 
     if (ingestionId) {
-      void loadEngineSummary(ingestionId);
-      void loadSeoPreview(ingestionId);
-      if (tab === "extract") void loadEnginePayloadFull(ingestionId);
+      // EAGER load SEO tab so it appears immediately
+      void loadSeoPreview(ingestionId, nonce);
+
+      if (nextTab === "extract") void loadEnginePayloadFull(ingestionId, nonce);
     }
 
     if (pipelineRunId) {
-      if (tab === "out0") void loadPipelineOutput(pipelineRunId, 0);
-      if (tab === "out1") void loadPipelineOutput(pipelineRunId, 1);
+      if (nextTab === "out0") void loadPipelineOutput(pipelineRunId, 0, nonce);
+      if (nextTab === "out1") void loadPipelineOutput(pipelineRunId, 1, nonce);
     }
   }
 
-  // Fetch when switching tabs
+  // if user switches tabs within drawer, load required data for current selection
   useEffect(() => {
     if (!drawerOpen) return;
     if (!selectedItem) return;
 
+    const nonce = selectionNonceRef.current;
     const ingestionId = selectedItem.ingestion_id || null;
     const pipelineRunId = selectedItem.pipeline_run_id || null;
 
-    if (drawerTab === "seo" && ingestionId) void loadSeoPreview(ingestionId);
-    if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
-    if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0);
-    if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1);
-
+    if (drawerTab === "seo" && ingestionId) void loadSeoPreview(ingestionId, nonce);
+    if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId, nonce);
+    if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0, nonce);
+    if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1, nonce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerTab, drawerOpen, selectedId]);
+  }, [drawerOpen, drawerTab, selectedId]);
 
-  const engineSummary = selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
-  const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
+  // prevent stale panel when item list refreshes and selected item disappears from current page
+  useEffect(() => {
+    if (!selectedId) return;
+    const stillExists = items.some((it) => it.id === selectedId);
+    if (!stillExists) {
+      setDrawerOpen(false);
+      setSelectedId(null);
+    }
+  }, [items, selectedId]);
 
   const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
   const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
@@ -713,21 +647,14 @@ export default function BulkJobClient(props: {
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
   const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
 
-  const pipelineRunId = selectedItem?.pipeline_run_id || null;
-  const out0K = pipelineRunId ? outKey(pipelineRunId, 0) : null;
-  const out1K = pipelineRunId ? outKey(pipelineRunId, 1) : null;
+  const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
+  const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
 
-  const out0Data = out0K ? pipelineOutCache[out0K] : null;
-  const out1Data = out1K ? pipelineOutCache[out1K] : null;
+  const drawerOut0 = out0Key ? pipelineOutCache[out0Key] : null;
+  const drawerOut1 = out1Key ? pipelineOutCache[out1Key] : null;
 
-  const out0Loading = out0K ? Boolean(pipelineOutLoading[out0K]) : false;
-  const out1Loading = out1K ? Boolean(pipelineOutLoading[out1K]) : false;
-
-  const out0Err = out0K ? pipelineOutError[out0K] : null;
-  const out1Err = out1K ? pipelineOutError[out1K] : null;
-
-  const fullPayload = engineFull?.payload ?? null;
-  const fullStats = fullPayload ? jsonCounts(fullPayload) : null;
+  const drawerOut0Loading = out0Key ? Boolean(pipelineOutLoading[out0Key]) : false;
+  const drawerOut1Loading = out1Key ? Boolean(pipelineOutLoading[out1Key]) : false;
 
   const seoPayload = seoPreview?.seo_payload ?? null;
   const seoHtml = seoPreview?.description_html ?? null;
@@ -736,7 +663,6 @@ export default function BulkJobClient(props: {
   const seoTitle = getSeoField(seoPayload, "title") || getSeoField(seoPayload, "seo.title");
   const seoMeta = getSeoField(seoPayload, "metaDescription") || getSeoField(seoPayload, "seo.metaDescription");
   const seoH1 = getSeoField(seoPayload, "h1") || getSeoField(seoPayload, "seo.h1");
-  const seoShort = getSeoField(seoPayload, "shortDescription") || getSeoField(seoPayload, "seo.shortDescription");
 
   const seoPreviewDoc = useMemo(() => {
     return buildSeoPreviewHtmlDoc({
@@ -749,849 +675,599 @@ export default function BulkJobClient(props: {
 
   const seoPreviewKey = useMemo(() => tinyHash(seoPreviewDoc || ""), [seoPreviewDoc]);
 
-  const BTN = "inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm hover:bg-slate-50 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
-  const BTN_SM = "inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 shadow-sm hover:bg-slate-50 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
-  const BTN_PRIMARY = "inline-flex items-center justify-center rounded-md bg-sky-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-sky-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
-  const BTN_DANGER = "inline-flex items-center justify-center rounded-md bg-rose-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-rose-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
-  const CHIP = "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs text-slate-700 shadow-sm backdrop-blur";
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
-      <div className="mx-auto max-w-[1600px] p-4 space-y-4">
-        {/* Header */}
-        <div className="rounded-2xl border bg-white/70 p-4 shadow-sm backdrop-blur">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">Bulk job dashboard</h1>
-                {job?.status ? (
-                  <span className="ml-1">{statusBadge(job.status)}</span>
-                ) : null}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <span className={CHIP}>
-                  Job id: <span className="font-mono">{bulkJobId || "—"}</span>
-                </span>
-                <span className={CHIP}>
-                  Updated: <span className="font-mono">{fmtDate(job?.updated_at)}</span>
-                </span>
-                {(loadingJob || loadingItems || loadingPlainItems) ? (
-                  <span className="text-xs text-slate-500">refreshing…</span>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => {
-                    fetchJob();
-                    fetchTelemetryItems();
-                    if (showQueuedAccurate) fetchPlainItems();
-                  }}
-                  className={BTN}
-                  disabled={!bulkJobId || loadingJob || loadingItems || loadingPlainItems}
-                >
-                  Refresh
-                </button>
-
-                <button onClick={downloadErrors} className={BTN_DANGER} disabled={!bulkJobId}>
-                  Download errors CSV
-                </button>
-
-                <button
-                  className={BTN_PRIMARY}
-                  onClick={retryFailedItems}
-                  disabled={(jobFailed ?? pageCounts.failed) === 0}
-                  title="Retry all failed items (server-side)"
-                >
-                  Retry failed
-                </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={autoPoll} onChange={(e) => setAutoPoll(e.target.checked)} />
-                  Auto refresh
-                </label>
-
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                  <span className="text-xs text-slate-600">Interval</span>
-                  <select
-                    className="rounded-md border border-slate-200 bg-white px-2 py-2 text-sm"
-                    value={pollIntervalMs}
-                    onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}
-                  >
-                    <option value={1000}>1s</option>
-                    <option value={3000}>3s</option>
-                    <option value={5000}>5s</option>
-                    <option value={10000}>10s</option>
-                  </select>
-                </label>
-
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={showQueuedAccurate} onChange={(e) => setShowQueuedAccurate(e.target.checked)} />
-                  Show queued accurately
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Alerts */}
-          <div className="mt-4 space-y-2">
-            {error ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-                {error}
-              </div>
-            ) : null}
-
-            {actionMessage ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                {actionMessage}
-              </div>
+    <div className="mx-auto max-w-[1400px] p-4 space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
+          <div className="mt-1 text-sm text-slate-600">
+            Job id: <span className="font-mono">{bulkJobId || "—"}</span>
+            {bulkJobId ? (
+              <button className="ml-2 text-xs underline text-sky-700" onClick={() => copyToClipboard(bulkJobId)}>
+                copy
+              </button>
             ) : null}
           </div>
         </div>
 
-        {/* KPI row */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 auto-rows-fr">
-          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs text-slate-500">Progress (job)</div>
-                <div className="mt-1 text-2xl font-semibold">{pct}%</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {jobCompleted ?? "—"}/{totalJob ?? "—"} done
-                </div>
-              </div>
-              <div className="text-xs text-slate-600">{statusBadge(job?.status ?? "—")}</div>
-            </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              fetchJob();
+              fetchStats();
+              fetchItems();
+            }}
+            className="rounded-md border px-3 py-2 text-sm bg-white"
+            disabled={!bulkJobId || loadingJob || loadingItems || loadingStats}
+          >
+            Refresh
+          </button>
 
-            <div className="mt-3 h-2 w-full rounded-full bg-slate-200 overflow-hidden">
-              <div
-                className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400"
-                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-              />
-            </div>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={autoPoll} onChange={(e) => setAutoPoll(e.target.checked)} />
+            Auto refresh
+          </label>
 
-            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <div className="text-slate-500">queued</div>
-                <div className="font-semibold">{jobQueued ?? "—"}</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <div className="text-slate-500">failed</div>
-                <div className="font-semibold text-rose-700">{jobFailed ?? "—"}</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <div className="text-slate-500">total</div>
-                <div className="font-semibold">{totalJob ?? "—"}</div>
-              </div>
-            </div>
-          </div>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <span className="text-xs text-slate-600">Interval</span>
+            <select className="rounded-md border bg-white px-2 py-2 text-sm" value={pollIntervalMs} onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}>
+              <option value={1000}>1s</option>
+              <option value={3000}>3s</option>
+              <option value={5000}>5s</option>
+              <option value={10000}>10s</option>
+            </select>
+          </label>
 
-          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs text-slate-500">Counts (job-level)</div>
-                <div className="mt-1 text-sm text-slate-600">From job row counters (best signal)</div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Succeeded</div>
-                <div className="text-xl font-semibold text-emerald-700">{jobCompleted ?? "—"}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Failed</div>
-                <div className="text-xl font-semibold text-rose-700">{jobFailed ?? "—"}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Queued (estimate)</div>
-                <div className="text-xl font-semibold text-slate-800">{jobQueued ?? "—"}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Total</div>
-                <div className="text-xl font-semibold text-slate-800">{totalJob ?? "—"}</div>
-              </div>
-            </div>
-
-            <div className="mt-auto pt-3 text-xs text-slate-500">
-              Note: job-level queued excludes “in_progress” if your backend doesn’t track it in the job row.
-            </div>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
-            <div className="text-xs text-slate-500">Counts (this page)</div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Succeeded</div>
-                <div className="text-xl font-semibold text-emerald-700">{pageCounts.succeeded}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Failed</div>
-                <div className="text-xl font-semibold text-rose-700">{pageCounts.failed}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">In progress</div>
-                <div className="text-xl font-semibold text-amber-700">{pageCounts.in_progress}</div>
-              </div>
-              <div className="rounded-xl border p-3">
-                <div className="text-xs text-slate-500">Queued</div>
-                <div className="text-xl font-semibold text-slate-800">{pageCounts.queued}</div>
-              </div>
-            </div>
-
-            <div className="mt-auto pt-3 text-xs text-slate-500">
-              Showing: {showQueuedAccurate ? "merged plain + telemetry" : "telemetry only"}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-4 shadow-sm h-full flex flex-col">
-            <div className="text-xs text-slate-500">Quick actions</div>
-
-            <div className="mt-3 space-y-2">
-              <button
-                className={classNames(BTN_PRIMARY, "w-full")}
-                onClick={retryFailedItems}
-                disabled={(jobFailed ?? pageCounts.failed) === 0}
-              >
-                Retry failed items
-              </button>
-
-              <button
-                className={classNames(BTN, "w-full")}
-                onClick={() => {
-                  fetchJob();
-                  fetchTelemetryItems();
-                  if (showQueuedAccurate) fetchPlainItems();
-                }}
-              >
-                Refresh now
-              </button>
-
-              <button
-                className={classNames(BTN, "w-full")}
-                onClick={() => {
-                  setSearch("");
-                  setStatusFilter("all");
-                  setOffset(0);
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
-
-            <div className="mt-auto pt-3 text-xs text-slate-500">
-              Tip: click any row to open the right drawer (defaults to SEO preview).
-            </div>
-          </div>
+          <button onClick={downloadErrors} className="rounded-md bg-rose-600 px-3 py-2 text-sm text-white" disabled={!bulkJobId}>
+            Download errors CSV
+          </button>
         </div>
+      </div>
 
-        {/* Main table */}
+      {error ? (
+        <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{error}</div>
+      ) : null}
+      {actionMessage ? (
+        <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">{actionMessage}</div>
+      ) : null}
+
+      {/* KPI row */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="text-xs text-slate-500">Items</div>
-              <div className="text-sm text-slate-700">
-                Showing <span className="font-semibold">{filteredItems.length}</span> / {mergedItems.length} (offset{" "}
-                {offset}, limit {limit})
-                <span className="ml-2 text-xs text-slate-500">
-                  {showQueuedAccurate ? "(merged plain+telemetry)" : "(telemetry only)"}
-                </span>
-              </div>
+          <div className="text-xs text-slate-500">Progress</div>
+          <div className="mt-1 flex items-end justify-between gap-3">
+            <div className="text-2xl font-semibold">{pct}%</div>
+            <div className="text-xs text-slate-500">{completed}/{total} done</div>
+          </div>
+          <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
+            <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+          </div>
+          <div className="mt-2 text-xs text-slate-500">
+            Job status: {statusBadge(job?.status ?? "—")}
+            {stats?.ok === false ? <span className="ml-2 text-amber-700">(stats unavailable)</span> : null}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Counts (job)</div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div className="rounded-lg border p-2">
+              <div className="text-xs text-slate-500">Succeeded</div>
+              <div className="text-lg font-semibold text-emerald-700">{completed}</div>
             </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-xs text-slate-500">Failed</div>
+              <div className="text-lg font-semibold text-rose-700">{failed}</div>
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-xs text-slate-500">In progress</div>
+              <div className="text-lg font-semibold text-amber-700">{inProgress}</div>
+            </div>
+            <div className="rounded-lg border p-2">
+              <div className="text-xs text-slate-500">Queued</div>
+              <div className="text-lg font-semibold text-slate-700">{queued}</div>
+            </div>
+          </div>
+        </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm w-[280px] max-w-full"
-                placeholder="Search URL / IDs"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <select
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-              >
-                <option value="all">All statuses</option>
-                <option value="queued">Queued</option>
-                <option value="in_progress">In progress</option>
-                <option value="failed">Failed</option>
-                <option value="succeeded">Succeeded</option>
-              </select>
-              <select
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={limit}
-                onChange={(e) => {
-                  setLimit(parseInt(e.target.value, 10));
-                  setOffset(0);
-                }}
-              >
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-                <option value={500}>500</option>
-              </select>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Filters</div>
+          <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={showOnlyQueued} onChange={(e) => {
+                setShowOnlyQueued(e.target.checked);
+                setOffset(0);
+              }} />
+              Show only queued
+            </label>
+            <div className="text-xs text-slate-500">
+              Works without telemetry (uses non-telemetry list endpoint).
+            </div>
+          </div>
+        </div>
 
-              <button
-                className={BTN}
-                onClick={() => {
-                  fetchTelemetryItems();
-                  if (showQueuedAccurate) fetchPlainItems();
-                }}
-              >
-                Reload items
-              </button>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Actions</div>
+          <div className="mt-3 space-y-2">
+            <button className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white disabled:opacity-50" onClick={retryFailedItems} disabled={failed === 0}>
+              Retry failed items
+            </button>
+            <button className="w-full rounded-md border bg-white px-3 py-2 text-sm" onClick={() => { fetchJob(); fetchStats(); fetchItems(); }}>
+              Refresh now
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main table */}
+      <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs text-slate-500">Items</div>
+            <div className="text-sm text-slate-700">
+              Showing <span className="font-semibold">{filteredItems.length}</span> / {items.length} (offset {offset}, limit {limit})
             </div>
           </div>
 
-          <div className="mt-4 overflow-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-sm">
-              <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200">
-                <tr className="text-left text-xs text-slate-500">
-                  <th className="py-3 px-3">#</th>
-                  <th className="py-3 px-3">URL</th>
-                  <th className="py-3 px-3">Item</th>
-                  <th className="py-3 px-3">Pipeline</th>
-                  <th className="py-3 px-3">Modules</th>
-                  <th className="py-3 px-3">Timing</th>
-                  <th className="py-3 px-3">Error</th>
-                  <th className="py-3 px-3">Actions</th>
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="rounded-md border px-3 py-2 text-sm w-[260px]" placeholder="Search URL / IDs" value={search} onChange={(e) => setSearch(e.target.value)} />
+
+            <select className="rounded-md border bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} disabled={showOnlyQueued}>
+              <option value="all">All statuses</option>
+              <option value="failed">Failed</option>
+              <option value="in_progress">In progress</option>
+              <option value="queued">Queued</option>
+              <option value="succeeded">Succeeded</option>
+            </select>
+
+            <select className="rounded-md border bg-white px-3 py-2 text-sm" value={limit} onChange={(e) => { setLimit(parseInt(e.target.value, 10)); setOffset(0); }}>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-3 overflow-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500">
+                <th className="py-2 pr-3">#</th>
+                <th className="py-2 pr-3">URL</th>
+                <th className="py-2 pr-3">Item</th>
+                <th className="py-2 pr-3">Pipeline</th>
+                <th className="py-2 pr-3">Modules</th>
+                <th className="py-2 pr-3">Timing</th>
+                <th className="py-2 pr-3">Error</th>
+                <th className="py-2 pr-3">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loadingItems ? (
+                <tr>
+                  <td className="py-4 text-sm text-slate-500" colSpan={8}>
+                    Loading items…
+                  </td>
                 </tr>
-              </thead>
+              ) : filteredItems.length === 0 ? (
+                <tr>
+                  <td className="py-4 text-sm text-slate-500" colSpan={8}>
+                    No items found.
+                  </td>
+                </tr>
+              ) : (
+                filteredItems.map((it) => {
+                  const dur = msBetween(it.started_at, it.finished_at);
+                  const isExpanded = Boolean(expanded[it.id]);
 
-              <tbody>
-                {(loadingItems || (showQueuedAccurate && loadingPlainItems)) ? (
-                  <tr>
-                    <td className="py-6 px-3 text-sm text-slate-500" colSpan={8}>
-                      Loading items…
-                    </td>
-                  </tr>
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td className="py-6 px-3 text-sm text-slate-500" colSpan={8}>
-                      No items found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((it) => {
-                    const dur = msBetween(it.started_at, it.finished_at);
-                    const isExpanded = Boolean(expanded[it.id]);
+                  const pipe = it.telemetry?.pipeline_run ?? null;
+                  const modSummary = it.telemetry?.module_summary ?? null;
+                  const mods = it.telemetry?.modules ?? [];
 
-                    const pipe = it.telemetry?.pipeline_run ?? null;
-                    const modSummary = it.telemetry?.module_summary ?? null;
-                    const mods = it.telemetry?.modules ?? [];
+                  return (
+                    <React.Fragment key={it.id}>
+                      <tr className={classNames("border-t hover:bg-slate-50 cursor-pointer")} onClick={() => openDrawer(it.id)}>
+                        <td className="py-2 pr-3 align-top">{it.item_index + 1}</td>
 
-                    return (
-                      <React.Fragment key={it.id}>
-                        <tr
-                          className="border-t hover:bg-slate-50 cursor-pointer"
-                          onClick={() => openDrawer(it.id, "seo")}
-                        >
-                          <td className="py-3 px-3 align-top text-slate-700">{it.item_index + 1}</td>
+                        <td className="py-2 pr-3 align-top max-w-[52ch]">
+                          <div className="truncate">{it.input_url}</div>
+                          <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
+                        </td>
 
-                          <td className="py-3 px-3 align-top max-w-[60ch]">
-                            <div className="truncate text-slate-900">{it.input_url}</div>
-                            <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
-                          </td>
+                        <td className="py-2 pr-3 align-top">
+                          <div className="flex items-center gap-2">
+                            {statusBadge(it.status)}
+                            <span className="text-xs text-slate-500 font-mono">tries:{it.tries ?? "—"}</span>
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            ingestion: <span className="font-mono">{it.ingestion_id ? `${it.ingestion_id.slice(0, 10)}…` : "—"}</span>
+                          </div>
+                        </td>
 
-                          <td className="py-3 px-3 align-top">
-                            <div className="flex items-center gap-2">
-                              {statusBadge(it.status)}
-                              <span className="text-xs text-slate-500 font-mono">tries:{it.tries ?? "—"}</span>
+                        <td className="py-2 pr-3 align-top">
+                          {it.pipeline_run_id ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                {statusBadge(pipe?.status ?? "—")}
+                                <span className="text-xs font-mono">{it.pipeline_run_id.slice(0, 10)}…</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                current:{" "}
+                                <span className="font-mono">
+                                  {modSummary?.current ? `${modSummary.current.module_index}:${modSummary.current.module_name}:${modSummary.current.status}` : "—"}
+                                </span>
+                              </div>
                             </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              ingestion:{" "}
-                              <span className="font-mono">
-                                {it.ingestion_id ? `${it.ingestion_id.slice(0, 10)}…` : "—"}
-                              </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-2 pr-3 align-top">
+                          {mods.length ? (
+                            <div className="space-y-2">
+                              {renderModuleStrip(mods)}
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                ok:{modSummary?.counts?.succeeded ?? 0} run:{modSummary?.counts?.running ?? 0} q:{modSummary?.counts?.queued ?? 0} fail:{modSummary?.counts?.failed ?? 0} skip:{modSummary?.counts?.skipped ?? 0}
+                              </div>
                             </div>
-                          </td>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
 
-                          <td className="py-3 px-3 align-top">
-                            {it.pipeline_run_id ? (
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                  {statusBadge(pipe?.status ?? "—")}
-                                  <span className="text-xs font-mono">{it.pipeline_run_id.slice(0, 10)}…</span>
-                                </div>
-                                <div className="text-[11px] text-slate-500">
-                                  current:{" "}
-                                  <span className="font-mono">
-                                    {modSummary?.current
-                                      ? `${modSummary.current.module_index}:${modSummary.current.module_name}:${modSummary.current.status}`
-                                      : "—"}
-                                  </span>
-                                </div>
+                        <td className="py-2 pr-3 align-top">
+                          <div className="text-xs text-slate-700 font-mono">{fmtDuration(dur)}</div>
+                          <div className="text-[11px] text-slate-400">start: {fmtDate(it.started_at)}</div>
+                        </td>
+
+                        <td className="py-2 pr-3 align-top">
+                          {it.last_error ? (
+                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
+                              {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
+                            </div>
+                          ) : modSummary?.failed?.error ? (
+                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
+                              {safeStringify(modSummary.failed.error, 220)}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-2 pr-3 align-top" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex flex-wrap gap-2">
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
+                              SEO preview
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
+                              Extract Full
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
+                              Output 0
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
+                              Output 1
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
+                              {isExpanded ? "Hide" : "Details"}
+                            </button>
+                            <button
+                              className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50"
+                              disabled={retryingIds[it.id] || String(it.status).toLowerCase() !== "failed"}
+                              onClick={() => retryItem(it.id)}
+                            >
+                              {retryingIds[it.id] ? "Retrying…" : "Retry"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {isExpanded ? (
+                        <tr className="border-t bg-slate-50">
+                          <td colSpan={8} className="p-3">
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-slate-500 mb-2">Telemetry (raw)</div>
+                                <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
+                                  {it.telemetry ? safeStringify(it.telemetry) : "—"}
+                                </pre>
                               </div>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-3 align-top">
-                            {mods.length ? (
-                              <div className="space-y-2">
-                                {renderModuleStrip(mods)}
-                                <div className="text-[11px] text-slate-500 font-mono">
-                                  ok:{modSummary?.counts?.succeeded ?? 0} run:{modSummary?.counts?.running ?? 0} q:
-                                  {modSummary?.counts?.queued ?? 0} fail:{modSummary?.counts?.failed ?? 0} skip:
-                                  {modSummary?.counts?.skipped ?? 0}
-                                </div>
+                              <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-slate-500 mb-2">Last error (raw)</div>
+                                <pre className="text-xs whitespace-pre-wrap break-all max-h-[260px] overflow-auto rounded border bg-slate-50 p-2">
+                                  {it.last_error ? safeStringify(it.last_error) : "—"}
+                                </pre>
                               </div>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-3 align-top">
-                            <div className="text-xs text-slate-800 font-mono">{fmtDuration(dur)}</div>
-                            <div className="text-[11px] text-slate-400">start: {fmtDate(it.started_at)}</div>
-                          </td>
-
-                          <td className="py-3 px-3 align-top">
-                            {it.last_error ? (
-                              <div className="max-w-[40ch] truncate text-xs text-rose-700">
-                                {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
-                              </div>
-                            ) : modSummary?.failed?.error ? (
-                              <div className="max-w-[40ch] truncate text-xs text-rose-700">
-                                {safeStringify(modSummary.failed.error, 220)}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-3 align-top" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex flex-wrap gap-2">
-                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
-                                SEO preview
-                              </button>
-                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
-                                Extract full
-                              </button>
-                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
-                                Output 0
-                              </button>
-                              <button className={BTN_SM} onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
-                                Output 1
-                              </button>
-                              <button className={BTN_SM} onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
-                                {isExpanded ? "Hide" : "Details"}
-                              </button>
-                              <button
-                                className={classNames(
-                                  "inline-flex items-center justify-center rounded-md px-2 py-1 text-xs shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
-                                  it.status === "failed" ? "bg-amber-400 text-slate-900 hover:bg-amber-300" : "bg-slate-100 text-slate-500"
-                                )}
-                                disabled={retryingIds[it.id] || it.status !== "failed"}
-                                onClick={() => retryItem(it.id)}
-                              >
-                                {retryingIds[it.id] ? "Retrying…" : "Retry"}
-                              </button>
                             </div>
                           </td>
                         </tr>
+                      ) : null}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                        {isExpanded ? (
-                          <tr className="border-t bg-slate-50">
-                            <td colSpan={8} className="p-4">
-                              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <div className="text-xs text-slate-500 mb-2">Telemetry (raw)</div>
-                                  <pre className="text-xs whitespace-pre-wrap break-all h-[260px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                    {it.telemetry ? safeStringify(it.telemetry) : "—"}
-                                  </pre>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                  <div className="text-xs text-slate-500 mb-2">Last error (raw)</div>
-                                  <pre className="text-xs whitespace-pre-wrap break-all h-[260px] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                    {it.last_error ? safeStringify(it.last_error) : "—"}
-                                  </pre>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : null}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 text-sm">
+            <button className="rounded px-2 py-1 border" onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
+              Prev
+            </button>
+            <button className="rounded px-2 py-1 border" onClick={() => setOffset(offset + limit)} disabled={items.length < limit}>
+              Next
+            </button>
+            <div className="text-xs text-slate-500">offset {offset}</div>
           </div>
+          <div className="text-xs text-slate-500">
+            Updated: {fmtDate(job?.updated_at)} {loadingJob || loadingItems || loadingStats ? "(refreshing…)" : ""}
+          </div>
+        </div>
+      </div>
 
-          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <button className={BTN_SM} onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
-                Prev
+      {/* Drawer */}
+      {drawerOpen && selectedItem ? (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-[860px] bg-white shadow-xl border-l flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-xs text-slate-500">Bulk item</div>
+                <div className="font-semibold truncate">{selectedItem.input_url}</div>
+                <div className="mt-1 text-xs text-slate-500 font-mono">
+                  ingestion: {selectedItem.ingestion_id ?? "—"} • pipeline: {selectedItem.pipeline_run_id ?? "—"}
+                </div>
+              </div>
+              <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setDrawerOpen(false)}>
+                Close
               </button>
-              <button className={BTN_SM} onClick={() => setOffset(offset + limit)} disabled={mergedItems.length < limit}>
-                Next
-              </button>
-              <div className="text-xs text-slate-500">offset {offset}</div>
             </div>
-            <div className="text-xs text-slate-500">
-              Updated: {fmtDate(job?.updated_at)} {loadingJob || loadingItems || loadingPlainItems ? "(refreshing…)" : ""}
+
+            <div className="px-4 pt-3 flex flex-wrap gap-2">
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "seo" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("seo")} disabled={!selectedItem.ingestion_id}>
+                SEO preview
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "summary" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("summary")}>
+                Summary
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "extract" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("extract")} disabled={!selectedItem.ingestion_id}>
+                Extract Full
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out0" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out0")} disabled={!selectedItem.pipeline_run_id}>
+                Output 0
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out1" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out1")} disabled={!selectedItem.pipeline_run_id}>
+                Output 1
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "telemetry" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("telemetry")}>
+                Telemetry
+              </button>
+            </div>
+
+            <div className="p-4 overflow-auto flex-1">
+              {/* SEO */}
+              {drawerTab === "seo" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">SEO preview (live HTML)</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded border bg-white px-2 py-1 text-xs"
+                        onClick={() => void copyToClipboard(seoPreviewDoc || "")}
+                        disabled={!seoPreviewDoc}
+                      >
+                        Copy HTML
+                      </button>
+                      <button
+                        className="rounded border bg-white px-2 py-1 text-xs"
+                        onClick={() => downloadTextFile(`seo-preview-${selectedItem.ingestion_id || "seo"}.html`, seoPreviewDoc || "", "text/html")}
+                        disabled={!seoPreviewDoc}
+                      >
+                        Download HTML
+                      </button>
+                    </div>
+                  </div>
+
+                  {seoPreviewIsLoading ? (
+                    <div className="text-sm text-slate-600">Loading SEO…</div>
+                  ) : seoPreview?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {seoPreview?.error ?? "No data available for this item"}
+                    </div>
+                  ) : seoPreview?.ok ? (
+                    <>
+                      <div className="rounded-xl border p-3 space-y-2">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div>
+                            <div className="text-xs text-slate-500">Title</div>
+                            <div className="text-sm">{seoTitle ?? "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-500">Meta description</div>
+                            <div className="text-sm">{seoMeta ?? "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-500">H1</div>
+                            <div className="text-sm">{seoH1 ?? "—"}</div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 grid grid-cols-3 gap-2 text-xs">
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">audit score</div>
+                            <div className="font-semibold">
+                              {typeof seoDiag?.audit_score === "number" ? seoDiag.audit_score : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">model</div>
+                            <div className="font-mono">{seoDiag?.model ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">generated</div>
+                            <div className="font-mono">{seoPreview?.seo_generated_at ? fmtDate(seoPreview.seo_generated_at) : "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border p-3">
+                        <div className="text-sm font-medium">Live preview</div>
+                        <div className="mt-2 rounded border bg-white overflow-hidden">
+                          <iframe
+                            key={seoPreviewKey}
+                            title="seo-preview"
+                            className="w-full h-[560px]"
+                            sandbox=""
+                            srcDoc={seoPreviewDoc}
+                          />
+                        </div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Preview is sandboxed (no scripts). Layout-only “naked eye” view.
+                        </div>
+                      </div>
+
+                      <details className="rounded-xl border p-3">
+                        <summary className="cursor-pointer text-sm font-medium">SEO payload JSON</summary>
+                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
+                          {safeStringify(seoPayload, 250000)}
+                        </pre>
+                      </details>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-600">No data available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Summary */}
+              {drawerTab === "summary" ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Status</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {statusBadge(selectedItem.status)}
+                      <span className="text-xs text-slate-500 font-mono">tries:{selectedItem.tries ?? "—"}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500 break-all">
+                      ingestion_id: {selectedItem.ingestion_id ?? "—"}<br />
+                      pipeline_run_id: {selectedItem.pipeline_run_id ?? "—"}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      className="rounded-lg border p-3 text-left hover:bg-slate-50 disabled:opacity-50"
+                      onClick={() => openExtract(selectedItem.ingestion_id, selectedItem.input_url)}
+                      disabled={!selectedItem.ingestion_id}
+                    >
+                      <div className="text-xs text-slate-500">Open Extract (working)</div>
+                      <div className="text-sm font-medium">/dashboard/extract</div>
+                    </button>
+
+                    <button
+                      className="rounded-lg border p-3 text-left hover:bg-slate-50 disabled:opacity-50"
+                      onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}
+                      disabled={!selectedItem.pipeline_run_id}
+                    >
+                      <div className="text-xs text-slate-500">Open Output 1</div>
+                      <div className="text-sm font-medium">/output/1</div>
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Error</div>
+                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Extract Full */}
+              {drawerTab === "extract" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Extract Full (engine payload)</div>
+                  </div>
+
+                  {engineFullIsLoading ? (
+                    <div className="text-sm text-slate-600">Loading engine payload…</div>
+                  ) : engineFull?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {engineFull?.error ?? "No data available for this item"}
+                    </div>
+                  ) : engineFull?.ok ? (
+                    <details className="rounded-xl border p-3" open>
+                      <summary className="cursor-pointer text-sm font-medium">JSON</summary>
+                      <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-2">
+                        {safeStringify(engineFull.payload ?? null, 250000)}
+                      </pre>
+                    </details>
+                  ) : (
+                    <div className="text-sm text-slate-600">No data available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Output 0 */}
+              {drawerTab === "out0" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Output 0</div>
+                  {drawerOut0Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/0…</div>
+                  ) : drawerOut0?.ok === false ? (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                      No data available for this item (status {drawerOut0?.status ?? "—"}).<br />
+                      <span className="text-xs">{String(drawerOut0?.error ?? "")}</span>
+                    </div>
+                  ) : drawerOut0 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut0, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No data available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Output 1 */}
+              {drawerTab === "out1" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Output 1</div>
+                  {drawerOut1Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/1…</div>
+                  ) : drawerOut1?.ok === false ? (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                      No data available for this item (status {drawerOut1?.status ?? "—"}).<br />
+                      <span className="text-xs">{String(drawerOut1?.error ?? "")}</span>
+                    </div>
+                  ) : drawerOut1 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut1, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No data available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Telemetry */}
+              {drawerTab === "telemetry" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Telemetry</div>
+                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                    {selectedItem.telemetry ? safeStringify(selectedItem.telemetry, 250000) : "No telemetry available for this item"}
+                  </pre>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-
-        {/* Drawer */}
-        {drawerOpen && selectedItem ? (
-          <div className="fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
-
-            <div className="absolute right-0 top-0 h-full w-full max-w-[920px] bg-white shadow-2xl border-l flex flex-col">
-              {/* Drawer header */}
-              <div className="border-b bg-gradient-to-b from-slate-50 to-white">
-                <div className="p-4 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs text-slate-500">Bulk item</div>
-                    <div className="mt-1 font-semibold truncate text-slate-900">{selectedItem.input_url}</div>
-
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className={CHIP}>
-                        ingestion: <span className="font-mono">{selectedItem.ingestion_id ?? "—"}</span>
-                      </span>
-                      <span className={CHIP}>
-                        pipeline: <span className="font-mono">{selectedItem.pipeline_run_id ?? "—"}</span>
-                      </span>
-                      <span className={CHIP}>
-                        status: <span>{statusBadge(selectedItem.status ?? "—")}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <button className={BTN} onClick={() => setDrawerOpen(false)}>
-                    Close
-                  </button>
-                </div>
-
-                {/* Drawer tabs */}
-                <div className="px-4 pb-3">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      className={classNames(
-                        "rounded-full border px-3 py-1 text-xs",
-                        drawerTab === "seo" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setDrawerTab("seo")}
-                      disabled={!selectedItem.ingestion_id}
-                    >
-                      SEO preview
-                    </button>
-                    <button
-                      className={classNames(
-                        "rounded-full border px-3 py-1 text-xs",
-                        drawerTab === "extract" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setDrawerTab("extract")}
-                      disabled={!selectedItem.ingestion_id}
-                    >
-                      Extract full
-                    </button>
-                    <button
-                      className={classNames(
-                        "rounded-full border px-3 py-1 text-xs",
-                        drawerTab === "out0" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setDrawerTab("out0")}
-                      disabled={!selectedItem.pipeline_run_id}
-                    >
-                      Output 0
-                    </button>
-                    <button
-                      className={classNames(
-                        "rounded-full border px-3 py-1 text-xs",
-                        drawerTab === "out1" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setDrawerTab("out1")}
-                      disabled={!selectedItem.pipeline_run_id}
-                    >
-                      Output 1
-                    </button>
-                    <button
-                      className={classNames(
-                        "rounded-full border px-3 py-1 text-xs",
-                        drawerTab === "telemetry" ? "bg-sky-50 border-sky-200 text-sky-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      )}
-                      onClick={() => setDrawerTab("telemetry")}
-                    >
-                      Telemetry
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Drawer content (single scroll) */}
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <div className="h-full overflow-auto p-4">
-                  {/* SEO tab */}
-                  {drawerTab === "seo" ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-900">SEO preview (live HTML)</div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button className={BTN_SM} onClick={() => void copyToClipboard(seoPreviewDoc)} disabled={!seoPreviewDoc}>
-                            Copy HTML
-                          </button>
-                          <button
-                            className={BTN_SM}
-                            onClick={() => {
-                              const id = selectedItem.ingestion_id || "seo";
-                              downloadTextFile(`seo-preview-${id}.html`, seoPreviewDoc, "text/html");
-                            }}
-                            disabled={!seoPreviewDoc}
-                          >
-                            Download HTML
-                          </button>
-                          {selectedItem.ingestion_id ? (
-                            <button className="text-xs underline text-sky-700" onClick={() => void loadSeoPreview(selectedItem.ingestion_id!)}>
-                              refresh
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {seoPreviewIsLoading ? (
-                        <div className="text-sm text-slate-600">Loading SEO…</div>
-                      ) : seoPreview?.ok === false ? (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-                          {seoPreview?.error ?? "Failed to load SEO preview"}
-                        </div>
-                      ) : seoPreview?.ok ? (
-                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-                          {/* Meta cards */}
-                          <div className="lg:col-span-2 space-y-3">
-                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                              <div className="grid grid-cols-1 gap-2">
-                                <div>
-                                  <div className="text-xs text-slate-500">Title</div>
-                                  <div className="text-sm text-slate-900 break-words">{seoTitle ?? "—"}</div>
-                                </div>
-                                <div>
-                                  <div className="text-xs text-slate-500">Meta description</div>
-                                  <div className="text-sm text-slate-900 break-words">{seoMeta ?? "—"}</div>
-                                </div>
-                                <div className="grid grid-cols-1 gap-2">
-                                  <div>
-                                    <div className="text-xs text-slate-500">H1</div>
-                                    <div className="text-sm text-slate-900 break-words">{seoH1 ?? "—"}</div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-slate-500">Short description</div>
-                                    <div className="text-sm text-slate-900 break-words">{seoShort ?? "—"}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                              <div className="text-xs text-slate-500 mb-2">Diagnostics</div>
-                              <div className="grid grid-cols-3 gap-2 text-xs">
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                  <div className="text-slate-500">audit score</div>
-                                  <div className="font-semibold">
-                                    {typeof seoDiag?.audit_score === "number" ? seoDiag.audit_score : "—"}
-                                  </div>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                  <div className="text-slate-500">model</div>
-                                  <div className="font-mono truncate">{seoDiag?.model ?? "—"}</div>
-                                </div>
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                  <div className="text-slate-500">generated</div>
-                                  <div className="font-mono">
-                                    {seoPreview?.seo_generated_at ? fmtDate(seoPreview.seo_generated_at) : "—"}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {engineSummaryLoading ? (
-                              <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                                Loading engine summary…
-                              </div>
-                            ) : engineSummary?.ok === false ? (
-                              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-                                {engineSummary?.error ?? "Failed to load engine summary"}
-                              </div>
-                            ) : engineSummary ? (
-                              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                                <div className="text-xs text-slate-500 mb-2">Engine summary</div>
-                                <pre className="text-xs whitespace-pre-wrap break-all rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                  {safeStringify(engineSummary, 5000)}
-                                </pre>
-                              </div>
-                            ) : null}
-                          </div>
-
-                          {/* Live preview */}
-                          <div className="lg:col-span-3 min-h-0">
-                            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col min-h-[520px]">
-                              <div className="text-sm font-medium text-slate-900">Live preview</div>
-                              <div className="mt-2 flex-1 min-h-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
-                                <iframe
-                                  key={seoPreviewKey}
-                                  title="seo-preview"
-                                  className="w-full h-full"
-                                  sandbox=""
-                                  srcDoc={seoPreviewDoc}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-slate-600">No SEO data loaded yet.</div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {/* Extract full */}
-                  {drawerTab === "extract" ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-900">Extract full (engine payload)</div>
-                        {selectedItem.ingestion_id ? (
-                          <button className="text-xs underline text-sky-700" onClick={() => void loadEnginePayloadFull(selectedItem.ingestion_id!)}>
-                            refresh
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {engineFullIsLoading ? (
-                        <div className="text-sm text-slate-600">Loading engine payload…</div>
-                      ) : engineFull?.ok === false ? (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
-                          {engineFull?.error ?? "Failed to load engine payload"}
-                        </div>
-                      ) : engineFull?.ok ? (
-                        <div className="space-y-3">
-                          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                            <div className="text-xs text-slate-500">Storage ref</div>
-                            <div className="mt-1 font-mono text-xs break-all">
-                              {engineFull.bucket}/{engineFull.ref}
-                            </div>
-
-                            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                <div className="text-slate-500">specs</div>
-                                <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
-                              </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                <div className="text-slate-500">features</div>
-                                <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
-                              </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                <div className="text-slate-500">images</div>
-                                <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
-                              </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                                <div className="text-slate-500">tabs</div>
-                                <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          <details className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                            <summary className="cursor-pointer text-sm font-medium text-slate-900">
-                              View JSON
-                            </summary>
-                            <pre className="mt-3 text-xs whitespace-pre-wrap break-all overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
-                              {safeStringify(engineFull.payload, 250000)}
-                            </pre>
-                          </details>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-slate-600">No payload available yet for this ingestion.</div>
-                      )}
-                    </div>
-                  ) : null}
-
-                  {/* Output 0 */}
-                  {drawerTab === "out0" ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-900">Output 0 (pipeline artifact)</div>
-                        {selectedItem.pipeline_run_id ? (
-                          <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 0)}>
-                            refresh
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {out0Loading ? (
-                        <div className="text-sm text-slate-600">Loading output/0…</div>
-                      ) : out0Err ? (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{out0Err}</div>
-                      ) : out0Data ? (
-                        <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          {safeStringify(out0Data, 250000)}
-                        </pre>
-                      ) : (
-                        <div className="text-sm text-slate-600">No output/0 available yet for this pipeline run.</div>
-                      )}
-
-                      {selectedItem.pipeline_run_id ? (
-                        <button className={BTN} onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 0)}>
-                          Open raw output/0 endpoint
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {/* Output 1 */}
-                  {drawerTab === "out1" ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="text-sm font-semibold text-slate-900">Output 1 (pipeline artifact)</div>
-                        {selectedItem.pipeline_run_id ? (
-                          <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 1)}>
-                            refresh
-                          </button>
-                        ) : null}
-                      </div>
-
-                      {out1Loading ? (
-                        <div className="text-sm text-slate-600">Loading output/1…</div>
-                      ) : out1Err ? (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{out1Err}</div>
-                      ) : out1Data ? (
-                        <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          {safeStringify(out1Data, 250000)}
-                        </pre>
-                      ) : (
-                        <div className="text-sm text-slate-600">No output/1 available yet for this pipeline run.</div>
-                      )}
-
-                      {selectedItem.pipeline_run_id ? (
-                        <button className={BTN} onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}>
-                          Open raw output/1 endpoint
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {/* Telemetry */}
-                  {drawerTab === "telemetry" ? (
-                    <div className="space-y-4">
-                      <div className="text-sm font-semibold text-slate-900">Telemetry</div>
-                      <pre className="text-xs whitespace-pre-wrap break-all overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        {selectedItem.telemetry ? safeStringify(selectedItem.telemetry, 250000) : "—"}
-                      </pre>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
