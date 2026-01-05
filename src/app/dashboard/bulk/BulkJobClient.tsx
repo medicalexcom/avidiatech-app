@@ -245,19 +245,6 @@ function tinyHash(s: string) {
   return h.toString(16);
 }
 
-/**
- * Heuristic "store page" target:
- * - prefers /dashboard/seo if it exists (likely matches single run preview UX)
- * - falls back to /dashboard/describe for legacy installs
- * - falls back to /dashboard/extract if neither exist (still useful)
- */
-function openStoreSeo(ingestionId: string) {
-  // We can't reliably probe routes here, so choose one canonical route:
-  // If your app has /dashboard/seo, this will work; otherwise it 404s.
-  // You can adjust to your actual route.
-  window.open(`/dashboard/seo?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
-}
-
 export default function BulkJobClient(props: {
   initialBulkJobId?: string;
   initialJob?: BulkJob | null;
@@ -302,8 +289,10 @@ export default function BulkJobClient(props: {
   const [seoCache, setSeoCache] = useState<Record<string, any>>({});
   const [seoLoadingById, setSeoLoadingById] = useState<Record<string, boolean>>({});
 
+  // IMPORTANT: cache keys should include moduleIndex to avoid showing wrong data between out0/out1
   const [pipelineOutCache, setPipelineOutCache] = useState<Record<string, any>>({});
   const [pipelineOutLoading, setPipelineOutLoading] = useState<Record<string, boolean>>({});
+  const [pipelineOutError, setPipelineOutError] = useState<Record<string, string>>({});
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
   const telemetryApi = useMemo(
@@ -451,11 +440,10 @@ export default function BulkJobClient(props: {
     window.open(`${jobApiBase}/items/errors`, "_blank");
   }
 
-  function openExtract(ingestionId?: string | null) {
-    if (!ingestionId) return;
-    window.open(`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
-  }
-
+  /**
+   * SUMMARY TAB: your /dashboard/extract appears broken, so we avoid routing users there.
+   * Instead, provide "Output 0" as the canonical Extract view (real pipeline artifact).
+   */
   function openPipelineOutput(pipelineRunId?: string | null, moduleIndex = 0) {
     if (!pipelineRunId) return;
     window.open(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, "_blank");
@@ -524,8 +512,8 @@ export default function BulkJobClient(props: {
 
   async function loadEnginePayloadFull(ingestionId: string) {
     if (!ingestionId) return;
-    if (enginePayloadCache[ingestionId]) return;
 
+    // ALWAYS refetch for "Extract full" (ensures it reflects the real latest data, not a stale cache)
     setEngineFullLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
@@ -545,8 +533,8 @@ export default function BulkJobClient(props: {
 
   async function loadSeoPreview(ingestionId: string) {
     if (!ingestionId) return;
-    if (seoCache[ingestionId]) return;
 
+    // Always refetch when opening SEO tab (avoid stale)
     setSeoLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, { cache: "no-store" });
@@ -564,18 +552,48 @@ export default function BulkJobClient(props: {
     }
   }
 
-  async function loadPipelineOutput(pipelineRunId: string, moduleIndex: number) {
-    const k = `${pipelineRunId}:${moduleIndex}`;
-    if (pipelineOutCache[k]) return;
+  function outKey(pipelineRunId: string, moduleIndex: number) {
+    return `${pipelineRunId}:${moduleIndex}`;
+  }
 
+  async function loadPipelineOutput(pipelineRunId: string, moduleIndex: number) {
+    const k = outKey(pipelineRunId, moduleIndex);
+
+    // ALWAYS refetch on tab open to ensure correctness
     setPipelineOutLoading((s) => ({ ...s, [k]: true }));
+    setPipelineOutError((s) => {
+      const next = { ...s };
+      delete next[k];
+      return next;
+    });
+
     try {
-      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, { cache: "no-store" });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(j?.error ?? `pipeline output fetch failed (${res.status})`);
-      setPipelineOutCache((s) => ({ ...s, [k]: j }));
+      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, {
+        cache: "no-store",
+      });
+
+      // Output endpoints may return JSON or raw; handle both
+      const text = await res.text().catch(() => "");
+      let parsed: any = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = { _raw: text };
+      }
+
+      if (!res.ok) {
+        const msg = parsed?.error ?? `output_${moduleIndex}_fetch_failed (${res.status})`;
+        throw new Error(msg);
+      }
+
+      setPipelineOutCache((s) => ({ ...s, [k]: parsed }));
     } catch (e: any) {
-      setPipelineOutCache((s) => ({ ...s, [k]: { ok: false, error: String(e?.message || e) } }));
+      setPipelineOutError((s) => ({ ...s, [k]: String(e?.message || e) }));
+      setPipelineOutCache((s) => {
+        const next = { ...s };
+        delete next[k];
+        return next;
+      });
     } finally {
       setPipelineOutLoading((s) => {
         const next = { ...s };
@@ -585,7 +603,7 @@ export default function BulkJobClient(props: {
     }
   }
 
-  // Clicking a row should default to SEO tab
+  // Clicking a row should default to SEO tab (and fetch everything needed)
   function onRowClick(itemId: string) {
     openDrawer(itemId, "seo");
   }
@@ -600,25 +618,31 @@ export default function BulkJobClient(props: {
     const ingestionId = item?.ingestion_id || null;
     const pipelineRunId = item?.pipeline_run_id || null;
 
-    // Always fetch these eagerly so summary tab + SEO tab never show stale/empty values.
     if (ingestionId) {
       void loadEngineSummary(ingestionId);
       void loadSeoPreview(ingestionId);
+      if (tab === "extract") void loadEnginePayloadFull(ingestionId);
     }
-    if (tab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
 
-    // pipeline artifact previews
     if (pipelineRunId) {
       if (tab === "out0") void loadPipelineOutput(pipelineRunId, 0);
       if (tab === "out1") void loadPipelineOutput(pipelineRunId, 1);
     }
   }
 
-  // Safety net: If user manually switches to SEO tab, ensure fetch
+  // When switching tabs, fetch live data for that tab
   useEffect(() => {
     if (!drawerOpen) return;
-    if (!selectedItem?.ingestion_id) return;
-    if (drawerTab === "seo") void loadSeoPreview(selectedItem.ingestion_id);
+    if (!selectedItem) return;
+
+    const ingestionId = selectedItem.ingestion_id || null;
+    const pipelineRunId = selectedItem.pipeline_run_id || null;
+
+    if (drawerTab === "seo" && ingestionId) void loadSeoPreview(ingestionId);
+    if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
+    if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0);
+    if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerTab, drawerOpen, selectedId]);
 
@@ -631,12 +655,18 @@ export default function BulkJobClient(props: {
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
   const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
 
-  const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
-  const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
-  const drawerOut0 = out0Key ? pipelineOutCache[out0Key] : null;
-  const drawerOut1 = out1Key ? pipelineOutCache[out1Key] : null;
-  const drawerOut0Loading = out0Key ? Boolean(pipelineOutLoading[out0Key]) : false;
-  const drawerOut1Loading = out1Key ? Boolean(pipelineOutLoading[out1Key]) : false;
+  const pipelineRunId = selectedItem?.pipeline_run_id || null;
+  const out0K = pipelineRunId ? outKey(pipelineRunId, 0) : null;
+  const out1K = pipelineRunId ? outKey(pipelineRunId, 1) : null;
+
+  const out0Data = out0K ? pipelineOutCache[out0K] : null;
+  const out1Data = out1K ? pipelineOutCache[out1K] : null;
+
+  const out0Loading = out0K ? Boolean(pipelineOutLoading[out0K]) : false;
+  const out1Loading = out1K ? Boolean(pipelineOutLoading[out1K]) : false;
+
+  const out0Err = out0K ? pipelineOutError[out0K] : null;
+  const out1Err = out1K ? pipelineOutError[out1K] : null;
 
   const fullPayload = engineFull?.payload ?? null;
   const fullStats = fullPayload ? jsonCounts(fullPayload) : null;
@@ -663,6 +693,7 @@ export default function BulkJobClient(props: {
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
+      {/* header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
@@ -711,6 +742,7 @@ export default function BulkJobClient(props: {
         <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">{actionMessage}</div>
       ) : null}
 
+      {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-xs text-slate-500">Progress</div>
@@ -769,6 +801,7 @@ export default function BulkJobClient(props: {
         </div>
       </div>
 
+      {/* Table */}
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -906,20 +939,17 @@ export default function BulkJobClient(props: {
 
                         <td className="py-2 pr-3 align-top" onClick={(e) => e.stopPropagation()}>
                           <div className="flex flex-wrap gap-2">
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openExtract(it.ingestion_id)} disabled={!it.ingestion_id}>
-                              Extract
-                            </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openStoreSeo(it.ingestion_id!)} disabled={!it.ingestion_id}>
-                              Dashboard SEO
-                            </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
                               SEO preview
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
-                              Extract (full)
+                              Extract full
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
+                              Output 0
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
-                              Out 1
+                              Output 1
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
                               {isExpanded ? "Hide" : "Details"}
@@ -997,48 +1027,12 @@ export default function BulkJobClient(props: {
               </button>
             </div>
 
-            {/* Quick extract summary strip */}
-            <div className="px-4 py-3 border-b bg-slate-50">
-              {selectedItem.ingestion_id ? (
-                engineSummaryLoading ? (
-                  <div className="text-xs text-slate-600">Loading extract summary…</div>
-                ) : engineSummary?.ok ? (
-                  <div className="grid grid-cols-4 gap-2 text-xs">
-                    <div className="rounded border bg-white p-2">
-                      <div className="text-slate-500">specs</div>
-                      <div className="font-semibold">{engineSummary.summary?.counts?.specsCount ?? "—"}</div>
-                    </div>
-                    <div className="rounded border bg-white p-2">
-                      <div className="text-slate-500">features</div>
-                      <div className="font-semibold">{engineSummary.summary?.counts?.featuresCount ?? "—"}</div>
-                    </div>
-                    <div className="rounded border bg-white p-2">
-                      <div className="text-slate-500">images</div>
-                      <div className="font-semibold">{engineSummary.summary?.counts?.imagesCount ?? "—"}</div>
-                    </div>
-                    <div className="rounded border bg-white p-2">
-                      <div className="text-slate-500">tabs</div>
-                      <div className="font-semibold">{engineSummary.summary?.counts?.tabsCount ?? "—"}</div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-rose-700">{engineSummary?.error ?? "Extract summary unavailable"}</div>
-                )
-              ) : (
-                <div className="text-xs text-slate-500">No ingestion id yet.</div>
-              )}
-            </div>
-
-            {/* tabs */}
             <div className="px-4 pt-3 flex flex-wrap gap-2">
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "seo" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("seo")} disabled={!selectedItem.ingestion_id}>
                 SEO preview
               </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "summary" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("summary")}>
-                Summary
-              </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "extract" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("extract")} disabled={!selectedItem.ingestion_id}>
-                Extract (full)
+                Extract full
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out0" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out0")} disabled={!selectedItem.pipeline_run_id}>
                 Output 0
@@ -1052,6 +1046,125 @@ export default function BulkJobClient(props: {
             </div>
 
             <div className="p-4 overflow-auto flex-1">
+              {drawerTab === "extract" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Extract full (ingest-engine-payloads)</div>
+                    {selectedItem.ingestion_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => void loadEnginePayloadFull(selectedItem.ingestion_id!)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {engineFullIsLoading ? (
+                    <div className="text-sm text-slate-600">Loading engine payload…</div>
+                  ) : engineFull?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {engineFull?.error ?? "Failed to load engine payload"}
+                    </div>
+                  ) : engineFull?.ok ? (
+                    <>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-xs text-slate-500">Storage ref</div>
+                        <div className="mt-1 font-mono text-xs break-all">
+                          {engineFull.bucket}/{engineFull.ref}
+                        </div>
+                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">specs</div>
+                            <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">features</div>
+                            <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">images</div>
+                            <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">tabs</div>
+                            <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <details className="rounded-xl border p-3">
+                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
+                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
+                          {safeStringify(engineFull.payload, 250000)}
+                        </pre>
+                      </details>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-600">No payload available yet for this ingestion.</div>
+                  )}
+                </div>
+              ) : null}
+
+              {drawerTab === "out0" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Output 0 (module artifact)</div>
+                    {selectedItem.pipeline_run_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 0)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {out0Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/0…</div>
+                  ) : out0Err ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{out0Err}</div>
+                  ) : out0Data ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(out0Data, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No output/0 available yet for this pipeline run.</div>
+                  )}
+
+                  {selectedItem.pipeline_run_id ? (
+                    <button className="rounded border bg-white px-3 py-2 text-sm" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 0)}>
+                      Open raw output/0 endpoint
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {drawerTab === "out1" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Output 1 (module artifact)</div>
+                    {selectedItem.pipeline_run_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => void loadPipelineOutput(selectedItem.pipeline_run_id!, 1)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {out1Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/1…</div>
+                  ) : out1Err ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">{out1Err}</div>
+                  ) : out1Data ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(out1Data, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No output/1 available yet for this pipeline run.</div>
+                  )}
+
+                  {selectedItem.pipeline_run_id ? (
+                    <button className="rounded border bg-white px-3 py-2 text-sm" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}>
+                      Open raw output/1 endpoint
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
               {drawerTab === "seo" ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1079,18 +1192,7 @@ export default function BulkJobClient(props: {
                         Download HTML
                       </button>
                       {selectedItem.ingestion_id ? (
-                        <button
-                          className="text-xs underline text-sky-700"
-                          onClick={() => {
-                            const id = selectedItem.ingestion_id!;
-                            setSeoCache((s) => {
-                              const next = { ...s };
-                              delete next[id];
-                              return next;
-                            });
-                            void loadSeoPreview(id);
-                          }}
-                        >
+                        <button className="text-xs underline text-sky-700" onClick={() => void loadSeoPreview(selectedItem.ingestion_id!)}>
                           refresh
                         </button>
                       ) : null}
@@ -1148,206 +1250,12 @@ export default function BulkJobClient(props: {
                       <div className="rounded-xl border p-3">
                         <div className="text-sm font-medium">Live preview</div>
                         <div className="mt-2 rounded border bg-white overflow-hidden">
-                          <iframe
-                            key={seoPreviewKey}
-                            title="seo-preview"
-                            className="w-full h-[560px]"
-                            sandbox=""
-                            srcDoc={seoPreviewDoc}
-                          />
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Preview is sandboxed (no scripts). This is for “naked eye” layout only.
+                          <iframe key={seoPreviewKey} title="seo-preview" className="w-full h-[560px]" sandbox="" srcDoc={seoPreviewDoc} />
                         </div>
                       </div>
-
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">SEO payload JSON</summary>
-                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
-                          {safeStringify(seoPayload, 250000)}
-                        </pre>
-                      </details>
                     </>
                   ) : (
                     <div className="text-sm text-slate-600">No SEO data loaded yet.</div>
-                  )}
-                </div>
-              ) : null}
-
-              {drawerTab === "summary" ? (
-                <div className="space-y-3">
-                  <div className="rounded-xl border p-3">
-                    <div className="text-xs text-slate-500">Status</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      {statusBadge(selectedItem.status)}
-                      <span className="text-xs text-slate-500 font-mono">tries:{selectedItem.tries ?? "—"}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openExtract(selectedItem.ingestion_id)} disabled={!selectedItem.ingestion_id}>
-                      <div className="text-xs text-slate-500">Open Extract page</div>
-                      <div className="text-sm font-medium">/dashboard/extract</div>
-                    </button>
-                    <button
-                      className="rounded-lg border p-3 text-left hover:bg-slate-50"
-                      onClick={() => selectedItem.ingestion_id && openStoreSeo(selectedItem.ingestion_id)}
-                      disabled={!selectedItem.ingestion_id}
-                    >
-                      <div className="text-xs text-slate-500">Open Dashboard SEO</div>
-                      <div className="text-sm font-medium">/dashboard/seo</div>
-                    </button>
-                  </div>
-
-                  <div className="rounded-xl border p-3">
-                    <div className="text-xs text-slate-500">Error</div>
-                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
-                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {drawerTab === "extract" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Full engine payload</div>
-                    {selectedItem.ingestion_id ? (
-                      <button
-                        className="text-xs underline text-sky-700"
-                        onClick={() => {
-                          const id = selectedItem.ingestion_id!;
-                          setEnginePayloadCache((s) => {
-                            const next = { ...s };
-                            delete next[id];
-                            return next;
-                          });
-                          void loadEnginePayloadFull(id);
-                        }}
-                      >
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {engineFullIsLoading ? (
-                    <div className="text-sm text-slate-600">Loading engine payload…</div>
-                  ) : engineFull?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {engineFull?.error ?? "Failed to load engine payload"}
-                    </div>
-                  ) : engineFull?.ok ? (
-                    <>
-                      <div className="rounded-xl border p-3">
-                        <div className="text-xs text-slate-500">Storage ref</div>
-                        <div className="mt-1 font-mono text-xs break-all">
-                          {engineFull.bucket}/{engineFull.ref}
-                        </div>
-                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">specs</div>
-                            <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">features</div>
-                            <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">images</div>
-                            <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">tabs</div>
-                            <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
-                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
-                          {safeStringify(engineFull.payload, 250000)}
-                        </pre>
-                      </details>
-                    </>
-                  ) : (
-                    <div className="text-sm text-slate-600">No payload loaded yet.</div>
-                  )}
-                </div>
-              ) : null}
-
-              {drawerTab === "out0" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Pipeline output 0</div>
-                    {selectedItem.pipeline_run_id ? (
-                      <button
-                        className="text-xs underline text-sky-700"
-                        onClick={() => {
-                          const k = `${selectedItem.pipeline_run_id!}:0`;
-                          setPipelineOutCache((s) => {
-                            const next = { ...s };
-                            delete next[k];
-                            return next;
-                          });
-                          void loadPipelineOutput(selectedItem.pipeline_run_id!, 0);
-                        }}
-                      >
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {drawerOut0Loading ? (
-                    <div className="text-sm text-slate-600">Loading output/0…</div>
-                  ) : drawerOut0?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {drawerOut0?.error ?? "Failed to load output/0"}
-                    </div>
-                  ) : drawerOut0 ? (
-                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[680px] overflow-auto rounded border bg-slate-50 p-3">
-                      {safeStringify(drawerOut0, 250000)}
-                    </pre>
-                  ) : (
-                    <div className="text-sm text-slate-600">No output loaded yet.</div>
-                  )}
-                </div>
-              ) : null}
-
-              {drawerTab === "out1" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Pipeline output 1</div>
-                    {selectedItem.pipeline_run_id ? (
-                      <button
-                        className="text-xs underline text-sky-700"
-                        onClick={() => {
-                          const k = `${selectedItem.pipeline_run_id!}:1`;
-                          setPipelineOutCache((s) => {
-                            const next = { ...s };
-                            delete next[k];
-                            return next;
-                          });
-                          void loadPipelineOutput(selectedItem.pipeline_run_id!, 1);
-                        }}
-                      >
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {drawerOut1Loading ? (
-                    <div className="text-sm text-slate-600">Loading output/1…</div>
-                  ) : drawerOut1?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {drawerOut1?.error ?? "Failed to load output/1"}
-                    </div>
-                  ) : drawerOut1 ? (
-                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[680px] overflow-auto rounded border bg-slate-50 p-3">
-                      {safeStringify(drawerOut1, 250000)}
-                    </pre>
-                  ) : (
-                    <div className="text-sm text-slate-600">No output loaded yet.</div>
                   )}
                 </div>
               ) : null}
