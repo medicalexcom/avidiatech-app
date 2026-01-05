@@ -161,6 +161,90 @@ function getSeoField(seoPayload: any, path: string): string | null {
   }
 }
 
+function buildSeoPreviewHtmlDoc(opts: {
+  title?: string | null;
+  metaDescription?: string | null;
+  h1?: string | null;
+  descriptionHtml?: string | null;
+}) {
+  const title = opts.title || "SEO Preview";
+  const metaDescription = opts.metaDescription || "";
+  const h1 = opts.h1 || "";
+
+  // Basic document wrapper so preview looks like a real page.
+  // IMPORTANT: We sandbox the iframe (no scripts, no same-origin).
+  // This is for operator preview only.
+  const body = `
+  <div style="max-width: 980px; margin: 24px auto; padding: 0 16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; color: #0f172a;">
+    <div style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">Meta preview</div>
+      <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">${escapeHtml(
+        title
+      )}</div>
+      ${
+        metaDescription
+          ? `<div style="font-size: 13px; color: #334155;">${escapeHtml(metaDescription)}</div>`
+          : `<div style="font-size: 13px; color: #94a3b8;">(no meta description)</div>`
+      }
+    </div>
+
+    ${
+      h1
+        ? `<h1 style="font-size: 28px; line-height: 1.2; margin: 18px 0 12px;">${escapeHtml(h1)}</h1>`
+        : ""
+    }
+
+    <div class="seo-description">
+      ${opts.descriptionHtml || "<p>(no description_html)</p>"}
+    </div>
+  </div>
+  `;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  ${metaDescription ? `<meta name="description" content="${escapeHtml(metaDescription)}" />` : ""}
+  <style>
+    /* minimal defaults that feel "store-like" */
+    .seo-description p { margin: 0.75rem 0; }
+    .seo-description ul, .seo-description ol { padding-left: 1.25rem; margin: 0.75rem 0; }
+    .seo-description h2 { margin: 1.5rem 0 0.75rem; font-size: 20px; }
+    .seo-description h3 { margin: 1.25rem 0 0.5rem; font-size: 16px; }
+    .seo-description a { color: #0369a1; text-decoration: underline; }
+    .seo-description table { border-collapse: collapse; width: 100%; }
+    .seo-description td, .seo-description th { border: 1px solid #e2e8f0; padding: 8px; }
+  </style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+}
+
+function escapeHtml(s: string) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function downloadTextFile(filename: string, text: string, mime = "text/plain") {
+  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function BulkJobClient(props: {
   initialBulkJobId?: string;
   initialJob?: BulkJob | null;
@@ -410,12 +494,18 @@ export default function BulkJobClient(props: {
 
     setEngineSummaryLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`,
+        { cache: "no-store" }
+      );
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `engine summary fetch failed (${res.status})`);
       setEngineSummaryCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setEngineSummaryCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
+      setEngineSummaryCache((s) => ({
+        ...s,
+        [ingestionId]: { ok: false, error: String(e?.message || e) },
+      }));
     } finally {
       setEngineSummaryLoadingById((s) => {
         const next = { ...s };
@@ -431,12 +521,18 @@ export default function BulkJobClient(props: {
 
     setEngineFullLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`,
+        { cache: "no-store" }
+      );
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `engine payload fetch failed (${res.status})`);
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setEnginePayloadCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
+      setEnginePayloadCache((s) => ({
+        ...s,
+        [ingestionId]: { ok: false, error: String(e?.message || e) },
+      }));
     } finally {
       setEngineFullLoadingById((s) => {
         const next = { ...s };
@@ -452,12 +548,17 @@ export default function BulkJobClient(props: {
 
     setSeoLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, { cache: "no-store" });
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, {
+        cache: "no-store",
+      });
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `seo preview fetch failed (${res.status})`);
       setSeoCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setSeoCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
+      setSeoCache((s) => ({
+        ...s,
+        [ingestionId]: { ok: false, error: String(e?.message || e) },
+      }));
     } finally {
       setSeoLoadingById((s) => {
         const next = { ...s };
@@ -473,7 +574,10 @@ export default function BulkJobClient(props: {
 
     setPipelineOutLoading((s) => ({ ...s, [k]: true }));
     try {
-      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`,
+        { cache: "no-store" }
+      );
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `pipeline output fetch failed (${res.status})`);
       setPipelineOutCache((s) => ({ ...s, [k]: j }));
@@ -521,14 +625,19 @@ export default function BulkJobClient(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, drawerTab, selectedId]);
 
-  const engineSummary = selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
-  const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
+  const engineSummary =
+    selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
+  const engineSummaryLoading =
+    selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
 
-  const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
-  const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
+  const engineFull =
+    selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
+  const engineFullIsLoading =
+    selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
 
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
-  const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
+  const seoPreviewIsLoading =
+    selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
 
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
@@ -548,6 +657,15 @@ export default function BulkJobClient(props: {
   const seoMeta = getSeoField(seoPayload, "metaDescription") || getSeoField(seoPayload, "seo.metaDescription");
   const seoH1 = getSeoField(seoPayload, "h1") || getSeoField(seoPayload, "seo.h1");
   const seoShort = getSeoField(seoPayload, "shortDescription") || getSeoField(seoPayload, "seo.shortDescription");
+
+  const seoPreviewDoc = useMemo(() => {
+    return buildSeoPreviewHtmlDoc({
+      title: seoTitle,
+      metaDescription: seoMeta,
+      h1: seoH1,
+      descriptionHtml: seoHtml ? String(seoHtml) : null,
+    });
+  }, [seoTitle, seoMeta, seoH1, seoHtml]);
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
@@ -584,11 +702,7 @@ export default function BulkJobClient(props: {
 
           <label className="inline-flex items-center gap-2 text-sm">
             <span className="text-xs text-slate-600">Interval</span>
-            <select
-              className="rounded-md border bg-white px-2 py-2 text-sm"
-              value={pollIntervalMs}
-              onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}
-            >
+            <select className="rounded-md border bg-white px-2 py-2 text-sm" value={pollIntervalMs} onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}>
               <option value={1000}>1s</option>
               <option value={3000}>3s</option>
               <option value={5000}>5s</option>
@@ -615,9 +729,7 @@ export default function BulkJobClient(props: {
           <div className="text-xs text-slate-500">Progress</div>
           <div className="mt-1 flex items-end justify-between gap-3">
             <div className="text-2xl font-semibold">{pct}%</div>
-            <div className="text-xs text-slate-500">
-              {completed}/{total} done
-            </div>
+            <div className="text-xs text-slate-500">{completed}/{total} done</div>
           </div>
           <div className="mt-3 h-2 w-full rounded-full bg-slate-200">
             <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-emerald-400 to-amber-400" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
@@ -688,7 +800,6 @@ export default function BulkJobClient(props: {
 
           <div className="flex flex-wrap items-center gap-2">
             <input className="rounded-md border px-3 py-2 text-sm w-[260px]" placeholder="Search URL / IDs" value={search} onChange={(e) => setSearch(e.target.value)} />
-
             <select className="rounded-md border bg-white px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
               <option value="all">All statuses</option>
               <option value="failed">Failed</option>
@@ -696,7 +807,6 @@ export default function BulkJobClient(props: {
               <option value="queued">Queued</option>
               <option value="succeeded">Succeeded</option>
             </select>
-
             <select className="rounded-md border bg-white px-3 py-2 text-sm" value={limit} onChange={(e) => setLimit(parseInt(e.target.value, 10))}>
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -890,7 +1000,7 @@ export default function BulkJobClient(props: {
       {drawerOpen && selectedItem ? (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-[760px] bg-white shadow-xl border-l flex flex-col">
+          <div className="absolute right-0 top-0 h-full w-full max-w-[860px] bg-white shadow-xl border-l flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <div className="min-w-0">
                 <div className="text-xs text-slate-500">Bulk item</div>
@@ -1062,23 +1172,46 @@ export default function BulkJobClient(props: {
               {drawerTab === "seo" ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">SEO preview (stored)</div>
-                    {selectedItem.ingestion_id ? (
+                    <div className="text-sm font-semibold">SEO preview (live HTML)</div>
+                    <div className="flex items-center gap-2">
                       <button
-                        className="text-xs underline text-sky-700"
+                        className="rounded border bg-white px-2 py-1 text-xs"
                         onClick={() => {
-                          const id = selectedItem.ingestion_id!;
-                          setSeoCache((s) => {
-                            const next = { ...s };
-                            delete next[id];
-                            return next;
-                          });
-                          loadSeoPreview(id);
+                          const html = seoPreviewDoc || "";
+                          void copyToClipboard(html);
                         }}
+                        disabled={!seoPreviewDoc}
                       >
-                        refresh
+                        Copy HTML
                       </button>
-                    ) : null}
+                      <button
+                        className="rounded border bg-white px-2 py-1 text-xs"
+                        onClick={() => {
+                          const html = seoPreviewDoc || "";
+                          const id = selectedItem.ingestion_id || "seo";
+                          downloadTextFile(`seo-preview-${id}.html`, html, "text/html");
+                        }}
+                        disabled={!seoPreviewDoc}
+                      >
+                        Download HTML
+                      </button>
+                      {selectedItem.ingestion_id ? (
+                        <button
+                          className="text-xs underline text-sky-700"
+                          onClick={() => {
+                            const id = selectedItem.ingestion_id!;
+                            setSeoCache((s) => {
+                              const next = { ...s };
+                              delete next[id];
+                              return next;
+                            });
+                            loadSeoPreview(id);
+                          }}
+                        >
+                          refresh
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   {seoPreviewIsLoading ? (
@@ -1129,16 +1262,20 @@ export default function BulkJobClient(props: {
                         </div>
                       </div>
 
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">Rendered HTML description</summary>
-                        <div className="mt-2 rounded border bg-white p-3 prose prose-slate max-w-none">
-                          {seoHtml ? (
-                            <div dangerouslySetInnerHTML={{ __html: String(seoHtml) }} />
-                          ) : (
-                            <div className="text-sm text-slate-600">No description_html stored.</div>
-                          )}
+                      <div className="rounded-xl border p-3">
+                        <div className="text-sm font-medium">Live preview</div>
+                        <div className="mt-2 rounded border bg-white overflow-hidden">
+                          <iframe
+                            title="seo-preview"
+                            className="w-full h-[560px]"
+                            sandbox=""
+                            srcDoc={seoPreviewDoc}
+                          />
                         </div>
-                      </details>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Note: preview is sandboxed (no scripts). This is for “naked eye” layout only.
+                        </div>
+                      </div>
 
                       <details className="rounded-xl border p-3">
                         <summary className="cursor-pointer text-sm font-medium">SEO payload JSON</summary>
