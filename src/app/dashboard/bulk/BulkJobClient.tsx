@@ -151,7 +151,6 @@ function jsonCounts(payload: any) {
 }
 
 function getSeoField(seoPayload: any, path: string): string | null {
-  // supports "seo.title" like paths for convenience
   try {
     const parts = path.split(".");
     let cur = seoPayload;
@@ -199,11 +198,11 @@ export default function BulkJobClient(props: {
   // Caches (avoid refetching big payloads)
   const [engineSummaryCache, setEngineSummaryCache] = useState<Record<string, any>>({});
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
-  const [engineLoading, setEngineLoading] = useState<Record<string, boolean>>({});
-  const [engineFullLoading, setEngineFullLoading] = useState<Record<string, boolean>>({});
+  const [engineSummaryLoadingById, setEngineSummaryLoadingById] = useState<Record<string, boolean>>({});
+  const [engineFullLoadingById, setEngineFullLoadingById] = useState<Record<string, boolean>>({});
 
   const [seoCache, setSeoCache] = useState<Record<string, any>>({});
-  const [seoLoading, setSeoLoading] = useState<Record<string, boolean>>({});
+  const [seoLoadingById, setSeoLoadingById] = useState<Record<string, boolean>>({});
 
   const [pipelineOutCache, setPipelineOutCache] = useState<Record<string, any>>({});
   const [pipelineOutLoading, setPipelineOutLoading] = useState<Record<string, boolean>>({});
@@ -409,7 +408,7 @@ export default function BulkJobClient(props: {
     if (!ingestionId) return;
     if (engineSummaryCache[ingestionId]) return;
 
-    setEngineLoading((s) => ({ ...s, [ingestionId]: true }));
+    setEngineSummaryLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
@@ -418,7 +417,7 @@ export default function BulkJobClient(props: {
     } catch (e: any) {
       setEngineSummaryCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setEngineLoading((s) => {
+      setEngineSummaryLoadingById((s) => {
         const next = { ...s };
         delete next[ingestionId];
         return next;
@@ -430,7 +429,7 @@ export default function BulkJobClient(props: {
     if (!ingestionId) return;
     if (enginePayloadCache[ingestionId]) return;
 
-    setEngineFullLoading((s) => ({ ...s, [ingestionId]: true }));
+    setEngineFullLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
@@ -439,7 +438,7 @@ export default function BulkJobClient(props: {
     } catch (e: any) {
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setEngineFullLoading((s) => {
+      setEngineFullLoadingById((s) => {
         const next = { ...s };
         delete next[ingestionId];
         return next;
@@ -451,7 +450,7 @@ export default function BulkJobClient(props: {
     if (!ingestionId) return;
     if (seoCache[ingestionId]) return;
 
-    setSeoLoading((s) => ({ ...s, [ingestionId]: true }));
+    setSeoLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
@@ -460,7 +459,7 @@ export default function BulkJobClient(props: {
     } catch (e: any) {
       setSeoCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
-      setSeoLoading((s) => {
+      setSeoLoadingById((s) => {
         const next = { ...s };
         delete next[ingestionId];
         return next;
@@ -523,13 +522,13 @@ export default function BulkJobClient(props: {
   }, [drawerOpen, drawerTab, selectedId]);
 
   const engineSummary = selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
-  const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineLoading[selectedItem.ingestion_id]) : false;
+  const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
 
   const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
-  const engineFullLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoading[selectedItem.ingestion_id]) : false;
+  const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
 
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
-  const seoPreviewLoading = selectedItem?.ingestion_id ? Boolean(seoLoading[selectedItem.ingestion_id]) : false;
+  const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
 
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
@@ -540,8 +539,6 @@ export default function BulkJobClient(props: {
 
   const fullPayload = engineFull?.payload ?? null;
   const fullStats = fullPayload ? jsonCounts(fullPayload) : null;
-
-  const summaryPayload = engineSummary?.summary ?? null;
 
   const seoPayload = seoPreview?.seo_payload ?? null;
   const seoHtml = seoPreview?.description_html ?? null;
@@ -587,7 +584,11 @@ export default function BulkJobClient(props: {
 
           <label className="inline-flex items-center gap-2 text-sm">
             <span className="text-xs text-slate-600">Interval</span>
-            <select className="rounded-md border bg-white px-2 py-2 text-sm" value={pollIntervalMs} onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}>
+            <select
+              className="rounded-md border bg-white px-2 py-2 text-sm"
+              value={pollIntervalMs}
+              onChange={(e) => setPollIntervalMs(parseInt(e.target.value, 10))}
+            >
               <option value={1000}>1s</option>
               <option value={3000}>3s</option>
               <option value={5000}>5s</option>
@@ -928,9 +929,7 @@ export default function BulkJobClient(props: {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-rose-700">
-                    {engineSummary?.error ?? "Extract summary unavailable"}
-                  </div>
+                  <div className="text-xs text-rose-700">{engineSummary?.error ?? "Extract summary unavailable"}</div>
                 )
               ) : (
                 <div className="text-xs text-slate-500">No ingestion id yet.</div>
@@ -996,22 +995,24 @@ export default function BulkJobClient(props: {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">Full engine payload</div>
                     {selectedItem.ingestion_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => {
-                        // force refresh by clearing cache
-                        const id = selectedItem.ingestion_id!;
-                        setEnginePayloadCache((s) => {
-                          const next = { ...s };
-                          delete next[id];
-                          return next;
-                        });
-                        loadEnginePayloadFull(id);
-                      }}>
+                      <button
+                        className="text-xs underline text-sky-700"
+                        onClick={() => {
+                          const id = selectedItem.ingestion_id!;
+                          setEnginePayloadCache((s) => {
+                            const next = { ...s };
+                            delete next[id];
+                            return next;
+                          });
+                          loadEnginePayloadFull(id);
+                        }}
+                      >
                         refresh
                       </button>
                     ) : null}
                   </div>
 
-                  {engineFullLoading ? (
+                  {engineFullIsLoading ? (
                     <div className="text-sm text-slate-600">Loading engine payload…</div>
                   ) : engineFull?.ok === false ? (
                     <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
@@ -1063,21 +1064,24 @@ export default function BulkJobClient(props: {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">SEO preview (stored)</div>
                     {selectedItem.ingestion_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => {
-                        const id = selectedItem.ingestion_id!;
-                        setSeoCache((s) => {
-                          const next = { ...s };
-                          delete next[id];
-                          return next;
-                        });
-                        loadSeoPreview(id);
-                      }}>
+                      <button
+                        className="text-xs underline text-sky-700"
+                        onClick={() => {
+                          const id = selectedItem.ingestion_id!;
+                          setSeoCache((s) => {
+                            const next = { ...s };
+                            delete next[id];
+                            return next;
+                          });
+                          loadSeoPreview(id);
+                        }}
+                      >
                         refresh
                       </button>
                     ) : null}
                   </div>
 
-                  {seoPreviewLoading ? (
+                  {seoPreviewIsLoading ? (
                     <div className="text-sm text-slate-600">Loading SEO…</div>
                   ) : seoPreview?.ok === false ? (
                     <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
@@ -1129,7 +1133,6 @@ export default function BulkJobClient(props: {
                         <summary className="cursor-pointer text-sm font-medium">Rendered HTML description</summary>
                         <div className="mt-2 rounded border bg-white p-3 prose prose-slate max-w-none">
                           {seoHtml ? (
-                            // This is operator UI; HTML is generated by your system. If you want extra safety, you can sanitize.
                             <div dangerouslySetInnerHTML={{ __html: String(seoHtml) }} />
                           ) : (
                             <div className="text-sm text-slate-600">No description_html stored.</div>
@@ -1156,15 +1159,18 @@ export default function BulkJobClient(props: {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">Pipeline output 0</div>
                     {selectedItem.pipeline_run_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => {
-                        const k = `${selectedItem.pipeline_run_id!}:0`;
-                        setPipelineOutCache((s) => {
-                          const next = { ...s };
-                          delete next[k];
-                          return next;
-                        });
-                        loadPipelineOutput(selectedItem.pipeline_run_id!, 0);
-                      }}>
+                      <button
+                        className="text-xs underline text-sky-700"
+                        onClick={() => {
+                          const k = `${selectedItem.pipeline_run_id!}:0`;
+                          setPipelineOutCache((s) => {
+                            const next = { ...s };
+                            delete next[k];
+                            return next;
+                          });
+                          loadPipelineOutput(selectedItem.pipeline_run_id!, 0);
+                        }}
+                      >
                         refresh
                       </button>
                     ) : null}
@@ -1192,15 +1198,18 @@ export default function BulkJobClient(props: {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold">Pipeline output 1</div>
                     {selectedItem.pipeline_run_id ? (
-                      <button className="text-xs underline text-sky-700" onClick={() => {
-                        const k = `${selectedItem.pipeline_run_id!}:1`;
-                        setPipelineOutCache((s) => {
-                          const next = { ...s };
-                          delete next[k];
-                          return next;
-                        });
-                        loadPipelineOutput(selectedItem.pipeline_run_id!, 1);
-                      }}>
+                      <button
+                        className="text-xs underline text-sky-700"
+                        onClick={() => {
+                          const k = `${selectedItem.pipeline_run_id!}:1`;
+                          setPipelineOutCache((s) => {
+                            const next = { ...s };
+                            delete next[k];
+                            return next;
+                          });
+                          loadPipelineOutput(selectedItem.pipeline_run_id!, 1);
+                        }}
+                      >
                         refresh
                       </button>
                     ) : null}
