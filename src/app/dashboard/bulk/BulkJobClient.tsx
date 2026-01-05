@@ -126,7 +126,11 @@ function statusBadge(status?: string | null) {
             ? "bg-slate-100 text-slate-700 ring-slate-200"
             : "bg-slate-100 text-slate-700 ring-slate-200";
 
-  return <span className={classNames("inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", cls)}>{s}</span>;
+  return (
+    <span className={classNames("inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1", cls)}>
+      {s}
+    </span>
+  );
 }
 
 function extractErrorMessage(last_error: any): string | null {
@@ -246,7 +250,6 @@ export default function BulkJobClient(props: {
   const [loadingItems, setLoadingItems] = useState(false);
   const [error, setError] = useState<string | null>(props.initialError ?? null);
 
-  // authoritative stats
   const [stats, setStats] = useState<any | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -268,10 +271,8 @@ export default function BulkJobClient(props: {
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
-  // default should be SEO preview
   const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "telemetry">("seo");
 
-  // Caches: keyed strictly by ingestionId or pipelineRunId+moduleIndex
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
   const [engineFullLoadingById, setEngineFullLoadingById] = useState<Record<string, boolean>>({});
 
@@ -281,7 +282,6 @@ export default function BulkJobClient(props: {
   const [pipelineOutCache, setPipelineOutCache] = useState<Record<string, any>>({});
   const [pipelineOutLoading, setPipelineOutLoading] = useState<Record<string, boolean>>({});
 
-  // to prevent stale fetch completion from overriding new selection (race protection)
   const selectionNonceRef = useRef(0);
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
@@ -314,7 +314,6 @@ export default function BulkJobClient(props: {
       if (!res.ok) throw new Error(j?.error ?? `Failed to fetch stats (${res.status})`);
       setStats(j?.data ?? j);
     } catch (e: any) {
-      // stats failure should not break the page; fallback to job fields
       setStats({ ok: false, error: String(e?.message || e) });
     } finally {
       setLoadingStats(false);
@@ -326,7 +325,6 @@ export default function BulkJobClient(props: {
     setLoadingItems(true);
     setError(null);
 
-    // Rule: queued filter must work even without telemetry -> prefer non-telemetry endpoint.
     const preferNonTelemetry = showOnlyQueued;
 
     try {
@@ -339,7 +337,6 @@ export default function BulkJobClient(props: {
         }
       }
 
-      // canonical fallback (and used for queued mode)
       const fallback = await fetch(itemsApi, { cache: "no-store" });
       const j = await fallback.json().catch(() => null);
       if (!fallback.ok) throw new Error(j?.error ?? `Failed to fetch items (${fallback.status})`);
@@ -349,6 +346,12 @@ export default function BulkJobClient(props: {
     } finally {
       setLoadingItems(false);
     }
+  }
+
+  // FIX: missing function referenced in header button
+  async function downloadErrors() {
+    if (!bulkJobId) return;
+    window.open(`${jobApiBase}/items/errors`, "_blank");
   }
 
   useEffect(() => {
@@ -375,7 +378,6 @@ export default function BulkJobClient(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkJobId, autoPoll, offset, limit, pollIntervalMs, showOnlyQueued]);
 
-  // prefer authoritative stats if available
   const total = Number(stats?.total_items ?? job?.total_items ?? items?.length ?? 0);
   const completed = Number(stats?.completed_items ?? job?.completed_items ?? 0);
   const failed = Number(stats?.failed_items ?? job?.failed_items ?? 0);
@@ -506,7 +508,7 @@ export default function BulkJobClient(props: {
     try {
       const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
-      if (nonce !== selectionNonceRef.current) return; // stale selection
+      if (nonce !== selectionNonceRef.current) return;
       if (!res.ok) throw new Error(j?.error ?? `engine payload fetch failed (${res.status})`);
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
@@ -558,7 +560,6 @@ export default function BulkJobClient(props: {
       const j = await res.json().catch(() => null);
       if (nonce !== selectionNonceRef.current) return;
 
-      // 404/409 should be treated as "no data available" (not stale substitution)
       if (!res.ok) {
         setPipelineOutCache((s) => ({
           ...s,
@@ -585,37 +586,28 @@ export default function BulkJobClient(props: {
   function openDrawer(itemId: string, tab?: typeof drawerTab) {
     const item = items.find((i) => i.id === itemId) || null;
 
-    // increment nonce to invalidate in-flight requests from previous selection
     selectionNonceRef.current += 1;
     const nonce = selectionNonceRef.current;
 
     setSelectedId(itemId);
     setDrawerOpen(true);
 
-    // default tab = seo (requirement #3)
     const nextTab = tab ?? "seo";
     setDrawerTab(nextTab);
-
-    // IMPORTANT: clear any per-selection transient display concerns
-    // (we keep caches by ingestionId/pipelineRunId, but we never display them unless ids match current selection)
 
     const ingestionId = item?.ingestion_id || null;
     const pipelineRunId = item?.pipeline_run_id || null;
 
     if (ingestionId) {
-      // EAGER load SEO tab so it appears immediately
       void loadSeoPreview(ingestionId, nonce);
-
       if (nextTab === "extract") void loadEnginePayloadFull(ingestionId, nonce);
     }
-
     if (pipelineRunId) {
       if (nextTab === "out0") void loadPipelineOutput(pipelineRunId, 0, nonce);
       if (nextTab === "out1") void loadPipelineOutput(pipelineRunId, 1, nonce);
     }
   }
 
-  // if user switches tabs within drawer, load required data for current selection
   useEffect(() => {
     if (!drawerOpen) return;
     if (!selectedItem) return;
@@ -631,7 +623,6 @@ export default function BulkJobClient(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, drawerTab, selectedId]);
 
-  // prevent stale panel when item list refreshes and selected item disappears from current page
   useEffect(() => {
     if (!selectedId) return;
     const stillExists = items.some((it) => it.id === selectedId);
@@ -641,11 +632,11 @@ export default function BulkJobClient(props: {
     }
   }, [items, selectedId]);
 
-  const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
-  const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
-
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
   const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
+
+  const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
+  const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
 
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
@@ -774,10 +765,14 @@ export default function BulkJobClient(props: {
           <div className="text-xs text-slate-500">Filters</div>
           <div className="mt-3 space-y-2 text-sm text-slate-700">
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={showOnlyQueued} onChange={(e) => {
-                setShowOnlyQueued(e.target.checked);
-                setOffset(0);
-              }} />
+              <input
+                type="checkbox"
+                checked={showOnlyQueued}
+                onChange={(e) => {
+                  setShowOnlyQueued(e.target.checked);
+                  setOffset(0);
+                }}
+              />
               Show only queued
             </label>
             <div className="text-xs text-slate-500">
@@ -862,9 +857,8 @@ export default function BulkJobClient(props: {
                   const dur = msBetween(it.started_at, it.finished_at);
                   const isExpanded = Boolean(expanded[it.id]);
 
-                  const pipe = it.telemetry?.pipeline_run ?? null;
-                  const modSummary = it.telemetry?.module_summary ?? null;
                   const mods = it.telemetry?.modules ?? [];
+                  const modSummary = it.telemetry?.module_summary ?? null;
 
                   return (
                     <React.Fragment key={it.id}>
@@ -890,7 +884,7 @@ export default function BulkJobClient(props: {
                           {it.pipeline_run_id ? (
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                {statusBadge(pipe?.status ?? "—")}
+                                {statusBadge(it.telemetry?.pipeline_run?.status ?? "—")}
                                 <span className="text-xs font-mono">{it.pipeline_run_id.slice(0, 10)}…</span>
                               </div>
                               <div className="text-[11px] text-slate-500">
@@ -1117,25 +1111,10 @@ export default function BulkJobClient(props: {
                       <div className="rounded-xl border p-3">
                         <div className="text-sm font-medium">Live preview</div>
                         <div className="mt-2 rounded border bg-white overflow-hidden">
-                          <iframe
-                            key={seoPreviewKey}
-                            title="seo-preview"
-                            className="w-full h-[560px]"
-                            sandbox=""
-                            srcDoc={seoPreviewDoc}
-                          />
+                          <iframe key={seoPreviewKey} title="seo-preview" className="w-full h-[560px]" sandbox="" srcDoc={seoPreviewDoc} />
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Preview is sandboxed (no scripts). Layout-only “naked eye” view.
-                        </div>
+                        <div className="mt-2 text-xs text-slate-500">Preview is sandboxed (no scripts). Layout-only view.</div>
                       </div>
-
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">SEO payload JSON</summary>
-                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
-                          {safeStringify(seoPayload, 250000)}
-                        </pre>
-                      </details>
                     </>
                   ) : (
                     <div className="text-sm text-slate-600">No data available for this item</div>
@@ -1164,7 +1143,7 @@ export default function BulkJobClient(props: {
                       onClick={() => openExtract(selectedItem.ingestion_id, selectedItem.input_url)}
                       disabled={!selectedItem.ingestion_id}
                     >
-                      <div className="text-xs text-slate-500">Open Extract (working)</div>
+                      <div className="text-xs text-slate-500">Open Extract</div>
                       <div className="text-sm font-medium">/dashboard/extract</div>
                     </button>
 
@@ -1190,23 +1169,17 @@ export default function BulkJobClient(props: {
               {/* Extract Full */}
               {drawerTab === "extract" ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Extract Full (engine payload)</div>
-                  </div>
-
+                  <div className="text-sm font-semibold">Extract Full (engine payload)</div>
                   {engineFullIsLoading ? (
                     <div className="text-sm text-slate-600">Loading engine payload…</div>
                   ) : engineFull?.ok === false ? (
                     <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
                       {engineFull?.error ?? "No data available for this item"}
                     </div>
-                  ) : engineFull?.ok ? (
-                    <details className="rounded-xl border p-3" open>
-                      <summary className="cursor-pointer text-sm font-medium">JSON</summary>
-                      <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-2">
-                        {safeStringify(engineFull.payload ?? null, 250000)}
-                      </pre>
-                    </details>
+                  ) : engineFull ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(engineFull.payload ?? null, 250000)}
+                    </pre>
                   ) : (
                     <div className="text-sm text-slate-600">No data available for this item</div>
                   )}
