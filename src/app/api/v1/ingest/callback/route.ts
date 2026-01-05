@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 import { verifySignature } from "@/lib/ingest/signature";
 import {
   normalizeToAvidiaStandardFromCallback,
@@ -11,6 +12,10 @@ const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+// Store full engine payload/callback into Supabase Storage (private bucket recommended)
+const ENGINE_PAYLOADS_BUCKET =
+  process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
 
 // Use service role for callback so it can always update product_ingestions regardless of RLS.
 function getCallbackSupabase() {
@@ -40,6 +45,10 @@ function makeRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function sha256Hex(input: string) {
+  return crypto.createHash("sha256").update(input, "utf8").digest("hex");
+}
+
 export async function GET() {
   return NextResponse.json(
     {
@@ -47,6 +56,7 @@ export async function GET() {
       route: "ingest_callback",
       ingest_secret_configured: Boolean(INGEST_SECRET),
       supabase_configured: Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY),
+      engine_payloads_bucket: ENGINE_PAYLOADS_BUCKET,
       timestamp: new Date().toISOString(),
     },
     { status: 200 }
@@ -60,7 +70,6 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get("x-avidiatech-signature") || "";
 
-    // High-signal operational log (no secrets)
     console.info("[ingest_callback] received", {
       requestId,
       hasSignature: Boolean(signature),
@@ -117,11 +126,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Load existing row for diagnostics merging
     const { data: existing, error: loadErr } = await supabase
       .from("product_ingestions")
       .select(
-        "id, status, diagnostics, attempts_count, last_error, created_at, job_id, source_url, ingest_callback_at, ingest_engine_status, ingest_callback_request_id"
+        "id, status, diagnostics, attempts_count, last_error, created_at, job_id, source_url, ingest_callback_at, ingest_engine_status, ingest_callback_request_id, engine_payload_ref, engine_payload_sha256"
       )
       .or(`id.eq.${jobId},job_id.eq.${jobId}`)
       .limit(1)
@@ -154,6 +162,40 @@ export async function POST(req: NextRequest) {
       callbackBody: body,
     });
 
+    // === NEW: persist the full engine callback payload to Storage for strict parity ===
+    // This is the only way to make pipeline extract output equal the ingest engine response
+    // without re-extracting a second time.
+    const enginePayloadJsonText = rawBody; // exact bytes we verified signature for
+    const enginePayloadSha = sha256Hex(enginePayloadJsonText);
+
+    const enginePayloadRef = `ingestions/${existing.id}/engine-callback.json`;
+
+    // Best-effort upload; if it fails, we still persist normalized_payload and diagnostics
+    try {
+      const uploadRes = await supabase.storage
+        .from(ENGINE_PAYLOADS_BUCKET)
+        .upload(enginePayloadRef, enginePayloadJsonText, {
+          contentType: "application/json; charset=utf-8",
+          upsert: true,
+        });
+
+      if (uploadRes.error) {
+        console.warn("[ingest_callback] failed to upload engine payload", {
+          requestId,
+          ingestionId: existing.id,
+          bucket: ENGINE_PAYLOADS_BUCKET,
+          enginePayloadRef,
+          error: uploadRes.error.message,
+        });
+      }
+    } catch (e: any) {
+      console.warn("[ingest_callback] storage upload threw", {
+        requestId,
+        ingestionId: existing.id,
+        error: String(e?.message || e),
+      });
+    }
+
     // Always record that callback was received (even if normalized payload is missing/invalid)
     const callbackDiagnosticsBase: any = {
       ...(existingDiagnostics.ingest_callback || {}),
@@ -170,7 +212,6 @@ export async function POST(req: NextRequest) {
         variants_payload: safeKeys(body.variants_payload),
         raw_payload: safeKeys(body.raw_payload),
       },
-      // small previews for debugging (avoid huge diagnostics)
       payload_previews: {
         normalized_payload: capAnyText(JSON.stringify(body.normalized_payload ?? null), 4000),
         specs_payload: capAnyText(JSON.stringify(body.specs_payload ?? null), 4000),
@@ -181,6 +222,13 @@ export async function POST(req: NextRequest) {
         issues: normalization.issues,
         extracted: normalization.extracted,
         validated_at: nowIso,
+      },
+
+      // Add strict-parity pointers
+      engine_payload: {
+        bucket: ENGINE_PAYLOADS_BUCKET,
+        ref: enginePayloadRef,
+        sha256: enginePayloadSha,
       },
     };
 
@@ -195,7 +243,6 @@ export async function POST(req: NextRequest) {
     const updatePatch: any = {
       diagnostics: updatedDiagnostics,
 
-      // Durable callback markers (preferred by polling / pipeline gating)
       ingest_callback_at: nowIso,
       ingest_callback_request_id: requestId,
       ingest_engine_status: inferredEngineStatus,
@@ -208,7 +255,12 @@ export async function POST(req: NextRequest) {
         payload_bucket_keys: callbackDiagnosticsBase.payload_bucket_keys,
         payload_previews: callbackDiagnosticsBase.payload_previews,
         normalized_validation: callbackDiagnosticsBase.normalized_validation,
+        engine_payload: callbackDiagnosticsBase.engine_payload,
       },
+
+      // NEW: durable ref for pipeline extract parity
+      engine_payload_ref: enginePayloadRef,
+      engine_payload_sha256: enginePayloadSha,
 
       attempts_count: currentAttempts + 1,
       updated_at: nowIso,
@@ -217,17 +269,11 @@ export async function POST(req: NextRequest) {
     };
 
     if (normalization.normalized) {
-      // Persist canonical normalized payload
       updatePatch.normalized_payload = normalization.normalized;
-
-      // Keep legacy status updated (even if some other process uses it)
       updatePatch.status = engineReportedStatus;
     } else {
-      // Do NOT overwrite normalized_payload with unusable placeholder data.
-      // Mark as error to prevent SEO/Describe from hallucinating.
       updatePatch.status = "error";
       updatePatch.last_error = "ingest_invalid_normalized_payload";
-
       updatePatch.error = {
         code: "ingest_invalid_normalized_payload",
         message:
@@ -260,6 +306,7 @@ export async function POST(req: NextRequest) {
       jobId,
       ingestionId: existing.id,
       inferredEngineStatus,
+      enginePayloadRef,
     });
 
     return NextResponse.json({ ok: true, requestId }, { status: 200 });
