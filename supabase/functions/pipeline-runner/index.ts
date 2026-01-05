@@ -4,6 +4,13 @@ const BUCKET = "pipeline-outputs";
 type ModuleStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
 type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 
+/**
+ * Bucket that stores the full ingest callback body JSON (strict parity).
+ * This is written by src/app/api/v1/ingest/callback/route.ts.
+ */
+const ENGINE_PAYLOADS_BUCKET =
+  Deno.env.get("INGEST_ENGINE_PAYLOADS_BUCKET") || "ingest-engine-payloads";
+
 async function uploadJson(supabase: any, key: string, payload: any) {
   const { error } = await supabase.storage
     .from(BUCKET)
@@ -141,7 +148,7 @@ Deno.serve(async (req) => {
       }
 
       // Soft gate policy:
-      // If audit failed, automatically skip import/monitor/price (and anything after audit you choose later).
+      // If audit failed, automatically skip import/monitor/price.
       const shouldSkipDueToAudit =
         auditPassedOrNotRun === false && ["import", "monitor", "price"].includes(moduleName);
 
@@ -182,10 +189,12 @@ Deno.serve(async (req) => {
         if (moduleName === "extract") {
           if (!ingestionId) throw new Error("missing_ingestionId_for_extract");
 
+          // For strict parity: pipeline extract output must equal the entire ingest callback body.
+          // We store that body in Supabase Storage during /api/v1/ingest/callback and keep a ref in DB.
           const { data: ing, error: ingErr } = await supabase
             .from("product_ingestions")
             .select(
-              "id, tenant_id, source_url, status, normalized_payload, diagnostics, created_at, updated_at"
+              "id, engine_payload_ref, engine_payload_sha256, ingest_engine_status, ingest_callback_at"
             )
             .eq("id", ingestionId)
             .maybeSingle();
@@ -193,12 +202,47 @@ Deno.serve(async (req) => {
           if (ingErr) throw ingErr;
           if (!ing) throw new Error("ingestion_not_found");
 
+          const engineRef = (ing as any).engine_payload_ref as string | null;
+          if (!engineRef) {
+            // Do not fall back to normalized_payload snapshots.
+            throw new Error("missing_engine_payload_ref_for_extract");
+          }
+
+          const { data: blob, error: dlErr } = await supabase.storage
+            .from(ENGINE_PAYLOADS_BUCKET)
+            .download(engineRef);
+
+          if (dlErr || !blob) {
+            throw new Error(`engine_payload_download_failed: ${dlErr?.message ?? "unknown"}`);
+          }
+
+          const engineJsonText = await blob.text();
+
+          let engineCallback: any;
+          try {
+            engineCallback = engineJsonText ? JSON.parse(engineJsonText) : null;
+          } catch {
+            throw new Error("engine_payload_not_json");
+          }
+
+          // Persist the extract artifact to pipeline-outputs
           await uploadJson(supabase, key, {
             pipelineRunId,
             ingestionId,
             module: { name: moduleName, index: moduleIndex },
             generatedAt: new Date().toISOString(),
-            extract: ing,
+
+            // Strict-parity output:
+            // Entire callback body exactly as captured at ingestion time (semantic JSON equality).
+            engine_callback: engineCallback,
+
+            engine_payload: {
+              bucket: ENGINE_PAYLOADS_BUCKET,
+              ref: engineRef,
+              sha256: (ing as any).engine_payload_sha256 ?? null,
+              ingest_engine_status: (ing as any).ingest_engine_status ?? null,
+              ingest_callback_at: (ing as any).ingest_callback_at ?? null,
+            },
           });
 
           await supabase
