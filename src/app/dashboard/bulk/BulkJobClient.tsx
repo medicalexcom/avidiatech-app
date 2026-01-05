@@ -136,6 +136,16 @@ function extractErrorMessage(last_error: any): string | null {
   return null;
 }
 
+function jsonCounts(payload: any) {
+  const specsCount =
+    payload?.specs && typeof payload.specs === "object" ? Object.keys(payload.specs).length : null;
+  const featuresCount = Array.isArray(payload?.features_raw) ? payload.features_raw.length : null;
+  const imagesCount = Array.isArray(payload?.images) ? payload.images.length : null;
+  const tabsCount = Array.isArray(payload?.tabs) ? payload.tabs.length : null;
+
+  return { specsCount, featuresCount, imagesCount, tabsCount };
+}
+
 export default function BulkJobClient(props: {
   initialBulkJobId?: string;
   initialJob?: BulkJob | null;
@@ -165,6 +175,16 @@ export default function BulkJobClient(props: {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<"summary" | "extract" | "out0" | "out1" | "telemetry">("summary");
+
+  // Cache heavy payloads by ingestionId / pipelineRunId
+  const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
+  const [enginePayloadLoading, setEnginePayloadLoading] = useState<Record<string, boolean>>({});
+  const [pipelineOutCache, setPipelineOutCache] = useState<Record<string, any>>({});
+  const [pipelineOutLoading, setPipelineOutLoading] = useState<Record<string, boolean>>({});
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
   const telemetryApi = useMemo(
@@ -196,7 +216,6 @@ export default function BulkJobClient(props: {
     setLoadingItems(true);
     setError(null);
     try {
-      // Prefer telemetry endpoint; fall back to the old endpoint if telemetry isn’t deployed yet.
       const res = await fetch(telemetryApi, { cache: "no-store" });
       if (!res.ok) {
         const fallbackUrl = `${jobApiBase}/items?limit=${limit}&offset=${offset}`;
@@ -317,14 +336,7 @@ export default function BulkJobClient(props: {
     if (!ingestionId) return;
     window.open(`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
   }
-  function openDescribe(ingestionId?: string | null) {
-    if (!ingestionId) return;
-    window.open(`/dashboard/describe?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
-  }
-  function openMonitor(ingestionId?: string | null) {
-    if (!ingestionId) return;
-    window.open(`/dashboard/monitor?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
-  }
+
   function openPipelineOutput(pipelineRunId?: string | null, moduleIndex = 0) {
     if (!pipelineRunId) return;
     window.open(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, "_blank");
@@ -365,8 +377,91 @@ export default function BulkJobClient(props: {
     );
   }
 
+  async function loadEnginePayload(ingestionId: string) {
+    if (!ingestionId) return;
+    if (enginePayloadCache[ingestionId]) return;
+
+    setEnginePayloadLoading((s) => ({ ...s, [ingestionId]: true }));
+    try {
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `engine payload fetch failed (${res.status})`);
+
+      setEnginePayloadCache((s) => ({ ...s, [ingestionId]: j }));
+    } catch (e: any) {
+      setEnginePayloadCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
+    } finally {
+      setEnginePayloadLoading((s) => {
+        const next = { ...s };
+        delete next[ingestionId];
+        return next;
+      });
+    }
+  }
+
+  async function loadPipelineOutput(pipelineRunId: string, moduleIndex: number) {
+    const k = `${pipelineRunId}:${moduleIndex}`;
+    if (pipelineOutCache[k]) return;
+
+    setPipelineOutLoading((s) => ({ ...s, [k]: true }));
+    try {
+      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, { cache: "no-store" });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error ?? `pipeline output fetch failed (${res.status})`);
+      setPipelineOutCache((s) => ({ ...s, [k]: j }));
+    } catch (e: any) {
+      setPipelineOutCache((s) => ({ ...s, [k]: { ok: false, error: String(e?.message || e) } }));
+    } finally {
+      setPipelineOutLoading((s) => {
+        const next = { ...s };
+        delete next[k];
+        return next;
+      });
+    }
+  }
+
+  function openDrawer(itemId: string, tab: typeof drawerTab = "summary") {
+    setSelectedId(itemId);
+    setDrawerTab(tab);
+    setDrawerOpen(true);
+  }
+
+  // When drawer opens or tab changes, trigger fetches (on-demand)
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!selectedItem) return;
+
+    const ingestionId = selectedItem.ingestion_id || null;
+    const pipelineRunId = selectedItem.pipeline_run_id || null;
+
+    if (drawerTab === "extract" && ingestionId) {
+      loadEnginePayload(ingestionId);
+    }
+    if (drawerTab === "out0" && pipelineRunId) {
+      loadPipelineOutput(pipelineRunId, 0);
+    }
+    if (drawerTab === "out1" && pipelineRunId) {
+      loadPipelineOutput(pipelineRunId, 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerOpen, drawerTab, selectedId]);
+
+  const drawerEngine = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
+  const drawerEngineLoading = selectedItem?.ingestion_id ? Boolean(enginePayloadLoading[selectedItem.ingestion_id]) : false;
+
+  const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
+  const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
+  const drawerOut0 = out0Key ? pipelineOutCache[out0Key] : null;
+  const drawerOut1 = out1Key ? pipelineOutCache[out1Key] : null;
+  const drawerOut0Loading = out0Key ? Boolean(pipelineOutLoading[out0Key]) : false;
+  const drawerOut1Loading = out1Key ? Boolean(pipelineOutLoading[out1Key]) : false;
+
+  const enginePayload = drawerEngine?.payload ?? null;
+  const engineStats = enginePayload ? jsonCounts(enginePayload) : null;
+
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
+      {/* header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
@@ -491,7 +586,7 @@ export default function BulkJobClient(props: {
 
       {/* Main grid */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-8 rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="xl:col-span-12 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="text-xs text-slate-500">Items</div>
@@ -552,8 +647,6 @@ export default function BulkJobClient(props: {
                   filteredItems.map((it) => {
                     const dur = msBetween(it.started_at, it.finished_at);
                     const isExpanded = Boolean(expanded[it.id]);
-                    const isSelected = selectedId === it.id;
-
                     const pipe = it.telemetry?.pipeline_run ?? null;
                     const modSummary = it.telemetry?.module_summary ?? null;
                     const mods = it.telemetry?.modules ?? [];
@@ -561,12 +654,12 @@ export default function BulkJobClient(props: {
                     return (
                       <React.Fragment key={it.id}>
                         <tr
-                          className={classNames("border-t hover:bg-slate-50 cursor-pointer", isSelected && "bg-sky-50")}
-                          onClick={() => setSelectedId(it.id)}
+                          className={classNames("border-t hover:bg-slate-50 cursor-pointer")}
+                          onClick={() => openDrawer(it.id, "summary")}
                         >
                           <td className="py-2 pr-3 align-top">{it.item_index + 1}</td>
 
-                          <td className="py-2 pr-3 align-top max-w-[44ch]">
+                          <td className="py-2 pr-3 align-top max-w-[52ch]">
                             <div className="truncate">{it.input_url}</div>
                             <div className="mt-1 text-xs text-slate-400 font-mono">id: {it.id.slice(0, 8)}…</div>
                           </td>
@@ -579,9 +672,7 @@ export default function BulkJobClient(props: {
                             <div className="mt-1 text-xs text-slate-500">
                               ingestion:{" "}
                               {it.ingestion_id ? (
-                                <button className="underline text-sky-700 font-mono" onClick={(e) => { e.stopPropagation(); openExtract(it.ingestion_id); }}>
-                                  {it.ingestion_id.slice(0, 10)}…
-                                </button>
+                                <span className="font-mono">{it.ingestion_id.slice(0, 10)}…</span>
                               ) : (
                                 "—"
                               )}
@@ -593,15 +684,9 @@ export default function BulkJobClient(props: {
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
                                   {statusBadge(pipe?.status ?? "—")}
-                                  <button
-                                    className="text-xs underline text-sky-700 font-mono"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openPipelineOutput(it.pipeline_run_id, 0);
-                                    }}
-                                  >
+                                  <span className="text-xs font-mono">
                                     {it.pipeline_run_id.slice(0, 10)}…
-                                  </button>
+                                  </span>
                                 </div>
                                 <div className="text-[11px] text-slate-500">
                                   current:{" "}
@@ -652,16 +737,23 @@ export default function BulkJobClient(props: {
                               <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openExtract(it.ingestion_id)} disabled={!it.ingestion_id}>
                                 Extract
                               </button>
-                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 0)} disabled={!it.pipeline_run_id}>
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
+                                Inspect
+                              </button>
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
                                 Out 0
                               </button>
-                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 1)} disabled={!it.pipeline_run_id}>
+                              <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
                                 Out 1
                               </button>
                               <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
                                 {isExpanded ? "Hide" : "Details"}
                               </button>
-                              <button className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50" disabled={retryingIds[it.id] || it.status !== "failed"} onClick={() => retryItem(it.id)}>
+                              <button
+                                className="rounded px-2 py-1 text-xs bg-amber-400 text-slate-900 disabled:opacity-50"
+                                disabled={retryingIds[it.id] || it.status !== "failed"}
+                                onClick={() => retryItem(it.id)}
+                              >
                                 {retryingIds[it.id] ? "Retrying…" : "Retry"}
                               </button>
                             </div>
@@ -711,79 +803,188 @@ export default function BulkJobClient(props: {
             </div>
           </div>
         </div>
+      </div>
 
-        <aside className="xl:col-span-4 space-y-4">
-          <section className="rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Selection</h3>
-              {selectedItem ? (
-                <button className="text-xs underline text-sky-700" onClick={() => copyToClipboard(selectedItem.id)}>
-                  copy item id
-                </button>
+      {/* Drawer */}
+      {drawerOpen && selectedItem ? (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-[720px] bg-white shadow-xl border-l flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div className="min-w-0">
+                <div className="text-xs text-slate-500">Bulk item</div>
+                <div className="font-semibold truncate">{selectedItem.input_url}</div>
+                <div className="mt-1 text-xs text-slate-500 font-mono">
+                  ingestion: {selectedItem.ingestion_id ?? "—"} • pipeline: {selectedItem.pipeline_run_id ?? "—"}
+                </div>
+              </div>
+              <button className="rounded-md border px-3 py-2 text-sm" onClick={() => setDrawerOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="px-4 pt-3 flex flex-wrap gap-2">
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "summary" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("summary")}>Summary</button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "extract" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("extract")} disabled={!selectedItem.ingestion_id}>Extract (full)</button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out0" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out0")} disabled={!selectedItem.pipeline_run_id}>Output 0</button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out1" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out1")} disabled={!selectedItem.pipeline_run_id}>Output 1</button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "telemetry" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("telemetry")}>Telemetry</button>
+            </div>
+
+            <div className="p-4 overflow-auto flex-1">
+              {drawerTab === "summary" ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Status</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {statusBadge(selectedItem.status)}
+                      <span className="text-xs text-slate-500 font-mono">tries:{selectedItem.tries ?? "—"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openExtract(selectedItem.ingestion_id)} disabled={!selectedItem.ingestion_id}>
+                      <div className="text-xs text-slate-500">Open Extract page</div>
+                      <div className="text-sm font-medium">/dashboard/extract</div>
+                    </button>
+                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)} disabled={!selectedItem.pipeline_run_id}>
+                      <div className="text-xs text-slate-500">Open SEO artifact</div>
+                      <div className="text-sm font-medium">/output/1</div>
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Error</div>
+                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {drawerTab === "extract" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Full engine payload</div>
+                    {selectedItem.ingestion_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => loadEnginePayload(selectedItem.ingestion_id!)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {drawerEngineLoading ? (
+                    <div className="text-sm text-slate-600">Loading engine payload…</div>
+                  ) : drawerEngine?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {drawerEngine?.error ?? "Failed to load engine payload"}
+                    </div>
+                  ) : drawerEngine?.ok ? (
+                    <>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-xs text-slate-500">Storage ref</div>
+                        <div className="mt-1 font-mono text-xs break-all">
+                          {drawerEngine.bucket}/{drawerEngine.ref}
+                        </div>
+                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">specs</div>
+                            <div className="font-semibold">{engineStats?.specsCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">features</div>
+                            <div className="font-semibold">{engineStats?.featuresCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">images</div>
+                            <div className="font-semibold">{engineStats?.imagesCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">tabs</div>
+                            <div className="font-semibold">{engineStats?.tabsCount ?? "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <details className="rounded-xl border p-3">
+                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
+                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
+                          {safeStringify(drawerEngine.payload, 200000)}
+                        </pre>
+                      </details>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-600">No payload loaded yet.</div>
+                  )}
+                </div>
+              ) : null}
+
+              {drawerTab === "out0" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Pipeline output 0</div>
+                    {selectedItem.pipeline_run_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => loadPipelineOutput(selectedItem.pipeline_run_id!, 0)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {drawerOut0Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/0…</div>
+                  ) : drawerOut0?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {drawerOut0?.error ?? "Failed to load output/0"}
+                    </div>
+                  ) : drawerOut0 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[680px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut0, 200000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No output loaded yet.</div>
+                  )}
+                </div>
+              ) : null}
+
+              {drawerTab === "out1" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Pipeline output 1 (SEO)</div>
+                    {selectedItem.pipeline_run_id ? (
+                      <button className="text-xs underline text-sky-700" onClick={() => loadPipelineOutput(selectedItem.pipeline_run_id!, 1)}>
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {drawerOut1Loading ? (
+                    <div className="text-sm text-slate-600">Loading output/1…</div>
+                  ) : drawerOut1?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {drawerOut1?.error ?? "Failed to load output/1"}
+                    </div>
+                  ) : drawerOut1 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[680px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut1, 200000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No output loaded yet.</div>
+                  )}
+                </div>
+              ) : null}
+
+              {drawerTab === "telemetry" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Telemetry</div>
+                  <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                    {selectedItem.telemetry ? safeStringify(selectedItem.telemetry, 200000) : "—"}
+                  </pre>
+                </div>
               ) : null}
             </div>
-
-            {selectedItem ? (
-              <div className="mt-2 space-y-3">
-                <div className="text-sm">
-                  <div className="text-xs text-slate-500">URL</div>
-                  <div className="break-words">{selectedItem.input_url}</div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg border p-2">
-                    <div className="text-slate-500">Item</div>
-                    <div className="mt-1">{statusBadge(selectedItem.status)}</div>
-                  </div>
-                  <div className="rounded-lg border p-2">
-                    <div className="text-slate-500">Pipeline</div>
-                    <div className="mt-1">{statusBadge(selectedItem.telemetry?.pipeline_run?.status ?? (selectedItem.pipeline_run_id ? "—" : "—"))}</div>
-                  </div>
-                </div>
-
-                <details>
-                  <summary className="cursor-pointer text-xs text-slate-600">Module runs</summary>
-                  <div className="mt-2 space-y-2">
-                    {(selectedItem.telemetry?.modules ?? []).map((m) => (
-                      <div key={m.module_index} className="flex items-center justify-between rounded border bg-white px-2 py-1">
-                        <span className="text-xs font-mono">{m.module_index}:{m.module_name}</span>
-                        <span>{statusBadge(m.status)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-
-                <details>
-                  <summary className="cursor-pointer text-xs text-slate-600">Raw telemetry</summary>
-                  <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[320px] overflow-auto rounded border bg-slate-50 p-2">
-                    {selectedItem.telemetry ? safeStringify(selectedItem.telemetry) : "—"}
-                  </pre>
-                </details>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-slate-600">Click a row to inspect details.</div>
-            )}
-          </section>
-
-          <section className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Job details</h3>
-            <div className="mt-3 text-sm text-slate-700 space-y-1">
-              <div><span className="text-slate-500">Name:</span> {job?.name ?? "—"}</div>
-              <div><span className="text-slate-500">Status:</span> {job?.status ?? "—"}</div>
-              <div><span className="text-slate-500">Created by:</span> <span className="font-mono">{job?.created_by ?? "—"}</span></div>
-              <div><span className="text-slate-500">Created:</span> {fmtDate(job?.created_at)}</div>
-              <div><span className="text-slate-500">Updated:</span> {fmtDate(job?.updated_at)}</div>
-            </div>
-
-            <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-slate-600">Options</summary>
-              <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[220px] overflow-auto rounded border bg-slate-50 p-2">
-                {job?.options ? safeStringify(job.options) : "—"}
-              </pre>
-            </details>
-          </section>
-        </aside>
-      </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
