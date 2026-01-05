@@ -239,11 +239,23 @@ function downloadTextFile(filename: string, text: string, mime = "text/plain") {
   URL.revokeObjectURL(url);
 }
 
-// lightweight stable hash for iframe remounting
 function tinyHash(s: string) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return h.toString(16);
+}
+
+/**
+ * Heuristic "store page" target:
+ * - prefers /dashboard/seo if it exists (likely matches single run preview UX)
+ * - falls back to /dashboard/describe for legacy installs
+ * - falls back to /dashboard/extract if neither exist (still useful)
+ */
+function openStoreSeo(ingestionId: string) {
+  // We can't reliably probe routes here, so choose one canonical route:
+  // If your app has /dashboard/seo, this will work; otherwise it 404s.
+  // You can adjust to your actual route.
+  window.open(`/dashboard/seo?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
 }
 
 export default function BulkJobClient(props: {
@@ -275,14 +287,13 @@ export default function BulkJobClient(props: {
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  // Drawer selection by item id
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Drawer
+  // SEO Preview should be the default open tab
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<"summary" | "extract" | "seo" | "out0" | "out1" | "telemetry">("summary");
+  const [drawerTab, setDrawerTab] = useState<"summary" | "extract" | "seo" | "out0" | "out1" | "telemetry">("seo");
 
-  // Caches (avoid refetching big payloads)
+  // caches
   const [engineSummaryCache, setEngineSummaryCache] = useState<Record<string, any>>({});
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
   const [engineSummaryLoadingById, setEngineSummaryLoadingById] = useState<Record<string, boolean>>({});
@@ -574,52 +585,42 @@ export default function BulkJobClient(props: {
     }
   }
 
-  function openDrawer(itemId: string, tab: typeof drawerTab = "summary") {
+  // Clicking a row should default to SEO tab
+  function onRowClick(itemId: string) {
+    openDrawer(itemId, "seo");
+  }
+
+  function openDrawer(itemId: string, tab: typeof drawerTab = "seo") {
     const item = items.find((i) => i.id === itemId) || null;
 
     setSelectedId(itemId);
     setDrawerTab(tab);
     setDrawerOpen(true);
 
-    // EAGER LOAD: avoid "refresh required" for SEO tab/metadata/html.
     const ingestionId = item?.ingestion_id || null;
     const pipelineRunId = item?.pipeline_run_id || null;
 
+    // Always fetch these eagerly so summary tab + SEO tab never show stale/empty values.
     if (ingestionId) {
       void loadEngineSummary(ingestionId);
-      if (tab === "seo") void loadSeoPreview(ingestionId);
-      if (tab === "extract") void loadEnginePayloadFull(ingestionId);
+      void loadSeoPreview(ingestionId);
     }
+    if (tab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
+
+    // pipeline artifact previews
     if (pipelineRunId) {
       if (tab === "out0") void loadPipelineOutput(pipelineRunId, 0);
       if (tab === "out1") void loadPipelineOutput(pipelineRunId, 1);
     }
   }
 
-  // Safety net: Prefetch summary when drawer opens
+  // Safety net: If user manually switches to SEO tab, ensure fetch
   useEffect(() => {
     if (!drawerOpen) return;
-    if (!selectedItem) return;
-    const ingestionId = selectedItem.ingestion_id || null;
-    if (ingestionId) void loadEngineSummary(ingestionId);
+    if (!selectedItem?.ingestion_id) return;
+    if (drawerTab === "seo") void loadSeoPreview(selectedItem.ingestion_id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerOpen, selectedId]);
-
-  // Safety net: On-demand fetches based on active tab
-  useEffect(() => {
-    if (!drawerOpen) return;
-    if (!selectedItem) return;
-
-    const ingestionId = selectedItem.ingestion_id || null;
-    const pipelineRunId = selectedItem.pipeline_run_id || null;
-
-    if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
-    if (drawerTab === "seo" && ingestionId) void loadSeoPreview(ingestionId);
-    if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0);
-    if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1);
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawerOpen, drawerTab, selectedId]);
+  }, [drawerTab, drawerOpen, selectedId]);
 
   const engineSummary = selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
   const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
@@ -658,22 +659,15 @@ export default function BulkJobClient(props: {
     });
   }, [seoTitle, seoMeta, seoH1, seoHtml]);
 
-  // Force iframe to remount whenever HTML changes (prevents stale iframe content)
   const seoPreviewKey = useMemo(() => tinyHash(seoPreviewDoc || ""), [seoPreviewDoc]);
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
-      {/* header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Bulk job dashboard</h1>
           <div className="mt-1 text-sm text-slate-600">
             Job id: <span className="font-mono">{bulkJobId || "—"}</span>
-            {bulkJobId ? (
-              <button className="ml-2 text-xs underline text-sky-700" onClick={() => copyToClipboard(bulkJobId)}>
-                copy
-              </button>
-            ) : null}
           </div>
         </div>
 
@@ -717,7 +711,6 @@ export default function BulkJobClient(props: {
         <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">{actionMessage}</div>
       ) : null}
 
-      {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-xs text-slate-500">Progress</div>
@@ -755,13 +748,7 @@ export default function BulkJobClient(props: {
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-xs text-slate-500">Telemetry</div>
-          <div className="mt-2 text-sm text-slate-700">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500">Endpoint</span>
-              <span className="font-mono text-xs">/items/telemetry</span>
-            </div>
-            <div className="mt-2 text-xs text-slate-500">Adds pipeline + module status per item.</div>
-          </div>
+          <div className="mt-2 text-xs text-slate-500">Adds pipeline + module status per item.</div>
           <div className="mt-3">
             <button className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm text-white" onClick={fetchItems} disabled={!bulkJobId}>
               Refresh telemetry now
@@ -782,7 +769,6 @@ export default function BulkJobClient(props: {
         </div>
       </div>
 
-      {/* Items table */}
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -849,7 +835,7 @@ export default function BulkJobClient(props: {
 
                   return (
                     <React.Fragment key={it.id}>
-                      <tr className={classNames("border-t hover:bg-slate-50 cursor-pointer")} onClick={() => openDrawer(it.id, "summary")}>
+                      <tr className={classNames("border-t hover:bg-slate-50 cursor-pointer")} onClick={() => onRowClick(it.id)}>
                         <td className="py-2 pr-3 align-top">{it.item_index + 1}</td>
 
                         <td className="py-2 pr-3 align-top max-w-[52ch]">
@@ -923,11 +909,14 @@ export default function BulkJobClient(props: {
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openExtract(it.ingestion_id)} disabled={!it.ingestion_id}>
                               Extract
                             </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
-                              Extract (full)
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openStoreSeo(it.ingestion_id!)} disabled={!it.ingestion_id}>
+                              Dashboard SEO
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "seo")} disabled={!it.ingestion_id}>
                               SEO preview
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "extract")} disabled={!it.ingestion_id}>
+                              Extract (full)
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
                               Out 1
@@ -1040,15 +1029,16 @@ export default function BulkJobClient(props: {
               )}
             </div>
 
+            {/* tabs */}
             <div className="px-4 pt-3 flex flex-wrap gap-2">
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "seo" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("seo")} disabled={!selectedItem.ingestion_id}>
+                SEO preview
+              </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "summary" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("summary")}>
                 Summary
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "extract" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("extract")} disabled={!selectedItem.ingestion_id}>
                 Extract (full)
-              </button>
-              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "seo" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("seo")} disabled={!selectedItem.ingestion_id}>
-                SEO preview
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out0" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out0")} disabled={!selectedItem.pipeline_run_id}>
                 Output 0
@@ -1062,107 +1052,6 @@ export default function BulkJobClient(props: {
             </div>
 
             <div className="p-4 overflow-auto flex-1">
-              {/* Summary */}
-              {drawerTab === "summary" ? (
-                <div className="space-y-3">
-                  <div className="rounded-xl border p-3">
-                    <div className="text-xs text-slate-500">Status</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      {statusBadge(selectedItem.status)}
-                      <span className="text-xs text-slate-500 font-mono">tries:{selectedItem.tries ?? "—"}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openExtract(selectedItem.ingestion_id)} disabled={!selectedItem.ingestion_id}>
-                      <div className="text-xs text-slate-500">Open Extract page</div>
-                      <div className="text-sm font-medium">/dashboard/extract</div>
-                    </button>
-                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)} disabled={!selectedItem.pipeline_run_id}>
-                      <div className="text-xs text-slate-500">Open SEO artifact</div>
-                      <div className="text-sm font-medium">/output/1</div>
-                    </button>
-                  </div>
-
-                  <div className="rounded-xl border p-3">
-                    <div className="text-xs text-slate-500">Error</div>
-                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
-                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Extract full */}
-              {drawerTab === "extract" ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold">Full engine payload</div>
-                    {selectedItem.ingestion_id ? (
-                      <button
-                        className="text-xs underline text-sky-700"
-                        onClick={() => {
-                          const id = selectedItem.ingestion_id!;
-                          setEnginePayloadCache((s) => {
-                            const next = { ...s };
-                            delete next[id];
-                            return next;
-                          });
-                          void loadEnginePayloadFull(id);
-                        }}
-                      >
-                        refresh
-                      </button>
-                    ) : null}
-                  </div>
-
-                  {engineFullIsLoading ? (
-                    <div className="text-sm text-slate-600">Loading engine payload…</div>
-                  ) : engineFull?.ok === false ? (
-                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-                      {engineFull?.error ?? "Failed to load engine payload"}
-                    </div>
-                  ) : engineFull?.ok ? (
-                    <>
-                      <div className="rounded-xl border p-3">
-                        <div className="text-xs text-slate-500">Storage ref</div>
-                        <div className="mt-1 font-mono text-xs break-all">
-                          {engineFull.bucket}/{engineFull.ref}
-                        </div>
-                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">specs</div>
-                            <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">features</div>
-                            <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">images</div>
-                            <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
-                          </div>
-                          <div className="rounded border p-2">
-                            <div className="text-slate-500">tabs</div>
-                            <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <details className="rounded-xl border p-3">
-                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
-                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
-                          {safeStringify(engineFull.payload, 250000)}
-                        </pre>
-                      </details>
-                    </>
-                  ) : (
-                    <div className="text-sm text-slate-600">No payload loaded yet.</div>
-                  )}
-                </div>
-              ) : null}
-
-              {/* SEO preview */}
               {drawerTab === "seo" ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1263,7 +1152,6 @@ export default function BulkJobClient(props: {
                             key={seoPreviewKey}
                             title="seo-preview"
                             className="w-full h-[560px]"
-                            // Empty sandbox = no scripts, no same-origin; safe for operator preview.
                             sandbox=""
                             srcDoc={seoPreviewDoc}
                           />
@@ -1286,7 +1174,108 @@ export default function BulkJobClient(props: {
                 </div>
               ) : null}
 
-              {/* Output 0 */}
+              {drawerTab === "summary" ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Status</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {statusBadge(selectedItem.status)}
+                      <span className="text-xs text-slate-500 font-mono">tries:{selectedItem.tries ?? "—"}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className="rounded-lg border p-3 text-left hover:bg-slate-50" onClick={() => openExtract(selectedItem.ingestion_id)} disabled={!selectedItem.ingestion_id}>
+                      <div className="text-xs text-slate-500">Open Extract page</div>
+                      <div className="text-sm font-medium">/dashboard/extract</div>
+                    </button>
+                    <button
+                      className="rounded-lg border p-3 text-left hover:bg-slate-50"
+                      onClick={() => selectedItem.ingestion_id && openStoreSeo(selectedItem.ingestion_id)}
+                      disabled={!selectedItem.ingestion_id}
+                    >
+                      <div className="text-xs text-slate-500">Open Dashboard SEO</div>
+                      <div className="text-sm font-medium">/dashboard/seo</div>
+                    </button>
+                  </div>
+
+                  <div className="rounded-xl border p-3">
+                    <div className="text-xs text-slate-500">Error</div>
+                    <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
+                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {drawerTab === "extract" ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Full engine payload</div>
+                    {selectedItem.ingestion_id ? (
+                      <button
+                        className="text-xs underline text-sky-700"
+                        onClick={() => {
+                          const id = selectedItem.ingestion_id!;
+                          setEnginePayloadCache((s) => {
+                            const next = { ...s };
+                            delete next[id];
+                            return next;
+                          });
+                          void loadEnginePayloadFull(id);
+                        }}
+                      >
+                        refresh
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {engineFullIsLoading ? (
+                    <div className="text-sm text-slate-600">Loading engine payload…</div>
+                  ) : engineFull?.ok === false ? (
+                    <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                      {engineFull?.error ?? "Failed to load engine payload"}
+                    </div>
+                  ) : engineFull?.ok ? (
+                    <>
+                      <div className="rounded-xl border p-3">
+                        <div className="text-xs text-slate-500">Storage ref</div>
+                        <div className="mt-1 font-mono text-xs break-all">
+                          {engineFull.bucket}/{engineFull.ref}
+                        </div>
+                        <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">specs</div>
+                            <div className="font-semibold">{fullStats?.specsCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">features</div>
+                            <div className="font-semibold">{fullStats?.featuresCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">images</div>
+                            <div className="font-semibold">{fullStats?.imagesCount ?? "—"}</div>
+                          </div>
+                          <div className="rounded border p-2">
+                            <div className="text-slate-500">tabs</div>
+                            <div className="font-semibold">{fullStats?.tabsCount ?? "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <details className="rounded-xl border p-3">
+                        <summary className="cursor-pointer text-sm font-medium">View JSON</summary>
+                        <pre className="mt-2 text-xs whitespace-pre-wrap break-all max-h-[520px] overflow-auto rounded border bg-slate-50 p-2">
+                          {safeStringify(engineFull.payload, 250000)}
+                        </pre>
+                      </details>
+                    </>
+                  ) : (
+                    <div className="text-sm text-slate-600">No payload loaded yet.</div>
+                  )}
+                </div>
+              ) : null}
+
               {drawerTab === "out0" ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1325,7 +1314,6 @@ export default function BulkJobClient(props: {
                 </div>
               ) : null}
 
-              {/* Output 1 */}
               {drawerTab === "out1" ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1364,7 +1352,6 @@ export default function BulkJobClient(props: {
                 </div>
               ) : null}
 
-              {/* Telemetry */}
               {drawerTab === "telemetry" ? (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">Telemetry</div>
