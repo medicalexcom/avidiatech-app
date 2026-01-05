@@ -13,7 +13,7 @@ const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
-// Store full engine payload/callback into Supabase Storage (private bucket recommended)
+// Store full callback body JSON (strict parity) in Supabase Storage.
 const ENGINE_PAYLOADS_BUCKET =
   process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
 
@@ -45,7 +45,7 @@ function makeRequestId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function sha256Hex(input: string) {
+function sha256HexUtf8(input: string) {
   return crypto.createHash("sha256").update(input, "utf8").digest("hex");
 }
 
@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Load existing row for diagnostics merging
     const { data: existing, error: loadErr } = await supabase
       .from("product_ingestions")
       .select(
@@ -162,19 +163,15 @@ export async function POST(req: NextRequest) {
       callbackBody: body,
     });
 
-    // === NEW: persist the full engine callback payload to Storage for strict parity ===
-    // This is the only way to make pipeline extract output equal the ingest engine response
-    // without re-extracting a second time.
-    const enginePayloadJsonText = rawBody; // exact bytes we verified signature for
-    const enginePayloadSha = sha256Hex(enginePayloadJsonText);
-
+    // === STRICT PARITY: persist entire callback body to storage ===
+    // Upload the exact rawBody string (already signature-verified).
+    const enginePayloadSha = sha256HexUtf8(rawBody);
     const enginePayloadRef = `ingestions/${existing.id}/engine-callback.json`;
 
-    // Best-effort upload; if it fails, we still persist normalized_payload and diagnostics
     try {
       const uploadRes = await supabase.storage
         .from(ENGINE_PAYLOADS_BUCKET)
-        .upload(enginePayloadRef, enginePayloadJsonText, {
+        .upload(enginePayloadRef, rawBody, {
           contentType: "application/json; charset=utf-8",
           upsert: true,
         });
@@ -212,6 +209,7 @@ export async function POST(req: NextRequest) {
         variants_payload: safeKeys(body.variants_payload),
         raw_payload: safeKeys(body.raw_payload),
       },
+      // small previews for debugging (avoid huge diagnostics)
       payload_previews: {
         normalized_payload: capAnyText(JSON.stringify(body.normalized_payload ?? null), 4000),
         specs_payload: capAnyText(JSON.stringify(body.specs_payload ?? null), 4000),
@@ -223,8 +221,6 @@ export async function POST(req: NextRequest) {
         extracted: normalization.extracted,
         validated_at: nowIso,
       },
-
-      // Add strict-parity pointers
       engine_payload: {
         bucket: ENGINE_PAYLOADS_BUCKET,
         ref: enginePayloadRef,
@@ -243,6 +239,7 @@ export async function POST(req: NextRequest) {
     const updatePatch: any = {
       diagnostics: updatedDiagnostics,
 
+      // Durable callback markers
       ingest_callback_at: nowIso,
       ingest_callback_request_id: requestId,
       ingest_engine_status: inferredEngineStatus,
@@ -258,7 +255,7 @@ export async function POST(req: NextRequest) {
         engine_payload: callbackDiagnosticsBase.engine_payload,
       },
 
-      // NEW: durable ref for pipeline extract parity
+      // NEW: durable strict-parity pointer
       engine_payload_ref: enginePayloadRef,
       engine_payload_sha256: enginePayloadSha,
 
