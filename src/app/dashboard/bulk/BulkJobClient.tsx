@@ -161,6 +161,15 @@ function getSeoField(seoPayload: any, path: string): string | null {
   }
 }
 
+function escapeHtml(s: string) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function buildSeoPreviewHtmlDoc(opts: {
   title?: string | null;
   metaDescription?: string | null;
@@ -171,16 +180,11 @@ function buildSeoPreviewHtmlDoc(opts: {
   const metaDescription = opts.metaDescription || "";
   const h1 = opts.h1 || "";
 
-  // Basic document wrapper so preview looks like a real page.
-  // IMPORTANT: We sandbox the iframe (no scripts, no same-origin).
-  // This is for operator preview only.
   const body = `
-  <div style="max-width: 980px; margin: 24px auto; padding: 0 16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; color: #0f172a;">
+  <div style="max-width: 980px; margin: 24px auto; padding: 0 16px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: #0f172a;">
     <div style="margin-bottom: 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
       <div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">Meta preview</div>
-      <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">${escapeHtml(
-        title
-      )}</div>
+      <div style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">${escapeHtml(title)}</div>
       ${
         metaDescription
           ? `<div style="font-size: 13px; color: #334155;">${escapeHtml(metaDescription)}</div>`
@@ -208,7 +212,6 @@ function buildSeoPreviewHtmlDoc(opts: {
   <title>${escapeHtml(title)}</title>
   ${metaDescription ? `<meta name="description" content="${escapeHtml(metaDescription)}" />` : ""}
   <style>
-    /* minimal defaults that feel "store-like" */
     .seo-description p { margin: 0.75rem 0; }
     .seo-description ul, .seo-description ol { padding-left: 1.25rem; margin: 0.75rem 0; }
     .seo-description h2 { margin: 1.5rem 0 0.75rem; font-size: 20px; }
@@ -224,15 +227,6 @@ ${body}
 </html>`;
 }
 
-function escapeHtml(s: string) {
-  return String(s)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function downloadTextFile(filename: string, text: string, mime = "text/plain") {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
   const url = URL.createObjectURL(blob);
@@ -243,6 +237,13 @@ function downloadTextFile(filename: string, text: string, mime = "text/plain") {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// lightweight stable hash for iframe remounting
+function tinyHash(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h.toString(16);
 }
 
 export default function BulkJobClient(props: {
@@ -273,6 +274,8 @@ export default function BulkJobClient(props: {
   const [search, setSearch] = useState<string>("");
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  // Drawer selection by item id
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Drawer
@@ -386,11 +389,6 @@ export default function BulkJobClient(props: {
     return items.find((i) => i.id === selectedId) || null;
   }, [items, selectedId]);
 
-  async function downloadErrors() {
-    if (!bulkJobId) return;
-    window.open(`${jobApiBase}/items/errors`, "_blank");
-  }
-
   async function retryItem(itemId: string) {
     if (!bulkJobId || !itemId) return;
     setRetryingIds((s) => ({ ...s, [itemId]: true }));
@@ -437,6 +435,11 @@ export default function BulkJobClient(props: {
     }
   }
 
+  async function downloadErrors() {
+    if (!bulkJobId) return;
+    window.open(`${jobApiBase}/items/errors`, "_blank");
+  }
+
   function openExtract(ingestionId?: string | null) {
     if (!ingestionId) return;
     window.open(`/dashboard/extract?ingestionId=${encodeURIComponent(ingestionId)}`, "_blank");
@@ -459,7 +462,6 @@ export default function BulkJobClient(props: {
 
   function renderModuleStrip(mods: ModuleRunLite[]) {
     if (!mods || mods.length === 0) return <span className="text-xs text-slate-400">—</span>;
-
     return (
       <div className="flex items-center gap-1">
         {mods
@@ -494,18 +496,12 @@ export default function BulkJobClient(props: {
 
     setEngineSummaryLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(
-        `/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload?mode=summary`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `engine summary fetch failed (${res.status})`);
       setEngineSummaryCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setEngineSummaryCache((s) => ({
-        ...s,
-        [ingestionId]: { ok: false, error: String(e?.message || e) },
-      }));
+      setEngineSummaryCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
       setEngineSummaryLoadingById((s) => {
         const next = { ...s };
@@ -521,18 +517,12 @@ export default function BulkJobClient(props: {
 
     setEngineFullLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(
-        `/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/engine-payload`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `engine payload fetch failed (${res.status})`);
       setEnginePayloadCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setEnginePayloadCache((s) => ({
-        ...s,
-        [ingestionId]: { ok: false, error: String(e?.message || e) },
-      }));
+      setEnginePayloadCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
       setEngineFullLoadingById((s) => {
         const next = { ...s };
@@ -548,17 +538,12 @@ export default function BulkJobClient(props: {
 
     setSeoLoadingById((s) => ({ ...s, [ingestionId]: true }));
     try {
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, {
-        cache: "no-store",
-      });
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(ingestionId)}/seo`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `seo preview fetch failed (${res.status})`);
       setSeoCache((s) => ({ ...s, [ingestionId]: j }));
     } catch (e: any) {
-      setSeoCache((s) => ({
-        ...s,
-        [ingestionId]: { ok: false, error: String(e?.message || e) },
-      }));
+      setSeoCache((s) => ({ ...s, [ingestionId]: { ok: false, error: String(e?.message || e) } }));
     } finally {
       setSeoLoadingById((s) => {
         const next = { ...s };
@@ -574,10 +559,7 @@ export default function BulkJobClient(props: {
 
     setPipelineOutLoading((s) => ({ ...s, [k]: true }));
     try {
-      const res = await fetch(
-        `/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`,
-        { cache: "no-store" }
-      );
+      const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(pipelineRunId)}/output/${moduleIndex}`, { cache: "no-store" });
       const j = await res.json().catch(() => null);
       if (!res.ok) throw new Error(j?.error ?? `pipeline output fetch failed (${res.status})`);
       setPipelineOutCache((s) => ({ ...s, [k]: j }));
@@ -593,23 +575,37 @@ export default function BulkJobClient(props: {
   }
 
   function openDrawer(itemId: string, tab: typeof drawerTab = "summary") {
+    const item = items.find((i) => i.id === itemId) || null;
+
     setSelectedId(itemId);
     setDrawerTab(tab);
     setDrawerOpen(true);
+
+    // EAGER LOAD: avoid "refresh required" for SEO tab/metadata/html.
+    const ingestionId = item?.ingestion_id || null;
+    const pipelineRunId = item?.pipeline_run_id || null;
+
+    if (ingestionId) {
+      void loadEngineSummary(ingestionId);
+      if (tab === "seo") void loadSeoPreview(ingestionId);
+      if (tab === "extract") void loadEnginePayloadFull(ingestionId);
+    }
+    if (pipelineRunId) {
+      if (tab === "out0") void loadPipelineOutput(pipelineRunId, 0);
+      if (tab === "out1") void loadPipelineOutput(pipelineRunId, 1);
+    }
   }
 
-  // Prefetch small summary when drawer opens
+  // Safety net: Prefetch summary when drawer opens
   useEffect(() => {
     if (!drawerOpen) return;
     if (!selectedItem) return;
-
     const ingestionId = selectedItem.ingestion_id || null;
-    if (ingestionId) loadEngineSummary(ingestionId);
-
+    if (ingestionId) void loadEngineSummary(ingestionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, selectedId]);
 
-  // On-demand fetches based on active tab
+  // Safety net: On-demand fetches based on active tab
   useEffect(() => {
     if (!drawerOpen) return;
     if (!selectedItem) return;
@@ -617,27 +613,22 @@ export default function BulkJobClient(props: {
     const ingestionId = selectedItem.ingestion_id || null;
     const pipelineRunId = selectedItem.pipeline_run_id || null;
 
-    if (drawerTab === "extract" && ingestionId) loadEnginePayloadFull(ingestionId);
-    if (drawerTab === "seo" && ingestionId) loadSeoPreview(ingestionId);
-    if (drawerTab === "out0" && pipelineRunId) loadPipelineOutput(pipelineRunId, 0);
-    if (drawerTab === "out1" && pipelineRunId) loadPipelineOutput(pipelineRunId, 1);
+    if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId);
+    if (drawerTab === "seo" && ingestionId) void loadSeoPreview(ingestionId);
+    if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0);
+    if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, drawerTab, selectedId]);
 
-  const engineSummary =
-    selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
-  const engineSummaryLoading =
-    selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
+  const engineSummary = selectedItem?.ingestion_id ? engineSummaryCache[selectedItem.ingestion_id] : null;
+  const engineSummaryLoading = selectedItem?.ingestion_id ? Boolean(engineSummaryLoadingById[selectedItem.ingestion_id]) : false;
 
-  const engineFull =
-    selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
-  const engineFullIsLoading =
-    selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
+  const engineFull = selectedItem?.ingestion_id ? enginePayloadCache[selectedItem.ingestion_id] : null;
+  const engineFullIsLoading = selectedItem?.ingestion_id ? Boolean(engineFullLoadingById[selectedItem.ingestion_id]) : false;
 
   const seoPreview = selectedItem?.ingestion_id ? seoCache[selectedItem.ingestion_id] : null;
-  const seoPreviewIsLoading =
-    selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
+  const seoPreviewIsLoading = selectedItem?.ingestion_id ? Boolean(seoLoadingById[selectedItem.ingestion_id]) : false;
 
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
@@ -666,6 +657,9 @@ export default function BulkJobClient(props: {
       descriptionHtml: seoHtml ? String(seoHtml) : null,
     });
   }, [seoTitle, seoMeta, seoH1, seoHtml]);
+
+  // Force iframe to remount whenever HTML changes (prevents stale iframe content)
+  const seoPreviewKey = useMemo(() => tinyHash(seoPreviewDoc || ""), [seoPreviewDoc]);
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 space-y-4">
@@ -1114,7 +1108,7 @@ export default function BulkJobClient(props: {
                             delete next[id];
                             return next;
                           });
-                          loadEnginePayloadFull(id);
+                          void loadEnginePayloadFull(id);
                         }}
                       >
                         refresh
@@ -1205,7 +1199,7 @@ export default function BulkJobClient(props: {
                               delete next[id];
                               return next;
                             });
-                            loadSeoPreview(id);
+                            void loadSeoPreview(id);
                           }}
                         >
                           refresh
@@ -1266,14 +1260,16 @@ export default function BulkJobClient(props: {
                         <div className="text-sm font-medium">Live preview</div>
                         <div className="mt-2 rounded border bg-white overflow-hidden">
                           <iframe
+                            key={seoPreviewKey}
                             title="seo-preview"
                             className="w-full h-[560px]"
+                            // Empty sandbox = no scripts, no same-origin; safe for operator preview.
                             sandbox=""
                             srcDoc={seoPreviewDoc}
                           />
                         </div>
                         <div className="mt-2 text-xs text-slate-500">
-                          Note: preview is sandboxed (no scripts). This is for “naked eye” layout only.
+                          Preview is sandboxed (no scripts). This is for “naked eye” layout only.
                         </div>
                       </div>
 
@@ -1305,7 +1301,7 @@ export default function BulkJobClient(props: {
                             delete next[k];
                             return next;
                           });
-                          loadPipelineOutput(selectedItem.pipeline_run_id!, 0);
+                          void loadPipelineOutput(selectedItem.pipeline_run_id!, 0);
                         }}
                       >
                         refresh
@@ -1344,7 +1340,7 @@ export default function BulkJobClient(props: {
                             delete next[k];
                             return next;
                           });
-                          loadPipelineOutput(selectedItem.pipeline_run_id!, 1);
+                          void loadPipelineOutput(selectedItem.pipeline_run_id!, 1);
                         }}
                       >
                         refresh
