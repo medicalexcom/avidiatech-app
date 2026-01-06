@@ -1,22 +1,19 @@
-import { safeFetch } from "@/lib/utils/safeFetch";
-
-/**
+/* src/lib/ecommerce/connectors/bigcommerce.ts
+ *
  * BigCommerce connector helpers
  *
- * Exports:
- * - BigCommerceCredentials (type)
- * - extractSkuFromIngestion(row)
- * - findProductBySku({ creds, sku })
- * - importToBigCommerce({ creds, ingestionRow, opts })  // legacy/ingest-oriented import helper
- * - createBigCommerceAdapter({ storeHash, accessToken }) // adapter used by workers (async iterator)
+ * This file was extended to make importToBigCommerce more robust:
+ * - It now returns structured error information instead of throwing for 4xx/5xx API responses.
+ * - The returned BigCommerceImportResult includes ok:false and an `error` / `reason` field with
+ *   the remote response body and status when an upstream API call fails (useful to persist in diagnostics).
  *
- * The file provides both the importToBigCommerce helper (used by runImportForIngestion)
- * and a streaming adapter (createBigCommerceAdapter) used by the worker processors.
- *
- * Notes:
- * - Do NOT commit credentials to the repo. Provide them via integrations.encrypted_secrets or env in runtime.
- * - The adapters are conservative and should be extended to support images, variants, and rate-limit backoff.
+ * Note: callers (runImportForIngestion) already expect result.ok and persist diagnostics.result,
+ * so switching from throws -> structured result makes import failures visible without bubbling exceptions.
  */
+
+import { safeFetch } from "@/lib/utils/safeFetch";
+
+/* Types */
 
 export type BigCommerceCredentials = {
   // Accept both snake_case and camelCase keys for flexibility
@@ -33,12 +30,13 @@ export type BigCommerceUpsertOptions = {
 export type BigCommerceImportResult = {
   ok: boolean;
   platform: "bigcommerce";
-  action: "created" | "needs_review" | "updated";
+  action: "created" | "needs_review" | "updated" | "failed";
   product_id?: number;
   sku?: string | null;
   warnings: string[];
   needs_review?: boolean;
   reason?: string;
+  error?: any; // structured error details from BigCommerce or internal diagnostics
 };
 
 function bcBaseUrl(storeHash: string) {
@@ -53,7 +51,8 @@ function headers(token: string) {
   };
 }
 
-// Conservative SKU extraction: extend later as normalized model gets richer
+/* Helpers */
+
 export function extractSkuFromIngestion(row: any): string | null {
   const normalized = row?.normalized_payload ?? {};
   const candidates = [
@@ -74,10 +73,6 @@ export function extractSkuFromIngestion(row: any): string | null {
   return null;
 }
 
-/**
- * Find a product by SKU using BigCommerce catalog search.
- * BigCommerce search by keyword can return many results; we filter for an exact SKU match.
- */
 export async function findProductBySku(args: { creds: BigCommerceCredentials; sku: string }) {
   const storeHash = (args.creds.storeHash ?? args.creds.store_hash) as string;
   const token = (args.creds.accessToken ?? args.creds.access_token) as string;
@@ -99,11 +94,9 @@ export async function findProductBySku(args: { creds: BigCommerceCredentials; sk
   }
 
   const data = json?.data ?? [];
-  // BigCommerce products may not expose SKU at top-level if variants exist; try best-effort match
   const exact = data.find((p: any) => {
     const topSku = String(p?.sku ?? "").trim();
     if (topSku) return topSku === args.sku;
-    // try variants (if present)
     if (Array.isArray(p?.variants)) {
       return p.variants.some((v: any) => String(v?.sku ?? "").trim() === args.sku);
     }
@@ -144,13 +137,15 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
 }
 
 /**
- * Legacy / ingestion-oriented helper: import a single ingestion row into BigCommerce.
- * - If SKU exists and allowOverwriteExisting is false, returns needs_review result.
- * - If SKU exists and allowOverwriteExisting is true, attempts to update product.
- * - Otherwise creates a new product.
+ * importToBigCommerce
  *
- * NOTE: This helper is synchronous per-row and may be slow for huge batches.
- * Consider using the adapter/paginated approach for full syncs.
+ * - Tries to find an existing product by SKU
+ * - If found and allowOverwriteExisting=false -> returns needs_review
+ * - If found and allowOverwriteExisting=true -> attempts to update and returns result (structured)
+ * - Otherwise creates a product and returns result (structured)
+ *
+ * Important: For non-2xx BigCommerce responses we DO NOT throw; instead we return ok:false with
+ * structured error details so callers can persist diagnostics and surface helpful messages in the UI.
  */
 export async function importToBigCommerce(args: {
   creds: BigCommerceCredentials;
@@ -172,7 +167,6 @@ export async function importToBigCommerce(args: {
     try {
       existing = await findProductBySku({ creds: args.creds, sku });
     } catch (e: any) {
-      // If search fails, surface as a warning but try create path
       warnings.push("search_failed");
     }
   }
@@ -194,61 +188,103 @@ export async function importToBigCommerce(args: {
     const updateUrl = `${bcBaseUrl(storeHash)}/catalog/products/${existing.id}`;
     const updatePayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
 
-    const res = await safeFetch(updateUrl, {
-      method: "PUT",
-      headers: headers(token),
-      body: JSON.stringify(updatePayload),
-      timeoutMs: 15_000,
-    });
+    try {
+      const res = await safeFetch(updateUrl, {
+        method: "PUT",
+        headers: headers(token),
+        body: JSON.stringify(updatePayload),
+        timeoutMs: 15_000,
+      });
 
-    const text = await res.text().catch(() => "");
-    if (!res.ok) throw new Error(`bigcommerce_update_failed:${res.status}:${text}`);
+      const text = await res.text().catch(() => "");
+      const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
 
-    const json = text ? JSON.parse(text) : null;
-    const updated = json?.data ?? null;
+      if (!res.ok) {
+        // return structured failure instead of throwing
+        return {
+          ok: false,
+          platform: "bigcommerce",
+          action: "failed",
+          product_id: existing.id,
+          sku,
+          warnings,
+          reason: `bigcommerce_update_failed:${res.status}`,
+          error: { status: res.status, body },
+        };
+      }
 
-    return {
-      ok: true,
-      platform: "bigcommerce",
-      action: "updated",
-      product_id: updated?.id ?? existing.id,
-      sku,
-      warnings,
-    };
+      const updated = body?.data ?? null;
+      return {
+        ok: true,
+        platform: "bigcommerce",
+        action: "updated",
+        product_id: updated?.id ?? existing.id,
+        sku,
+        warnings,
+      };
+    } catch (e: any) {
+      return {
+        ok: false,
+        platform: "bigcommerce",
+        action: "failed",
+        sku,
+        warnings,
+        reason: "bigcommerce_update_exception",
+        error: { message: String(e?.message ?? e) },
+      };
+    }
   }
 
   // Create new product
   const createUrl = `${bcBaseUrl(storeHash)}/catalog/products`;
   const createPayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
 
-  const res = await safeFetch(createUrl, {
-    method: "POST",
-    headers: headers(token),
-    body: JSON.stringify(createPayload),
-    timeoutMs: 15_000,
-  });
+  try {
+    const res = await safeFetch(createUrl, {
+      method: "POST",
+      headers: headers(token),
+      body: JSON.stringify(createPayload),
+      timeoutMs: 15_000,
+    });
 
-  const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`bigcommerce_create_failed:${res.status}:${text}`);
+    const text = await res.text().catch(() => "");
+    const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
 
-  const json = text ? JSON.parse(text) : null;
-  const created = json?.data ?? null;
+    if (!res.ok) {
+      return {
+        ok: false,
+        platform: "bigcommerce",
+        action: "failed",
+        sku,
+        warnings,
+        reason: `bigcommerce_create_failed:${res.status}`,
+        error: { status: res.status, body },
+      };
+    }
 
-  return {
-    ok: true,
-    platform: "bigcommerce",
-    action: "created",
-    product_id: created?.id ?? undefined,
-    sku,
-    warnings,
-  };
+    const created = body?.data ?? null;
+
+    return {
+      ok: true,
+      platform: "bigcommerce",
+      action: "created",
+      product_id: created?.id ?? undefined,
+      sku,
+      warnings,
+    };
+  } catch (e: any) {
+    return {
+      ok: false,
+      platform: "bigcommerce",
+      action: "failed",
+      sku,
+      warnings,
+      reason: "bigcommerce_create_exception",
+      error: { message: String(e?.message ?? e) },
+    };
+  }
 }
 
-/**
- * Adapter for worker-style pagination/streaming syncs.
- * Accepts credentials (camel or snake case) and yields NormalizedProduct objects.
- * The adapter focuses on product listing and yields lightweight normalized objects.
- */
 export type NormalizedProduct = {
   sku?: string;
   title?: string;
@@ -303,7 +339,6 @@ export function createBigCommerceAdapter(opts: { storeHash?: string; accessToken
       }
 
       page += 1;
-      // safety: stop if too many pages (protect against runaway)
       if (page > 10000) break;
     }
   }
