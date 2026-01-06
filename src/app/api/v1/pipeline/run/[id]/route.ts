@@ -22,9 +22,28 @@ function getSupabaseServerClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+function isInternalAuthed(req: Request): boolean {
+  const expected = String(process.env.PIPELINE_INTERNAL_SECRET || "");
+  if (!expected) return false;
+
+  const a = String(req.headers.get("x-pipeline-secret") || "");
+  if (a && a === expected) return true;
+
+  const b = String(req.headers.get("x-service-api-key") || "");
+  if (b && b === expected) return true;
+
+  return false;
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const internal = isInternalAuthed(req);
+
+  let createdBy: string | null = null;
+  if (!internal) {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    createdBy = clerkUserIdToUuid(userId);
+  }
 
   const supabase = getSupabaseServerClient();
   if (!supabase) {
@@ -35,7 +54,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const { id } = await ctx.params;
-  const createdBy = clerkUserIdToUuid(userId);
 
   const { data: run, error: runErr } = await supabase
     .from("pipeline_runs")
@@ -47,7 +65,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "run_query_failed", details: String(runErr?.message ?? runErr) }, { status: 500 });
   }
   if (!run) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (run.created_by !== createdBy) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // For external users, enforce ownership. For internal worker calls, allow access.
+  if (!internal && createdBy && run.created_by !== createdBy) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   const { data: modules, error: modErr } = await supabase
     .from("module_runs")
