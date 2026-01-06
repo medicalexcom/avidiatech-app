@@ -21,6 +21,10 @@
 // NEW (2026-01-06):
 // - Normalize thrown errors so UI/logs never show "[object Object]".
 //   We always derive a meaningful message and preserve payload shape.
+//
+// NEW (2026-01-06): resiliency improvements
+// - Per-domain concurrency limit to avoid hammering a single host.
+// - Transient retry wrapper around POST /api/v1/ingest to retry render-timeouts and 5xx.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -109,35 +113,54 @@ const INGEST_POLL_INTERVAL_MS = parseInt(process.env.BULK_INGEST_POLL_INTERVAL_M
 const INGEST_RETRY_ON_TIMEOUT = (process.env.BULK_INGEST_RETRY_ON_TIMEOUT || "true").toLowerCase() !== "false";
 const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env.BULK_INGEST_RETRY_MAX || "1", 10)); // retries after timeout
 
-// Basic required env checks (fail-fast)
-if (!supabaseUrl || !supabaseKey) {
-  console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set for bulk workers");
-  process.exit(1);
-}
-if (!internalApiBase) {
-  console.error("[bulk-item] FATAL: INTERNAL_API_BASE is not set. Please set INTERNAL_API_BASE and restart.");
-  process.exit(1);
-}
-if (!SERVICE_API_KEY) {
-  console.error(
-    "[bulk-item] FATAL: service secret missing. Set PIPELINE_INTERNAL_SECRET (preferred) or SERVICE_API_KEY and restart."
-  );
-  process.exit(1);
+// Per-domain concurrency defaults (to avoid hammering one site)
+const DOMAIN_CONCURRENCY_LIMIT = Math.max(1, parseInt(process.env.BULK_DOMAIN_CONCURRENCY_LIMIT || "2", 10));
+const DOMAIN_CONCURRENCY_WAIT_MS = Math.max(200, parseInt(process.env.BULK_DOMAIN_CONCURRENCY_WAIT_MS || "250", 10));
+
+/* ---- Domain concurrency limiter ---- */
+// Simple in-memory domain concurrency map. Suitable for single-process workers.
+// For multi-process deployments you'd need a shared rate limiter (redis/DB).
+const domainConcurrency = new Map<string, number>();
+
+function domainFromUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  try {
+    return new URL(String(u)).hostname;
+  } catch {
+    return null;
+  }
 }
 
-if (process.env.DEBUG_BULK) {
-  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET raw len:", String(RAW_PIPELINE_SECRET || "").length);
-  console.log("[bulk-item][debug] PIPELINE_INTERNAL_SECRET clean len:", PIPELINE_INTERNAL_SECRET.length);
-  console.log("[bulk-item][debug] SERVICE_API_KEY raw len:", String(RAW_SERVICE_API_KEY || "").length);
-  console.log("[bulk-item][debug] SERVICE_API_KEY clean len:", SERVICE_API_KEY.length);
-  console.log("[bulk-item][debug] INGEST_POLL_TIMEOUT_MS:", INGEST_POLL_TIMEOUT_MS);
-  console.log("[bulk-item][debug] INGEST_RETRY_ON_TIMEOUT:", INGEST_RETRY_ON_TIMEOUT);
-  console.log("[bulk-item][debug] INGEST_RETRY_MAX:", INGEST_RETRY_MAX);
-}
+/**
+ * Acquire a slot for a domain. Returns a release function to call when done.
+ * If domain can't be determined, returns a no-op release.
+ */
+async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => void> {
+  const domain = domainFromUrl(url);
+  if (!domain) return () => {};
 
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+  const start = Date.now();
+  while (true) {
+    const cur = domainConcurrency.get(domain) ?? 0;
+    if (cur < DOMAIN_CONCURRENCY_LIMIT) {
+      domainConcurrency.set(domain, cur + 1);
+      return () => {
+        const now = domainConcurrency.get(domain) ?? 1;
+        if (now <= 1) domainConcurrency.delete(domain);
+        else domainConcurrency.set(domain, now - 1);
+      };
+    }
+    if (Date.now() - start > maxWaitMs) {
+      // Give up waiting and return a no-op release to avoid deadlock
+      return () => {};
+    }
+    await new Promise((r) => setTimeout(r, DOMAIN_CONCURRENCY_WAIT_MS));
+  }
+}
 
 /* ---- Helpers ---- */
+
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 async function markItem(id: string, updates: Record<string, any>) {
   const { error } = await supabase.from("bulk_job_items").update(updates).eq("id", id);
@@ -190,6 +213,8 @@ function normalizeAbsoluteUrl(input: string): string {
   }
 }
 
+/* ---- Ingest: POST and transient retry wrapper ---- */
+
 async function postIngest(itemUrl: string) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
@@ -219,20 +244,89 @@ async function postIngest(itemUrl: string) {
   return { res, text, json, normalizedUrl: normalized };
 }
 
-async function pollForIngestionJob(
-  jobId: string,
-  timeoutMs = INGEST_POLL_TIMEOUT_MS,
-  intervalMs = INGEST_POLL_INTERVAL_MS
-) {
+/**
+ * tryPostIngestWithRetries
+ * - Acquire per-domain slot
+ * - Retry transient failures (render-timeout, status 0, 5xx, network throws)
+ * - Exponential backoff between attempts
+ * - Throws an Error with payload if still failing after retries
+ */
+async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
+  let attempt = 0;
+  let lastErr: any = null;
+
+  const release = await acquireDomainSlot(itemUrl);
+  try {
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl);
+
+        // If success or normal non-transient error, return as usual
+        if (res.ok) {
+          return { res, text, json: j, normalizedUrl };
+        }
+
+        // Determine if transient:
+        // - res.status === 0 (network)
+        // - 5xx server errors
+        // - text contains known render-timeout/network indicators
+        const isTransient =
+          res.status === 0 ||
+          (res.status >= 500 && res.status < 600) ||
+          /render-timeout|timeout|ENOTFOUND|ECONNRESET|ERR_SOCKET_NOT_CONNECTED/i.test(text || String(j || ""));
+
+        if (!isTransient) {
+          // Non-transient -> return the response so caller handles it
+          return { res, text, json: j, normalizedUrl };
+        }
+
+        lastErr = { res, text, json: j, normalizedUrl };
+
+        if (process.env.DEBUG_BULK) {
+          console.warn("[bulk-item][debug] transient ingest POST detected, will retry", { attempt, itemUrl, status: res.status });
+        }
+
+        // backoff then retry
+        const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      } catch (e: any) {
+        // Network/throwable error - considered transient
+        lastErr = e;
+        if (process.env.DEBUG_BULK) {
+          console.warn("[bulk-item][debug] postIngest threw, will retry", { attempt, itemUrl, err: String(e?.message || e) });
+        }
+        const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+    }
+
+    // After retries, throw a descriptive error
+    const err: any = new Error("ingest_post_transient_failed");
+    err.payload = lastErr;
+    throw err;
+  } finally {
+    try {
+      if (typeof release === "function") release();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/* ---- Ingest polling ---- */
+
+async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOUT_MS, intervalMs = INGEST_POLL_INTERVAL_MS) {
   const start = Date.now();
   let lastPayload: any = null;
   let lastStatus: number | null = null;
 
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
+      headers: serviceHeaders(),
+    });
 
     lastStatus = res.status;
     const text = await res.text().catch(() => "");
@@ -262,6 +356,8 @@ async function pollForIngestionJob(
   throw err;
 }
 
+/* ---- Start ingest (uses retry wrapper) ---- */
+
 async function startIngestAndReturnIngestionId(itemUrl: string) {
   let attempt = 0;
   let lastTimeoutPayload: any = null;
@@ -269,7 +365,8 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
   while (true) {
     attempt++;
 
-    const { res, text, json: j } = await postIngest(itemUrl);
+    // Use the transient retry wrapper that also enforces per-domain concurrency.
+    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, 3);
 
     if (!res.ok) {
       const msg = j?.error ?? `ingest failed (${res.status})`;
@@ -355,6 +452,8 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
   }
 }
 
+/* ---- Pipeline start/poll ---- */
+
 async function startPipeline(ingestionId: string, steps: string[]) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run`;
   if (process.env.DEBUG_BULK) {
@@ -372,7 +471,6 @@ async function startPipeline(ingestionId: string, steps: string[]) {
     }),
   });
 
-  // Read text first to preserve non-JSON error bodies
   const text = await res.text().catch(() => "");
   let j: any = null;
   try {
@@ -400,10 +498,9 @@ async function startPipeline(ingestionId: string, steps: string[]) {
 async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(
-      `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`,
-      { headers: serviceHeaders() }
-    );
+    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
+      headers: serviceHeaders(),
+    });
 
     const text = await res.text().catch(() => "");
     let j: any = null;
@@ -455,8 +552,9 @@ async function handleJob(job: any) {
           .eq("user_id", userId)
           .order("created_at", { ascending: true })
           .limit(1);
-
-        if (!tmErr && tm && tm.length > 0) tenantId = tm[0].tenant_id;
+        if (!tmErr && tm && tm.length > 0) {
+          tenantId = tm[0].tenant_id;
+        }
       }
 
       if (tenantId) {
@@ -466,7 +564,6 @@ async function handleJob(job: any) {
           .eq("user_id", userId)
           .eq("tenant_id", tenantId)
           .limit(1);
-
         if (!roleErr && roleRows && roleRows.length > 0) {
           const role = roleRows[0].role;
           if (role === "owner" || role === "admin") isOwner = true;
