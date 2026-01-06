@@ -72,7 +72,7 @@ async function downloadFailedRowsCsv(jobId: string, toast: any) {
     return;
   }
   try {
-    const res = await fetch(`/api/v1/imports/${encodeURIComponent(jobId)}/errors?format=csv`);
+    const res = await fetch(`/api/v1/imports/${encodeURIComponent(jobId)}/errors?format=csv`, { credentials: "same-origin" });
     if (!res.ok) {
       const j = await res.json().catch(() => null);
       toast?.error?.(j?.error ?? "Failed to download failed rows");
@@ -214,7 +214,7 @@ export default function ImportPage() {
   // fetch org id (calls /api/v1/me)
   async function fetchOrg() {
     try {
-      const res = await fetch("/api/v1/me");
+      const res = await fetch("/api/v1/me", { credentials: "same-origin" });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.ok && json.org_id) {
         setOrgId(json.org_id);
@@ -234,7 +234,7 @@ export default function ImportPage() {
       return;
     }
     try {
-      const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
+      const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`, { credentials: "same-origin" });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.ok) setConnectors(json.integrations ?? []);
       else setConnectors([]);
@@ -250,7 +250,7 @@ export default function ImportPage() {
 
   async function testConnector(connectorId: string) {
     try {
-      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST" });
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST", credentials: "same-origin" });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         toast.error(`Test failed: ${json?.error ?? "unknown"}`);
@@ -271,6 +271,7 @@ export default function ImportPage() {
     try {
       const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ org_id: orgId }),
       });
@@ -292,7 +293,7 @@ export default function ImportPage() {
   async function fetchIngestion(id: string) {
     try {
       setJob(null);
-      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`);
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`, { credentials: "same-origin" });
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
       const row = json?.data ?? json;
@@ -305,7 +306,7 @@ export default function ImportPage() {
   }
 
   async function fetchPipelineSnapshot(runId: string) {
-    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`);
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`, { credentials: "same-origin" });
     const json = await res.json().catch(() => null);
     if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
     return json as PipelineSnapshot;
@@ -326,7 +327,7 @@ export default function ImportPage() {
   async function fetchImportArtifact(runId: string, modules?: PipelineModule[]) {
     const importMod = (modules ?? []).find((m) => m.module_name === "import");
     if (!importMod) return null;
-    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`);
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`, { credentials: "same-origin" });
     const json = await res.json().catch(() => null);
     if (!res.ok) throw new Error(json?.error?.message || json?.error || `Import artifact fetch failed: ${res.status}`);
     setImportArtifact(json);
@@ -356,6 +357,7 @@ export default function ImportPage() {
       toast.info("Starting pipeline run");
       const res = await fetch("/api/v1/pipeline/run", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ingestionId: id,
@@ -469,12 +471,10 @@ export default function ImportPage() {
   const btnGhost =
     "h-10 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white/70 px-3 text-sm text-slate-800 shadow-sm hover:bg-white " +
     "dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-200 dark:hover:bg-slate-950";
-
   const btnPrimary =
     "h-10 inline-flex items-center justify-center rounded-xl px-4 text-sm font-semibold text-slate-950 shadow-sm transition " +
     "bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400 hover:opacity-95 hover:-translate-y-[1px] " +
     "focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:opacity-60 disabled:shadow-none";
-
   const btnDark =
     "h-10 inline-flex items-center justify-center rounded-xl px-3 text-sm font-semibold text-white shadow-sm transition " +
     "bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-60 " +
@@ -500,9 +500,9 @@ export default function ImportPage() {
         <div className="absolute -top-36 -left-28 h-[28rem] w-[28rem] rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/14" />
         <div className="absolute -top-40 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-fuchsia-300/14 blur-3xl dark:bg-fuchsia-500/10" />
         <div className="absolute -bottom-52 right-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-300/16 blur-3xl dark:bg-emerald-500/10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_55%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_r[...]
         <div className="absolute inset-0 opacity-[0.035] dark:opacity-[0.07]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradi[...]
         </div>
       </div>
 
@@ -510,7 +510,7 @@ export default function ImportPage() {
         {/* Top bar */}
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-s[...]
               <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
                 <span className={cx("h-1.5 w-1.5 rounded-full", running ? "bg-cyan-400 animate-pulse" : "bg-slate-400")} />
               </span>
@@ -546,14 +546,14 @@ export default function ImportPage() {
         </section>
 
         {/* Primary workspace */}
-        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(15,23,42,0.75)]">
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18p[...]
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
             {/* LEFT: Stores & Connectors */}
             <aside className="lg:col-span-4">
               <div
                 ref={connectorShellRef}
                 data-connector-shell
-                className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-[0_18px_45px_rgba(148,163,184,0.18)] dark:border-slate-800 dark:from-slate-950/70 dark:to-slate-950/40"
+                className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-[0_18px_45px_rgba(148,163,184,0.18)] dark:border-slate-800 dark:from-slate-[...]
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -562,12 +562,12 @@ export default function ImportPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-s[...]
                       <span className={cx("h-1.5 w-1.5 rounded-full", orgId ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-700")} />
                       {orgId ? "org loaded" : "org unknown"}
                     </span>
 
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-s[...]
                       <span className="font-mono">{connectors.length}</span> stores
                     </span>
                   </div>
@@ -816,7 +816,7 @@ export default function ImportPage() {
                                 setMappingPreset(null);
                                 toast?.info?.("Mapping preset cleared");
                               }}
-                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:bg-slate-950"
+                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:bg-slate-950[...]
                             >
                               Clear
                             </button>
@@ -990,7 +990,7 @@ export default function ImportPage() {
           setConfirmDeleteOpen(false);
           if (!toDeleteIngestionId) return;
           try {
-            const res = await fetch(`/api/v1/imports/${encodeURIComponent(toDeleteIngestionId)}`, { method: "DELETE" });
+            const res = await fetch(`/api/v1/imports/${encodeURIComponent(toDeleteIngestionId)}`, { method: "DELETE", credentials: "same-origin" });
             const json = await res.json().catch(() => null);
             if (!res.ok || !json?.ok) {
               toast.error(json?.error ?? "Delete failed");
