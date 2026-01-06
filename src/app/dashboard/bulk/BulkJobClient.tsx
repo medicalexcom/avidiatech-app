@@ -295,7 +295,7 @@ export default function BulkJobClient(props: {
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "telemetry">("seo");
+  const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "out2" | "telemetry">("seo");
 
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
   const [engineFullLoadingById, setEngineFullLoadingById] = useState<Record<string, boolean>>({});
@@ -643,6 +643,7 @@ export default function BulkJobClient(props: {
     if (pipelineRunId) {
       if (nextTab === "out0") void loadPipelineOutput(pipelineRunId, 0, nonce);
       if (nextTab === "out1") void loadPipelineOutput(pipelineRunId, 1, nonce);
+      if (nextTab === "out2") void loadPipelineOutput(pipelineRunId, 2, nonce);
     }
   }
 
@@ -658,6 +659,7 @@ export default function BulkJobClient(props: {
     if (drawerTab === "extract" && ingestionId) void loadEnginePayloadFull(ingestionId, nonce);
     if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0, nonce);
     if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1, nonce);
+    if (drawerTab === "out2" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 2, nonce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, drawerTab, selectedId]);
 
@@ -678,12 +680,15 @@ export default function BulkJobClient(props: {
 
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
+  const out2Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:2` : null;
 
   const drawerOut0 = out0Key ? pipelineOutCache[out0Key] : null;
   const drawerOut1 = out1Key ? pipelineOutCache[out1Key] : null;
+  const drawerOut2 = out2Key ? pipelineOutCache[out2Key] : null;
 
   const drawerOut0Loading = out0Key ? Boolean(pipelineOutLoading[out0Key]) : false;
   const drawerOut1Loading = out1Key ? Boolean(pipelineOutLoading[out1Key]) : false;
+  const drawerOut2Loading = out2Key ? Boolean(pipelineOutLoading[out2Key]) : false;
 
   const seoPayload = seoPreview?.seo_payload ?? null;
   const seoHtml = seoPreview?.description_html ?? null;
@@ -978,10 +983,16 @@ export default function BulkJobClient(props: {
                               Extract Full
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out0")} disabled={!it.pipeline_run_id}>
-                              Output 0
+                              Out 0
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out1")} disabled={!it.pipeline_run_id}>
-                              Output 1
+                              Out 1
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out2")} disabled={!it.pipeline_run_id}>
+                              Out 2
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 2)} disabled={!it.pipeline_run_id}>
+                              Open Audit (Out 2)
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
                               {isExpanded ? "Hide" : "Details"}
@@ -1074,6 +1085,9 @@ export default function BulkJobClient(props: {
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out1" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out1")} disabled={!selectedItem.pipeline_run_id}>
                 Output 1
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out2" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out2")} disabled={!selectedItem.pipeline_run_id}>
+                Output 2 (Audit)
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "telemetry" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("telemetry")}>
                 Telemetry
@@ -1187,11 +1201,11 @@ export default function BulkJobClient(props: {
 
                     <button
                       className="rounded-lg border p-3 text-left hover:bg-slate-50 disabled:opacity-50"
-                      onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 1)}
+                      onClick={() => openPipelineOutput(selectedItem.pipeline_run_id, 3)}
                       disabled={!selectedItem.pipeline_run_id}
                     >
-                      <div className="text-xs text-slate-500">Open Output 1</div>
-                      <div className="text-sm font-medium">/output/1</div>
+                      <div className="text-xs text-slate-500">Open Import (module 3)</div>
+                      <div className="text-sm font-medium">/pipeline/output/3</div>
                     </button>
                   </div>
 
@@ -1262,6 +1276,27 @@ export default function BulkJobClient(props: {
                     </pre>
                   ) : (
                     <div className="text-sm text-slate-600">No data available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Output 2 (Audit) */}
+              {drawerTab === "out2" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Output 2 — Audit</div>
+                  {drawerOut2Loading ? (
+                    <div className="text-sm text-slate-600">Loading audit output…</div>
+                  ) : drawerOut2?.ok === false ? (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                      No audit output available for this item (status {drawerOut2?.status ?? "—"}).<br />
+                      <span className="text-xs">{String(drawerOut2?.error ?? "")}</span>
+                    </div>
+                  ) : drawerOut2 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut2, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No audit output available for this item</div>
                   )}
                 </div>
               ) : null}
