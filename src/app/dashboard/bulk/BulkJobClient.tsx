@@ -133,10 +133,34 @@ function statusBadge(status?: string | null) {
   );
 }
 
+/**
+ * Improved error extraction:
+ * - Avoids "[object Object]"
+ * - Supports bulk worker normalized error shape:
+ *    { message, payload: { error: { message, code, issues } ... } }
+ */
 function extractErrorMessage(last_error: any): string | null {
   if (!last_error) return null;
+
   if (typeof last_error === "string") return last_error;
-  if (typeof last_error?.message === "string") return last_error.message;
+
+  if (typeof last_error?.message === "string" && last_error.message.trim()) return last_error.message;
+  if (typeof last_error?.error === "string" && last_error.error.trim()) return last_error.error;
+
+  const nested =
+    last_error?.payload?.error?.message ||
+    last_error?.payload?.message ||
+    last_error?.payload?.error ||
+    last_error?.detail;
+
+  if (typeof nested === "string" && nested.trim()) return nested;
+
+  if (typeof last_error?.payload?.error?.code === "string" && last_error.payload.error.code.trim()) {
+    const msg = last_error?.payload?.error?.message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+    return last_error.payload.error.code;
+  }
+
   return null;
 }
 
@@ -286,8 +310,14 @@ export default function BulkJobClient(props: {
 
   const jobApiBase = useMemo(() => `/api/v1/bulk/${encodeURIComponent(bulkJobId)}`, [bulkJobId]);
   const statsApi = useMemo(() => `${jobApiBase}/stats`, [jobApiBase]);
-  const telemetryApi = useMemo(() => `${jobApiBase}/items/telemetry?limit=${limit}&offset=${offset}`, [jobApiBase, limit, offset]);
-  const itemsApi = useMemo(() => `${jobApiBase}/items?limit=${limit}&offset=${offset}`, [jobApiBase, limit, offset]);
+  const telemetryApi = useMemo(
+    () => `${jobApiBase}/items/telemetry?limit=${limit}&offset=${offset}`,
+    [jobApiBase, limit, offset]
+  );
+  const itemsApi = useMemo(
+    () => `${jobApiBase}/items?limit=${limit}&offset=${offset}`,
+    [jobApiBase, limit, offset]
+  );
 
   async function fetchJob() {
     if (!bulkJobId) return;
@@ -314,6 +344,7 @@ export default function BulkJobClient(props: {
       if (!res.ok) throw new Error(j?.error ?? `Failed to fetch stats (${res.status})`);
       setStats(j?.data ?? j);
     } catch (e: any) {
+      // stats failure should not break the page
       setStats({ ok: false, error: String(e?.message || e) });
     } finally {
       setLoadingStats(false);
@@ -325,6 +356,7 @@ export default function BulkJobClient(props: {
     setLoadingItems(true);
     setError(null);
 
+    // queued filter must work even without telemetry -> prefer non-telemetry list endpoint
     const preferNonTelemetry = showOnlyQueued;
 
     try {
@@ -348,7 +380,6 @@ export default function BulkJobClient(props: {
     }
   }
 
-  // FIX: missing function referenced in header button
   async function downloadErrors() {
     if (!bulkJobId) return;
     window.open(`${jobApiBase}/items/errors`, "_blank");
@@ -378,6 +409,7 @@ export default function BulkJobClient(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkJobId, autoPoll, offset, limit, pollIntervalMs, showOnlyQueued]);
 
+  // prefer authoritative stats if available
   const total = Number(stats?.total_items ?? job?.total_items ?? items?.length ?? 0);
   const completed = Number(stats?.completed_items ?? job?.completed_items ?? 0);
   const failed = Number(stats?.failed_items ?? job?.failed_items ?? 0);
@@ -494,7 +526,13 @@ export default function BulkJobClient(props: {
                     : m.status === "skipped"
                       ? "bg-slate-300"
                       : "bg-slate-200";
-            return <span key={m.module_index} className={classNames("h-2 w-4 rounded", cls)} title={`${m.module_index}:${m.module_name}:${m.status}`} />;
+            return (
+              <span
+                key={m.module_index}
+                className={classNames("h-2 w-4 rounded", cls)}
+                title={`${m.module_index}:${m.module_name}:${m.status}`}
+              />
+            );
           })}
       </div>
     );
@@ -919,11 +957,11 @@ export default function BulkJobClient(props: {
 
                         <td className="py-2 pr-3 align-top">
                           {it.last_error ? (
-                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
+                            <div className="max-w-[52ch] truncate text-xs text-rose-700">
                               {extractErrorMessage(it.last_error) || safeStringify(it.last_error, 220)}
                             </div>
                           ) : modSummary?.failed?.error ? (
-                            <div className="max-w-[34ch] truncate text-xs text-rose-700">
+                            <div className="max-w-[52ch] truncate text-xs text-rose-700">
                               {safeStringify(modSummary.failed.error, 220)}
                             </div>
                           ) : (
@@ -1160,7 +1198,7 @@ export default function BulkJobClient(props: {
                   <div className="rounded-xl border p-3">
                     <div className="text-xs text-slate-500">Error</div>
                     <div className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-words">
-                      {selectedItem.last_error ? safeStringify(selectedItem.last_error, 4000) : "—"}
+                      {selectedItem.last_error ? (extractErrorMessage(selectedItem.last_error) || safeStringify(selectedItem.last_error, 4000)) : "—"}
                     </div>
                   </div>
                 </div>
