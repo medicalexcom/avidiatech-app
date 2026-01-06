@@ -295,7 +295,7 @@ export default function BulkJobClient(props: {
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "out2" | "telemetry">("seo");
+  const [drawerTab, setDrawerTab] = useState<"seo" | "summary" | "extract" | "out0" | "out1" | "out2" | "out3" | "telemetry">("seo");
 
   const [enginePayloadCache, setEnginePayloadCache] = useState<Record<string, any>>({});
   const [engineFullLoadingById, setEngineFullLoadingById] = useState<Record<string, boolean>>({});
@@ -644,6 +644,7 @@ export default function BulkJobClient(props: {
       if (nextTab === "out0") void loadPipelineOutput(pipelineRunId, 0, nonce);
       if (nextTab === "out1") void loadPipelineOutput(pipelineRunId, 1, nonce);
       if (nextTab === "out2") void loadPipelineOutput(pipelineRunId, 2, nonce);
+      if (nextTab === "out3") void loadPipelineOutput(pipelineRunId, 3, nonce);
     }
   }
 
@@ -660,6 +661,7 @@ export default function BulkJobClient(props: {
     if (drawerTab === "out0" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 0, nonce);
     if (drawerTab === "out1" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 1, nonce);
     if (drawerTab === "out2" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 2, nonce);
+    if (drawerTab === "out3" && pipelineRunId) void loadPipelineOutput(pipelineRunId, 3, nonce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerOpen, drawerTab, selectedId]);
 
@@ -681,14 +683,17 @@ export default function BulkJobClient(props: {
   const out0Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:0` : null;
   const out1Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:1` : null;
   const out2Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:2` : null;
+  const out3Key = selectedItem?.pipeline_run_id ? `${selectedItem.pipeline_run_id}:3` : null;
 
   const drawerOut0 = out0Key ? pipelineOutCache[out0Key] : null;
   const drawerOut1 = out1Key ? pipelineOutCache[out1Key] : null;
   const drawerOut2 = out2Key ? pipelineOutCache[out2Key] : null;
+  const drawerOut3 = out3Key ? pipelineOutCache[out3Key] : null;
 
   const drawerOut0Loading = out0Key ? Boolean(pipelineOutLoading[out0Key]) : false;
   const drawerOut1Loading = out1Key ? Boolean(pipelineOutLoading[out1Key]) : false;
   const drawerOut2Loading = out2Key ? Boolean(pipelineOutLoading[out2Key]) : false;
+  const drawerOut3Loading = out3Key ? Boolean(pipelineOutLoading[out3Key]) : false;
 
   const seoPayload = seoPreview?.seo_payload ?? null;
   const seoHtml = seoPreview?.description_html ?? null;
@@ -991,8 +996,11 @@ export default function BulkJobClient(props: {
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out2")} disabled={!it.pipeline_run_id}>
                               Out 2
                             </button>
-                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 2)} disabled={!it.pipeline_run_id}>
-                              Open Audit (Out 2)
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openDrawer(it.id, "out3")} disabled={!it.pipeline_run_id}>
+                              Out 3
+                            </button>
+                            <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => openPipelineOutput(it.pipeline_run_id, 3)} disabled={!it.pipeline_run_id}>
+                              Open Import (Out 3)
                             </button>
                             <button className="rounded px-2 py-1 text-xs border bg-white" onClick={() => setExpanded((s) => ({ ...s, [it.id]: !s[it.id] }))}>
                               {isExpanded ? "Hide" : "Details"}
@@ -1088,6 +1096,9 @@ export default function BulkJobClient(props: {
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out2" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out2")} disabled={!selectedItem.pipeline_run_id}>
                 Output 2 (Audit)
+              </button>
+              <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "out3" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("out3")} disabled={!selectedItem.pipeline_run_id}>
+                Output 3 (Import)
               </button>
               <button className={classNames("rounded-full border px-3 py-1 text-xs", drawerTab === "telemetry" && "bg-sky-50 border-sky-200")} onClick={() => setDrawerTab("telemetry")}>
                 Telemetry
@@ -1297,6 +1308,27 @@ export default function BulkJobClient(props: {
                     </pre>
                   ) : (
                     <div className="text-sm text-slate-600">No audit output available for this item</div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Output 3 (Import) */}
+              {drawerTab === "out3" ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold">Output 3 — Import</div>
+                  {drawerOut3Loading ? (
+                    <div className="text-sm text-slate-600">Loading import output…</div>
+                  ) : drawerOut3?.ok === false ? (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                      No import output available for this item (status {drawerOut3?.status ?? "—"}).<br />
+                      <span className="text-xs">{String(drawerOut3?.error ?? "")}</span>
+                    </div>
+                  ) : drawerOut3 ? (
+                    <pre className="text-xs whitespace-pre-wrap break-all max-h-[720px] overflow-auto rounded border bg-slate-50 p-3">
+                      {safeStringify(drawerOut3, 250000)}
+                    </pre>
+                  ) : (
+                    <div className="text-sm text-slate-600">No import output available for this item</div>
                   )}
                 </div>
               ) : null}
