@@ -497,12 +497,30 @@ export default function ImportPage() {
 
       {/* Background */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-36 -left-28 h-[28rem] w-[28rem] rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/14" />
-        <div className="absolute -top-40 right-[-10rem] h-[26rem] w-[26rem] rounded-full bg-fuchsia-300/14 blur-3xl dark:bg-fuchsia-500/10" />
-        <div className="absolute -bottom-52 right-[-12rem] h-[34rem] w-[34rem] rounded-full bg-emerald-300/16 blur-3xl dark:bg-emerald-500/10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_55%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_r[...]
+        <div className="absolute -top-36 -left-28 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/14" />
+        <div className="absolute -top-40 right-[-10rem] h-64 w-64 rounded-full bg-fuchsia-300/14 blur-3xl dark:bg-fuchsia-500/10" />
+        <div className="absolute -bottom-52 right-[-12rem] h-80 w-80 rounded-full bg-emerald-300/16 blur-3xl dark:bg-emerald-500/10" />
+
+        {/* subtle vertical radial fade */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at top, rgba(248,250,252,0) 0%, rgba(248,250,252,0.92) 55%, rgba(248,250,252,1) 100%)",
+          }}
+        />
+
+        {/* faint grid overlay */}
         <div className="absolute inset-0 opacity-[0.035] dark:opacity-[0.07]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradi[...]
+          <div
+            style={{
+              height: "100%",
+              width: "100%",
+              background:
+                "linear-gradient(to right, rgba(229,231,235,1) 1px, transparent 1px), linear-gradient(to bottom, rgba(229,231,235,1) 1px, transparent 1px)",
+              backgroundSize: "46px 46px",
+            }}
+          />
         </div>
       </div>
 
@@ -510,7 +528,7 @@ export default function ImportPage() {
         {/* Top bar */}
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-s[...]
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm">
               <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
                 <span className={cx("h-1.5 w-1.5 rounded-full", running ? "bg-cyan-400 animate-pulse" : "bg-slate-400")} />
               </span>
@@ -546,14 +564,14 @@ export default function ImportPage() {
         </section>
 
         {/* Primary workspace */}
-        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18p[...]
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_...">
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
             {/* LEFT: Stores & Connectors */}
             <aside className="lg:col-span-4">
               <div
                 ref={connectorShellRef}
                 data-connector-shell
-                className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-[0_18px_45px_rgba(148,163,184,0.18)] dark:border-slate-800 dark:from-slate-[...]
+                className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950/35"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -562,12 +580,12 @@ export default function ImportPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-s[...]
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
                       <span className={cx("h-1.5 w-1.5 rounded-full", orgId ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-700")} />
                       {orgId ? "org loaded" : "org unknown"}
                     </span>
 
-                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-s[...]
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
                       <span className="font-mono">{connectors.length}</span> stores
                     </span>
                   </div>
@@ -816,7 +834,7 @@ export default function ImportPage() {
                                 setMappingPreset(null);
                                 toast?.info?.("Mapping preset cleared");
                               }}
-                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:bg-slate-950[...]
+                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:bg-slate-950"
                             >
                               Clear
                             </button>
