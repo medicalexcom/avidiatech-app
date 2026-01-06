@@ -10,7 +10,7 @@ import { getQueue } from "@/lib/queue/bull";
 /**
  * POST /api/v1/bulk
  *
- * Accepts JSON: { name?, pasted?: string, items?: [{ url, metadata }] }
+ * Accepts JSON: { name?, pasted?: string, items?: [{ url, metadata }], options?: any }
  * Creates a bulk job and enqueues a bulk-master job.
  *
  * NOTE: We do NOT run requireSubscriptionAndUsage here to avoid blocking the UI.
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const name = payload?.name ?? `bulk-${new Date().toISOString()}`;
-    const options = payload?.options ?? {};
+    const optionsFromBody = payload?.options ?? {};
     const pasted = payload?.pasted ?? payload?.text ?? null;
     const itemsFromBody = Array.isArray(payload?.items)
       ? payload.items.map((it: any) => ({ input_url: it.url || it.input_url, metadata: it.metadata || {} }))
@@ -51,13 +51,24 @@ export async function POST(request: NextRequest) {
 
     if (!items.length) return NextResponse.json({ error: "No items provided" }, { status: 400 });
 
-    // Create job quickly; do not perform subscription/usage check here.
-    // Workers will perform usage checks and increment usage as they process items.
+    // Default bulk pipeline mode to "full" so items go through audit like single-run URLs.
+    // Caller can override explicitly with options.mode = "seo" (or any other supported mode).
+    const mode = typeof optionsFromBody?.mode === "string" && optionsFromBody.mode.trim()
+      ? String(optionsFromBody.mode).trim()
+      : "full";
+
+    const options = {
+      ...optionsFromBody,
+      mode,
+      source_tenant: tenantFromRequest(request) ?? null,
+      requested_by_email: userEmail,
+    };
+
     const bulkJobId = await createBulkJob({
       orgId: payload?.orgId ?? null,
       name,
       createdBy: userId,
-      options: { ...options, source_tenant: tenantFromRequest(request) ?? null, requested_by_email: userEmail },
+      options,
       items,
     });
 
