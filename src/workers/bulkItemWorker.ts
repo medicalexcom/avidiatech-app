@@ -17,6 +17,10 @@
 //   include rich diagnostics in bulk_job_items.last_error.
 // - Improve pipeline start error capture (read text fallback; keep JSON if present).
 // - Increase default ingest polling timeout via envs.
+//
+// NEW (2026-01-06):
+// - Normalize thrown errors so UI/logs never show "[object Object]".
+//   We always derive a meaningful message and preserve payload shape.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -31,6 +35,55 @@ const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 function stripAnsiAndTrim(v: any): string {
   if (v == null) return "";
   return String(v).replace(ANSI_REGEX, "").trim();
+}
+
+function safeJsonStringify(v: any, maxLen = 8000) {
+  try {
+    const s = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+    if (s.length <= maxLen) return s;
+    return s.slice(0, maxLen) + "\n…(truncated)";
+  } catch {
+    return String(v);
+  }
+}
+
+function normalizeErrorMessage(err: any): string {
+  if (!err) return "unknown_error";
+  if (typeof err === "string") return err;
+
+  if (typeof err?.message === "string" && err.message.trim()) return err.message;
+
+  const nested =
+    err?.payload?.error?.message ||
+    err?.payload?.message ||
+    err?.error?.message ||
+    err?.detail ||
+    err?.error;
+
+  if (typeof nested === "string" && nested.trim()) return nested;
+
+  // Sometimes payload.error is an object with {code,message}
+  const code = err?.payload?.error?.code || err?.error?.code;
+  if (typeof code === "string" && code.trim()) return code;
+
+  const asJson = safeJsonStringify(err, 1200);
+  if (asJson && asJson !== "[object Object]") return asJson;
+
+  return "unknown_error_object";
+}
+
+function normalizeErrorPayload(err: any) {
+  const payload = err?.payload ?? null;
+  const core =
+    payload ??
+    (typeof err === "object"
+      ? { ...err }
+      : { value: err });
+
+  return {
+    message: normalizeErrorMessage(err),
+    payload: core,
+  };
 }
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -166,15 +219,20 @@ async function postIngest(itemUrl: string) {
   return { res, text, json, normalizedUrl: normalized };
 }
 
-async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOUT_MS, intervalMs = INGEST_POLL_INTERVAL_MS) {
+async function pollForIngestionJob(
+  jobId: string,
+  timeoutMs = INGEST_POLL_TIMEOUT_MS,
+  intervalMs = INGEST_POLL_INTERVAL_MS
+) {
   const start = Date.now();
   let lastPayload: any = null;
   let lastStatus: number | null = null;
 
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
-      headers: serviceHeaders(),
-    });
+    const res = await fetch(
+      `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`,
+      { headers: serviceHeaders() }
+    );
 
     lastStatus = res.status;
     const text = await res.text().catch(() => "");
@@ -220,7 +278,8 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
       throw err;
     }
 
-    const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
+    const possibleIngestionId =
+      j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
 
     if (possibleIngestionId) {
       if (j?.status === "accepted" || res.status === 202) {
@@ -236,8 +295,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
             lastTimeoutPayload = e?.payload ?? null;
 
             const canRetry =
-              INGEST_RETRY_ON_TIMEOUT &&
-              attempt <= (1 + INGEST_RETRY_MAX);
+              INGEST_RETRY_ON_TIMEOUT && attempt <= (1 + INGEST_RETRY_MAX);
 
             if (canRetry) {
               console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
@@ -277,8 +335,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
       if (msg === "ingest job timeout") {
         lastTimeoutPayload = e?.payload ?? null;
         const canRetry =
-          INGEST_RETRY_ON_TIMEOUT &&
-          attempt <= (1 + INGEST_RETRY_MAX);
+          INGEST_RETRY_ON_TIMEOUT && attempt <= (1 + INGEST_RETRY_MAX);
 
         if (canRetry) {
           console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
@@ -343,9 +400,10 @@ async function startPipeline(ingestionId: string, steps: string[]) {
 async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
-      headers: serviceHeaders(),
-    });
+    const res = await fetch(
+      `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`,
+      { headers: serviceHeaders() }
+    );
 
     const text = await res.text().catch(() => "");
     let j: any = null;
@@ -397,9 +455,8 @@ async function handleJob(job: any) {
           .eq("user_id", userId)
           .order("created_at", { ascending: true })
           .limit(1);
-        if (!tmErr && tm && tm.length > 0) {
-          tenantId = tm[0].tenant_id;
-        }
+
+        if (!tmErr && tm && tm.length > 0) tenantId = tm[0].tenant_id;
       }
 
       if (tenantId) {
@@ -409,6 +466,7 @@ async function handleJob(job: any) {
           .eq("user_id", userId)
           .eq("tenant_id", tenantId)
           .limit(1);
+
         if (!roleErr && roleRows && roleRows.length > 0) {
           const role = roleRows[0].role;
           if (role === "owner" || role === "admin") isOwner = true;
@@ -465,18 +523,18 @@ async function handleJob(job: any) {
       );
     }
   } catch (err: any) {
-    const payload = err?.payload ?? null;
+    const norm = normalizeErrorPayload(err);
 
     console.error("[bulk-item] processing error", {
       bulkJobItemId,
-      error: err?.message ?? err,
-      payload,
+      error: norm.message,
+      payload: norm.payload,
     });
 
     await markItem(bulkJobItemId, {
       status: "failed",
       finished_at: new Date().toISOString(),
-      last_error: payload ? { message: String(err?.message || err), payload } : { message: String(err?.message || err) },
+      last_error: norm,
     });
 
     await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
@@ -510,7 +568,8 @@ async function handleJob(job: any) {
   });
 
   worker.on("failed", (job: any, err: any) => {
-    console.error(`[bulk-item] failed ${job.id}`, err?.message ?? err);
+    const norm = normalizeErrorPayload(err);
+    console.error(`[bulk-item] failed ${job.id}`, norm.message);
   });
 
   console.log(`[bulk-item] worker started (concurrency=${concurrency})`);
