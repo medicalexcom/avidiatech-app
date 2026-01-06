@@ -8,9 +8,12 @@ type Integration = {
   provider?: string;
   name?: string;
   created_at?: string;
+  updated_at?: string;
   config?: Record<string, any>;
   schedule?: any;
   last_error?: string | null;
+  org_id?: string | null;
+  status?: string | null;
 };
 
 interface Props {
@@ -23,6 +26,8 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
   const [loading, setLoading] = useState(false);
   const [integration, setIntegration] = useState<Integration | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const toast = useToast();
 
@@ -31,15 +36,19 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
     let mounted = true;
     setLoading(true);
     setError(null);
+    setIntegration(null);
+    setTestResult(null);
 
-    fetch(`/api/v1/integrations/${integrationId}`)
-      .then((res) => res.json())
+    // Use the details route which returns safe integration info
+    fetch(`/api/v1/integrations/${encodeURIComponent(integrationId)}/details`)
+      .then((res) => res.json().catch(() => null))
       .then((data) => {
         if (!mounted) return;
-        if (!data.ok) {
-          setError(data.error ?? "Failed to load integration");
+        if (!data || data.ok === false) {
+          setError(data?.error ?? "Failed to load integration");
           setIntegration(null);
         } else {
+          // details route returns { ok: true, integration: {...} }
           setIntegration(data.integration ?? data);
         }
       })
@@ -59,9 +68,54 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
   // focus container when open
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => containerRef.current?.focus(), 0);
+      setTimeout(() => containerRef.current?.focus(), 50);
     }
   }, [isOpen]);
+
+  async function runTest() {
+    if (!integrationId && !integration?.id) {
+      toast.error("Integration id missing");
+      return;
+    }
+    const id = integrationId ?? integration!.id;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = j?.error ?? `Test failed (${res.status})`;
+        setTestResult({ ok: false, error: msg });
+        toast.error(msg);
+        return;
+      }
+      setTestResult(j);
+      if (j?.ok) {
+        toast.success("Connection succeeded");
+      } else {
+        toast.error(j?.error ?? "Connection failed");
+      }
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      setTestResult({ ok: false, error: msg });
+      toast.error(msg);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function prettyStoreInfo(cfg?: Record<string, any>) {
+    if (!cfg) return "—";
+    const storeHash = cfg.store_hash ?? cfg.storeHash ?? null;
+    const domain = cfg.domain ?? cfg.store_domain ?? cfg.hostname ?? cfg.storeUrl ?? null;
+    if (storeHash && domain) return `${domain} • ${storeHash}`;
+    if (storeHash) return storeHash;
+    if (domain) return domain;
+    return JSON.stringify(cfg);
+  }
 
   if (!isOpen) return null;
 
@@ -98,6 +152,10 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
               <div className="text-sm text-gray-600">
                 Created: <strong className="text-gray-800">{integration.created_at ?? "—"}</strong>
               </div>
+              <div className="text-sm text-gray-600">
+                Org/Tenant:{" "}
+                <strong className="text-gray-800">{integration.org_id ?? <span className="text-slate-400">Not associated</span>}</strong>
+              </div>
             </div>
 
             <section className="mt-4">
@@ -119,17 +177,23 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
             </section>
 
             {integration.last_error && (
-              <div className="mt-4 text-sm text-rose-600">
-                Last error: {integration.last_error}
-              </div>
+              <div className="mt-4 text-sm text-rose-600">Last error: {integration.last_error}</div>
             )}
 
-            <div className="mt-6 flex gap-2">
+            <div className="mt-6 flex gap-2 items-center">
               <button
                 onClick={async () => {
+                  // kick off connector sync (existing endpoint expects body.org_id; we keep simple)
                   try {
                     if (!integration?.id) return;
-                    const res = await fetch(`/api/v1/integrations/${integration.id}/sync`, { method: "POST" });
+                    // if integration has org_id, pass it; otherwise UI will show not associated
+                    const body: any = {};
+                    if (integration.org_id) body.org_id = integration.org_id;
+                    const res = await fetch(`/api/v1/integrations/${encodeURIComponent(integration.id)}/sync`, {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify(body),
+                    });
                     const json = await res.json().catch(() => null);
                     if (!res.ok || !json?.ok) {
                       toast.error(json?.error ?? "Failed to start sync");
@@ -151,7 +215,32 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
               >
                 Edit
               </a>
+
+              <button
+                onClick={runTest}
+                disabled={testing}
+                className={`px-4 py-2 rounded text-sm ${testing ? "bg-gray-300" : "bg-emerald-600 text-white"}`}
+              >
+                {testing ? "Testing…" : "Test connection"}
+              </button>
+
+              <button
+                onClick={() => {
+                  const info = prettyStoreInfo(integration.config);
+                  navigator.clipboard?.writeText(info);
+                  toast.success("Store info copied");
+                }}
+                className="px-3 py-2 rounded border text-sm text-gray-700"
+              >
+                Copy store info
+              </button>
             </div>
+
+            {testResult ? (
+              <div className={`mt-4 rounded-md p-3 text-sm ${testResult.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-rose-50 text-rose-700 border border-rose-100"}`}>
+                {testResult.ok ? "Connection succeeded" : `Connection failed: ${testResult.error ?? "unknown error"}`}
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="text-sm text-gray-500">No integration selected</div>
