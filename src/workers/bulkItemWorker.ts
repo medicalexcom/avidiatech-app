@@ -25,6 +25,11 @@
 // NEW (2026-01-06): resiliency improvements
 // - Per-domain concurrency limit to avoid hammering a single host.
 // - Transient retry wrapper around POST /api/v1/ingest to retry render-timeouts and 5xx.
+//
+// NEW (2026-01-07): pipeline options forwarding
+// - Forward bulk job / item options into pipeline run metadata so import/module toggles and
+//   platform options are available to the pipeline-runner and internal modules.
+// - Compute pipeline steps from merged options (bulk job options + per-item metadata override).
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -452,12 +457,18 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
   }
 }
 
-/* ---- Pipeline start/poll ---- */
+/* ---- Pipeline start/poll (now supports forwarding options) ---- */
 
-async function startPipeline(ingestionId: string, steps: string[]) {
+/**
+ * startPipeline
+ * - ingestionId: ingestion to run pipeline for
+ * - steps: ordered list of module names to execute
+ * - options: free-form options forwarded into pipeline metadata.payload.options
+ */
+async function startPipeline(ingestionId: string, steps: string[], options: Record<string, any> = {}) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run`;
   if (process.env.DEBUG_BULK) {
-    console.log("[bulk-item][debug] startPipeline POST", url, "ingestionId=", ingestionId);
+    console.log("[bulk-item][debug] startPipeline POST", url, "ingestionId=", ingestionId, "steps=", steps, "options=", options);
   }
 
   const res = await fetch(url, {
@@ -467,10 +478,11 @@ async function startPipeline(ingestionId: string, steps: string[]) {
       ingestionId,
       triggerModule: "seo",
       steps,
-      options: {},
+      options,
     }),
   });
 
+  // Read text first to preserve non-JSON error bodies
   const text = await res.text().catch(() => "");
   let j: any = null;
   try {
@@ -593,12 +605,39 @@ async function handleJob(job: any) {
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
 
-    const steps =
-      bulkJob.options?.mode === "full" || String(bulkJob.options?.mode) === "full"
-        ? ["extract", "seo", "audit", "import", "monitor", "price"]
-        : ["extract", "seo"];
+    // Merge bulk job options with per-item metadata.options (item-level overrides)
+    const mergedOptions: Record<string, any> = {
+      ...(bulkJob.options ?? {}),
+      ...(item.metadata?.options ?? {}),
+    };
 
-    const pipelineRunId = await startPipeline(ingestionId, steps);
+    // Compute pipeline steps from merged options. Defaults:
+    // - If options.mode === "full" (or unspecified and bulkJob.options.mode === 'full'), include audit/import/monitor/price
+    // - Individual include flags (includeAudit/includeImport/includeMonitor/includePrice) can override.
+    const modeFull = String(mergedOptions?.mode ?? "").toLowerCase() === "full";
+    const steps: string[] = ["extract", "seo"];
+
+    if (mergedOptions?.includeAudit !== false && (mergedOptions.includeAudit === true || modeFull || mergedOptions.includeAudit === undefined)) {
+      steps.push("audit");
+    }
+
+    if (mergedOptions?.includeImport !== false && (mergedOptions.includeImport === true || modeFull || mergedOptions.includeImport === undefined)) {
+      steps.push("import");
+    }
+
+    if (mergedOptions?.includeMonitor !== false && (mergedOptions.includeMonitor === true || modeFull || mergedOptions.includeMonitor === undefined)) {
+      steps.push("monitor");
+    }
+
+    if (mergedOptions?.includePrice !== false && (mergedOptions.includePrice === true || modeFull || mergedOptions.includePrice === undefined)) {
+      steps.push("price");
+    }
+
+    if (process.env.DEBUG_BULK) {
+      console.log("[bulk-item][debug] computed steps for item", { bulkJobId: bulkJob.id, itemId: bulkJobItemId, steps, mergedOptions });
+    }
+
+    const pipelineRunId = await startPipeline(ingestionId, steps, mergedOptions);
     await markItem(bulkJobItemId, { pipeline_run_id: pipelineRunId });
 
     const snap = await pollPipeline(pipelineRunId);
