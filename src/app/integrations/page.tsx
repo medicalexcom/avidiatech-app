@@ -1,56 +1,30 @@
 "use client";
+import React, { useState } from "react";
+import IntegrationList from "@/components/connectors/IntegrationList";
 
-import React, { useEffect, useState } from "react";
-import IntegrationRow from "@/components/connectors/IntegrationRow";
-
-export default function IntegrationsPageClient() {
-  const [integrations, setIntegrations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    fetch(`/api/v1/integrations`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!mounted) return;
-        if (d.ok) setIntegrations(d.integrations ?? d);
-        else {
-          // fallback: some endpoints return an array directly
-          if (Array.isArray(d)) setIntegrations(d);
-        }
-      })
-      .catch((e) => {
-        // eslint-disable-next-line no-console
-        console.error("Failed to fetch integrations", e);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+export default function IntegrationsPage() {
+  const [viewGrid, setViewGrid] = useState(false);
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold mb-4">Integrations</h1>
-      {loading ? (
-        <p>Loading…</p>
-      ) : integrations.length === 0 ? (
-        <p className="text-sm text-gray-500">No integrations found.</p>
-      ) : (
-        <div className="space-y-2">
-          {integrations.map((it) => (
-            <IntegrationRow
-              key={it.id}
-              integration={it}
-              onDeleted={(id) => setIntegrations((s) => s.filter((x) => x.id !== id))}
-              onSynced={() => {}}
-            />
-          ))}
+    <div className="max-w-6xl mx-auto py-8 px-4">
+      <header className="mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Integrations</h1>
+            <p className="text-sm text-slate-600">Connect and manage your stores and third-party integrations for this organization.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button onClick={() => setViewGrid(false)} className={`px-3 py-1 rounded ${!viewGrid ? "bg-slate-900 text-white" : "border"}`}>List</button>
+            <button onClick={() => setViewGrid(true)} className={`px-3 py-1 rounded ${viewGrid ? "bg-slate-900 text-white" : "border"}`}>Grid</button>
+            <a href="/integrations/new" className="px-3 py-1 rounded bg-emerald-600 text-white">Add store</a>
+          </div>
         </div>
-      )}
+      </header>
+
+      <main>
+        <IntegrationList compact={!viewGrid} />
+      </main>
     </div>
   );
 }
