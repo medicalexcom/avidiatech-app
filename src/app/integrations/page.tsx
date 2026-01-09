@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import IntegrationRow from "@/components/connectors/IntegrationRow";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
@@ -25,8 +24,9 @@ const PROVIDERS = [
 export default function IntegrationsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { integrations, activeIntegrations, refresh, disconnect, testConnection, loading } = useIntegrations();
+  const { integrations, activeIntegrations, refresh, disconnect, testConnection } = useIntegrations();
 
+  const [orgId, setOrgId] = useState<string>("");
   const [showConnectorManager, setShowConnectorManager] = useState(false);
   const [cmProvider, setCmProvider] = useState<string | null>(null);
 
@@ -35,6 +35,21 @@ export default function IntegrationsPage() {
   const [bcStoreHash, setBcStoreHash] = useState("");
   const [bcAccessToken, setBcAccessToken] = useState("");
   const [bcLoading, setBcLoading] = useState(false);
+
+  useEffect(() => {
+    // fetch org id for ConnectorManager usage (if required)
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+        const json = await res.json().catch(() => null);
+        if (res.ok && json?.ok && json.org_id) {
+          setOrgId(json.org_id);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
 
@@ -138,7 +153,7 @@ export default function IntegrationsPage() {
                         Disconnect
                       </button>
 
-                      <button onClick={() => { /* open details drawer using IntegrationRow or ConnectorDetailsDrawer if desired */ }} className="px-3 py-1 border rounded text-sm">
+                      <button onClick={() => setShowConnectorManager(true)} className="px-3 py-1 border rounded text-sm">
                         Manage
                       </button>
                     </div>
@@ -225,12 +240,12 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
           <div className="w-full max-w-3xl rounded-lg bg-white p-6 dark:bg-slate-900">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Connect {cmProvider}</h3>
+              <h3 className="text-lg font-medium">Connect Integration</h3>
               <button onClick={() => { setShowConnectorManager(false); setCmProvider(null); }} className="px-2 py-1">Close</button>
             </div>
 
             {/* Reuse existing ConnectorManager component to handle creation flows */}
-            <ConnectorManager orgId={undefined as any} selectedId={""} onSelect={() => {}} providerFilter={cmProvider ?? undefined} />
+            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} />
 
             <div className="mt-4 flex justify-end">
               <button onClick={() => { setShowConnectorManager(false); setCmProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
