@@ -29,7 +29,6 @@ export default function IntegrationList({
     try {
       const r = await fetch("/api/v1/integrations?active=true", { credentials: "same-origin" });
       const json = await r.json();
-      // support either { data: [...] } or direct array
       const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : json?.data ?? [];
       setRows(data);
     } catch (e) {
