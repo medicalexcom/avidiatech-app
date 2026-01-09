@@ -507,7 +507,7 @@ export default function ImportPage() {
         </section>
 
         {/* Primary workspace */}
-        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_...[...]
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(2,6,23,0.6)]">
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
             {/* LEFT: compact Integration status (replaces Stores & Connectors card) */}
             <aside className="lg:col-span-4">
