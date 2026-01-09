@@ -1,9 +1,9 @@
-// scripts/validate_bigcommerce_connections.js
 // Usage:
-//   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... INTEGRATIONS_ENCRYPTION_KEY=... node scripts/validate_bigcommerce_connections.js
+// SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... INTEGRATIONS_ENCRYPTION_KEY=... node scripts/validate_bigcommerce_connections.js
 
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
+const fetch = global.fetch || require("node-fetch");
 
 function keyBytes(RAW_KEY) {
   if (!RAW_KEY) throw new Error("INTEGRATIONS_ENCRYPTION_KEY is not set");
@@ -26,7 +26,7 @@ function decryptSecrets(blob, RAW_KEY) {
 async function validateBC(storeHash, token) {
   const url = `https://api.bigcommerce.com/stores/${encodeURIComponent(storeHash)}/v3/catalog/products?limit=1`;
   const res = await fetch(url, { headers: { "X-Auth-Token": token, Accept: "application/json" } });
-  const text = await res.text();
+  const text = await res.text().catch(() => "");
   return { ok: res.ok, status: res.status, body: text };
 }
 
@@ -70,7 +70,7 @@ async function validateBC(storeHash, token) {
         console.log(`${r.id} tenant=${r.tenant_id} store=${storeHash} -> decrypt failed: ${String(e.message || e)}`);
         continue;
       }
-      const token = secrets.access_token ?? secrets.accessToken ?? secrets.token ?? secrets.accessToken;
+      const token = secrets.access_token ?? secrets.accessToken ?? secrets.token;
       if (!token) {
         console.log(`${r.id} tenant=${r.tenant_id} store=${storeHash} -> no access token in decrypted secrets`);
         continue;
