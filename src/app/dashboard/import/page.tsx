@@ -1,232 +1,450 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useToast } from "@/components/ui/toast";
+import { useRouter, useSearchParams } from "next/navigation";
+import ImportUploaderWithPreset from "@/components/imports/ImportUploaderWithPreset";
+import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
+import RecentRuns from "@/components/pipeline/RecentRuns";
+import { MappingPresetSelector } from "@/components/imports/MappingPresetSelector";
 import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
-import ImportRunDrawer from "@/components/import/ImportRunDrawer";
-import { RecentRuns } from "@/components/import/RecentRuns";
-import { MappingPresetSelector } from "@/components/import/MappingPresetSelector";
+import IntegrationStatus from "@/components/IntegrationStatus";
+import { useToast } from "@/components/ui/toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
+/* Helper types & functions */
 type AnyObj = Record<string, any>;
+type PipelineRunStatus = "queued" | "running" | "succeeded" | "failed";
+type ModuleRunStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
+
+type PipelineModule = {
+  id?: string;
+  module_index: number;
+  module_name: string;
+  status: ModuleRunStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
+  output_ref?: string | null;
+  error?: any;
+};
+
+type PipelineSnapshot = {
+  run?: { id: string; status: PipelineRunStatus; created_at?: string; started_at?: string; finished_at?: string } & AnyObj;
+  modules?: PipelineModule[];
+};
+
+type ImportMode = "full" | "import_only";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-function statusChipClass(status: string) {
-  switch (status) {
-    case "running":
-      return "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-100 dark:border-cyan-500/30";
-    case "succeeded":
-    case "success":
-    case "completed":
-      return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/45 dark:text-emerald-100 dark:border-emerald-500/40";
-    case "failed":
-    case "error":
-      return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/45 dark:text-rose-100 dark:border-rose-500/40";
-    case "queued":
-      return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-500/30";
-    default:
-      return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700";
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+function fmtMs(ms: number | null) {
+  if (ms == null || Number.isNaN(ms)) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 100) / 10;
+  return `${s}s`;
+}
+function statusChipClass(status?: string | null) {
+  const s = (status || "").toLowerCase();
+  if (s === "running") return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/45 dark:text-amber-100 dark:border-amber-500/40";
+  if (s === "failed") return "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/45 dark:text-rose-100 dark:border-rose-500/40";
+  if (s === "succeeded" || s === "completed") return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/45 dark:text-emerald-100 dark:border-emerald-500/40";
+  if (s === "skipped") return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700";
+  return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700";
+}
+
+function downloadJson(filename: string, data: any) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadFailedRowsCsv(jobId: string, toast: any) {
+  if (!jobId) {
+    toast?.error?.("No job id");
+    return;
+  }
+  try {
+    const res = await fetch(`/api/v1/imports/${encodeURIComponent(jobId)}/errors?format=csv`, { credentials: "same-origin" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      toast?.error?.(j?.error ?? "Failed to download failed rows");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `failed-rows-${jobId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast?.success?.("Downloaded failed rows");
+  } catch (err: any) {
+    toast?.error?.(String(err?.message ?? err));
   }
 }
 
-export const dynamic = "force-dynamic";
+/* Small UI helpers */
+const Spinner = () => (
+  <svg className="animate-spin h-4 w-4 inline-block mr-2 align-middle" viewBox="0 0 24 24" aria-hidden>
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  </svg>
+);
 
+function SkeletonRow() {
+  return (
+    <div className="h-12 rounded-2xl border border-slate-200 bg-slate-50/70 animate-pulse dark:border-slate-800 dark:bg-slate-950/45" />
+  );
+}
+
+/* Page component */
 export default function ImportPage() {
+  const params = useSearchParams();
   const router = useRouter();
   const toast = useToast();
 
+  const ingestionIdParam = params?.get("ingestionId") || "";
+  const pipelineRunIdParam = params?.get("pipelineRunId") || "";
+
+  // org + connectors
   const [orgId, setOrgId] = useState<string>("");
   const [connectors, setConnectors] = useState<any[]>([]);
-  const [detailsConnectorId, setDetailsConnectorId] = useState<string>("");
+  const [selectedConnector, setSelectedConnector] = useState<string>("");
 
-  const [mappingPreset, setMappingPreset] = useState<string>("default");
+  // mapping preset — accept object or string
+  const [mappingPreset, setMappingPreset] = useState<any | null>(null);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [pipelineRunId, setPipelineRunId] = useState<string>("");
-  const [runStatus, setRunStatus] = useState<string | null>(null);
+  // modals
+  const [moduleLogsOpen, setModuleLogsOpen] = useState(false);
+  const [moduleLogsParams, setModuleLogsParams] = useState<{ runId: string; index: number } | null>(null);
+
+  // pipeline / import
+  const [ingestionIdInput, setIngestionIdInput] = useState(ingestionIdParam || "");
+  const [importMode, setImportMode] = useState<ImportMode>("full");
+  const [allowOverwriteExisting, setAllowOverwriteExisting] = useState(false);
+  const [autoRunAfterUpload, setAutoRunAfterUpload] = useState(false);
+
+  const [job, setJob] = useState<any | null>(null);
+  const [pipelineRunId, setPipelineRunId] = useState<string>(pipelineRunIdParam || "");
+  const [pipelineSnapshot, setPipelineSnapshot] = useState<PipelineSnapshot | null>(null);
+  const [importArtifact, setImportArtifact] = useState<any | null>(null);
 
   const [running, setRunning] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const [uploadMode, setUploadMode] = useState<"csv" | "sync">("csv");
-  const [ingestionIdInput, setIngestionIdInput] = useState<string>("");
+  // confirm delete import job
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [toDeleteIngestionId, setToDeleteIngestionId] = useState<string | null>(null);
 
-  const btnGhost =
-    "h-10 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white/70 px-3 text-sm text-slate-800 shadow-sm hover:bg-white " +
-    "dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-200 dark:hover:bg-slate-950";
+  // details drawer (separate from selection so "Details" doesn't hijack selection state)
+  const [detailsConnectorId, setDetailsConnectorId] = useState<string>("");
 
-  const btnPrimary =
-    "h-10 inline-flex items-center justify-center rounded-xl px-4 text-sm font-semibold text-slate-950 shadow-sm transition " +
-    "bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400 hover:opacity-95 hover:-translate-y-[1px] " +
-    "focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:opacity-60 disabled:shadow-none";
+  // derived
+  const selectedConnectorObj = useMemo(
+    () => connectors.find((c) => c.id === selectedConnector) ?? null,
+    [connectors, selectedConnector]
+  );
 
-  const inputClass =
-    "h-10 w-full rounded-xl border border-slate-200 bg-white/80 px-3 text-sm text-slate-900 shadow-sm outline-none " +
-    "placeholder:text-slate-400 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-400/20 " +
-    "dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-50 dark:placeholder:text-slate-500 dark:focus:border-cyan-500/50 dark:focus:ring-cyan-500/15";
-
-  async function fetchOrgAndConnectors() {
+  // fetch org id (calls /api/v1/me)
+  async function fetchOrg() {
     try {
       const res = await fetch("/api/v1/me", { credentials: "same-origin" });
       const json = await res.json().catch(() => null);
-
       if (res.ok && json?.ok && json.org_id) {
         setOrgId(json.org_id);
-        const org = String(json.org_id);
-
-        try {
-          const r2 = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(org)}`, { credentials: "same-origin" });
-          const j2 = await r2.json().catch(() => null);
-          if (r2.ok && j2?.ok) setConnectors(j2.integrations ?? []);
-          else setConnectors([]);
-        } catch {
-          setConnectors([]);
-        }
-        return;
+        return json.org_id;
       }
-
       setOrgId("");
-      setConnectors([]);
+      return "";
     } catch {
       setOrgId("");
+      return "";
+    }
+  }
+
+  async function loadConnectors() {
+    if (!orgId) {
+      setConnectors([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`, { credentials: "same-origin" });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok) setConnectors(json.integrations ?? []);
+      else setConnectors([]);
+    } catch {
       setConnectors([]);
     }
   }
 
-  useEffect(() => {
-    fetchOrgAndConnectors();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const canRun = useMemo(() => Boolean(orgId), [orgId]);
-
-  async function pollPipeline(runId: string) {
-    if (!runId) return;
-
-    setRunning(true);
-    setRunStatus("running");
-
-    try {
-      const start = Date.now();
-      while (Date.now() - start < 1000 * 60 * 10) {
-        const res = await fetch(`/api/v1/pipeline_runs/${encodeURIComponent(runId)}`, { credentials: "same-origin" });
-        const json = await res.json().catch(() => null);
-
-        const st = json?.pipeline_run?.status ?? json?.status ?? null;
-        if (st) setRunStatus(String(st));
-
-        if (st && ["succeeded", "success", "completed", "failed", "error"].includes(String(st))) {
-          setRunning(false);
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 1200));
-      }
-      setRunning(false);
-      setRunStatus((s) => s ?? "running");
-    } catch {
-      setRunning(false);
-      setRunStatus("error");
-    }
+  function selectConnectorId(id: string) {
+    setSelectedConnector(id);
+    toast?.info?.("Connector selected");
   }
 
-  async function startSyncFromStore() {
-    if (!orgId) {
-      toast.error("Org is not loaded.");
-      return;
-    }
-
-    // If you have a specific integration selection UX, it should live on /integrations.
-    // Here we just route the user there to connect or manage a store, then return to Import.
-    router.push("/integrations");
-  }
-
-  async function createImportJobFromUpload(file: File) {
-    if (!orgId) {
-      toast.error("Org is not loaded.");
-      return;
-    }
-
+  async function testConnector(connectorId: string) {
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("org_id", orgId);
-      form.append("mapping_preset", mappingPreset);
-
-      const res = await fetch("/api/v1/import/jobs/upload", {
-        method: "POST",
-        credentials: "same-origin",
-        body: form,
-      });
-
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/test`, { method: "POST", credentials: "same-origin" });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
-        toast.error(json?.error ?? "Upload failed");
+        toast.error(`Test failed: ${json?.error ?? "unknown"}`);
         return;
       }
-
-      setIngestionIdInput(String(json.import_job_id ?? json.ingestion_id ?? ""));
-      toast.success("Import job created");
+      toast.success("Connection test succeeded");
+      await loadConnectors();
     } catch (err: any) {
       toast.error(String(err?.message ?? err));
     }
   }
 
-  async function runPipeline() {
+  async function syncConnector(connectorId: string) {
     if (!orgId) {
-      toast.error("Org is not loaded.");
+      toast.error("Org ID missing — set DEV_ORG_ID or wire session.");
       return;
     }
-
-    if (!ingestionIdInput) {
-      toast.error("Missing import job ID.");
-      return;
-    }
-
     try {
-      setRunning(true);
-      setRunStatus("queued");
+      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(connectorId)}/sync`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ org_id: orgId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        toast.error(json?.error ?? "Sync failed");
+        return;
+      }
+      const jobId = json.jobId ?? json.id ?? "";
+      setIngestionIdInput(jobId);
+      toast.success(`Sync started: ${jobId}`);
+      if (jobId) await fetchIngestion(jobId);
+      await loadConnectors();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    }
+  }
 
-      const res = await fetch("/api/v1/import/run", {
+  async function fetchIngestion(id: string) {
+    try {
+      setJob(null);
+      const res = await fetch(`/api/v1/ingest/${encodeURIComponent(id)}`, { credentials: "same-origin" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Ingest fetch failed: ${res.status}`);
+      const row = json?.data ?? json;
+      setJob(row);
+      return row;
+    } catch (err) {
+      setJob(null);
+      throw err;
+    }
+  }
+
+  async function fetchPipelineSnapshot(runId: string) {
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}`, { credentials: "same-origin" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline fetch failed: ${res.status}`);
+    return json as PipelineSnapshot;
+  }
+
+  async function pollPipeline(runId: string, timeoutMs = 300_000, intervalMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const snap = await fetchPipelineSnapshot(runId);
+      setPipelineSnapshot(snap);
+      const s = snap?.run?.status;
+      if (s === "succeeded" || s === "failed") return snap;
+      await sleep(intervalMs);
+    }
+    throw new Error("Pipeline did not complete within timeout");
+  }
+
+  async function fetchImportArtifact(runId: string, modules?: PipelineModule[]) {
+    const importMod = (modules ?? []).find((m) => m.module_name === "import");
+    if (!importMod) return null;
+    const res = await fetch(`/api/v1/pipeline/run/${encodeURIComponent(runId)}/output/${importMod.module_index}`, { credentials: "same-origin" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(json?.error?.message || json?.error || `Import artifact fetch failed: ${res.status}`);
+    setImportArtifact(json);
+    return json;
+  }
+
+  async function runImport(forIngestionId?: string) {
+    if (running) return;
+    setError(null);
+    setStatusMessage(null);
+    setPipelineSnapshot(null);
+    setImportArtifact(null);
+
+    const id = (forIngestionId ?? ingestionIdInput).trim();
+    if (!id) {
+      toast.error("Enter an ingestionId first.");
+      return;
+    }
+
+    setRunning(true);
+    try {
+      toast.info("Loading ingestion");
+      await fetchIngestion(id);
+
+      const steps = importMode === "import_only" ? ["import"] : ["extract", "seo", "audit", "import"];
+
+      toast.info("Starting pipeline run");
+      const res = await fetch("/api/v1/pipeline/run", {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          org_id: orgId,
-          import_job_id: ingestionIdInput,
-          mapping_preset: mappingPreset,
+          ingestionId: id,
+          triggerModule: "import",
+          steps,
+          options: {
+            import: {
+              allowOverwriteExisting,
+              mappingPreset: mappingPreset?.id ?? mappingPreset ?? undefined,
+            },
+          },
         }),
       });
 
       const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        setRunning(false);
-        setRunStatus("error");
-        toast.error(json?.error ?? "Run failed");
-        return;
-      }
+      if (!res.ok) throw new Error(json?.error?.message || json?.error || `Pipeline start failed: ${res.status}`);
 
-      const runId = String(json.pipeline_run_id ?? "");
+      const runId = String(json?.pipelineRunId ?? "");
+      if (!runId) throw new Error("Pipeline start did not return pipelineRunId");
+
       setPipelineRunId(runId);
-      setDrawerOpen(true);
-      toast.success("Pipeline started");
+      router.push(`/dashboard/import?ingestionId=${encodeURIComponent(id)}&pipelineRunId=${encodeURIComponent(runId)}`);
 
-      await pollPipeline(runId);
-    } catch (err: any) {
+      toast.info("Pipeline running");
+      const snap = await pollPipeline(runId, 300_000, 2000);
+
+      toast.info("Refreshing ingestion");
+      await fetchIngestion(id);
+
+      toast.info("Loading import artifact");
+      await fetchImportArtifact(runId, snap?.modules ?? []);
+
+      toast.success("Import run completed");
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      toast.error(String(e?.message || e));
+    } finally {
       setRunning(false);
-      setRunStatus("error");
-      toast.error(String(err?.message ?? err));
     }
   }
 
+  function openModuleLogs(index: number) {
+    if (!pipelineRunId) {
+      toast.error("No pipeline run selected");
+      return;
+    }
+    setModuleLogsParams({ runId: pipelineRunId, index });
+    setModuleLogsOpen(true);
+  }
+
+  useEffect(() => {
+    (async () => {
+      const o = await fetchOrg();
+      if (o) await loadConnectors();
+      if (ingestionIdParam) {
+        fetchIngestion(ingestionIdParam).catch((e) => setError(String((e as any)?.message || e)));
+      }
+      if (pipelineRunIdParam) {
+        try {
+          const snap = await fetchPipelineSnapshot(pipelineRunIdParam);
+          setPipelineSnapshot(snap);
+          setPipelineRunId(pipelineRunIdParam);
+          await fetchImportArtifact(pipelineRunIdParam, snap?.modules ?? []);
+        } catch (e: any) {
+          setError(String(e?.message || e));
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const jobData = useMemo(() => {
+    if (!job) return null;
+    if ((job as any)?.data?.data) return (job as any).data.data;
+    if ((job as any)?.data) return (job as any).data;
+    return job;
+  }, [job]);
+
+  const importDiag = jobData?.diagnostics?.import ?? null;
+  const runStatus = pipelineSnapshot?.run?.status ?? null;
+
+  const moduleRuntime = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of pipelineSnapshot?.modules ?? []) {
+      if (m.started_at && m.finished_at) {
+        const ms = new Date(m.finished_at).getTime() - new Date(m.started_at).getTime();
+        if (!Number.isNaN(ms) && ms >= 0) map.set(m.module_name, ms);
+      }
+    }
+    return map;
+  }, [pipelineSnapshot]);
+
+  const progress = useMemo(() => {
+    const mods = pipelineSnapshot?.modules ?? [];
+    if (!mods.length) return 0;
+    const done = mods.filter((m) => ["succeeded", "failed", "skipped"].includes(m.status)).length;
+    return Math.round((done / mods.length) * 100);
+  }, [pipelineSnapshot]);
+
+  // premium classes
+  const input =
+    "h-10 w-full rounded-xl border border-slate-300 bg-white/80 px-3 text-sm text-slate-900 placeholder:text-slate-400 " +
+    "focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 " +
+    "dark:border-slate-700 dark:bg-slate-950/55 dark:text-slate-50 dark:placeholder:text-slate-500";
+
+  const select =
+    "h-10 rounded-xl border border-slate-300 bg-white/80 px-3 text-sm text-slate-900 " +
+    "focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 " +
+    "dark:border-slate-700 dark:bg-slate-950/55 dark:text-slate-50";
+
+  const btnGhost =
+    "h-10 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white/70 px-3 text-sm text-slate-800 shadow-sm hover:bg-white " +
+    "dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-200 dark:hover:bg-slate-950";
+  const btnPrimary =
+    "h-10 inline-flex items-center justify-center rounded-xl px-4 text-sm font-semibold text-slate-950 shadow-sm transition " +
+    "bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400 hover:opacity-95 hover:-translate-y-[1px] " +
+    "focus:outline-none focus:ring-2 focus:ring-cyan-500/30 disabled:opacity-60 disabled:shadow-none";
+  const btnDark =
+    "h-10 inline-flex items-center justify-center rounded-xl px-3 text-sm font-semibold text-white shadow-sm transition " +
+    "bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500/30 disabled:opacity-60 " +
+    "dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100";
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* plain <style> (no styled-jsx) */}
+      <style>{`
+        .headline-grad {
+          background-size: 220% 220%;
+          animation: gshift 8s ease-in-out infinite;
+        }
+        @keyframes gshift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
+
       {/* Background */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-36 -left-28 h-72 w-72 rounded-full bg-cyan-300/22 blur-3xl dark:bg-cyan-500/14" />
         <div className="absolute -top-40 right-[-10rem] h-64 w-64 rounded-full bg-fuchsia-300/14 blur-3xl dark:bg-fuchsia-500/10" />
         <div className="absolute -bottom-52 right-[-12rem] h-80 w-80 rounded-full bg-emerald-300/16 blur-3xl dark:bg-emerald-500/10" />
+
+        {/* subtle vertical radial fade */}
         <div
           className="absolute inset-0"
           style={{
@@ -253,8 +471,8 @@ export default function ImportPage() {
         {/* Top bar */}
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/45 dark:text-slate-300">
-              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-white border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+              <span className="inline-flex h-3 w-3 items-center justify-center rounded-full bg-slate-50 border border-cyan-200 dark:bg-slate-900 dark:border-cyan-400/30">
                 <span className={cx("h-1.5 w-1.5 rounded-full", running ? "bg-cyan-400 animate-pulse" : "bg-slate-400")} />
               </span>
               Data Intelligence · AvidiaImport
@@ -285,42 +503,57 @@ export default function ImportPage() {
                 {runStatus ?? "idle"}
               </span>
             </div>
-
-            <div className="text-xs text-slate-600 dark:text-slate-300">
-              Store:{" "}
-              <span
-                className={cx(
-                  "ml-2 inline-flex items-center gap-2 rounded-full border px-2 py-0.5",
-                  connectors?.length
-                    ? "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/45 dark:text-emerald-100 dark:border-emerald-500/40"
-                    : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:border-slate-700"
-                )}
-                title={connectors?.length ? "At least one store integration is available." : "No store integration connected yet."}
-              >
-                <span
-                  className={cx(
-                    "h-1.5 w-1.5 rounded-full",
-                    connectors?.length ? "bg-emerald-400" : "bg-slate-400 dark:bg-slate-600"
-                  )}
-                />
-                {connectors?.length ? "connected" : "disconnected"}
-              </span>
-            </div>
-
-            <button onClick={() => router.push("/integrations")} className={cx(btnPrimary, "h-8 px-3 text-xs")}>
-              Connect a store
-            </button>
           </div>
         </section>
 
         {/* Primary workspace */}
         <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(2,6,23,0.6)]">
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
+            {/* LEFT: compact Integration status (replaces Stores & Connectors card) */}
+            <aside className="lg:col-span-4">
+              <div className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950/35">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Integrations</h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">Manage store connections</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={cx("inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35")}>
+                      <span className={cx("h-1.5 w-1.5 rounded-full", orgId ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-700")} />
+                      {orgId ? "org loaded" : "org unknown"}
+                    </span>
+
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
+                      <span className="font-mono">{connectors.length}</span> stores
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <IntegrationStatus />
+                </div>
+
+                <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
+                  <div>Quick actions:</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button onClick={() => router.push("/integrations")} className={cx(btnGhost, "h-8 px-3 text-xs")}>
+                      Manage integrations
+                    </button>
+                    <button onClick={() => router.push("/integrations")} className={cx(btnPrimary, "h-8 px-3 text-xs")}>
+                      Connect a store
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
             {/* RIGHT: Upload + Command Bar */}
-            <div className="lg:col-span-12 space-y-4">
+            <div className="lg:col-span-8 space-y-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                  <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
+                  <h1 className="text-xl font-semibold leading-tight text-slate-900 dark:text-slate-50">
+                    Upload &{" "}
                     <span
                       className={cx(
                         "bg-clip-text text-transparent headline-grad",
@@ -338,279 +571,323 @@ export default function ImportPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
-                      fetchOrgAndConnectors();
-                      toast.success("Refreshed");
+                      const headers = ["sku", "title", "description", "price", "inventory", "weight", "brand"];
+                      const rows = [["SKU-001", "Sample product", "Desc", "19.99", "10", "0.5", "Brand"]];
+                      const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n");
+                      const blob = new Blob([csv], { type: "text/csv" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "import-sample.csv";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast?.info?.("Sample CSV downloaded");
                     }}
                     className={cx(btnGhost, "h-9 px-3 text-xs")}
                   >
-                    Refresh
+                    Download sample CSV
                   </button>
-
-                  <button
-                    onClick={() => setDrawerOpen(true)}
-                    className={cx(btnGhost, "h-9 px-3 text-xs")}
-                    disabled={!pipelineRunId}
-                    title={!pipelineRunId ? "Run the pipeline to see details" : "Open run details"}
-                  >
-                    View run
-                  </button>
-
-                  <button onClick={runPipeline} className={cx(btnPrimary, "h-9 px-3 text-xs")} disabled={!canRun || running}>
-                    {running ? "Running…" : "Run pipeline"}
-                  </button>
+                  <a href="/imports" className={cx(btnGhost, "h-9 px-3 text-xs")}>
+                    Import history
+                  </a>
                 </div>
               </div>
 
-              {/* Mode switch */}
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Create import job</div>
-                    <div className="text-sm text-slate-600 dark:text-slate-300">
-                      Upload a CSV or sync from a connected store.
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/35">
+                <ImportUploaderWithPreset
+                  bucket="imports"
+                  mappingPreset={mappingPreset}
+                  onCreated={async (jobId: string) => {
+                    if (jobId) {
+                      setIngestionIdInput(jobId);
+                      toast.success(`Import job created: ${jobId}.`);
+                      if (autoRunAfterUpload) {
+                        await runImport(jobId);
+                      } else {
+                        fetchIngestion(jobId).catch(() => null);
+                      }
+                      await fetchOrg();
+                      await loadConnectors();
+                    } else {
+                      toast.info("Import created.");
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/35">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-end">
+                  <div className="lg:col-span-7">
+                    <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Ingestion ID / Job
+                    </label>
+                    <div className="mt-1 grid grid-cols-12 gap-2">
+                      <div className="col-span-9">
+                        <input value={ingestionIdInput} onChange={(e) => setIngestionIdInput(e.target.value)} className={input} />
+                      </div>
+                      <div className="col-span-3">
+                        <button
+                          onClick={() => {
+                            if (!ingestionIdInput) return toast.error("No ingestion id to delete");
+                            setToDeleteIngestionId(ingestionIdInput);
+                            setConfirmDeleteOpen(true);
+                          }}
+                          className={cx(btnGhost, "w-full")}
+                          aria-label="Delete ingestion job"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      className={cx(
-                        "h-9 rounded-xl px-3 text-xs font-semibold border shadow-sm",
-                        uploadMode === "csv"
-                          ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
-                          : "bg-white/70 text-slate-700 border-slate-200 hover:bg-white dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-800 dark:hover:bg-slate-950"
-                      )}
-                      onClick={() => setUploadMode("csv")}
-                    >
-                      Upload CSV
-                    </button>
-                    <button
-                      className={cx(
-                        "h-9 rounded-xl px-3 text-xs font-semibold border shadow-sm",
-                        uploadMode === "sync"
-                          ? "bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white"
-                          : "bg-white/70 text-slate-700 border-slate-200 hover:bg-white dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-800 dark:hover:bg-slate-950"
-                      )}
-                      onClick={() => setUploadMode("sync")}
-                    >
-                      Sync from store
-                    </button>
-                  </div>
-                </div>
-
-                {uploadMode === "csv" ? (
-                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                    <div className="lg:col-span-4">
-                      <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Mapping preset</div>
-                      <MappingPresetSelector value={mappingPreset} onChange={setMappingPreset} />
+                  <div className="lg:col-span-5">
+                    <label className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                      Optional: Sync from store
+                    </label>
+                    <div className="mt-1 grid grid-cols-12 gap-2">
+                      <div className="col-span-8">
+                        <select value={selectedConnector} onChange={(e) => setSelectedConnector(e.target.value)} className={cx(select, "w-full")}>
+                          <option value="">Select connector…</option>
+                          {connectors.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name ?? c.provider}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-4">
+                        <button
+                          onClick={() => {
+                            if (selectedConnector) syncConnector(selectedConnector);
+                            else toast.error("Select a connector");
+                          }}
+                          className={cx(btnPrimary, "w-full")}
+                        >
+                          Sync
+                        </button>
+                      </div>
                     </div>
+                  </div>
 
-                    <div className="lg:col-span-8">
-                      <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Upload</div>
-                      <label className="block">
-                        <input
-                          className="hidden"
-                          type="file"
-                          accept=".csv,text/csv"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) createImportJobFromUpload(f);
+                  <div className="lg:col-span-8">
+                    <div className="flex flex-wrap items-center gap-5 pt-1">
+                      <label className="inline-flex items-center gap-2">
+                        <input type="checkbox" checked={allowOverwriteExisting} onChange={(e) => setAllowOverwriteExisting(e.target.checked)} />
+                        <span className="text-xs text-slate-700 dark:text-slate-200">Allow overwrite existing SKU</span>
+                      </label>
+
+                      <label className="inline-flex items-center gap-2">
+                        <input type="checkbox" checked={autoRunAfterUpload} onChange={(e) => setAutoRunAfterUpload(e.target.checked)} />
+                        <span className="text-xs text-slate-700 dark:text-slate-200">Auto-run after upload</span>
+                      </label>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <MappingPresetSelector
+                          provider={selectedConnectorObj?.provider}
+                          onSelect={(preset: any) => {
+                            setMappingPreset(preset ?? null);
+                            toast?.info?.("Mapping preset selected");
                           }}
                         />
-                        <div
-                          className={cx(
-                            "group flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white/70 px-3 py-3 shadow-sm hover:bg-white",
-                            "dark:border-slate-800 dark:bg-slate-950/35 dark:hover:bg-slate-950"
-                          )}
-                        >
-                          <div className="text-sm text-slate-700 dark:text-slate-200">
-                            Choose a CSV file to create an import job
+                        {mappingPreset ? (
+                          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs dark:border-slate-800 dark:bg-slate-950/50">
+                            <span className="max-w-[260px] truncate">
+                              {mappingPreset?.name ?? mappingPreset?.id ?? String(mappingPreset)}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setMappingPreset(null);
+                                toast?.info?.("Mapping preset cleared");
+                              }}
+                              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:bg-slate-950"
+                            >
+                              Clear
+                            </button>
                           </div>
-                          <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white">
-                            Browse
-                          </div>
-                        </div>
-                      </label>
-                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        After upload, the import job ID will appear below.
+                        ) : null}
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm text-slate-700 dark:text-slate-200">
-                        Sync requires a connected store integration.
-                      </div>
-                      <button
-                        onClick={startSyncFromStore}
-                        className={cx(btnPrimary, "h-9 px-3 text-xs")}
-                        disabled={!orgId}
-                        title={!orgId ? "Org not loaded" : "Go to integrations to connect a store"}
-                      >
-                        Go to integrations
-                      </button>
-                    </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/35 dark:text-slate-300">
-                      Connected integrations:{" "}
-                      <span className="font-semibold">{connectors?.length ? connectors.length : 0}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Run details */}
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-                <div className="lg:col-span-5 space-y-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Import job ID</div>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                      Paste an existing import job ID or use the one created above.
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        className={inputClass}
-                        value={ingestionIdInput}
-                        onChange={(e) => setIngestionIdInput(e.target.value)}
-                        placeholder="import_job_id (or ingestion id)"
-                      />
-                      <button
-                        onClick={() => {
-                          if (!ingestionIdInput) return toast.error("Missing import job ID.");
-                          toast.success("Import job ID set");
-                        }}
-                        className={cx(btnGhost, "shrink-0 h-10 px-3 text-xs")}
-                      >
-                        Set
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Recent runs</div>
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                          Quickly open or inspect recent pipeline executions.
-                        </p>
-                      </div>
-                      <button onClick={() => fetchOrgAndConnectors()} className={cx(btnGhost, "h-9 px-3 text-xs")}>
-                        Refresh
-                      </button>
-                    </div>
-
-                    <div className="mt-3">
-                      <RecentRuns
-                        orgId={orgId}
-                        onOpen={(runId: string) => {
-                          setPipelineRunId(runId);
-                          setDrawerOpen(true);
-                          pollPipeline(runId);
-                        }}
-                      />
-                    </div>
+                  <div className="lg:col-span-4">
+                    <button onClick={() => runImport()} disabled={running} className={cx(btnPrimary, "w-full")} aria-label="Run import">
+                      {running ? (
+                        <>
+                          <Spinner />
+                          Running…
+                        </>
+                      ) : (
+                        "Run Import"
+                      )}
+                    </button>
                   </div>
                 </div>
 
-                <div className="lg:col-span-7 space-y-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1">
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Run pipeline</div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300">
-                          Starts the pipeline using the import job and mapping preset.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => router.push("/dashboard")}
-                          className={cx(btnGhost, "h-9 px-3 text-xs")}
-                          title="Back to dashboard"
-                        >
-                          Dashboard
-                        </button>
-
-                        <button
-                          onClick={runPipeline}
-                          className={cx(btnPrimary, "h-9 px-3 text-xs")}
-                          disabled={!canRun || running || !ingestionIdInput}
-                          title={!ingestionIdInput ? "Set an import job ID first" : ""}
-                        >
-                          {running ? "Running…" : "Run now"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/35 dark:text-slate-200">
-                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">Org</div>
-                        <div className="mt-1 font-mono text-xs">{orgId ? orgId : "—"}</div>
-                      </div>
-
-                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950/35 dark:text-slate-200">
-                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">Mapping preset</div>
-                        <div className="mt-1 font-mono text-xs">{mappingPreset}</div>
-                      </div>
-                    </div>
+                {error ? (
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/30 dark:text-rose-100">
+                    {error}
                   </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">Quick actions</div>
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                          Open run details and manage connected stores (on the Integrations page).
-                        </p>
+        {/* Pipeline + artifact */}
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.18)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55">
+          <div className="p-4 lg:p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Live pipeline</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Progress, module status, logs, and output refs.</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Progress: {progress}%</div>
+                <div className="h-2 w-44 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Pipeline modules</div>
+                <div className="space-y-2">
+                  {(pipelineSnapshot?.modules ?? [])
+                    .slice()
+                    .sort((a, b) => a.module_index - b.module_index)
+                    .map((m) => (
+                      <div
+                        key={`${m.module_index}-${m.module_name}`}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/35"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">
+                            {m.module_index}. {String(m.module_name)}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                            output_ref: <span className="font-mono">{m.output_ref ?? "—"}</span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-xs", statusChipClass(m.status))}>
+                            {m.status}
+                          </div>
+                          <div className="text-xs mt-1 text-slate-600 dark:text-slate-300">
+                            {fmtMs(moduleRuntime.get(m.module_name) ?? null)}
+                          </div>
+                          <button onClick={() => openModuleLogs(m.module_index)} className={cx(btnGhost, "h-9 mt-2 px-2 text-xs")}>
+                            View logs
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => setDrawerOpen(true)}
-                          className={cx(btnGhost, "h-9 px-3 text-xs")}
-                          disabled={!pipelineRunId}
-                          title={!pipelineRunId ? "Run the pipeline first" : "Open run drawer"}
-                        >
-                          View run
-                        </button>
+                    ))}
+                  {!(pipelineSnapshot?.modules ?? []).length && (
+                    <>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">No active run selected.</div>
+                      <SkeletonRow />
+                      <SkeletonRow />
+                    </>
+                  )}
+                </div>
 
-                        <button
-                          onClick={() => router.push("/integrations")}
-                          className={cx(btnPrimary, "h-9 px-3 text-xs")}
-                          title="Go to Integrations"
-                        >
-                          Integrations
-                        </button>
-                      </div>
-                    </div>
+                <div className="pt-2">
+                  <RecentRuns ingestionId={ingestionIdInput} pipelineId={pipelineRunId} />
+                </div>
+              </div>
 
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/35 dark:text-slate-300">
-                      Store connections detected: <span className="font-semibold">{connectors?.length ?? 0}</span>
-                      {connectors?.length ? (
-                        <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
-                          (manage / test / sync on Integrations)
-                        </span>
-                      ) : null}
-                    </div>
+              <div className="space-y-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400">Import artifact</div>
+                <pre className="max-h-[340px] overflow-auto rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
+                  {importArtifact ? JSON.stringify(importArtifact, null, 2) : "Run an import to see artifact JSON."}
+                </pre>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Download results</div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() =>
+                        downloadJson(`import-result-${jobData?.id ?? ingestionIdInput ?? "unknown"}.json`, {
+                          ingestionId: jobData?.id ?? ingestionIdInput ?? null,
+                          pipelineRunId: pipelineRunId || null,
+                          diagnostics_import: importDiag ?? null,
+                          import_artifact: importArtifact ?? null,
+                        })
+                      }
+                      className={cx(btnDark, "h-9 px-3 text-xs")}
+                    >
+                      Export JSON
+                    </button>
+                    <button onClick={() => downloadFailedRowsCsv(ingestionIdInput, toast)} className={cx(btnGhost, "h-9 px-3 text-xs")}>
+                      Download failed rows
+                    </button>
+                    <a href="/imports" className={cx(btnGhost, "h-9 px-3 text-xs")}>
+                      Import history
+                    </a>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
+
+        {/* Ingestion viewer */}
+        <section className="rounded-3xl border border-slate-200 bg-white/92 backdrop-blur dark:border-slate-800 dark:bg-slate-950/55">
+          <div className="p-4 lg:p-5">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Ingestion (context)</h4>
+              <div className="text-xs text-slate-500 dark:text-slate-400">Persisted diagnostics & raw payload</div>
+            </div>
+            <pre className="mt-3 max-h-[360px] overflow-auto rounded-2xl border border-slate-800 bg-slate-900/95 p-3 text-[11px] text-slate-100 dark:bg-slate-950/70">
+              {jobData ? JSON.stringify(jobData, null, 2) : "Load an ingestion to view persisted diagnostics."}
+            </pre>
+          </div>
+        </section>
       </div>
 
-      {/* Drawer: pipeline run details */}
-      <ImportRunDrawer
-        orgId={orgId}
-        runId={pipelineRunId}
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
+      {/* Module logs modal */}
+      {moduleLogsParams && (
+        <ModuleLogsModal
+          open={moduleLogsOpen}
+          runId={moduleLogsParams.runId}
+          moduleIndex={moduleLogsParams.index}
+          onClose={() => setModuleLogsOpen(false)}
+        />
+      )}
 
-      {/* Existing connector drawer (kept for compatibility if invoked elsewhere) */}
+      {/* Connector details drawer */}
       <ConnectorDetailsDrawer
         integrationId={detailsConnectorId}
         isOpen={Boolean(detailsConnectorId)}
         onClose={() => setDetailsConnectorId("")}
+      />
+
+      {/* Confirm delete ingestion */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onCancel={() => setConfirmDeleteOpen(false)}
+        title="Delete import job"
+        description={`Delete import job ${toDeleteIngestionId}? This cannot be undone.`}
+        onConfirm={async () => {
+          setConfirmDeleteOpen(false);
+          if (!toDeleteIngestionId) return;
+          try {
+            const res = await fetch(`/api/v1/imports/${encodeURIComponent(toDeleteIngestionId)}`, { method: "DELETE", credentials: "same-origin" });
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.ok) {
+              toast.error(json?.error ?? "Delete failed");
+              return;
+            }
+            toast.success("Import deleted");
+            setIngestionIdInput("");
+            setJob(null);
+            setToDeleteIngestionId(null);
+          } catch (err: any) {
+            toast.error(String(err?.message ?? err));
+          }
+        }}
       />
     </main>
   );
