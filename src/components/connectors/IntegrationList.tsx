@@ -15,24 +15,29 @@ export default function IntegrationList({
   compact = true,
   onDeleted,
   onSynced,
+  showInactiveToggle = true,
 }: {
   compact?: boolean;
   onDeleted?: (id: string) => void;
   onSynced?: (id: string) => void;
+  showInactiveToggle?: boolean;
 }) {
   const [rows, setRows] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
+      // backend return shape may vary; this is tolerant
       const r = await fetch("/api/v1/integrations?active=true", { credentials: "same-origin" });
       const json = await r.json();
       const data = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : json?.data ?? [];
       setRows(data);
     } catch (e) {
       console.error("failed load integrations", e);
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -42,7 +47,14 @@ export default function IntegrationList({
     load();
   }, []);
 
-  const filtered = rows.filter((row) => {
+  // Filter out deleted/inactive by default
+  const filteredByStatus = rows.filter((r) => {
+    if (showInactive) return true;
+    // treat status 'deleted' explicitly; treat others opt-in (only 'active' shown by default)
+    return (r.status ?? "active") === "active";
+  });
+
+  const filtered = filteredByStatus.filter((row) => {
     if (!q) return true;
     const name = (row.name ?? row.provider ?? row.platform ?? "").toLowerCase();
     return name.includes(q.toLowerCase());
@@ -53,7 +65,7 @@ export default function IntegrationList({
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h3 className="text-lg font-semibold">Connected stores & integrations</h3>
-          <span className="text-sm text-slate-500">{rows.length} connected</span>
+          <span className="text-sm text-slate-500">{rows.filter(r => (r.status ?? "active") === "active").length} connected</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -70,6 +82,15 @@ export default function IntegrationList({
           </button>
         </div>
       </div>
+
+      {showInactiveToggle && (
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
+            <span>Show disconnected / deleted</span>
+          </label>
+        </div>
+      )}
 
       <div>
         {loading ? (
@@ -100,7 +121,7 @@ export default function IntegrationList({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((i) => (
-              <div key={i.id} className="p-4 border rounded-lg bg-white">
+              <div key={i.id} className="p-4 border rounded-lg bg-white shadow-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="font-semibold">{i.name ?? i.provider ?? i.platform}</div>
@@ -113,12 +134,8 @@ export default function IntegrationList({
                   </div>
 
                   <div className="flex flex-col items-end gap-2">
-                    <button onClick={() => window.location.assign(`/integrations/${i.id}`)} className="px-3 py-1 rounded border text-sm">
-                      Details
-                    </button>
-                    <button onClick={() => {}} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">
-                      Sync
-                    </button>
+                    <a href={`/integrations/${i.id}`} className="px-3 py-1 rounded border text-sm">Details</a>
+                    <button className="px-3 py-1 rounded bg-blue-600 text-white text-sm">Sync</button>
                   </div>
                 </div>
               </div>
