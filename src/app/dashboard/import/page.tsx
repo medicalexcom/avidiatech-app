@@ -3,11 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ImportUploaderWithPreset from "@/components/imports/ImportUploaderWithPreset";
+import ConnectorManager from "@/components/integrations/ConnectorManager";
 import ModuleLogsModal from "@/components/pipeline/ModuleLogsModal";
 import RecentRuns from "@/components/pipeline/RecentRuns";
 import { MappingPresetSelector } from "@/components/imports/MappingPresetSelector";
 import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
-import IntegrationStatus from "@/components/IntegrationStatus";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -147,6 +147,63 @@ export default function ImportPage() {
 
   // details drawer (separate from selection so "Details" doesn't hijack selection state)
   const [detailsConnectorId, setDetailsConnectorId] = useState<string>("");
+
+  // flatten/normalize ConnectorManager UI without editing that component
+  const connectorShellRef = React.useRef<HTMLDivElement | null>(null);
+
+  function normalizeConnectorManagerUI() {
+    const root = connectorShellRef.current;
+    if (!root) return;
+
+    // Hide duplicated headings by exact text
+    const hide = new Set(["connectors", "create connector"]);
+    root.querySelectorAll("h1,h2,h3,h4,h5,h6,div,span,p,label").forEach((el) => {
+      const t = (el.textContent || "").trim().toLowerCase();
+      if (hide.has(t)) (el as HTMLElement).style.display = "none";
+    });
+
+    // Remove nested-card vibe: kill shadows, white panels, borders (but keep inputs/buttons)
+    root.querySelectorAll(".shadow,.shadow-sm,.shadow-md,.shadow-lg").forEach((el) => {
+      (el as HTMLElement).style.boxShadow = "none";
+    });
+
+    root.querySelectorAll(".bg-white").forEach((el) => {
+      const h = el as HTMLElement;
+      const tag = h.tagName;
+      if (tag === "BUTTON" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      h.style.background = "transparent";
+    });
+
+    root.querySelectorAll(".border").forEach((el) => {
+      const h = el as HTMLElement;
+      const tag = h.tagName;
+      if (tag === "BUTTON" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      h.style.borderColor = "transparent";
+    });
+
+    // Flatten frames around selects (often Provider dropdown wrapper)
+    root.querySelectorAll("select").forEach((sel) => {
+      let p: HTMLElement | null = sel.parentElement as HTMLElement | null;
+      let steps = 0;
+      while (p && p !== root && steps < 8) {
+        const cls = String(p.className || "");
+        if (cls.includes("border") && (cls.includes("rounded") || cls.includes("shadow") || cls.includes("bg-white"))) {
+          p.style.border = "0";
+          p.style.background = "transparent";
+          p.style.boxShadow = "none";
+          p.style.padding = "0";
+        }
+        p = p.parentElement as HTMLElement | null;
+        steps++;
+      }
+    });
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => normalizeConnectorManagerUI(), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, connectors.length, selectedConnector]);
 
   // derived
   const selectedConnectorObj = useMemo(
@@ -507,19 +564,23 @@ export default function ImportPage() {
         </section>
 
         {/* Primary workspace */}
-        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_45px_rgba(2,6,23,0.6)]">
+        <section className="rounded-3xl border border-slate-200 bg-white/92 shadow-[0_18px_45px_rgba(148,163,184,0.22)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-[0_18px_...">
           <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-12 lg:gap-5 lg:p-5">
-            {/* LEFT: compact Integration status (replaces Stores & Connectors card) */}
+            {/* LEFT: Stores & Connectors */}
             <aside className="lg:col-span-4">
-              <div className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950/35">
-                <div className="flex items-center justify-between gap-3">
+              <div
+                ref={connectorShellRef}
+                data-connector-shell
+                className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white/95 to-slate-50/70 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950/35"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Integrations</h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-300">Manage store connections</p>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Stores & Connectors</h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">Select a store, test, sync, or open details.</p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className={cx("inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35")}>
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-[11px] text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-950/35">
                       <span className={cx("h-1.5 w-1.5 rounded-full", orgId ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-700")} />
                       {orgId ? "org loaded" : "org unknown"}
                     </span>
@@ -531,20 +592,93 @@ export default function ImportPage() {
                 </div>
 
                 <div className="mt-4">
-                  <IntegrationStatus />
-                </div>
+                  <div className="rounded-2xl border border-slate-200/60 bg-white/50 p-3 backdrop-blur dark:border-slate-800/70 dark:bg-slate-950/30">
+                    <ConnectorManager orgId={orgId} selectedId={selectedConnector} onSelect={selectConnectorId} />
+                  </div>
 
-                <div className="mt-4 text-xs text-slate-600 dark:text-slate-300">
-                  <div>Quick actions:</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button onClick={() => router.push("/integrations")} className={cx(btnGhost, "h-8 px-3 text-xs")}>
-                      Manage integrations
-                    </button>
-                    <button onClick={() => router.push("/integrations")} className={cx(btnPrimary, "h-8 px-3 text-xs")}>
-                      Connect a store
-                    </button>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      SKU recommended for matching
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      Preview up to 50 rows
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/60 px-3 py-1 dark:border-slate-800 dark:bg-slate-950/35">
+                      Max 5,000 rows / 50 columns
+                    </span>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200/60 bg-gradient-to-b from-white/70 to-white/40 p-3 dark:border-slate-800/70 dark:from-slate-950/35 dark:to-slate-950/20">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        Selected store
+                      </div>
+
+                      {selectedConnectorObj ? (
+                        <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]", statusChipClass(selectedConnectorObj.status))}>
+                          {selectedConnectorObj.status ?? "unknown"}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {selectedConnectorObj ? (
+                      <div className="mt-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-slate-900 dark:text-slate-50">
+                            {selectedConnectorObj.name ?? selectedConnectorObj.provider}
+                          </div>
+                          <div className="text-xs text-slate-600 dark:text-slate-300">
+                            Provider: <span className="font-medium">{selectedConnectorObj.provider}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            Last synced: {selectedConnectorObj.last_synced_at ? new Date(selectedConnectorObj.last_synced_at).toLocaleString() : "—"}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                          <button onClick={() => testConnector(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
+                            Test
+                          </button>
+                          <button onClick={() => syncConnector(selectedConnectorObj.id)} className={cx(btnPrimary, "h-9 px-3 text-xs")}>
+                            Sync
+                          </button>
+                          <button onClick={() => setDetailsConnectorId(selectedConnectorObj.id)} className={cx(btnGhost, "h-9 px-2 text-xs")}>
+                            Details
+                          </button>
+                        </div>
+
+                        <div className="mt-3 text-xs">
+                          {selectedConnectorObj.status === "ready" ? (
+                            <span className="text-emerald-700 dark:text-emerald-200">Connected</span>
+                          ) : selectedConnectorObj.status === "failed" ? (
+                            <span className="text-rose-700 dark:text-rose-200">
+                              Failed — {selectedConnectorObj.last_error ?? "see details"}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 dark:text-slate-300">Not ready</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-slate-600 dark:text-slate-300">Select a store to enable actions.</div>
+                    )}
                   </div>
                 </div>
+
+                {/* plain <style> scoped via attribute (no styled-jsx) */}
+                <style>{`
+                  [data-connector-shell] .shadow,
+                  [data-connector-shell] .shadow-sm,
+                  [data-connector-shell] .shadow-md,
+                  [data-connector-shell] .shadow-lg { box-shadow: none !important; }
+
+                  [data-connector-shell] .bg-white:not(button):not(input):not(select):not(textarea) {
+                    background: transparent !important;
+                  }
+                  [data-connector-shell] .border:not(button):not(input):not(select):not(textarea) {
+                    border-color: transparent !important;
+                  }
+                `}</style>
               </div>
             </aside>
 
