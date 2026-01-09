@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
+import IntegrationDropdownLink from "@/components/ui/IntegrationDropdownLink";
 
 /**
  * ProfileMenu — simplified account dropdown
@@ -87,7 +88,7 @@ export default function ProfileMenu() {
       window.location.href = href;
     } catch {
       window.location.href = href;
-    }
+    };
   }
 
   if (!isLoaded) return null;
@@ -114,7 +115,7 @@ export default function ProfileMenu() {
   const menu = (
     <div
       ref={menuRef}
-      className="fixed right-4 top-16 z-[9999] w-[340px] rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.35)] backdrop-blur-xl overflow-hidden"
+      className="fixed right-4 top-16 z-[9999] w-[340px] rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 shadow-[0_24px_80px_rgba(15,23,42,0.35)] backdrop-blur"
       role="menu"
       aria-orientation="vertical"
     >
@@ -123,7 +124,9 @@ export default function ProfileMenu() {
       <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80">
         <div className="relative">
           <img src={avatar} alt="avatar" className="w-11 h-11 rounded-xl object-cover border border-slate-200 dark:border-slate-700" />
-          <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-semibold text-slate-950 shadow-[0_0_0_2px_rgba(255,255,255,0.9)] dark:shadow-[0_0_0_2px_rgba(15,23,42,1)]">✓</span>
+          <span className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-semibold text-slate-950 shadow-[0_0_0_2px_rgba(255,255,255,0.8)]">
+            ✓
+          </span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">{name}</div>
@@ -150,6 +153,9 @@ export default function ProfileMenu() {
         {/* Single canonical Organization link that opens the org settings page */}
         <Item href="/settings/organization">Organization</Item>
 
+        {/* Integrations: inserted into the org-level menu */}
+        <IntegrationDropdownLink />
+
         <Item href="/settings/developer/api-keys">API keys &amp; developer tools</Item>
         <Item href="/settings/billing">Subscription &amp; billing</Item>
       </nav>
@@ -170,11 +176,11 @@ export default function ProfileMenu() {
                 isDark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-700",
               ].join(" ")}
             >
-              <span className={[ "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors", !isDark ? "bg-slate-900 text-slate-50" : "text-slate-500 dark:text-slate-300", ].join(" ")}>
+              <span className={["inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors", !isDark ? "bg-slate-900 text-slate-50" : "text-slate-500 dark:text-slate-300"].join(" ")}>
                 <span className="text-xs">☀️</span>
                 <span>Light</span>
               </span>
-              <span className={[ "inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors", isDark ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900" : "text-slate-500", ].join(" ")}>
+              <span className={["inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors", isDark ? "bg-slate-100 text-slate-900 dark:bg-slate-50 dark:text-slate-900" : "text-slate-50"].join(" ")}>
                 <span className="text-xs">🌙</span>
                 <span>Dark</span>
               </span>
@@ -184,7 +190,7 @@ export default function ProfileMenu() {
 
         <div>
           <SignOutButton>
-            <button onClick={() => setOpen(false)} className="w-full rounded-lg border border-red-100/70 dark:border-red-500/40 bg-red-50/70 dark:bg-red-500/10 px-3 py-2 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors">
+            <button onClick={() => setOpen(false)} className="w-full rounded-lg border border-red-100/70 dark:border-red-500/40 bg-red-50/70 dark:bg-red-500/10 px-3 py-2 text-left text-sm font-medium text-red-700 dark:text-red-300">
               Sign out
             </button>
           </SignOutButton>
@@ -195,7 +201,7 @@ export default function ProfileMenu() {
 
   return (
     <>
-      <button ref={buttonRef} aria-expanded={open} onClick={() => setOpen((s) => !s)} className="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 px-1.5 py-1 shadow-sm hover:bg-slate-100/90 dark:hover:bg-slate-800/90 transition-colors" title="Account" type="button">
+      <button ref={buttonRef} aria-expanded={open} onClick={() => setOpen((s) => !s)} className="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/60 p-1">
         <img src={avatar} alt="avatar" className="w-7 h-7 rounded-full object-cover" />
       </button>
 
