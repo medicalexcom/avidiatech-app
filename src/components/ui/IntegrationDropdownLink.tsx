@@ -23,15 +23,15 @@ export default function IntegrationDropdownLink() {
   }, []);
 
   return (
-    <li>
+    <div>
       <Link href="/integrations" className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded" role="menuitem" aria-label="Manage integrations">
-        <svg className="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <svg className="w-4 h-4 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
           <path d="M7 7h10v10H7z" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M3 3l6 6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span>Integrations</span>
         {typeof count === "number" && <span className="ml-auto text-xs text-slate-500">{count}</span>}
       </Link>
-    </li>
+    </div>
   );
 }
