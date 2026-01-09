@@ -4,10 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * useIntegrations
- * - Fetches both /api/v1/integrations and /api/v1/ecommerce_connections in parallel
- * - Normalizes to a single Integration[] shape for UI usage.
- * - Exposes connect (navigate), disconnect, testConnection, refresh.
+ * useIntegrations (tenant-aware)
+ * - fetches /api/v1/me for org_id, then queries integrations and ecommerce_connections using that id
+ * - normalizes results for UI
  */
 
 export type Integration = {
@@ -18,7 +17,7 @@ export type Integration = {
   status?: string | null;
   config?: Record<string, any> | null;
   updated_at?: string | null;
-  hasSecrets?: boolean;
+  __source?: "integrations" | "ecommerce";
 };
 
 function normalizeList(payload: any, source: "integrations" | "ecommerce") {
@@ -39,7 +38,6 @@ function normalizeList(payload: any, source: "integrations" | "ecommerce") {
     status: r.status ?? null,
     config: r.config ?? null,
     updated_at: r.updated_at ?? r.last_synced_at ?? r.updatedAt ?? null,
-    hasSecrets: Boolean(r.encrypted_secrets ?? r.secrets_enc ?? r.secrets ?? r.encrypted_secret),
     __source: source,
   }));
 }
@@ -49,77 +47,97 @@ export function useIntegrations() {
   const [integrations, setIntegrations] = useState<Integration[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchOrg = useCallback(async () => {
     try {
-      // fetch both in parallel
-      const [r1, r2] = await Promise.allSettled([
-        fetch("/api/v1/integrations", { credentials: "same-origin" }),
-        fetch("/api/v1/ecommerce_connections", { credentials: "same-origin" }),
-      ]);
-
-      let list: Integration[] = [];
-
-      // primary endpoint
-      if (r1.status === "fulfilled") {
-        try {
-          const res = r1.value;
-          const json = await res.json().catch(() => null);
-          if (res.ok) {
-            list = list.concat(normalizeList(json, "integrations"));
-          } else {
-            // non-ok — treat as empty but keep going
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-      }
-
-      // ecommerce fallback
-      if (r2.status === "fulfilled") {
-        try {
-          const res2 = r2.value;
-          const json2 = await res2.json().catch(() => null);
-          if (res2.ok) {
-            list = list.concat(normalizeList(json2, "ecommerce"));
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      // deduplicate by id (prefer integrations source over ecommerce if duplicates)
-      const byId = new Map<string, Integration>();
-      for (const item of list) {
-        if (!byId.has(item.id)) byId.set(item.id, item);
-        else {
-          // merge preferring non-null fields
-          const cur = byId.get(item.id)!;
-          byId.set(
-            item.id,
-            Object.assign({}, cur, Object.fromEntries(Object.entries(item).filter(([k, v]) => v !== null && v !== undefined)))
-          );
-        }
-      }
-
-      const merged = Array.from(byId.values());
-      setIntegrations(merged);
-    } catch (err: any) {
-      console.error("useIntegrations.fetchAll error", err);
-      setError(String(err?.message ?? err));
-      setIntegrations([]);
-    } finally {
-      setLoading(false);
+      const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+      if (!res.ok) return null;
+      const json = await res.json().catch(() => null);
+      return json?.org_id ?? null;
+    } catch {
+      return null;
     }
   }, []);
+
+  const fetchAll = useCallback(
+    async (forceOrgId?: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resolvedOrg = forceOrgId ?? (orgId ?? (await fetchOrg()));
+        if (!resolvedOrg) {
+          // try fetching generic endpoints without orgId (best-effort)
+          const [r1, r2] = await Promise.allSettled([
+            fetch("/api/v1/integrations", { credentials: "same-origin" }),
+            fetch("/api/v1/ecommerce_connections", { credentials: "same-origin" }),
+          ]);
+          let list: Integration[] = [];
+          if (r1.status === "fulfilled") {
+            const res = r1.value;
+            const json = await res.json().catch(() => null);
+            if (res.ok) list = list.concat(normalizeList(json, "integrations"));
+          }
+          if (r2.status === "fulfilled") {
+            const res2 = r2.value;
+            const json2 = await res2.json().catch(() => null);
+            if (res2.ok) list = list.concat(normalizeList(json2, "ecommerce"));
+          }
+          setIntegrations(list);
+          setLoading(false);
+          return;
+        }
+
+        // we have an org/tenant id: query tenant-aware endpoints
+        setOrgId(resolvedOrg);
+
+        const urls = [
+          `/api/v1/integrations?orgId=${encodeURIComponent(resolvedOrg)}`,
+          `/api/v1/ecommerce_connections?tenantId=${encodeURIComponent(resolvedOrg)}`,
+        ];
+
+        const [r1, r2] = await Promise.allSettled(urls.map((u) => fetch(u, { credentials: "same-origin" })));
+
+        let list: Integration[] = [];
+
+        if (r1.status === "fulfilled") {
+          const res = r1.value;
+          const json = await res.json().catch(() => null);
+          if (res.ok) list = list.concat(normalizeList(json, "integrations"));
+        }
+        if (r2.status === "fulfilled") {
+          const res2 = r2.value;
+          const json2 = await res2.json().catch(() => null);
+          if (res2.ok) list = list.concat(normalizeList(json2, "ecommerce"));
+        }
+
+        // dedupe by id (prefer 'integrations' source)
+        const byId = new Map<string, Integration>();
+        for (const it of list) {
+          if (!byId.has(it.id)) byId.set(it.id, it);
+          else {
+            const cur = byId.get(it.id)!;
+            byId.set(it.id, Object.assign({}, cur, Object.fromEntries(Object.entries(it).filter(([k, v]) => v != null))));
+          }
+        }
+
+        setIntegrations(Array.from(byId.values()));
+      } catch (err: any) {
+        console.error("useIntegrations.fetchAll error", err);
+        setError(String(err?.message ?? err));
+        setIntegrations([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchOrg, orgId]
+  );
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const refresh = useCallback(() => fetchAll(), [fetchAll]);
+  const refresh = useCallback(() => fetchAll(null), [fetchAll]);
 
   const connect = useCallback((provider: string) => {
     router.push(`/integrations?connect=${encodeURIComponent(provider)}`);
@@ -133,7 +151,7 @@ export function useIntegrations() {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? body?.message ?? `Delete failed (${res.status})`);
       }
-      await fetchAll();
+      await fetchAll(null);
       return true;
     },
     [fetchAll]
@@ -151,7 +169,6 @@ export function useIntegrations() {
         platform = idOrObj.platform;
       }
 
-      // try ecommerce validate first if suitable
       if (platform || provider === "bigcommerce") {
         const url = `/api/v1/ecommerce_connections/${encodeURIComponent(id)}/validate`;
         const res = await fetch(url, { credentials: "same-origin" });
@@ -159,7 +176,6 @@ export function useIntegrations() {
           const json = await res.json().catch(() => null);
           return json ?? { ok: true };
         }
-        // else fallthrough
       }
 
       const testUrl = `/api/v1/integrations/${encodeURIComponent(id)}/test`;
@@ -187,6 +203,7 @@ export function useIntegrations() {
     activeIntegrations,
     loading,
     error,
+    orgId,
     refresh,
     connect,
     disconnect,
