@@ -8,10 +8,14 @@ type Props = {
     id: string;
     provider?: string;
     name?: string;
+    // optional platform indicates ecommerce connection row
+    platform?: string;
   };
   onDeleted?: (id: string) => void;
   onSynced?: (id: string) => void;
 };
+
+const ECOMMERCE_PLATFORMS = new Set(["bigcommerce", "shopify", "woocommerce", "magento", "squarespace"]);
 
 const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) => {
   const [isDrawerOpen, setDrawerOpen] = useState(false);
@@ -19,11 +23,32 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
+  const isEcommerce = Boolean(integration.platform && ECOMMERCE_PLATFORMS.has(integration.platform));
+
+  async function callDelete() {
+    // choose endpoint based on integration type
+    const url = isEcommerce
+      ? `/api/v1/ecommerce_connections/${encodeURIComponent(integration.id)}`
+      : `/api/v1/integrations/${encodeURIComponent(integration.id)}`;
+
+    const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
+    let data;
+    try {
+      data = await res.json().catch(() => null);
+    } catch {
+      data = null;
+    }
+    if (!res.ok) {
+      throw new Error(data?.error || data?.message || `Status ${res.status}`);
+    }
+    return data;
+  }
+
   return (
     <div className="flex items-center justify-between py-2 border-b">
       <div>
         <div className="font-medium">{integration.name ?? integration.id}</div>
-        <div className="text-sm text-gray-500">{integration.provider}</div>
+        <div className="text-sm text-gray-500">{integration.provider ?? integration.platform}</div>
       </div>
 
       <div className="flex items-center gap-2">
@@ -39,9 +64,12 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
           onClick={async () => {
             setLoading(true);
             try {
-              const res = await fetch(`/api/v1/integrations/${integration.id}/sync`, { method: "POST" });
-              const data = await res.json();
-              if (!data.ok) throw new Error(data.error || "Sync failed");
+              const res = await fetch(`/api/v1/integrations/${integration.id}/sync`, {
+                method: "POST",
+                credentials: "same-origin",
+              });
+              const data = await res.json().catch(() => null);
+              if (!res.ok || !data?.ok) throw new Error(data?.error || data?.message || "Sync failed");
               toast.success("Sync queued");
               onSynced?.(integration.id);
             } catch (err: any) {
@@ -70,18 +98,18 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
 
       <ConfirmDialog
         open={confirmOpen}
-        // onCancel closes the dialog (ConfirmDialog expects this)
         onCancel={() => setConfirmOpen(false)}
-        title="Delete integration"
-        description={`Delete integration ${integration.name ?? integration.id}? This cannot be undone.`}
+        title={isEcommerce ? "Disconnect store" : "Delete integration"}
+        description={
+          isEcommerce
+            ? `Disconnect store ${integration.name ?? integration.id}? This will remove stored credentials but you can reconnect later.`
+            : `Delete integration ${integration.name ?? integration.id}? This cannot be undone.`
+        }
         onConfirm={async () => {
-          // Close the dialog immediately
           setConfirmOpen(false);
           try {
-            const res = await fetch(`/api/v1/integrations/${integration.id}`, { method: "DELETE" });
-            const data = await res.json();
-            if (!data.ok) throw new Error(data.error || "Delete failed");
-            toast.success("Integration deleted");
+            const data = await callDelete();
+            toast.success(isEcommerce ? "Store disconnected" : "Integration deleted");
             onDeleted?.(integration.id);
           } catch (err: any) {
             toast.error(String(err?.message ?? err));
