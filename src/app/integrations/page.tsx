@@ -54,7 +54,6 @@ export default function IntegrationsPage() {
   }
 
   function openConnect(providerId: string) {
-    // open provider-aware connect modal if we have schema; otherwise open connector manager fallback
     setConnectProvider(providerId);
     setConnectModalOpen(true);
   }
@@ -173,7 +172,7 @@ export default function IntegrationsPage() {
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); }} className="px-2 py-1">Close</button>
             </div>
 
-            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} providerFilter={connectorManagerProvider ?? undefined} />
+            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} initialProvider={connectorManagerProvider ?? undefined} />
 
             <div className="mt-4 flex justify-end">
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
