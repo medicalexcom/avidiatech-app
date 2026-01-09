@@ -9,10 +9,13 @@ export default function IntegrationDropdownLink() {
     let mounted = true;
     (async () => {
       try {
+        // ask the backend and filter on client in case backend doesn't support active query param
         const res = await fetch("/api/v1/integrations?active=true", { credentials: "same-origin" });
         const json = await res.json();
         const arr = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : json?.data ?? [];
-        if (mounted) setCount(arr.length);
+        // Only count active (clients can filter)
+        const activeCount = (arr as any[]).filter(r => (r.status ?? "active") === "active").length;
+        if (mounted) setCount(activeCount);
       } catch {
         if (mounted) setCount(null);
       }
