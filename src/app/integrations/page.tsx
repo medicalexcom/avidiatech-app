@@ -1,18 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
+import ConnectModal from "@/components/integrations/ConnectModal";
 
-/**
- * Integrations page — wired connect/disconnect/test flows.
- *
- * - BigCommerce: inline connect modal that POSTs to /api/v1/integrations/ecommerce/bigcommerce
- * - Other providers: open ConnectorManager (reuse existing UI)
- */
-
+/* providers list */
 const PROVIDERS = [
   { id: "bigcommerce", name: "BigCommerce", desc: "Full-featured storefront", available: true },
   { id: "shopify", name: "Shopify", desc: "Shopify stores", available: true },
@@ -27,29 +22,11 @@ export default function IntegrationsPage() {
   const { integrations, activeIntegrations, refresh, disconnect, testConnection } = useIntegrations();
 
   const [orgId, setOrgId] = useState<string>("");
-  const [showConnectorManager, setShowConnectorManager] = useState(false);
-  const [cmProvider, setCmProvider] = useState<string | null>(null);
+  const [connectorManagerOpen, setConnectorManagerOpen] = useState(false);
+  const [connectorManagerProvider, setConnectorManagerProvider] = useState<string | null>(null);
 
-  // BigCommerce connect modal state
-  const [showBCModal, setShowBCModal] = useState(false);
-  const [bcStoreHash, setBcStoreHash] = useState("");
-  const [bcAccessToken, setBcAccessToken] = useState("");
-  const [bcLoading, setBcLoading] = useState(false);
-
-  useEffect(() => {
-    // fetch org id for ConnectorManager usage (if required)
-    (async () => {
-      try {
-        const res = await fetch("/api/v1/me", { credentials: "same-origin" });
-        const json = await res.json().catch(() => null);
-        if (res.ok && json?.ok && json.org_id) {
-          setOrgId(json.org_id);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [connectProvider, setConnectProvider] = useState<string | null>(null);
 
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
 
@@ -76,45 +53,17 @@ export default function IntegrationsPage() {
     }
   }
 
-  // Connect: provider dispatcher
   function openConnect(providerId: string) {
-    if (providerId === "bigcommerce") {
-      setBcStoreHash("");
-      setBcAccessToken("");
-      setShowBCModal(true);
-      return;
-    }
-    // for other providers reuse existing ConnectorManager UI (embedded)
-    setCmProvider(providerId);
-    setShowConnectorManager(true);
+    // open provider-aware connect modal if we have schema; otherwise open connector manager fallback
+    setConnectProvider(providerId);
+    setConnectModalOpen(true);
   }
 
-  async function submitBigCommerceConnect() {
-    if (!bcStoreHash.trim() || !bcAccessToken.trim()) {
-      toast.error("storeHash and access token required");
-      return;
-    }
-    setBcLoading(true);
-    try {
-      const res = await fetch("/api/v1/integrations/ecommerce/bigcommerce", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ storeHash: bcStoreHash.trim(), accessToken: bcAccessToken.trim() }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        toast.error(json?.error ?? json?.detail ?? `Connect failed (${res.status})`);
-        return;
-      }
-      toast.success("BigCommerce connected");
-      setShowBCModal(false);
-      await refresh();
-    } catch (err: any) {
-      toast.error(String(err?.message ?? err));
-    } finally {
-      setBcLoading(false);
-    }
+  function openConnectorManagerFallback(provider?: string | null) {
+    setConnectorManagerProvider(provider ?? null);
+    setConnectorManagerOpen(true);
+    setConnectModalOpen(false);
+    toast.info("Opening connector manager for advanced flow");
   }
 
   return (
@@ -153,7 +102,13 @@ export default function IntegrationsPage() {
                         Disconnect
                       </button>
 
-                      <button onClick={() => setShowConnectorManager(true)} className="px-3 py-1 border rounded text-sm">
+                      <button
+                        onClick={() => {
+                          setConnectorManagerProvider(i.provider ?? i.platform ?? null);
+                          setConnectorManagerOpen(true);
+                        }}
+                        className="px-3 py-1 border rounded text-sm"
+                      >
                         Manage
                       </button>
                     </div>
@@ -176,79 +131,52 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="grid gap-3">
-            {PROVIDERS.map((p) => {
-              const available = p.available;
-              return (
-                <div key={p.id} className="p-3 rounded-md border bg-white dark:bg-slate-900 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-slate-500">{p.desc}</div>
-                  </div>
-
-                  <div>
-                    {available ? (
-                      <button
-                        onClick={() => openConnect(p.id)}
-                        className="px-3 py-1 bg-sky-600 text-white rounded text-sm"
-                      >
-                        Connect
-                      </button>
-                    ) : (
-                      <button disabled className="px-3 py-1 border rounded text-sm text-slate-400">
-                        Coming soon
-                      </button>
-                    )}
-                  </div>
+            {PROVIDERS.map((p) => (
+              <div key={p.id} className="p-3 rounded-md border bg-white dark:bg-slate-900 flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{p.name}</div>
+                  <div className="text-xs text-slate-500">{p.desc}</div>
                 </div>
-              );
-            })}
+
+                <div>
+                  {p.available ? (
+                    <button onClick={() => openConnect(p.id)} className="px-3 py-1 bg-sky-600 text-white rounded text-sm">
+                      Connect
+                    </button>
+                  ) : (
+                    <button disabled className="px-3 py-1 border rounded text-sm text-slate-400">
+                      Coming soon
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </aside>
       </div>
 
-      {/* BigCommerce Connect Modal */}
-      {showBCModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-lg rounded-lg bg-white p-6 dark:bg-slate-900">
-            <h3 className="text-lg font-medium mb-2">Connect BigCommerce</h3>
-            <p className="text-sm text-slate-500 mb-4">Enter your store hash and API token (store API).</p>
+      {/* Provider-aware Connect modal (uses schema where available, else falls back) */}
+      <ConnectModal
+        provider={connectProvider}
+        open={connectModalOpen}
+        onClose={() => setConnectModalOpen(false)}
+        onSuccess={() => refresh()}
+        onOpenConnectorManager={() => openConnectorManagerFallback(connectProvider)}
+      />
 
-            <div className="space-y-3">
-              <label className="block text-xs text-slate-600">Store hash</label>
-              <input className="w-full rounded border px-3 py-2" value={bcStoreHash} onChange={(e) => setBcStoreHash(e.target.value)} />
-
-              <label className="block text-xs text-slate-600">Access token</label>
-              <input className="w-full rounded border px-3 py-2" value={bcAccessToken} onChange={(e) => setBcAccessToken(e.target.value)} />
-            </div>
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowBCModal(false)} className="px-3 py-1 rounded border">Cancel</button>
-              <button
-                onClick={submitBigCommerceConnect}
-                disabled={bcLoading}
-                className="px-4 py-1 rounded bg-sky-600 text-white"
-              >
-                {bcLoading ? "Connecting…" : "Connect BigCommerce"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ConnectorManager modal fallback for other providers */}
-      {showConnectorManager && (
+      {/* ConnectorManager fallback (only used when modal requests fallback or user explicitly opens it) */}
+      {connectorManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
           <div className="w-full max-w-3xl rounded-lg bg-white p-6 dark:bg-slate-900">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">Connect Integration</h3>
-              <button onClick={() => { setShowConnectorManager(false); setCmProvider(null); }} className="px-2 py-1">Close</button>
+              <h3 className="text-lg font-medium">Connector manager{connectorManagerProvider ? ` — ${connectorManagerProvider}` : ""}</h3>
+              <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); }} className="px-2 py-1">Close</button>
             </div>
 
-            {/* Reuse existing ConnectorManager component to handle creation flows */}
-            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} />
+            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} providerFilter={connectorManagerProvider ?? undefined} />
 
             <div className="mt-4 flex justify-end">
-              <button onClick={() => { setShowConnectorManager(false); setCmProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
+              <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
                 Done
               </button>
             </div>
