@@ -1,3 +1,4 @@
+"use client";
 import React, { useState } from "react";
 import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -8,7 +9,6 @@ type Props = {
     id: string;
     provider?: string;
     name?: string;
-    // optional platform indicates ecommerce connection row
     platform?: string;
   };
   onDeleted?: (id: string) => void;
@@ -26,18 +26,15 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
   const isEcommerce = Boolean(integration.platform && ECOMMERCE_PLATFORMS.has(integration.platform));
 
   async function callDelete() {
-    // choose endpoint based on integration type
     const url = isEcommerce
       ? `/api/v1/ecommerce_connections/${encodeURIComponent(integration.id)}`
       : `/api/v1/integrations/${encodeURIComponent(integration.id)}`;
 
     const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
-    let data;
+    let data = null;
     try {
       data = await res.json().catch(() => null);
-    } catch {
-      data = null;
-    }
+    } catch {}
     if (!res.ok) {
       throw new Error(data?.error || data?.message || `Status ${res.status}`);
     }
@@ -87,10 +84,10 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
 
         <button
           onClick={() => setConfirmOpen(true)}
-          aria-label={`Delete ${integration.name ?? integration.id}`}
-          className="px-3 py-1 rounded border text-red-600 hover:bg-red-50"
+          aria-label={`${isEcommerce ? "Disconnect" : "Delete"} ${integration.name ?? integration.id}`}
+          className={`px-3 py-1 rounded ${isEcommerce ? "border text-rose-600 hover:bg-rose-50" : "border text-red-600 hover:bg-red-50"}`}
         >
-          Delete
+          {isEcommerce ? "Disconnect" : "Delete"}
         </button>
       </div>
 
@@ -108,7 +105,7 @@ const IntegrationRow: React.FC<Props> = ({ integration, onDeleted, onSynced }) =
         onConfirm={async () => {
           setConfirmOpen(false);
           try {
-            const data = await callDelete();
+            await callDelete();
             toast.success(isEcommerce ? "Store disconnected" : "Integration deleted");
             onDeleted?.(integration.id);
           } catch (err: any) {
