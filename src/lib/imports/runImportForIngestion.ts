@@ -260,7 +260,7 @@ export async function runImportForIngestion(opts: {
         return { ok: false, reason: `bigcommerce_update_failed:${upRes.status}`, detail: upBody };
       }
 
-      // Best-effort: images and variants (omitted detailed error handling for brevity)
+      // Best-effort: images and variants
       if (Array.isArray(productPayload.images) && productPayload.images.length) {
         for (const im of productPayload.images) {
           try {
