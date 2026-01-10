@@ -1,11 +1,20 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
 import ConnectModal from "@/components/integrations/ConnectModal";
+import ConnectorManager from "@/components/integrations/ConnectorManager";
+
+/**
+ * Integrations page — restored full layout:
+ * - Left: Connected integrations (uses useIntegrations)
+ * - Right: Available integrations catalog (connect buttons open ConnectModal)
+ * - ConnectorManager fallback/modal for advanced flows
+ *
+ * Wire Test/Sync to the hook's testConnection / syncConnection functions.
+ */
 
 const PROVIDERS = [
   { id: "bigcommerce", name: "BigCommerce", desc: "Full-featured storefront", available: true },
@@ -18,125 +27,189 @@ const PROVIDERS = [
 export default function IntegrationsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { integrations, activeIntegrations, refresh, disconnect, testConnection } = useIntegrations();
 
-  const [connectorManagerOpen, setConnectorManagerOpen] = useState(false);
-  const [connectorManagerProvider, setConnectorManagerProvider] = useState<string | null>(null);
+  const { integrations, activeIntegrations, loading, error, refresh, testConnection, syncConnection, connect } = useIntegrations();
 
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
 
-  const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
+  const [connectorManagerOpen, setConnectorManagerOpen] = useState(false);
+  const [connectorManagerProvider, setConnectorManagerProvider] = useState<string | null>(null);
 
-  async function handleDelete(id: string, platform?: string) {
-    if (!confirm("Delete this connection? This will remove stored credentials and cannot be undone.")) return;
-    try {
-      // endpoint: ecommerce_connections for ecommerce rows; integrations otherwise
-      const url = platform ? `/api/v1/ecommerce_connections/${encodeURIComponent(id)}` : `/api/v1/integrations/${encodeURIComponent(id)}`;
-      const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        toast.error(json?.error ?? `Delete failed (${res.status})`);
-        return;
+  const [orgId, setOrgId] = useState<string | null>(null);
+
+  // Resolve org id for tenant-aware calls; pass into ConnectModal/ConnectorManager to avoid extra /api/v1/me calls
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const j = await res.json().catch(() => null);
+        if (j?.org_id) setOrgId(j.org_id);
+      } catch {
+        // ignore
       }
-      toast.success("Connection deleted");
-      refresh();
-    } catch (err: any) {
-      toast.error(String(err?.message ?? err));
-    }
-  }
+    })();
+  }, []);
 
-  async function handleTest(id: string) {
-    try {
-      const res = await testConnection(id);
-      const ok = res?.result?.ok ?? !!res?.ok;
-      toast.success(ok ? "Connection OK" : `Test result: ${res?.result?.status ?? "error"}`);
-      return res;
-    } catch (err: any) {
-      toast.error(String(err?.message ?? err));
-      throw err;
-    }
-  }
-
-  function openConnect(providerId: string) {
+  function openConnectModal(providerId: string) {
     setConnectProvider(providerId);
     setConnectModalOpen(true);
   }
 
-  function openConnectorManagerFallback(provider?: string | null) {
-    setConnectorManagerProvider(provider ?? null);
+  function openConnectorManager(providerId?: string | null) {
+    setConnectorManagerProvider(providerId ?? null);
     setConnectorManagerOpen(true);
     setConnectModalOpen(false);
     toast.info("Opening connector manager for advanced flow");
   }
 
+  async function onTest(i: any) {
+    try {
+      const res = await testConnection(i);
+      const ok = res?.ok ?? (res?.result?.ok ?? false);
+      if (ok) {
+        toast.success("Connection test succeeded");
+      } else {
+        const msg = res?.error ?? res?.detail ?? JSON.stringify(res);
+        toast.error(`Test returned: ${msg}`);
+      }
+      await refresh();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    }
+  }
+
+  async function onSync(i: any) {
+    try {
+      const res = await syncConnection(i);
+      const jobId = res?.jobId ?? res?.id ?? res?.pipelineRunId ?? null;
+      toast.success(jobId ? `Sync queued (${jobId})` : "Sync started");
+      await refresh();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    }
+  }
+
+  async function onDelete(i: any) {
+    if (!confirm("Delete this connection? This will remove stored credentials and cannot be undone.")) return;
+    try {
+      // reconnect hook might expose a disconnect; if not, call endpoint directly
+      const res = await fetch(
+        i.platform ? `/api/v1/ecommerce_connections/${encodeURIComponent(i.id)}` : `/api/v1/integrations/${encodeURIComponent(i.id)}`,
+        { method: "DELETE", credentials: "same-origin" }
+      );
+      const j = await res.json().catch(() => null);
+      if (!res.ok || !j?.ok) {
+        throw new Error(j?.error ?? `Delete failed (${res.status})`);
+      }
+      toast.success("Connection deleted");
+      await refresh();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    }
+  }
+
+  const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
+
   return (
-    <div className="container mx-auto py-8 px-4">
+    <main className="container mx-auto py-8 px-4">
       <header className="mb-6">
         <h1 className="text-3xl font-semibold">Integrations</h1>
         <p className="mt-2 text-sm text-slate-600">Connect AvidiaTech to your store and data sources.</p>
       </header>
 
       <div className="grid grid-cols-12 gap-6">
+        {/* Connected integrations */}
         <section className="col-span-8">
-          <div className="mb-4">
-            <h2 className="text-xl font-medium">Connected integrations</h2>
-            <p className="text-sm text-slate-500">Active connections for this tenant</p>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-medium">Connected integrations</h2>
+              <p className="text-sm text-slate-500">Active connections for this tenant</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push("/integrations")}
+                className="px-3 py-1 rounded border text-sm"
+              >
+                Manage integrations
+              </button>
+              <button
+                onClick={() => openConnectModal("bigcommerce")}
+                className="px-3 py-1 rounded bg-sky-600 text-white text-sm"
+              >
+                Connect BigCommerce
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {(activeIntegrations && activeIntegrations.length > 0) ? (
+            {loading ? (
+              <div className="text-sm text-slate-500">Loading…</div>
+            ) : (activeIntegrations && activeIntegrations.length > 0) ? (
               activeIntegrations.map((i) => (
-                <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      {/* Show friendly name when present; fallback to provider / config.store_hash */}
-                      <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
-                      <div className="text-xs text-slate-500">{i.platform ?? i.provider}</div>
-                      <div className="text-xs text-slate-400 mt-1">Last update: {i.updated_at ?? "—"}</div>
-                    </div>
+                <div key={i.id} className="flex items-center justify-between rounded border p-3 bg-white">
+                  <div>
+                    <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
+                    <div className="text-xs text-slate-500">{(i.platform ?? i.provider) + (i.status ? ` • ${i.status}` : "")}</div>
+                  </div>
 
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleTest(i.id)} className="px-3 py-1 bg-emerald-600 text-white rounded text-sm">
-                        Test connection
-                      </button>
+                  <div className="flex items-center gap-2">
+                    {/* Show Test / Sync only for ecommerce-like rows (platform present) */}
+                    {i.platform ? (
+                      <>
+                        <button
+                          onClick={() => onTest(i)}
+                          className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
+                          aria-label={`Test ${i.name ?? i.id}`}
+                        >
+                          Test connection
+                        </button>
 
-                      <button onClick={() => {
-                        // Sync endpoint: prefer ecommerce sync route if platform present
-                        const syncUrl = i.platform
-                          ? `/api/v1/ecommerce_connections/${encodeURIComponent(i.id)}/sync`
-                          : `/api/v1/integrations/${encodeURIComponent(i.id)}/sync`;
-                        (async () => {
-                          try {
-                            const res = await fetch(syncUrl, { method: "POST", credentials: "same-origin" });
-                            const json = await res.json().catch(() => null);
-                            if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
-                            toast.success("Sync started");
-                            refresh();
-                          } catch (err: any) {
-                            toast.error(String(err?.message ?? err));
-                          }
-                        })();
-                      }} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
-                        Sync
-                      </button>
+                        <button
+                          onClick={() => onSync(i)}
+                          className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+                          aria-label={`Sync ${i.name ?? i.id}`}
+                        >
+                          Sync
+                        </button>
 
-                      {/* Replace Manage with Delete to avoid duplication with ConnectorManager */}
-                      <button onClick={() => handleDelete(i.id, i.platform)} className="px-3 py-1 border rounded text-sm text-rose-600 hover:bg-rose-50">
-                        Delete
+                        <button
+                          onClick={() => openConnectorManager(i.platform ?? i.provider)}
+                          className="px-3 py-1 rounded border text-sm"
+                          aria-label={`Manage ${i.name ?? i.id}`}
+                        >
+                          Manage
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => onTest(i)}
+                        className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
+                        aria-label={`Test ${i.name ?? i.id}`}
+                      >
+                        Test
                       </button>
-                    </div>
+                    )}
+
+                    <button
+                      onClick={() => onDelete(i)}
+                      className="px-3 py-1 border rounded text-sm text-rose-600 hover:bg-rose-50"
+                      aria-label={`Delete ${i.name ?? i.id}`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="p-4 rounded-md border bg-white dark:bg-slate-900">
-                <div className="text-sm text-slate-600">No active integrations. Connect a store from the catalog.</div>
-              </div>
+              <div className="text-sm text-slate-500">No active integrations for this tenant.</div>
             )}
           </div>
         </section>
 
+        {/* Available integrations */}
         <aside className="col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-medium">Available integrations</h3>
@@ -145,7 +218,7 @@ export default function IntegrationsPage() {
 
           <div className="grid gap-3">
             {PROVIDERS.map((p) => (
-              <div key={p.id} className="p-3 rounded-md border bg-white dark:bg-slate-900 flex items-center justify-between">
+              <div key={p.id} className="p-3 rounded-md border bg-white flex items-center justify-between">
                 <div>
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-slate-500">{p.desc}</div>
@@ -153,7 +226,7 @@ export default function IntegrationsPage() {
 
                 <div>
                   {p.available ? (
-                    <button onClick={() => openConnect(p.id)} className="px-3 py-1 bg-sky-600 text-white rounded text-sm">
+                    <button onClick={() => openConnectModal(p.id)} className="px-3 py-1 bg-sky-600 text-white rounded text-sm">
                       Connect
                     </button>
                   ) : (
@@ -168,15 +241,17 @@ export default function IntegrationsPage() {
         </aside>
       </div>
 
+      {/* Connect modal */}
       <ConnectModal
         provider={connectProvider}
         open={connectModalOpen}
         onClose={() => setConnectModalOpen(false)}
         onSuccess={() => refresh()}
-        onOpenConnectorManager={() => openConnectorManagerFallback(connectProvider)}
+        onOpenConnectorManager={() => openConnectorManager(connectProvider)}
+        orgId={orgId ?? undefined}
       />
 
-      {/* ConnectorManager fallback (rare; advanced flows) */}
+      {/* ConnectorManager fallback */}
       {connectorManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
           <div className="w-full max-w-3xl rounded-lg bg-white p-6 dark:bg-slate-900">
@@ -185,7 +260,7 @@ export default function IntegrationsPage() {
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); }} className="px-2 py-1">Close</button>
             </div>
 
-            <ConnectorManager orgId={undefined as any} selectedId={""} onSelect={() => {}} />
+            <ConnectorManager orgId={orgId ?? ""} selectedId={""} onSelect={() => {}} initialProvider={connectorManagerProvider ?? undefined} />
 
             <div className="mt-4 flex justify-end">
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
@@ -195,6 +270,6 @@ export default function IntegrationsPage() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
