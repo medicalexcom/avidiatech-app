@@ -7,7 +7,6 @@ import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
 import ConnectModal from "@/components/integrations/ConnectModal";
 
-/* providers list */
 const PROVIDERS = [
   { id: "bigcommerce", name: "BigCommerce", desc: "Full-featured storefront", available: true },
   { id: "shopify", name: "Shopify", desc: "Shopify stores", available: true },
@@ -21,7 +20,6 @@ export default function IntegrationsPage() {
   const toast = useToast();
   const { integrations, activeIntegrations, refresh, disconnect, testConnection } = useIntegrations();
 
-  const [orgId, setOrgId] = useState<string>("");
   const [connectorManagerOpen, setConnectorManagerOpen] = useState(false);
   const [connectorManagerProvider, setConnectorManagerProvider] = useState<string | null>(null);
 
@@ -30,12 +28,19 @@ export default function IntegrationsPage() {
 
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
 
-  async function handleDisconnect(id: string, platform?: string) {
-    if (!confirm("Disconnect this integration? Stored credentials will be removed (you can reconnect later).")) return;
+  async function handleDelete(id: string, platform?: string) {
+    if (!confirm("Delete this connection? This will remove stored credentials and cannot be undone.")) return;
     try {
-      await disconnect(id, platform);
-      toast.success("Disconnected");
-      await refresh();
+      // endpoint: ecommerce_connections for ecommerce rows; integrations otherwise
+      const url = platform ? `/api/v1/ecommerce_connections/${encodeURIComponent(id)}` : `/api/v1/integrations/${encodeURIComponent(id)}`;
+      const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        toast.error(json?.error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      toast.success("Connection deleted");
+      refresh();
     } catch (err: any) {
       toast.error(String(err?.message ?? err));
     }
@@ -67,14 +72,12 @@ export default function IntegrationsPage() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      {/* Hero */}
       <header className="mb-6">
         <h1 className="text-3xl font-semibold">Integrations</h1>
         <p className="mt-2 text-sm text-slate-600">Connect AvidiaTech to your store and data sources.</p>
       </header>
 
       <div className="grid grid-cols-12 gap-6">
-        {/* Connected integrations */}
         <section className="col-span-8">
           <div className="mb-4">
             <h2 className="text-xl font-medium">Connected integrations</h2>
@@ -87,7 +90,8 @@ export default function IntegrationsPage() {
                 <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{i.name ?? i.provider ?? i.platform}</div>
+                      {/* Show friendly name when present; fallback to provider / config.store_hash */}
+                      <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
                       <div className="text-xs text-slate-500">{i.platform ?? i.provider}</div>
                       <div className="text-xs text-slate-400 mt-1">Last update: {i.updated_at ?? "—"}</div>
                     </div>
@@ -97,18 +101,29 @@ export default function IntegrationsPage() {
                         Test connection
                       </button>
 
-                      <button onClick={() => handleDisconnect(i.id, i.platform)} className="px-3 py-1 bg-rose-600 text-white rounded text-sm">
-                        Disconnect
+                      <button onClick={() => {
+                        // Sync endpoint: prefer ecommerce sync route if platform present
+                        const syncUrl = i.platform
+                          ? `/api/v1/ecommerce_connections/${encodeURIComponent(i.id)}/sync`
+                          : `/api/v1/integrations/${encodeURIComponent(i.id)}/sync`;
+                        (async () => {
+                          try {
+                            const res = await fetch(syncUrl, { method: "POST", credentials: "same-origin" });
+                            const json = await res.json().catch(() => null);
+                            if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
+                            toast.success("Sync started");
+                            refresh();
+                          } catch (err: any) {
+                            toast.error(String(err?.message ?? err));
+                          }
+                        })();
+                      }} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+                        Sync
                       </button>
 
-                      <button
-                        onClick={() => {
-                          setConnectorManagerProvider(i.provider ?? i.platform ?? null);
-                          setConnectorManagerOpen(true);
-                        }}
-                        className="px-3 py-1 border rounded text-sm"
-                      >
-                        Manage
+                      {/* Replace Manage with Delete to avoid duplication with ConnectorManager */}
+                      <button onClick={() => handleDelete(i.id, i.platform)} className="px-3 py-1 border rounded text-sm text-rose-600 hover:bg-rose-50">
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -122,7 +137,6 @@ export default function IntegrationsPage() {
           </div>
         </section>
 
-        {/* Catalogue / Connect */}
         <aside className="col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-medium">Available integrations</h3>
@@ -154,7 +168,6 @@ export default function IntegrationsPage() {
         </aside>
       </div>
 
-      {/* Provider-aware Connect modal (uses schema where available, else falls back) */}
       <ConnectModal
         provider={connectProvider}
         open={connectModalOpen}
@@ -163,7 +176,7 @@ export default function IntegrationsPage() {
         onOpenConnectorManager={() => openConnectorManagerFallback(connectProvider)}
       />
 
-      {/* ConnectorManager fallback (only used when modal requests fallback or user explicitly opens it) */}
+      {/* ConnectorManager fallback (rare; advanced flows) */}
       {connectorManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
           <div className="w-full max-w-3xl rounded-lg bg-white p-6 dark:bg-slate-900">
@@ -172,7 +185,7 @@ export default function IntegrationsPage() {
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); }} className="px-2 py-1">Close</button>
             </div>
 
-            <ConnectorManager orgId={orgId as any} selectedId={""} onSelect={() => {}} initialProvider={connectorManagerProvider ?? undefined} />
+            <ConnectorManager orgId={undefined as any} selectedId={""} onSelect={() => {}} />
 
             <div className="mt-4 flex justify-end">
               <button onClick={() => { setConnectorManagerOpen(false); setConnectorManagerProvider(null); refresh(); }} className="px-3 py-1 rounded bg-sky-600 text-white">
