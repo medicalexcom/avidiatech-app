@@ -152,7 +152,7 @@ export async function POST(req: Request) {
       }
 
       const secrets_enc = encryptSecrets({ access_token: accessToken });
-      const config = { store_hash: storeHash };
+      const config: Record<string, any> = { store_hash: storeHash };
       if (nameProvided) config.store_name = nameProvided;
 
       const insert = await supaAdmin
