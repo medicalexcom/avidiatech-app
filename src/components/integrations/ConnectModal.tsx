@@ -24,7 +24,7 @@ type Props = {
   provider: string | null;
   open: boolean;
   onClose: () => void;
-  onSuccess?: (connection?: any) => void;
+  onSuccess?: () => void;
   onOpenConnectorManager?: () => void;
 };
 
@@ -39,10 +39,10 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
   }, [fields]);
 
   const [form, setForm] = useState<Record<string, string>>(initialState);
-  const [connectionName, setConnectionName] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // sync initial when provider changes
   React.useEffect(() => {
     setForm(
       (PROVIDER_FIELDS[provider ?? ""] ?? []).reduce((acc: Record<string, string>, f) => {
@@ -50,10 +50,8 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
         return acc;
       }, {})
     );
-    setConnectionName("");
     setError(null);
     setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, open]);
 
   if (!open) return null;
@@ -63,12 +61,13 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
 
   async function submit() {
     if (!hasSchema) {
+      // fallback: open ConnectorManager to handle provider
       toast.info("Opening connector manager for provider");
       onOpenConnectorManager?.();
       return;
     }
 
-    // validate required
+    // simple validation: all required
     for (const f of fields!) {
       if (!form[f.name] || String(form[f.name]).trim() === "") {
         setError(`Field "${f.label}" is required`);
@@ -79,40 +78,19 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setLoading(true);
     setError(null);
     try {
-      // Unified endpoint for ecommerce connections
-      const url = `/api/v1/ecommerce_connections`;
-      const payload: any = {
-        provider,
-        name: connectionName || undefined,
-      };
-
-      // Provider-specific mapping: include either top-level keys for BC or config/secrets for generic providers
-      if (provider === "bigcommerce") {
-        payload.storeHash = form.storeHash ?? form.store_hash ?? "";
-        payload.accessToken = form.accessToken ?? form.access_token ?? "";
-      } else {
-        // Generic provider: put fields into config/secrets when appropriate
-        payload.config = {};
-        payload.secrets = {};
-        (fields ?? []).forEach((f) => {
-          if (f.secret) payload.secrets[f.name] = form[f.name];
-          else payload.config[f.name] = form[f.name];
-        });
-        // If secrets is empty, delete it so server can encrypt empty object itself
-        if (Object.keys(payload.secrets).length === 0) delete payload.secrets;
-      }
-
+      const url = `/api/v1/integrations/ecommerce/${encodeURIComponent(provider!)}`;
       const res = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(form),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
-        // fallback to ConnectorManager if server says not implemented
-        if (res.status === 404 || String(json?.error).includes("not implemented")) {
-          toast.info("Falling back to connector manager for advanced flow");
+        // if endpoint not implemented, open ConnectorManager fallback
+        if (res.status === 404 || (json && json.error && json.error.includes("not implemented"))) {
+          setError(null);
+          toast.info("Falling back to ConnectorManager (server-side flow required)");
           onOpenConnectorManager?.();
           return;
         }
@@ -121,7 +99,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
       }
 
       toast.success(`${provider} connected`);
-      onSuccess?.(json.connection ?? null);
+      onSuccess?.();
       onClose();
     } catch (err: any) {
       setError(String(err?.message ?? err));
@@ -143,18 +121,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
           </div>
         </div>
 
-        <div className="mt-4 space-y-3">
-          <div>
-            <label className="block text-xs text-slate-600">Connection name (optional)</label>
-            <input
-              placeholder="A friendly name (e.g. My Store)"
-              value={connectionName}
-              onChange={(e) => setConnectionName(e.target.value)}
-              className="w-full rounded border px-3 py-2"
-            />
-            <div className="text-xs text-slate-500 mt-1">This name will be shown in the UI instead of the store hash.</div>
-          </div>
-
+        <div className="mt-4">
           {!hasSchema ? (
             <div className="rounded p-3 border bg-slate-50 dark:bg-slate-950/30">
               <div className="text-sm text-slate-700">This provider requires a specialized connect flow.</div>
@@ -166,7 +133,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
               </div>
             </div>
           ) : (
-            <>
+            <div className="space-y-3">
               {fields!.map((f) => (
                 <div key={f.name}>
                   <label className="block text-xs text-slate-600">{f.label}</label>
@@ -186,7 +153,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
                   {loading ? "Connecting…" : `Connect ${provider}`}
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
