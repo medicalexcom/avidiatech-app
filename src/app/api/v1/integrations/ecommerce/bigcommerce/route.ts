@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { auth, clerkClient } from "@/lib/auth"; // adjust imports if your project uses different helper names
-import { getOrCreateTenantIdFromClerkOrg } from "@/lib/tenants"; // ensure this helper exists in your project
+import { getCurrentUser, getCurrentTenantId } from "@/lib/auth";
 import { encryptSecrets } from "@/lib/integrations/encryption";
 
 /**
  * POST /api/v1/integrations/ecommerce/bigcommerce
- * Body: { storeHash, accessToken, name? }
+ * Body: { storeHash | store_hash, accessToken | access_token, name? }
  *
- * Validates credentials, encrypts secrets, inserts into ecommerce_connections with optional name
+ * This version uses the simple auth helpers present in your repo:
+ * - getCurrentUser(req?) and getCurrentTenantId(req?) from src/lib/auth.ts
+ *
+ * NOTE: In production you should replace these with real session/Clerk checks.
  */
 
 function getSupabaseAdmin() {
@@ -44,9 +46,12 @@ async function validateBigCommerceCredentials(storeHash: string, token: string) 
 
 export async function POST(req: Request) {
   try {
-    const { userId, orgId } = await auth(); // your existing auth helper returning { userId, orgId }
-    if (!userId) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-    if (!orgId) return NextResponse.json({ ok: false, error: "missing_tenant" }, { status: 400 });
+    // Minimal auth using your helpers (replace with Clerk/session later)
+    const user = await getCurrentUser(req);
+    const tenantId = getCurrentTenantId(req);
+
+    if (!user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    if (!tenantId) return NextResponse.json({ ok: false, error: "missing_tenant" }, { status: 400 });
 
     const body = await req.json().catch(() => ({}));
     const storeHash: string = (body.storeHash ?? body.store_hash ?? "").trim();
@@ -69,28 +74,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Try to get a friendly tenant name (best-effort)
-    let tenantName: string | null = null;
-    try {
-      const client = await clerkClient();
-      const org = await client.organizations.getOrganization({ organizationId: orgId });
-      tenantName = org?.name ?? null;
-    } catch {
-      // ignore
-    }
-
-    // Map clerk org -> tenant id (existing helper)
-    const tenantId = await getOrCreateTenantIdFromClerkOrg({
-      clerkOrgId: orgId,
-      clerkUserId: userId,
-      tenantName,
-    });
-
+    // Prepare Supabase admin client and write connection row
     const supabase = getSupabaseAdmin();
     const secrets_enc = encryptSecrets({ access_token: accessToken });
 
-    // use provided connection name if present, fallback to tenantName or storeHash
-    const connectionName = nameProvided ?? tenantName ?? storeHash;
+    // Decide a UI-friendly name: provided name > tenant id (or storeHash fallback)
+    const connectionName = nameProvided ?? `store-${storeHash}`;
 
     const insert = await supabase
       .from("ecommerce_connections")
@@ -102,10 +91,11 @@ export async function POST(req: Request) {
         config: { store_hash: storeHash },
         secrets_enc,
       })
-      .select("id, tenant_id, platform, status, config, name, created_at")
+      .select("id, tenant_id, platform, status, config, name, created_at, updated_at")
       .single();
 
     if (insert.error) {
+      console.error("[bigcommerce] db insert error:", insert.error.message);
       return NextResponse.json({ ok: false, error: "db_insert_failed", detail: insert.error.message }, { status: 500 });
     }
 
