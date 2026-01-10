@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * useIntegrations (tenant-aware)
- * - fetches /api/v1/me for org_id, then queries integrations and ecommerce_connections using that id
- * - normalizes results for UI
+ * useIntegrations
+ * - Fetches both /api/v1/integrations and /api/v1/ecommerce_connections in parallel
+ * - Normalizes and merges results (dedup by id)
+ * - Exposes connect, disconnect, refresh, testConnection, syncConnection
  */
 
 export type Integration = {
@@ -17,6 +18,7 @@ export type Integration = {
   status?: string | null;
   config?: Record<string, any> | null;
   updated_at?: string | null;
+  hasSecrets?: boolean;
   __source?: "integrations" | "ecommerce";
 };
 
@@ -34,10 +36,11 @@ function normalizeList(payload: any, source: "integrations" | "ecommerce") {
     id: String(r.id),
     provider: r.provider ?? null,
     platform: r.platform ?? null,
-    name: r.name ?? r.display_name ?? r.store_name ?? r.config?.store_name ?? r.config?.store_hash ?? r.id,
+    name: r.name ?? r.display_name ?? r.store_name ?? r.config?.store_name ?? r.config?.store_hash ?? null,
     status: r.status ?? null,
     config: r.config ?? null,
     updated_at: r.updated_at ?? r.last_synced_at ?? r.updatedAt ?? null,
+    hasSecrets: Boolean(r.encrypted_secrets ?? r.secrets_enc ?? r.secrets ?? r.encrypted_secret),
     __source: source,
   }));
 }
@@ -47,97 +50,65 @@ export function useIntegrations() {
   const [integrations, setIntegrations] = useState<Integration[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orgId, setOrgId] = useState<string | null>(null);
 
-  const fetchOrg = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await fetch("/api/v1/me", { credentials: "same-origin" });
-      if (!res.ok) return null;
-      const json = await res.json().catch(() => null);
-      return json?.org_id ?? null;
-    } catch {
-      return null;
-    }
-  }, []);
+      const [r1, r2] = await Promise.allSettled([
+        fetch("/api/v1/integrations", { credentials: "same-origin" }),
+        fetch("/api/v1/ecommerce_connections", { credentials: "same-origin" }),
+      ]);
 
-  const fetchAll = useCallback(
-    async (forceOrgId?: string | null) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resolvedOrg = forceOrgId ?? (orgId ?? (await fetchOrg()));
-        if (!resolvedOrg) {
-          // try fetching generic endpoints without orgId (best-effort)
-          const [r1, r2] = await Promise.allSettled([
-            fetch("/api/v1/integrations", { credentials: "same-origin" }),
-            fetch("/api/v1/ecommerce_connections", { credentials: "same-origin" }),
-          ]);
-          let list: Integration[] = [];
-          if (r1.status === "fulfilled") {
-            const res = r1.value;
-            const json = await res.json().catch(() => null);
-            if (res.ok) list = list.concat(normalizeList(json, "integrations"));
-          }
-          if (r2.status === "fulfilled") {
-            const res2 = r2.value;
-            const json2 = await res2.json().catch(() => null);
-            if (res2.ok) list = list.concat(normalizeList(json2, "ecommerce"));
-          }
-          setIntegrations(list);
-          setLoading(false);
-          return;
-        }
+      let list: Integration[] = [];
 
-        // we have an org/tenant id: query tenant-aware endpoints
-        setOrgId(resolvedOrg);
-
-        const urls = [
-          `/api/v1/integrations?orgId=${encodeURIComponent(resolvedOrg)}`,
-          `/api/v1/ecommerce_connections?tenantId=${encodeURIComponent(resolvedOrg)}`,
-        ];
-
-        const [r1, r2] = await Promise.allSettled(urls.map((u) => fetch(u, { credentials: "same-origin" })));
-
-        let list: Integration[] = [];
-
-        if (r1.status === "fulfilled") {
+      if (r1.status === "fulfilled") {
+        try {
           const res = r1.value;
           const json = await res.json().catch(() => null);
           if (res.ok) list = list.concat(normalizeList(json, "integrations"));
+        } catch {
+          // ignore parse errors
         }
-        if (r2.status === "fulfilled") {
+      }
+
+      if (r2.status === "fulfilled") {
+        try {
           const res2 = r2.value;
           const json2 = await res2.json().catch(() => null);
           if (res2.ok) list = list.concat(normalizeList(json2, "ecommerce"));
+        } catch {
+          // ignore
         }
-
-        // dedupe by id (prefer 'integrations' source)
-        const byId = new Map<string, Integration>();
-        for (const it of list) {
-          if (!byId.has(it.id)) byId.set(it.id, it);
-          else {
-            const cur = byId.get(it.id)!;
-            byId.set(it.id, Object.assign({}, cur, Object.fromEntries(Object.entries(it).filter(([k, v]) => v != null))));
-          }
-        }
-
-        setIntegrations(Array.from(byId.values()));
-      } catch (err: any) {
-        console.error("useIntegrations.fetchAll error", err);
-        setError(String(err?.message ?? err));
-        setIntegrations([]);
-      } finally {
-        setLoading(false);
       }
-    },
-    [fetchOrg, orgId]
-  );
+
+      // dedupe by id
+      const byId = new Map<string, Integration>();
+      for (const item of list) {
+        if (!byId.has(item.id)) byId.set(item.id, item);
+        else {
+          const cur = byId.get(item.id)!;
+          // merge preferring non-null fields from item
+          const merged = Object.assign({}, cur, Object.fromEntries(Object.entries(item).filter(([k, v]) => v !== null && v !== undefined)));
+          byId.set(item.id, merged);
+        }
+      }
+
+      setIntegrations(Array.from(byId.values()));
+    } catch (err: any) {
+      console.error("useIntegrations.fetchAll error", err);
+      setError(String(err?.message ?? err));
+      setIntegrations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
 
-  const refresh = useCallback(() => fetchAll(null), [fetchAll]);
+  const refresh = useCallback(() => fetchAll(), [fetchAll]);
 
   const connect = useCallback((provider: string) => {
     router.push(`/integrations?connect=${encodeURIComponent(provider)}`);
@@ -151,7 +122,7 @@ export function useIntegrations() {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error ?? body?.message ?? `Delete failed (${res.status})`);
       }
-      await fetchAll(null);
+      await fetchAll();
       return true;
     },
     [fetchAll]
@@ -169,6 +140,7 @@ export function useIntegrations() {
         platform = idOrObj.platform;
       }
 
+      // Prefer ecommerce validate endpoint if platform suggests ecommerce
       if (platform || provider === "bigcommerce") {
         const url = `/api/v1/ecommerce_connections/${encodeURIComponent(id)}/validate`;
         const res = await fetch(url, { credentials: "same-origin" });
@@ -176,6 +148,7 @@ export function useIntegrations() {
           const json = await res.json().catch(() => null);
           return json ?? { ok: true };
         }
+        // fallthrough to legacy test
       }
 
       const testUrl = `/api/v1/integrations/${encodeURIComponent(id)}/test`;
@@ -183,6 +156,40 @@ export function useIntegrations() {
       if (!res2.ok) {
         const body = await res2.json().catch(() => null);
         throw new Error(body?.error ?? body?.message ?? `Test failed (${res2.status})`);
+      }
+      const json2 = await res2.json().catch(() => null);
+      return json2 ?? { ok: true };
+    },
+    []
+  );
+
+  const syncConnection = useCallback(
+    async (idOrObj: string | { id: string; provider?: string; platform?: string }) => {
+      let id: string;
+      let platform: string | undefined;
+      if (typeof idOrObj === "string") id = idOrObj;
+      else {
+        id = idOrObj.id;
+        platform = idOrObj.platform ?? idOrObj.provider;
+      }
+
+      // Try ecommerce sync first when platform present
+      if (platform) {
+        const url = `/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`;
+        const res = await fetch(url, { method: "POST", credentials: "same-origin" });
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          // Attempt to return job info if available
+          return json ?? { ok: true };
+        }
+        // fallback to legacy integrations sync if ecommerce sync missing or failed
+      }
+
+      const legacyUrl = `/api/v1/integrations/${encodeURIComponent(id)}/sync`;
+      const res2 = await fetch(legacyUrl, { method: "POST", credentials: "same-origin" });
+      if (!res2.ok) {
+        const body = await res2.json().catch(() => null);
+        throw new Error(body?.error ?? body?.message ?? `Sync failed (${res2.status})`);
       }
       const json2 = await res2.json().catch(() => null);
       return json2 ?? { ok: true };
@@ -203,10 +210,10 @@ export function useIntegrations() {
     activeIntegrations,
     loading,
     error,
-    orgId,
     refresh,
     connect,
     disconnect,
     testConnection,
+    syncConnection,
   };
 }
