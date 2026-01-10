@@ -420,13 +420,21 @@ Deno.serve(async (req) => {
         if (moduleName === "import") {
           if (!ingestionId) throw new Error("missing_ingestionId_for_import");
 
+          // ===== MODIFIED: include pipelineRunId and moduleIndex in the import call body
+          const importBody = {
+            ingestionId,
+            options: options?.import ?? null,
+            pipelineRunId,
+            moduleIndex,
+          };
+
           const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/import`, {
             method: "POST",
             headers: {
               "content-type": "application/json",
               "x-pipeline-secret": internalSecret,
             },
-            body: JSON.stringify({ ingestionId, options: options?.import ?? null }),
+            body: JSON.stringify(importBody),
           });
 
           const text = await resp.text().catch(() => "");
