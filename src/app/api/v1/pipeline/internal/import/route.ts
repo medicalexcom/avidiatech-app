@@ -1,4 +1,8 @@
 // src/app/api/v1/pipeline/internal/import/route.ts
+// Updated to fallback to reading product_ingestions.tenant_id when tenantId isn't provided in the request.
+// This is a minimal, non-breaking change starting from the repo file: we resolve tenant from DB (service role)
+// and only return 422 when tenant truly cannot be determined.
+
 import { NextResponse } from "next/server";
 import { runImportForIngestion } from "@/lib/imports/runImportForIngestion";
 import { createClient } from "@supabase/supabase-js";
@@ -56,10 +60,10 @@ export async function POST(req: Request) {
     const platform = (options?.platform ?? "bigcommerce") as "bigcommerce";
     const allowOverwriteExisting = Boolean(options?.allowOverwriteExisting);
 
-    // 1) respect tenant included in request body if present
+    // Respect tenant included in request body if present
     let tenantId = body?.tenantId ?? body?.tenant_id ?? null;
 
-    // 2) if tenantId missing, attempt to resolve from product_ingestions
+    // If tenantId missing, attempt to resolve it from product_ingestions (authoritative)
     if (!tenantId) {
       const resolved = await resolveTenantFromIngestion(ingestionId);
       if (resolved) {
@@ -67,15 +71,18 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3) Call the import executor. We pass tenantId if resolved; runImportForIngestion
-    //    implementations that don't accept tenantId should ignore extra props.
-    const result = await runImportForIngestion({
+    // If still missing, preserve existing behavior: runImportForIngestion should throw "missing_tenant_id_for_import"
+    // or you can explicitly return 422 here. We call the import executor and let it return expected errors.
+    const callArgs: any = {
       ingestionId,
       platform,
       allowOverwriteExisting,
-      tenantId, // added fallback param (non-breaking)
-      options,
-    } as any);
+    };
+
+    // Pass tenantId through so import executor can use it if it supports/needs it.
+    if (tenantId) callArgs.tenantId = tenantId;
+
+    const result = await runImportForIngestion(callArgs);
 
     return NextResponse.json(result, { status: 200 });
   } catch (err: any) {
