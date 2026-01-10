@@ -26,9 +26,11 @@ type Props = {
   onClose: () => void;
   onSuccess?: () => void;
   onOpenConnectorManager?: () => void;
+  // optional: if the parent already knows orgId, pass it to avoid an extra /api/v1/me roundtrip
+  orgId?: string;
 };
 
-export default function ConnectModal({ provider, open, onClose, onSuccess, onOpenConnectorManager }: Props) {
+export default function ConnectModal({ provider, open, onClose, onSuccess, onOpenConnectorManager, orgId: orgIdProp }: Props) {
   const toast = useToast();
   const fields = useMemo(() => (provider ? PROVIDER_FIELDS[provider] ?? null : null), [provider]);
 
@@ -61,6 +63,19 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
 
   const hasSchema = !!fields;
 
+  async function resolveOrgId(): Promise<string | null> {
+    // if caller passed orgId, use it
+    if (orgIdProp) return orgIdProp;
+    try {
+      const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+      if (!res.ok) return null;
+      const json = await res.json().catch(() => null);
+      return json?.org_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function submit() {
     if (!hasSchema) {
       // fallback: open ConnectorManager to handle provider
@@ -81,17 +96,21 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setError(null);
     try {
       // unified endpoint for ecommerce connections
-      const url = `/api/v1/ecommerce_connections`;
-      // build payload: include provider + provider-specific fields + optional name
+      const baseUrl = `/api/v1/ecommerce_connections`;
+
+      // Resolve tenant id (prefer prop; otherwise call /api/v1/me)
+      const resolvedOrg = await resolveOrgId();
+
+      // Build payload: include provider + provider-specific fields + optional name
       const payload: any = { provider };
-      // copy fields as-is (server accepts storeHash / accessToken etc)
       for (const f of fields!) {
         payload[f.name] = form[f.name];
-        // also include snake_case fallback for some servers that check it
         const snake = f.name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
         payload[snake] = form[f.name];
       }
       if (connectionName && connectionName.trim()) payload.name = connectionName.trim();
+
+      const url = resolvedOrg ? `${baseUrl}?tenantId=${encodeURIComponent(resolvedOrg)}` : baseUrl;
 
       const res = await fetch(url, {
         method: "POST",
