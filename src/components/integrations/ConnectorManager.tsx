@@ -5,21 +5,21 @@ import { useToast } from "@/components/ui/toast";
 
 /**
  * ConnectorManager (multi-provider)
- * - Supports: bigcommerce (API token + store_hash), wooCommerce (consumer key/secret),
- *   shopify (OAuth flow trigger), magento (API token), generic-api-key.
+ * - Now unified to use /api/v1/ecommerce_connections for ecommerce provider create/list.
  *
  * - Expects server endpoints:
- *   GET  /api/v1/integrations?orgId=<org>
- *   POST /api/v1/integrations
- *   POST /api/v1/integrations/:id/sync
- *   GET  /api/v1/integrations/oauth/shopify/start  (server will redirect to Shopify)
+ *   GET  /api/v1/ecommerce_connections?tenantId=<org>
+ *   POST /api/v1/ecommerce_connections?tenantId=<org>
+ *   DELETE /api/v1/ecommerce_connections/:id
+ *   (falls back to /api/v1/integrations endpoints for compatibility)
  *
  * Replace orgId usage with a session-derived orgId once you add server auth integration.
  */
 
 type Integration = {
   id: string;
-  provider: string;
+  provider?: string;
+  platform?: string;
   name?: string;
   config?: any;
   status?: string;
@@ -65,14 +65,40 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`);
-      const json = await res.json().catch(() => null);
-      if (res.ok && json?.ok) {
-        setList(json.integrations ?? []);
+      // Try canonical ecommerce_connections first (tenant-aware)
+      const res = await fetch(`/api/v1/ecommerce_connections?tenantId=${encodeURIComponent(orgId)}`, {
+        credentials: "same-origin",
+      });
+      let json = await res.json().catch(() => null);
+      let rows: any[] = [];
+
+      if (res.ok && Array.isArray(json?.connections)) {
+        rows = json.connections;
       } else {
-        setError(json?.error ?? "Failed to load");
-        toast.error(json?.error ?? "Failed to load connectors");
+        // fallback to legacy integrations endpoint for compatibility
+        const res2 = await fetch(`/api/v1/integrations?orgId=${encodeURIComponent(orgId)}`, { credentials: "same-origin" });
+        const json2 = await res2.json().catch(() => null);
+        if (res2.ok && Array.isArray(json2?.integrations)) {
+          rows = json2.integrations;
+        } else if (res2.ok && Array.isArray(json2)) {
+          rows = json2;
+        }
       }
+
+      // normalize rows to Integration[]
+      const normalized = (rows ?? []).map((r: any) => {
+        return {
+          id: String(r.id),
+          provider: r.provider ?? r.platform ?? r.provider,
+          platform: r.platform ?? r.provider ?? undefined,
+          name: r.name ?? r.config?.store_name ?? r.name ?? r.config?.store_hash ?? r.id,
+          config: r.config ?? {},
+          status: r.status ?? "active",
+          last_synced_at: r.updated_at ?? r.last_synced_at ?? null,
+        } as Integration;
+      });
+
+      setList(normalized);
     } catch (err: any) {
       setError(String(err?.message ?? err));
       toast.error(String(err?.message ?? err));
@@ -90,19 +116,23 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
     setCreating(true);
     setError(null);
     try {
-      let payload: any = { org_id: orgId, provider, name: name || provider, config: {}, secrets: {} };
+      // Build payload for canonical endpoint
+      let payload: any = { provider };
 
       if (provider === "bigcommerce") {
-        payload.config = { store_hash: storeHash };
-        payload.secrets = { access_token: accessToken };
+        payload.storeHash = storeHash;
+        payload.accessToken = accessToken;
+        if (name) payload.name = name;
       } else if (provider === "woocommerce") {
         payload.config = {};
         payload.secrets = { consumer_key: wcKey, consumer_secret: wcSecret };
+        if (name) payload.name = name;
       } else if (provider === "magento") {
         payload.config = {};
         payload.secrets = { api_token: apiToken };
+        if (name) payload.name = name;
       } else if (provider === "shopify") {
-        // Shopify: start OAuth flow on the server
+        // Shopify: start OAuth flow on the server (legacy flow)
         const oauthRes = await fetch(`/api/v1/integrations/oauth/shopify/start`, {
           method: "POST",
           credentials: "same-origin",
@@ -113,7 +143,6 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
           const j = await oauthRes.json().catch(() => null);
           throw new Error(j?.error ?? `Shopify start failed (${oauthRes.status})`);
         }
-        // server should redirect the browser; return early
         const j = await oauthRes.json().catch(() => null);
         if (j?.redirect) {
           window.location.href = j.redirect;
@@ -123,11 +152,13 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
         // generic fallback
         payload.config = {};
         payload.secrets = { api_token: apiToken };
+        if (name) payload.name = name;
       }
 
-      // For non-OAuth providers, POST to create
+      // For non-OAuth providers, POST to canonical ecommerce endpoint
       if (provider !== "shopify") {
-        const res = await fetch("/api/v1/integrations", {
+        // include tenant info as query param so server can resolve tenant without session
+        const res = await fetch(`/api/v1/ecommerce_connections?tenantId=${encodeURIComponent(orgId)}`, {
           method: "POST",
           credentials: "same-origin",
           headers: { "content-type": "application/json" },
@@ -152,10 +183,18 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
 
   async function syncConnector(id: string) {
     try {
-      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+      // prefer ecommerce_connections sync route if present, else fallback to legacy integrations/:id/sync
+      let res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`, {
         method: "POST",
         credentials: "same-origin",
       });
+      if (!res.ok) {
+        // fallback
+        res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+          method: "POST",
+          credentials: "same-origin",
+        });
+      }
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
       toast.success("Sync started");
@@ -219,7 +258,7 @@ export default function ConnectorManager({ orgId, selectedId, onSelect, initialP
               <div key={l.id} className="flex items-center justify-between rounded border p-2">
                 <div>
                   <div className="font-medium">{l.name}</div>
-                  <div className="text-xs text-slate-500">{l.provider} • {l.status}</div>
+                  <div className="text-xs text-slate-500">{l.platform ?? l.provider} • {l.status}</div>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => syncConnector(l.id)} className="px-2 py-1 border rounded text-sm">Sync</button>
