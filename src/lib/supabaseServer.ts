@@ -92,7 +92,7 @@ export async function saveIngestion({
 }
 
 /**
- * incrementUsageCounter - unchanged except uses tenant fallback same as above.
+ * incrementUsageCounter - uses tenant fallback same as above.
  */
 export async function incrementUsageCounter({
   tenantId,
@@ -153,5 +153,54 @@ export async function incrementUsageCounter({
   } catch (e) {
     console.error("incrementUsageCounter unexpected error", e);
     throw e;
+  }
+}
+
+/**
+ * checkQuota - returns boolean whether tenant is within quota.
+ *
+ * - opts.limit may be a number or Infinity. If limit is Infinity or not provided, this function returns true.
+ * - On DB error this function returns true (fail-open).
+ */
+export async function checkQuota(opts: {
+  tenantId: string | null;
+  metric?: string;
+  limit?: number;
+}): Promise<boolean> {
+  const { tenantId, metric = "describe_calls", limit = Infinity } = opts;
+
+  // If limit is infinite, allow
+  if (!isFinite(limit)) return true;
+
+  if (!url || !serviceKey || !supabase) {
+    // Fail-open if DB not configured
+    return true;
+  }
+
+  const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
+  if (!tenantKey) {
+    // If no tenant and no global fallback configured, be conservative and allow (fail-open)
+    return true;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("usage_counters")
+      .select("count")
+      .eq("tenant_id", tenantKey)
+      .eq("metric", metric)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("checkQuota db error, failing open", error);
+      return true;
+    }
+
+    const current = Number((data as any)?.count ?? 0);
+    return current < Number(limit);
+  } catch (e) {
+    console.warn("checkQuota unexpected error, failing open", e);
+    return true;
   }
 }
