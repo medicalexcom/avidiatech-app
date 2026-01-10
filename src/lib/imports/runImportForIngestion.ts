@@ -1,10 +1,13 @@
 /**
- * runImportForIngestion.ts (v3 + persist product_id)
+ * src/lib/imports/runImportForIngestion.ts
  *
- * After successful create/update on BigCommerce, persist the store product id back to
- * product_ingestions.product_id so future runs can be idempotent and faster.
+ * Import / sync a single ingestion into BigCommerce and persist status.
+ * - Finds the tenant's active BigCommerce connection automatically.
+ * - Creates/updates product by SKU (create if not found).
+ * - Persists import_jobs + import_rows and writes product_id back to product_ingestions.
+ * - If pipelineRunId + moduleIndex provided in opts, marks module_runs/pipeline_runs and writes a pipeline_module_logs entry.
  *
- * Keep decryptSecrets at src/lib/integrations/encryption and SUPABASE envs present.
+ * Defensive and non-fatal: failures to mark pipeline module/persist product_id won't revert the import success.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -23,6 +26,7 @@ const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 function bcBaseUrl(storeHash: string) {
   return `https://api.bigcommerce.com/stores/${encodeURIComponent(storeHash)}/v3`;
 }
+
 function bcHeaders(token: string) {
   return {
     "X-Auth-Token": token,
@@ -30,6 +34,7 @@ function bcHeaders(token: string) {
     "Content-Type": "application/json",
   };
 }
+
 async function fetchJson(url: string, opts: RequestInit = {}) {
   const res = await fetch(url, opts);
   const text = await res.text().catch(() => "");
@@ -42,10 +47,7 @@ async function fetchJson(url: string, opts: RequestInit = {}) {
   return { res, body, text };
 }
 
-/**
- * Extract a normalized product shape from a variety of ingestion payload forms.
- * Returns { sku, title, description, price, variants, images, raw } or null.
- */
+/* ========== Normalization helpers ========== */
 function extractNormalizedProduct(ingestRow: any) {
   if (!ingestRow || typeof ingestRow !== "object") return null;
 
@@ -79,16 +81,11 @@ function extractNormalizedProduct(ingestRow: any) {
     const price = getFirst(o, "price", "list_price", "msrp", "price_cents");
     const variants = Array.isArray(o.variants) ? o.variants : Array.isArray(o.variant) ? o.variant : [];
     let images: string[] = [];
-    if (Array.isArray(o.images)) {
-      images = o.images.map((i: any) => (typeof i === "string" ? i : i.url ?? i.image_url ?? i.src ?? "")).filter(Boolean);
-    } else if (Array.isArray(o.media)) {
-      images = o.media.map((m: any) => (typeof m === "string" ? m : m.url ?? m.src ?? m.image_url ?? "")).filter(Boolean);
-    } else if (o.image && typeof o.image === "string") {
-      images = [o.image];
-    }
-    if (sku || title) {
-      return { sku, title, description, price, variants, images, raw: o };
-    }
+    if (Array.isArray(o.images)) images = o.images.map((i: any) => (typeof i === "string" ? i : i.url ?? i.image_url ?? i.src ?? "")).filter(Boolean);
+    else if (Array.isArray(o.media)) images = o.media.map((m: any) => (typeof m === "string" ? m : m.url ?? m.src ?? m.image_url ?? "")).filter(Boolean);
+    else if (o.image && typeof o.image === "string") images = [o.image];
+
+    if (sku || title) return { sku, title, description, price, variants, images, raw: o };
     return null;
   };
 
@@ -100,7 +97,7 @@ function extractNormalizedProduct(ingestRow: any) {
         const psc = scanObject(parsed);
         if (psc) return psc;
       } catch {
-        // ignore non-JSON strings
+        // ignore
       }
     } else {
       const scanned = scanObject(c);
@@ -108,7 +105,7 @@ function extractNormalizedProduct(ingestRow: any) {
     }
   }
 
-  // fallback: shallow walk top-level object keys
+  // final fallback: shallow walk top-level keys
   for (const k of Object.keys(ingestRow)) {
     const v = ingestRow[k];
     if (v && typeof v === "object") {
@@ -120,15 +117,18 @@ function extractNormalizedProduct(ingestRow: any) {
   return null;
 }
 
+/* ========== Main function ========== */
 export async function runImportForIngestion(opts: {
   ingestionId: string;
   platform?: "bigcommerce";
   allowOverwriteExisting?: boolean;
+  pipelineRunId?: string;
+  moduleIndex?: number;
 }): Promise<any> {
   const ingestionId = String(opts.ingestionId || "");
   if (!ingestionId) throw new Error("missing_ingestionId");
 
-  // Defensive table lookup
+  // Defensive: try common ingestion table names
   const ingestionTables = ["product_ingestions", "ingestions", "product_ingestion", "ingestion"];
   let ingestionRow: any = null;
   for (const t of ingestionTables) {
@@ -139,7 +139,7 @@ export async function runImportForIngestion(opts: {
         break;
       }
     } catch {
-      // ignore tables that don't exist
+      // ignore
     }
   }
   if (!ingestionRow) throw new Error("ingestion_not_found");
@@ -147,7 +147,7 @@ export async function runImportForIngestion(opts: {
   const tenantId = ingestionRow.org_id ?? ingestionRow.tenant_id ?? ingestionRow.tenantId ?? ingestionRow.orgId ?? null;
   if (!tenantId) throw new Error("missing_tenant_id_for_import");
 
-  // Find active BigCommerce connection for tenant
+  // Get active BigCommerce connection for tenant
   const { data: connections, error: connErr } = await supaAdmin
     .from("ecommerce_connections")
     .select("*")
@@ -171,7 +171,6 @@ export async function runImportForIngestion(opts: {
     throw new Error(`connection_load_failed:decrypt_failed:${String(e?.message ?? e)}`);
   }
 
-  // Safe, explicit config/token extraction (avoid mixing ?? and ||)
   const cfg = conn.config ?? {};
   const storeHash = cfg.store_hash ?? cfg.storeHash ?? undefined;
   const token = secrets.access_token ?? secrets.accessToken ?? secrets.token ?? undefined;
@@ -200,21 +199,15 @@ export async function runImportForIngestion(opts: {
   if (jobErr || !jobRow) throw new Error("import_persist_failed:create_job");
   const jobId = jobRow.id as string;
 
-  // Insert a row stub
-  const rowStub = {
-    job_id: jobId,
-    row_number: 1,
-    data: ingestionRow,
-    status: "pending",
-    errors: [],
-  };
+  // Insert import_rows stub
+  const rowStub = { job_id: jobId, row_number: 1, data: ingestionRow, status: "pending", errors: [] };
   const { error: insertRowErr } = await supaAdmin.from("import_rows").insert([rowStub]);
   if (insertRowErr) {
     await supaAdmin.from("import_jobs").update({ status: "failed", errors: JSON.stringify([insertRowErr.message ?? String(insertRowErr)]) }).eq("id", jobId);
     throw new Error("import_persist_failed:insert_row");
   }
 
-  // Normalize product from ingestion
+  // Normalize product
   const norm = extractNormalizedProduct(ingestionRow);
   if (!norm || !norm.sku) {
     const msg = "missing_sku_in_ingestion";
@@ -233,11 +226,7 @@ export async function runImportForIngestion(opts: {
       const option_values = Array.isArray(v.options)
         ? v.options.map((o: any) => ({ option_display_name: o.name ?? "Option", label: o.value ?? o }))
         : v.option_values ?? v.optionValues ?? undefined;
-      return {
-        sku: v.sku ?? sku,
-        price: v.price ?? v.list_price ?? undefined,
-        option_values,
-      };
+      return { sku: v.sku ?? sku, price: v.price ?? v.list_price ?? undefined, option_values };
     }),
     meta: { source: "pipeline_import", ingestionId, raw: norm.raw },
   };
@@ -245,7 +234,7 @@ export async function runImportForIngestion(opts: {
   const storeBase = bcBaseUrl(storeHash);
 
   try {
-    // Find existing by SKU
+    // Try find existing by SKU
     const findUrl = `${storeBase}/catalog/products?sku=${encodeURIComponent(sku)}`;
     const { res: findRes, body: findBody } = await fetchJson(findUrl, { headers: bcHeaders(token) });
     if (!findRes.ok) {
@@ -254,19 +243,16 @@ export async function runImportForIngestion(opts: {
     }
 
     const existingItems = (findBody && (findBody.data ?? findBody)) || [];
+
     if (Array.isArray(existingItems) && existingItems.length > 0) {
-      // Update path
+      // Update existing product
       const existing = existingItems[0];
       const productId = existing.id;
       const updateUrl = `${storeBase}/catalog/products/${productId}`;
       const updateBody: any = { name: productPayload.name, description: productPayload.description };
       if (productPayload.price) updateBody.price = productPayload.price;
 
-      const { res: upRes, body: upBody } = await fetchJson(updateUrl, {
-        method: "PUT",
-        headers: bcHeaders(token),
-        body: JSON.stringify(updateBody),
-      });
+      const { res: upRes, body: upBody } = await fetchJson(updateUrl, { method: "PUT", headers: bcHeaders(token), body: JSON.stringify(updateBody) });
 
       if (!upRes.ok) {
         await supaAdmin.from("import_rows").update({ status: "failed", errors: JSON.stringify([{ reason: `bigcommerce_update_failed:${upRes.status}`, detail: upBody }]) }).eq("job_id", jobId).eq("row_number", 1);
@@ -274,29 +260,23 @@ export async function runImportForIngestion(opts: {
         return { ok: false, reason: `bigcommerce_update_failed:${upRes.status}`, detail: upBody };
       }
 
-      // Best-effort images
+      // Best-effort: images and variants (omitted detailed error handling for brevity)
       if (Array.isArray(productPayload.images) && productPayload.images.length) {
         for (const im of productPayload.images) {
           try {
             const imgUrl = `${storeBase}/catalog/products/${productId}/images`;
-            const { res: iRes } = await fetchJson(imgUrl, {
-              method: "POST",
-              headers: bcHeaders(token),
-              body: JSON.stringify({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }),
-            });
-            // ignore non-critical image errors
+            await fetchJson(imgUrl, { method: "POST", headers: bcHeaders(token), body: JSON.stringify({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }) });
           } catch {
-            // ignore per-image exceptions
+            // ignore per-image errors
           }
         }
       }
 
-      // Best-effort variant upsert
       if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
         for (const v of productPayload.variants) {
-          const vSku = v.sku ?? null;
-          if (!vSku) continue;
           try {
+            const vSku = v.sku ?? null;
+            if (!vSku) continue;
             const vFindUrl = `${storeBase}/catalog/variants?sku=${encodeURIComponent(vSku)}`;
             const { res: vFindRes, body: vFindBody } = await fetchJson(vFindUrl, { headers: bcHeaders(token) });
             if (vFindRes.ok) {
@@ -316,39 +296,46 @@ export async function runImportForIngestion(opts: {
         }
       }
 
-      // Persist the product_id to product_ingestions (non-fatal)
+      // Persist product_id to ingestion (non-fatal)
       try {
         await supaAdmin.from("product_ingestions").update({ product_id: String(productId) }).eq("id", ingestionId);
-      } catch (e) {
-        // non-fatal: ignore but leave logs to server logging if you want
+      } catch {
+        // ignore
       }
 
+      // Update job/row status
       await supaAdmin.from("import_rows").update({ status: "success", data: ingestionRow, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
+
+      // If pipeline context provided, mark module & pipeline
+      if (opts.pipelineRunId && typeof opts.moduleIndex === "number") {
+        try {
+          await supaAdmin.from("module_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("pipeline_run_id", opts.pipelineRunId).eq("module_index", opts.moduleIndex);
+          await supaAdmin.from("pipeline_module_logs").insert([{ pipeline_run_id: opts.pipelineRunId, module_index: opts.moduleIndex, level: "info", message: "Import completed successfully", meta: { ingestionId } }]);
+          const { data: pending } = await supaAdmin.from("module_runs").select("id").eq("pipeline_run_id", opts.pipelineRunId).in("status", ["queued", "running", "failed"]).limit(1);
+          if (!pending || (Array.isArray(pending) && pending.length === 0)) {
+            await supaAdmin.from("pipeline_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("id", opts.pipelineRunId);
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+
       return { ok: true, action: "updated", product_id: productId, sku };
     } else {
-      // Create path
+      // Create product
       const createUrl = `${storeBase}/catalog/products`;
       const createPayload: any = { name: productPayload.name, description: productPayload.description, type: "physical" };
       if (productPayload.price) createPayload.price = productPayload.price;
       if (Array.isArray(productPayload.images) && productPayload.images.length) createPayload.images = productPayload.images.map((im: any) => ({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }));
       if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
-        createPayload.variants = productPayload.variants.map((v: any) => {
-          const out: any = { sku: v.sku ?? sku };
-          if (v.price) out.price = v.price;
-          if (v.option_values) out.option_values = v.option_values;
-          return out;
-        });
+        createPayload.variants = productPayload.variants.map((v: any) => ({ sku: v.sku ?? sku, price: v.price ?? undefined, option_values: v.option_values ?? undefined }));
       } else {
         createPayload.sku = sku;
         if (productPayload.price) createPayload.price = productPayload.price;
       }
 
-      const { res: cRes, body: cBody } = await fetchJson(createUrl, {
-        method: "POST",
-        headers: bcHeaders(token),
-        body: JSON.stringify(createPayload),
-      });
+      const { res: cRes, body: cBody } = await fetchJson(createUrl, { method: "POST", headers: bcHeaders(token), body: JSON.stringify(createPayload) });
 
       if (!cRes.ok) {
         await supaAdmin.from("import_rows").update({ status: "failed", errors: JSON.stringify([{ reason: `bigcommerce_create_failed:${cRes.status}`, detail: cBody }]) }).eq("job_id", jobId).eq("row_number", 1);
@@ -359,17 +346,30 @@ export async function runImportForIngestion(opts: {
       const createdProduct = (cBody && (cBody.data ?? cBody)) ?? null;
       const createdId = createdProduct?.id ?? createdProduct?.product_id ?? null;
 
-      // Persist the created product id to product_ingestions (non-fatal)
       if (createdId) {
         try {
           await supaAdmin.from("product_ingestions").update({ product_id: String(createdId) }).eq("id", ingestionId);
-        } catch (e) {
-          // non-fatal
+        } catch {
+          // ignore
         }
       }
 
       await supaAdmin.from("import_rows").update({ status: "success", data: { ...ingestionRow, product: createdProduct }, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
+
+      if (opts.pipelineRunId && typeof opts.moduleIndex === "number") {
+        try {
+          await supaAdmin.from("module_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("pipeline_run_id", opts.pipelineRunId).eq("module_index", opts.moduleIndex);
+          await supaAdmin.from("pipeline_module_logs").insert([{ pipeline_run_id: opts.pipelineRunId, module_index: opts.moduleIndex, level: "info", message: "Import completed successfully (created)", meta: { ingestionId, createdProduct } }]);
+          const { data: pending } = await supaAdmin.from("module_runs").select("id").eq("pipeline_run_id", opts.pipelineRunId).in("status", ["queued", "running", "failed"]).limit(1);
+          if (!pending || (Array.isArray(pending) && pending.length === 0)) {
+            await supaAdmin.from("pipeline_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("id", opts.pipelineRunId);
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+
       return { ok: true, action: "created", product_id: createdId ?? null, sku };
     }
   } catch (e: any) {
