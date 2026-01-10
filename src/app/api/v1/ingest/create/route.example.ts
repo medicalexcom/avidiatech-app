@@ -1,12 +1,7 @@
 // src/app/api/v1/ingest/create/route.example.ts
-// Example ingestion-creation route which uses resolveTenantForInsert to ensure tenant_id is set.
-// This is an example you can drop in or adapt into your existing creation endpoints (bulk, UI).
-//
-// Important: do not expose DEFAULT_FALLBACK_TENANT_ID in production unless you intend to
-// assign all missing ingestions to that tenant. For dev/single-user environments it's convenient.
-//
-// Usage: POST { ingestionId?, normalized_payload?, pipelinePayload?, ... }
-// The route will attempt to resolve tenant and insert product_ingestions.
+// Example ingestion-creation route that enforces tenant presence (strict).
+// Adapt this logic into your real endpoints (bulk worker, UI). This example uses resolveTenantForInsert
+// and will return 422 if tenant cannot be determined (no fallback configured).
 
 import { createClient } from "@supabase/supabase-js";
 import { resolveTenantForInsert } from "@/lib/ingest/resolve-tenant";
@@ -23,22 +18,19 @@ export async function POST(request: Request) {
     // adapt authContext to your app (example: clerk)
     const authContext = { tenantId: (request as any).user?.tenantId ?? null };
 
-    // Try to get tenant. Non-strict: will return null if not resolvable and no fallback set.
+    // Enforce tenant presence: strict=true will throw if tenant cannot be determined.
     const tenantId = await resolveTenantForInsert({
       requestBody: body,
       pipelinePayload: body?.pipelinePayload ?? null,
       authContext,
-      strict: false,
+      strict: true, // enforce at API layer
     });
 
-    // If tenantId is null and DB still has NOT NULL constraint, insertion will fail.
-    // Optionally enforce strict here:
-    // if (!tenantId) throw new Error("missing_tenant_id_for_ingestion");
-
+    // Now tenantId must be present (otherwise resolveTenantForInsert would have thrown)
     const ingestionRow: any = {
       id: body?.ingestionId ?? undefined,
       tenant_id: tenantId,
-      org_id: tenantId ?? undefined,
+      org_id: tenantId,
       normalized_payload: body?.normalized_payload ?? body?.payload ?? body,
       ingest_callback_at: new Date().toISOString(),
       meta: body?.meta ?? null,
