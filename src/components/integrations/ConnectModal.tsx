@@ -24,7 +24,7 @@ type Props = {
   provider: string | null;
   open: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (connection?: any) => void;
   onOpenConnectorManager?: () => void;
 };
 
@@ -53,6 +53,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setConnectionName("");
     setError(null);
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, open]);
 
   if (!open) return null;
@@ -78,14 +79,27 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setLoading(true);
     setError(null);
     try {
-      const url = `/api/v1/integrations/ecommerce/${encodeURIComponent(provider!)}`;
-      // send both camelCase + snake_case tolerant payload
-      const payload: any = { name: connectionName || undefined };
-      for (const f of fields!) {
-        payload[f.name] = form[f.name];
-        // snake_case fallback
-        const snake = f.name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
-        payload[snake] = form[f.name];
+      // Unified endpoint for ecommerce connections
+      const url = `/api/v1/ecommerce_connections`;
+      const payload: any = {
+        provider,
+        name: connectionName || undefined,
+      };
+
+      // Provider-specific mapping: include either top-level keys for BC or config/secrets for generic providers
+      if (provider === "bigcommerce") {
+        payload.storeHash = form.storeHash ?? form.store_hash ?? "";
+        payload.accessToken = form.accessToken ?? form.access_token ?? "";
+      } else {
+        // Generic provider: put fields into config/secrets when appropriate
+        payload.config = {};
+        payload.secrets = {};
+        (fields ?? []).forEach((f) => {
+          if (f.secret) payload.secrets[f.name] = form[f.name];
+          else payload.config[f.name] = form[f.name];
+        });
+        // If secrets is empty, delete it so server can encrypt empty object itself
+        if (Object.keys(payload.secrets).length === 0) delete payload.secrets;
       }
 
       const res = await fetch(url, {
@@ -97,7 +111,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         // fallback to ConnectorManager if server says not implemented
-        if (res.status === 404 || json?.error?.includes?.("not implemented")) {
+        if (res.status === 404 || String(json?.error).includes("not implemented")) {
           toast.info("Falling back to connector manager for advanced flow");
           onOpenConnectorManager?.();
           return;
@@ -107,7 +121,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
       }
 
       toast.success(`${provider} connected`);
-      onSuccess?.();
+      onSuccess?.(json.connection ?? null);
       onClose();
     } catch (err: any) {
       setError(String(err?.message ?? err));
