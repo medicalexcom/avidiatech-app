@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
@@ -11,9 +10,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
  * Integrations page — improved UI
- * - Removed the duplicate quick "Sync" button in the row (only available in Actions menu)
- * - Updated card styling, status pill, spacing and small formatting improvements
- * - Actions menu still contains: Test connection, Sync, Details, Delete
+ * - Removed the duplicate quick "Connect store" button in the header (per-request)
+ * - Actions menu: Test connection, Sync, Details, Delete
  */
 
 const PROVIDERS = [
@@ -35,7 +33,6 @@ function formatDate(iso?: string | null) {
 }
 
 export default function IntegrationsPage() {
-  const router = useRouter();
   const toast = useToast();
   const { integrations, activeIntegrations, refresh } = useIntegrations();
 
@@ -188,19 +185,9 @@ export default function IntegrationsPage() {
 
       <div className="grid grid-cols-12 gap-6">
         <section className="col-span-8">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-medium">Connected integrations</h2>
-              <p className="text-sm text-slate-500">Active connections for this tenant</p>
-            </div>
-            <div>
-              <button
-                onClick={() => openConnect("bigcommerce")}
-                className="hidden sm:inline-flex items-center gap-2 rounded bg-sky-600 px-3 py-1.5 text-white text-sm shadow-sm hover:bg-sky-700 transition"
-              >
-                Connect store
-              </button>
-            </div>
+          <div className="mb-4">
+            <h2 className="text-xl font-medium">Connected integrations</h2>
+            <p className="text-sm text-slate-500">Active connections for this tenant</p>
           </div>
 
           <div className="space-y-3">
@@ -237,7 +224,7 @@ export default function IntegrationsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 relative">
-                        {/* Actions menu trigger only (no duplicate Sync button) */}
+                        {/* Actions menu trigger only */}
                         <button
                           onClick={() => setActionMenuFor(menuOpen ? null : i.id)}
                           className="px-3 py-1 rounded border text-sm hover:bg-slate-50"
