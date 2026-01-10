@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/toast";
 type Integration = {
   id: string;
   provider?: string;
+  platform?: string;
   name?: string;
   created_at?: string;
   updated_at?: string;
@@ -13,6 +14,7 @@ type Integration = {
   schedule?: any;
   last_error?: string | null;
   org_id?: string | null;
+  tenant_id?: string | null;
   status?: string | null;
 };
 
@@ -31,6 +33,10 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
   const containerRef = useRef<HTMLDivElement | null>(null);
   const toast = useToast();
 
+  // source indicates which server resource we loaded from:
+  // "ecommerce" means ecommerce_connections row; "legacy" means integrations details
+  const [source, setSource] = useState<"ecommerce" | "legacy" | null>(null);
+
   useEffect(() => {
     if (!isOpen || !integrationId) return;
     let mounted = true;
@@ -38,27 +44,84 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
     setError(null);
     setIntegration(null);
     setTestResult(null);
+    setSource(null);
 
-    // Use the details route which returns safe integration info
-    fetch(`/api/v1/integrations/${encodeURIComponent(integrationId)}/details`)
-      .then((res) => res.json().catch(() => null))
-      .then((data) => {
-        if (!mounted) return;
-        if (!data || data.ok === false) {
-          setError(data?.error ?? "Failed to load integration");
-          setIntegration(null);
-        } else {
-          // details route returns { ok: true, integration: {...} }
-          setIntegration(data.integration ?? data);
+    async function fetchDetails() {
+      try {
+        // 1) Try ecommerce_connections/:id first (preferred)
+        try {
+          const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(integrationId)}`, {
+            credentials: "same-origin",
+          });
+          const json = await res.json().catch(() => null);
+          if (res.ok && json) {
+            // server may return { ok: true, connection: {...} } or directly the connection object
+            const conn = json.connection ?? json;
+            if (conn && (conn.platform || conn.tenant_id || conn.config)) {
+              if (!mounted) return;
+              // normalize ecommerce connection shape to Integration type
+              const norm: Integration = {
+                id: conn.id,
+                provider: conn.platform ?? conn.provider,
+                platform: conn.platform ?? conn.provider,
+                name: conn.name ?? conn.config?.store_name ?? null,
+                config: conn.config ?? {},
+                created_at: conn.created_at ?? null,
+                updated_at: conn.updated_at ?? null,
+                tenant_id: conn.tenant_id ?? null,
+                org_id: conn.tenant_id ?? null,
+                status: conn.status ?? null,
+                last_error: conn.last_error ?? null,
+              };
+              setIntegration(norm);
+              setSource("ecommerce");
+              return;
+            }
+          }
+        } catch (e) {
+          // ignore and fallback to legacy
         }
-      })
-      .catch((e) => {
-        if (!mounted) return;
-        setError(String(e));
-      })
-      .finally(() => {
+
+        // 2) Fallback to legacy integrations details route
+        try {
+          const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(integrationId)}/details`, {
+            credentials: "same-origin",
+          });
+          const json2 = await res2.json().catch(() => null);
+          if (!res2.ok || !json2) {
+            const msg = (json2 && json2.error) || `Failed to load integration details (${res2.status})`;
+            if (!mounted) return;
+            setError(msg);
+            return;
+          }
+          // details route returns { ok: true, integration: {...} } or integration object
+          const integ = json2.integration ?? json2;
+          if (!mounted) return;
+          const norm2: Integration = {
+            id: integ.id,
+            provider: integ.provider ?? integ.name ?? undefined,
+            platform: integ.platform ?? undefined,
+            name: integ.name ?? integ.display_name ?? integ.id,
+            config: integ.config ?? {},
+            created_at: integ.created_at ?? null,
+            updated_at: integ.updated_at ?? integ.last_synced_at ?? null,
+            org_id: integ.org_id ?? integ.tenant_id ?? null,
+            status: integ.status ?? null,
+            last_error: integ.last_error ?? null,
+          };
+          setIntegration(norm2);
+          setSource("legacy");
+          return;
+        } catch (e: any) {
+          if (!mounted) return;
+          setError(String(e?.message ?? e));
+        }
+      } finally {
         if (mounted) setLoading(false);
-      });
+      }
+    }
+
+    fetchDetails();
 
     return () => {
       mounted = false;
@@ -81,29 +144,86 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
+      // prefer ecommerce validate when source === "ecommerce"
+      if (source === "ecommerce") {
+        const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/validate`, {
+          credentials: "same-origin",
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || j?.ok === false) {
+          const msg = j?.error ?? j?.detail ?? `Validation failed (${res.status})`;
+          setTestResult({ ok: false, error: msg });
+          toast.error(msg);
+          return;
+        }
+        setTestResult({ ok: true });
+        toast.success("Connection validated");
+        return;
+      }
+
+      // fallback to legacy test endpoint
+      const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
         method: "POST",
         headers: { "content-type": "application/json" },
+        credentials: "same-origin",
       });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg = j?.error ?? `Test failed (${res.status})`;
+      const j2 = await res2.json().catch(() => null);
+      if (!res2.ok || j2?.ok === false) {
+        const msg = j2?.error ?? `Test failed (${res2.status})`;
         setTestResult({ ok: false, error: msg });
         toast.error(msg);
         return;
       }
-      setTestResult(j);
-      if (j?.ok) {
-        toast.success("Connection succeeded");
-      } else {
-        toast.error(j?.error ?? "Connection failed");
-      }
+      setTestResult({ ok: true });
+      toast.success("Connection validated");
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       setTestResult({ ok: false, error: msg });
       toast.error(msg);
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function startSync() {
+    if (!integrationId && !integration?.id) {
+      toast.error("Integration id missing");
+      return;
+    }
+    const id = integrationId ?? integration!.id;
+    try {
+      // prefer ecommerce sync when source === "ecommerce"
+      if (source === "ecommerce") {
+        const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`, {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        const j = await res.json().catch(() => null);
+        if (!res.ok || !j?.ok) {
+          // fallback to legacy if available
+          const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+            method: "POST",
+            credentials: "same-origin",
+          });
+          const j2 = await res2.json().catch(() => null);
+          if (!res2.ok || !j2?.ok) throw new Error(j2?.error ?? `Sync failed (${res2.status})`);
+          toast.success(j2?.jobId ? `Sync queued (job ${j2.jobId})` : "Sync started");
+          return;
+        }
+        toast.success(j?.jobId ? `Sync queued (job ${j.jobId})` : "Sync started");
+        return;
+      }
+
+      // legacy sync
+      const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const j2 = await res2.json().catch(() => null);
+      if (!res2.ok || !j2?.ok) throw new Error(j2?.error ?? `Sync failed (${res2.status})`);
+      toast.success(j2?.jobId ? `Sync queued (job ${j2.jobId})` : "Sync started");
+    } catch (e: any) {
+      toast.error(String(e?.message ?? e));
     }
   }
 
@@ -144,7 +264,7 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
           <>
             <div className="space-y-2">
               <div className="text-sm text-gray-600">
-                Provider: <strong className="text-gray-800">{integration.provider ?? "—"}</strong>
+                Provider: <strong className="text-gray-800">{integration.provider ?? integration.platform ?? "—"}</strong>
               </div>
               <div className="text-sm text-gray-600">
                 Name: <strong className="text-gray-800">{integration.name ?? integration.id}</strong>
@@ -154,7 +274,7 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
               </div>
               <div className="text-sm text-gray-600">
                 Org/Tenant:{" "}
-                <strong className="text-gray-800">{integration.org_id ?? <span className="text-slate-400">Not associated</span>}</strong>
+                <strong className="text-gray-800">{integration.org_id ?? integration.tenant_id ?? <span className="text-slate-400">Not associated</span>}</strong>
               </div>
             </div>
 
@@ -183,26 +303,7 @@ const ConnectorDetailsDrawer: React.FC<Props> = ({ integrationId, isOpen, onClos
             <div className="mt-6 flex gap-2 items-center">
               <button
                 onClick={async () => {
-                  // kick off connector sync (existing endpoint expects body.org_id; we keep simple)
-                  try {
-                    if (!integration?.id) return;
-                    // if integration has org_id, pass it; otherwise UI will show not associated
-                    const body: any = {};
-                    if (integration.org_id) body.org_id = integration.org_id;
-                    const res = await fetch(`/api/v1/integrations/${encodeURIComponent(integration.id)}/sync`, {
-                      method: "POST",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify(body),
-                    });
-                    const json = await res.json().catch(() => null);
-                    if (!res.ok || !json?.ok) {
-                      toast.error(json?.error ?? "Failed to start sync");
-                      return;
-                    }
-                    toast.success("Sync queued");
-                  } catch (e: any) {
-                    toast.error(String(e?.message ?? e));
-                  }
+                  await startSync();
                 }}
                 className="px-4 py-2 rounded bg-blue-600 text-white"
               >
