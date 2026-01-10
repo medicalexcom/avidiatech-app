@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
@@ -10,10 +10,15 @@ import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDraw
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
- * Integrations page — updated to use Actions menu per-connected-row:
- * - Actions: Test connection, Sync, Details, Delete
- * - Prefers ecommerce endpoints for ecommerce rows (platform present), falls back to legacy integrations endpoints
- * - Shows per-row loading states and toasts
+ * Integrations page — updated:
+ * - Removed the inline "Sync" quick button (keeps Sync inside Actions menu only)
+ * - Adds a lightweight "Premium" gating model: Test/Sync actions require premium.
+ *   - The page queries /api/v1/me for a simple plan flag (json.plan === "premium")
+ *   - If not premium, Test/Sync prompt the user to upgrade (toast + Upgrade button shown)
+ * - Small UI polish for cards (shadows, spacing) to feel more "premium"
+ *
+ * NOTE: This is a client-side gating UX. Your backend should enforce plan/permission checks for
+ * real access control. Adjust the /api/v1/me shape check to match how you store plan info.
  */
 
 const PROVIDERS = [
@@ -27,7 +32,7 @@ const PROVIDERS = [
 export default function IntegrationsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { integrations, activeIntegrations, refresh, disconnect, testConnection } = useIntegrations();
+  const { integrations, activeIntegrations, refresh } = useIntegrations();
 
   const [connectorManagerOpen, setConnectorManagerOpen] = useState(false);
   const [connectorManagerProvider, setConnectorManagerProvider] = useState<string | null>(null);
@@ -42,7 +47,32 @@ export default function IntegrationsPage() {
   const [confirmDeleteFor, setConfirmDeleteFor] = useState<string | null>(null);
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
 
+  // Premium gating state (fetched from /api/v1/me). Default false => show upgrade CTA.
+  const [isPremium, setIsPremium] = useState(false);
+  const [meLoading, setMeLoading] = useState(true);
+
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+        const json = await res.json().catch(() => null);
+        if (!mounted) return;
+        // Adapt this check to your backend shape. Commonly the plan could be on the org or user.
+        const plan = json?.plan ?? json?.org_plan ?? json?.org?.plan ?? null;
+        setIsPremium(plan === "premium" || plan === "pro");
+      } catch {
+        // ignore and treat as non-premium
+      } finally {
+        if (mounted) setMeLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   function openConnect(providerId: string) {
     setConnectProvider(providerId);
@@ -56,7 +86,23 @@ export default function IntegrationsPage() {
     toast.info("Opening connector manager for advanced flow");
   }
 
+  function promptUpgrade(actionLabel = "use this feature") {
+    toast.info(`${actionLabel} requires a Premium plan — visit Billing to upgrade.`);
+    // quick modal-less CTA — navigate to billing page (adjust path to match your app)
+    // You may prefer a modal; keep simple and navigable
+    const go = confirm("This is a Premium feature. Open Billing to upgrade?");
+    if (go) {
+      router.push("/settings/billing");
+    }
+  }
+
   async function handleTest(id: string, platform?: string) {
+    // client-side gate
+    if (!isPremium) {
+      promptUpgrade("test this connection");
+      return;
+    }
+
     setTestingFor(id);
     try {
       // prefer ecommerce validate endpoint if platform present
@@ -92,6 +138,12 @@ export default function IntegrationsPage() {
   }
 
   async function handleSync(id: string, platform?: string) {
+    // client-side gate
+    if (!isPremium) {
+      promptUpgrade("queue a sync");
+      return;
+    }
+
     if (syncingFor === id) return;
     setSyncingFor(id);
     try {
@@ -135,7 +187,7 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function handleDelete(id: string, platform?: string) {
+  function handleDelete(id: string, platform?: string) {
     // open confirm dialog
     setConfirmDeleteFor(id);
     setActionMenuFor(null);
@@ -166,8 +218,29 @@ export default function IntegrationsPage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <header className="mb-6">
-        <h1 className="text-3xl font-semibold">Integrations</h1>
-        <p className="mt-2 text-sm text-slate-600">Connect AvidiaTech to your store and data sources.</p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold">Integrations</h1>
+            <p className="mt-2 text-sm text-slate-600">Connect AvidiaTech to your store and data sources.</p>
+          </div>
+
+          {/* Premium badge / CTA */}
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-800">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l2.9 6.2L21 9l-5 3.6L17.8 21 12 17.8 6.2 21 8 12.6 3 9l6.1-0.8L12 2z" />
+              </svg>
+              Premium
+            </span>
+
+            <button
+              onClick={() => router.push("/settings/billing")}
+              className="rounded bg-sky-600 px-3 py-1 text-white text-sm shadow-sm hover:bg-sky-700"
+            >
+              Upgrade / Billing
+            </button>
+          </div>
+        </div>
       </header>
 
       <div className="grid grid-cols-12 gap-6">
@@ -185,7 +258,7 @@ export default function IntegrationsPage() {
                 const menuOpen = actionMenuFor === i.id;
                 const platform = i.platform ?? i.provider;
                 return (
-                  <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900 relative">
+                  <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900 shadow-sm relative">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
@@ -194,14 +267,7 @@ export default function IntegrationsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 relative">
-                        {/* Quick Sync button */}
-                        <button
-                          onClick={() => handleSync(i.id, i.platform)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
-                          disabled={isSyncing}
-                        >
-                          {isSyncing ? "Syncing…" : "Sync"}
-                        </button>
+                        {/* Removed the inline "Sync" button here intentionally (Sync available in Actions menu only) */}
 
                         {/* Actions menu trigger */}
                         <button
@@ -217,18 +283,20 @@ export default function IntegrationsPage() {
                             <div className="flex flex-col gap-1">
                               <button
                                 onClick={() => handleTest(i.id, i.platform)}
-                                disabled={isTesting}
-                                className="text-left px-2 py-1 rounded hover:bg-slate-50 text-sm"
+                                disabled={isTesting || meLoading}
+                                className={`text-left px-2 py-1 rounded hover:bg-slate-50 text-sm ${!isPremium && !meLoading ? "opacity-80" : ""}`}
                               >
                                 {isTesting ? "Testing…" : "Test connection"}
+                                {!isPremium && !meLoading ? " (Premium)" : ""}
                               </button>
 
                               <button
                                 onClick={() => handleSync(i.id, i.platform)}
-                                disabled={isSyncing}
-                                className="text-left px-2 py-1 rounded hover:bg-slate-50 text-sm"
+                                disabled={isSyncing || meLoading}
+                                className={`text-left px-2 py-1 rounded hover:bg-slate-50 text-sm ${!isPremium && !meLoading ? "opacity-80" : ""}`}
                               >
                                 {isSyncing ? "Syncing…" : "Sync"}
+                                {!isPremium && !meLoading ? " (Premium)" : ""}
                               </button>
 
                               <button
@@ -259,7 +327,7 @@ export default function IntegrationsPage() {
                 );
               })
             ) : (
-              <div className="p-4 rounded-md border bg-white dark:bg-slate-900">
+              <div className="p-4 rounded-md border bg-white dark:bg-slate-900 shadow-sm">
                 <div className="text-sm text-slate-600">No active integrations. Connect a store from the catalog.</div>
               </div>
             )}
@@ -274,7 +342,7 @@ export default function IntegrationsPage() {
 
           <div className="grid gap-3">
             {PROVIDERS.map((p) => (
-              <div key={p.id} className="p-3 rounded-md border bg-white dark:bg-slate-900 flex items-center justify-between">
+              <div key={p.id} className="p-3 rounded-md border bg-white dark:bg-slate-900 flex items-center justify-between shadow-sm">
                 <div>
                   <div className="font-medium">{p.name}</div>
                   <div className="text-xs text-slate-500">{p.desc}</div>
@@ -303,6 +371,7 @@ export default function IntegrationsPage() {
         onClose={() => setConnectModalOpen(false)}
         onSuccess={() => refresh()}
         onOpenConnectorManager={() => openConnectorManagerFallback(connectProvider)}
+        // optionally pass orgId here if parent has it to avoid /api/v1/me in modal
       />
 
       {/* ConnectorManager fallback (rare; advanced flows) */}
