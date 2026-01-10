@@ -1,13 +1,10 @@
 // src/app/api/v1/ingest/callback/require-tenant.ts
 // Helper to require/derive tenantId for ingestion creation.
-//
-// Usage: call requireTenantId(...) from your ingestion creation route handler
-// to ensure tenant_id/org_id are always present when inserting product_ingestions.
+// Use this in your ingestion creation route so new product_ingestions always get tenant_id/org_id set.
 
 export function extractTenantFromPipelinePayload(payload: any): string | null {
   if (!payload) return null;
-  // support both camelCase and snake_case-ish forms
-  return payload.tenantId ?? payload.orgId ?? payload.tenant_id ?? payload.org_id ?? null;
+  return payload.tenantId ?? payload.orgId ?? null;
 }
 
 /**
@@ -28,15 +25,46 @@ export function requireTenantId({
   pipelinePayload?: any;
   authContext?: any;
 }): string {
-  const tenantFromBody = requestBody?.tenantId ?? requestBody?.orgId ?? requestBody?.tenant_id ?? requestBody?.org_id ?? null;
+  const tenantFromBody = requestBody?.tenantId ?? requestBody?.orgId ?? null;
   if (tenantFromBody) return String(tenantFromBody);
 
   const tenantFromPipeline = extractTenantFromPipelinePayload(pipelinePayload);
   if (tenantFromPipeline) return String(tenantFromPipeline);
 
-  const tenantFromAuth = authContext?.tenantId ?? authContext?.orgId ?? authContext?.tenant_id ?? authContext?.org_id ?? null;
+  const tenantFromAuth = authContext?.tenantId ?? authContext?.orgId ?? null;
   if (tenantFromAuth) return String(tenantFromAuth);
 
   // No tenant found - fail early so DB never receives null tenant_id
   throw new Error("missing_tenant_id_for_ingestion");
 }
+
+/*
+Example usage (pseudo-code) in your ingestion callback route:
+
+import { requireTenantId } from './require-tenant';
+import { createClient } from '@supabase/supabase-js';
+
+export default async function handler(req, res) {
+  try {
+    const body = await req.json();
+    const pipelinePayload = body?.pipelinePayload ?? null;
+    const authContext = { tenantId: req.user?.tenantId }; // adapt to your auth
+
+    const tenantId = requireTenantId({ requestBody: body, pipelinePayload, authContext });
+
+    const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const row = {
+      id: body?.ingestionId ?? genUuid(),
+      tenant_id: tenantId,
+      org_id: tenantId,
+      normalized_payload: body?.normalized_payload ?? body,
+      ingest_callback_at: new Date().toISOString(),
+      // ...other fields...
+    };
+    await supa.from('product_ingestions').insert([row]);
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err?.message ?? err) }), { status: 422 });
+  }
+}
+*/
