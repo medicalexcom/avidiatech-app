@@ -39,10 +39,10 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
   }, [fields]);
 
   const [form, setForm] = useState<Record<string, string>>(initialState);
+  const [connectionName, setConnectionName] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // sync initial when provider changes
   React.useEffect(() => {
     setForm(
       (PROVIDER_FIELDS[provider ?? ""] ?? []).reduce((acc: Record<string, string>, f) => {
@@ -50,6 +50,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
         return acc;
       }, {})
     );
+    setConnectionName("");
     setError(null);
     setLoading(false);
   }, [provider, open]);
@@ -61,13 +62,12 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
 
   async function submit() {
     if (!hasSchema) {
-      // fallback: open ConnectorManager to handle provider
       toast.info("Opening connector manager for provider");
       onOpenConnectorManager?.();
       return;
     }
 
-    // simple validation: all required
+    // validate required
     for (const f of fields!) {
       if (!form[f.name] || String(form[f.name]).trim() === "") {
         setError(`Field "${f.label}" is required`);
@@ -79,18 +79,26 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setError(null);
     try {
       const url = `/api/v1/integrations/ecommerce/${encodeURIComponent(provider!)}`;
+      // send both camelCase + snake_case tolerant payload
+      const payload: any = { name: connectionName || undefined };
+      for (const f of fields!) {
+        payload[f.name] = form[f.name];
+        // snake_case fallback
+        const snake = f.name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+        payload[snake] = form[f.name];
+      }
+
       const res = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
-        // if endpoint not implemented, open ConnectorManager fallback
-        if (res.status === 404 || (json && json.error && json.error.includes("not implemented"))) {
-          setError(null);
-          toast.info("Falling back to ConnectorManager (server-side flow required)");
+        // fallback to ConnectorManager if server says not implemented
+        if (res.status === 404 || json?.error?.includes?.("not implemented")) {
+          toast.info("Falling back to connector manager for advanced flow");
           onOpenConnectorManager?.();
           return;
         }
@@ -121,7 +129,18 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
           </div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="block text-xs text-slate-600">Connection name (optional)</label>
+            <input
+              placeholder="A friendly name (e.g. My Store)"
+              value={connectionName}
+              onChange={(e) => setConnectionName(e.target.value)}
+              className="w-full rounded border px-3 py-2"
+            />
+            <div className="text-xs text-slate-500 mt-1">This name will be shown in the UI instead of the store hash.</div>
+          </div>
+
           {!hasSchema ? (
             <div className="rounded p-3 border bg-slate-50 dark:bg-slate-950/30">
               <div className="text-sm text-slate-700">This provider requires a specialized connect flow.</div>
@@ -133,7 +152,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
+            <>
               {fields!.map((f) => (
                 <div key={f.name}>
                   <label className="block text-xs text-slate-600">{f.label}</label>
@@ -153,7 +172,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
                   {loading ? "Connecting…" : `Connect ${provider}`}
                 </button>
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
