@@ -1,12 +1,15 @@
 /**
- * runImportForIngestion.ts (improved)
+ * runImportForIngestion.ts (v3 - fixed)
  *
- * - More robust extraction of SKU/name/variants/images from many ingestion shapes,
- *   including `normalized_payload`, `normalizedPayload`, and shallow key scans.
- * - Preserves previous behavior of persisting import_jobs & import_rows and upserting
- *   products into BigCommerce by SKU.
+ * Robust import runner that:
+ * - Finds ingestion row by id (defensive table names)
+ * - Resolves tenant -> active BigCommerce connection
+ * - Decrypts connection secrets
+ * - Extracts SKU/title/description/images/variants from many ingestion shapes
+ * - Upserts product by SKU into BigCommerce (create or update)
+ * - Persists status + errors to import_jobs / import_rows
  *
- * NOTE: Keep this file in sync with your project's decryptSecrets import and SUPABASE envs.
+ * NOTE: keep decryptSecrets at src/lib/integrations/encryption and SUPABASE envs present.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -45,14 +48,13 @@ async function fetchJson(url: string, opts: RequestInit = {}) {
 }
 
 /**
- * Shallow helper: try common fields for sku/title/description/price/images/variants
- * Also inspects a few likely nested keys (normalized_payload, normalizedPayload).
+ * Extract a normalized product shape from a variety of ingestion payload forms.
+ * Returns { sku, title, description, price, variants, images, raw } or null.
  */
 function extractNormalizedProduct(ingestRow: any) {
   if (!ingestRow || typeof ingestRow !== "object") return null;
 
-  // Candidate containers (order matters)
-  const candidates: any[] = [
+  const candidates = [
     ingestRow.normalized,
     ingestRow.normalized_product,
     ingestRow.normalized_payload,
@@ -63,11 +65,9 @@ function extractNormalizedProduct(ingestRow: any) {
     ingestRow.seo_payload,
     ingestRow.seo,
     ingestRow.raw_payload,
-    ingestRow.normalized?.normalized_payload, // defensive
-    ingestRow, // fallback: inspect top-level
+    ingestRow,
   ];
 
-  // Helper to get first non-empty value from provided keys
   const getFirst = (obj: any, ...keys: string[]) => {
     if (!obj) return undefined;
     for (const k of keys) {
@@ -76,16 +76,13 @@ function extractNormalizedProduct(ingestRow: any) {
     return undefined;
   };
 
-  // Shallow search for sku/name etc inside an object
   const scanObject = (o: any) => {
     if (!o || typeof o !== "object") return null;
     const sku = getFirst(o, "sku", "SKU", "product_sku", "gtin", "gtin8", "mpn");
     const title = getFirst(o, "title", "name", "name_best", "product_name", "pageTitle", "h1");
     const description = getFirst(o, "description", "descriptionHtml", "description_raw", "shortDescription", "overview");
-    const price = getFirst(o, "price", "list_price", "msrp");
-    // variants as array
+    const price = getFirst(o, "price", "list_price", "msrp", "price_cents");
     const variants = Array.isArray(o.variants) ? o.variants : Array.isArray(o.variant) ? o.variant : [];
-    // images: array of strings or objects with url/image_url/src
     let images: string[] = [];
     if (Array.isArray(o.images)) {
       images = o.images.map((i: any) => (typeof i === "string" ? i : i.url ?? i.image_url ?? i.src ?? "")).filter(Boolean);
@@ -94,36 +91,34 @@ function extractNormalizedProduct(ingestRow: any) {
     } else if (o.image && typeof o.image === "string") {
       images = [o.image];
     }
-    // If we found something meaningful return
     if (sku || title) {
       return { sku, title, description, price, variants, images, raw: o };
     }
-    // If nothing, return null so caller tries next candidate
     return null;
   };
 
-  // Iterate candidates
   for (const c of candidates) {
-    const scanned = scanObject(c);
-    if (scanned && (scanned.sku || scanned.title)) return scanned;
-    // If candidate is a stringified JSON, try parse
+    if (!c) continue;
     if (typeof c === "string") {
       try {
         const parsed = JSON.parse(c);
         const psc = scanObject(parsed);
-        if (psc && (psc.sku || psc.title)) return psc;
+        if (psc) return psc;
       } catch {
-        /* ignore */
+        // ignore non-JSON strings
       }
+    } else {
+      const scanned = scanObject(c);
+      if (scanned) return scanned;
     }
   }
 
-  // as a last resort, do a shallow walk of top-level keys and try to find sku
+  // fallback: shallow walk top-level object keys
   for (const k of Object.keys(ingestRow)) {
-    const v = (ingestRow as any)[k];
+    const v = ingestRow[k];
     if (v && typeof v === "object") {
       const s = scanObject(v);
-      if (s && (s.sku || s.title)) return s;
+      if (s) return s;
     }
   }
 
@@ -138,7 +133,7 @@ export async function runImportForIngestion(opts: {
   const ingestionId = String(opts.ingestionId || "");
   if (!ingestionId) throw new Error("missing_ingestionId");
 
-  // Defensive: many possible table names
+  // Defensive table lookup
   const ingestionTables = ["product_ingestions", "ingestions", "product_ingestion", "ingestion"];
   let ingestionRow: any = null;
   for (const t of ingestionTables) {
@@ -149,7 +144,7 @@ export async function runImportForIngestion(opts: {
         break;
       }
     } catch {
-      // table may not exist - ignore
+      // ignore tables that don't exist
     }
   }
   if (!ingestionRow) throw new Error("ingestion_not_found");
@@ -157,7 +152,7 @@ export async function runImportForIngestion(opts: {
   const tenantId = ingestionRow.org_id ?? ingestionRow.tenant_id ?? ingestionRow.tenantId ?? ingestionRow.orgId ?? null;
   if (!tenantId) throw new Error("missing_tenant_id_for_import");
 
-  // find active bigcommerce connection for tenant
+  // Find active BigCommerce connection for tenant
   const { data: connections, error: connErr } = await supaAdmin
     .from("ecommerce_connections")
     .select("*")
@@ -173,17 +168,21 @@ export async function runImportForIngestion(opts: {
   const conn = Array.isArray(connections) ? connections[0] : connections;
   const secretsBlob = conn.secrets_enc ?? conn.secrets ?? conn.encrypted_secrets ?? null;
   if (!secretsBlob) throw new Error("connection_load_failed:missing_secrets");
+
   let secrets: any = {};
   try {
     secrets = decryptSecrets(secretsBlob);
   } catch (e: any) {
     throw new Error(`connection_load_failed:decrypt_failed:${String(e?.message ?? e)}`);
   }
-  const storeHash = (conn.config && (conn.config.store_hash ?? conn.config.storeHash)) || conn.config?.store_hash ?? conn.config?.storeHash;
-  const token = secrets.access_token ?? secrets.accessToken ?? secrets.token;
+
+  // Safe, explicit config/token extraction (avoid mixing ?? and ||)
+  const cfg = conn.config ?? {};
+  const storeHash = cfg.store_hash ?? cfg.storeHash ?? undefined;
+  const token = secrets.access_token ?? secrets.accessToken ?? secrets.token ?? undefined;
   if (!storeHash || !token) throw new Error("bigcommerce_connection_incomplete");
 
-  // Create import job record
+  // Create import job
   const createdBy = "00000000-0000-5000-8000-000000000000";
   const { data: jobRow, error: jobErr } = await supaAdmin
     .from("import_jobs")
@@ -206,7 +205,7 @@ export async function runImportForIngestion(opts: {
   if (jobErr || !jobRow) throw new Error("import_persist_failed:create_job");
   const jobId = jobRow.id as string;
 
-  // insert row stub
+  // Insert a row stub
   const rowStub = {
     job_id: jobId,
     row_number: 1,
@@ -220,7 +219,7 @@ export async function runImportForIngestion(opts: {
     throw new Error("import_persist_failed:insert_row");
   }
 
-  // Normalize product
+  // Normalize product from ingestion
   const norm = extractNormalizedProduct(ingestionRow);
   if (!norm || !norm.sku) {
     const msg = "missing_sku_in_ingestion";
@@ -251,7 +250,7 @@ export async function runImportForIngestion(opts: {
   const storeBase = bcBaseUrl(storeHash);
 
   try {
-    // try find by SKU
+    // Find existing by SKU
     const findUrl = `${storeBase}/catalog/products?sku=${encodeURIComponent(sku)}`;
     const { res: findRes, body: findBody } = await fetchJson(findUrl, { headers: bcHeaders(token) });
     if (!findRes.ok) {
@@ -261,6 +260,7 @@ export async function runImportForIngestion(opts: {
 
     const existingItems = (findBody && (findBody.data ?? findBody)) || [];
     if (Array.isArray(existingItems) && existingItems.length > 0) {
+      // Update path
       const existing = existingItems[0];
       const productId = existing.id;
       const updateUrl = `${storeBase}/catalog/products/${productId}`;
@@ -279,8 +279,8 @@ export async function runImportForIngestion(opts: {
         return { ok: false, reason: `bigcommerce_update_failed:${upRes.status}`, detail: upBody };
       }
 
-      // upload images (best effort)
-      if (productPayload.images && productPayload.images.length) {
+      // Best-effort images
+      if (Array.isArray(productPayload.images) && productPayload.images.length) {
         for (const im of productPayload.images) {
           try {
             const imgUrl = `${storeBase}/catalog/products/${productId}/images`;
@@ -289,16 +289,14 @@ export async function runImportForIngestion(opts: {
               headers: bcHeaders(token),
               body: JSON.stringify({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }),
             });
-            if (!iRes.ok) {
-              // log warn
-            }
+            // ignore non-critical image errors
           } catch {
-            // ignore individual image errors
+            // ignore per-image exceptions
           }
         }
       }
 
-      // upsert variants (best-effort)
+      // Best-effort variant upsert
       if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
         for (const v of productPayload.variants) {
           const vSku = v.sku ?? null;
@@ -327,12 +325,12 @@ export async function runImportForIngestion(opts: {
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
       return { ok: true, action: "updated", product_id: existing.id, sku };
     } else {
-      // create product
+      // Create path
       const createUrl = `${storeBase}/catalog/products`;
       const createPayload: any = { name: productPayload.name, description: productPayload.description, type: "physical" };
       if (productPayload.price) createPayload.price = productPayload.price;
-      if (productPayload.images && productPayload.images.length) createPayload.images = productPayload.images.map((im: any) => ({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }));
-      if (productPayload.variants && productPayload.variants.length) {
+      if (Array.isArray(productPayload.images) && productPayload.images.length) createPayload.images = productPayload.images.map((im: any) => ({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }));
+      if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
         createPayload.variants = productPayload.variants.map((v: any) => {
           const out: any = { sku: v.sku ?? sku };
           if (v.price) out.price = v.price;
