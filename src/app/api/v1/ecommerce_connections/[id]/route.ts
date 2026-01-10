@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
 import { isOrgAdmin } from "@/lib/auth/isOrgAdmin";
+import { encryptSecrets } from "@/lib/integrations/encryption";
 
 /**
  * DELETE /api/v1/ecommerce_connections/:id
  * - Admin-only
- * - Soft-delete by default: status='deleted' and wipe secrets_enc
+ * - Soft-delete: set status='deleted' and overwrite secrets_enc with encrypted empty object
+ *
+ * Overwriting with encrypted empty object keeps the column non-null and keeps the value
+ * in a valid encrypted format (decryptSecrets will return {}).
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -41,18 +45,22 @@ export async function DELETE(req: Request, context: any) {
       return NextResponse.json({ ok: false, error: "connection not owned by tenant" }, { status: 403 });
     }
 
-    // Soft-delete: wipe secrets and mark deleted
+    // Overwrite secrets with an encrypted empty object (preserves non-null and valid format)
+    const encryptedEmpty = encryptSecrets({});
+
     const { error: updErr } = await supaAdmin
       .from("ecommerce_connections")
-      .update({ status: "deleted", secrets_enc: null, updated_at: new Date().toISOString() })
+      .update({ status: "deleted", secrets_enc: encryptedEmpty, updated_at: new Date().toISOString() })
       .eq("id", id);
 
     if (updErr) {
+      console.error("[ecommerce_connections][DELETE] update error:", updErr.message);
       return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, message: "connection deleted (soft)" }, { status: 200 });
   } catch (e: any) {
+    console.error("[ecommerce_connections][DELETE] exception:", String(e?.message ?? e));
     return NextResponse.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });
   }
 }
