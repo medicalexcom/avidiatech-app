@@ -9,9 +9,11 @@ import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDraw
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
- * Integrations page — improved UI
- * - Removed the duplicate quick "Connect store" button in the header (per-request)
- * - Actions menu: Test connection, Sync, Details, Delete
+ * Integrations page — refined UI and correct Actions wiring
+ * - Removed "Connect a store" button from the empty state
+ * - Actions dropdown items (Test, Sync, Details, Delete) are wired to prefer ecommerce endpoints
+ *   and fall back to legacy integrations endpoints when needed.
+ * - After actions, the UI refreshes where appropriate and action menus close.
  */
 
 const PROVIDERS = [
@@ -66,7 +68,7 @@ export default function IntegrationsPage() {
   async function handleTest(id: string, platform?: string) {
     setTestingFor(id);
     try {
-      // prefer ecommerce validate endpoint if platform present
+      // Prefer ecommerce validate endpoint for ecommerce rows
       if (platform) {
         const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/validate`, {
           credentials: "same-origin",
@@ -75,11 +77,13 @@ export default function IntegrationsPage() {
           const json = await res.json().catch(() => null);
           if (json?.ok === false) throw new Error(json?.error ?? json?.detail ?? "Validation failed");
           toast.success("Connection validated");
+          refresh();
           return;
         }
+        // if the ecommerce validate endpoint doesn't exist or returns non-OK, fallthrough to legacy
       }
 
-      // fallback to integrations test
+      // Fallback to legacy integrations test
       const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
         method: "POST",
         credentials: "same-origin",
@@ -87,6 +91,7 @@ export default function IntegrationsPage() {
       const j2 = await res2.json().catch(() => null);
       if (!res2.ok || j2?.ok === false) throw new Error(j2?.error ?? j2?.detail ?? `Test failed (${res2.status})`);
       toast.success("Connection validated");
+      refresh();
     } catch (err: any) {
       toast.error(String(err?.message ?? err));
     } finally {
@@ -105,18 +110,19 @@ export default function IntegrationsPage() {
           method: "POST",
           credentials: "same-origin",
         });
+
+        // If ecommerce sync not implemented or returned non-ok, try legacy integrations sync
         if (!res.ok) {
-          // fallback to legacy integrations sync
           res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
             method: "POST",
             credentials: "same-origin",
           });
         }
+
         const json = await res.json().catch(() => null);
         if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
         const jobId = json?.jobId ?? json?.id ?? json?.pipelineRunId ?? null;
         toast.success(jobId ? `Sync queued (job ${jobId})` : "Sync started");
-        // refresh list after enqueue
         refresh();
         return;
       }
@@ -146,7 +152,7 @@ export default function IntegrationsPage() {
 
   async function confirmDeleteNow(id: string) {
     try {
-      // try ecommerce delete first; if not ecommerce row, fall back to integrations
+      // Try ecommerce delete first (most common), then fallback to integrations delete
       const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "same-origin",
@@ -157,7 +163,8 @@ export default function IntegrationsPage() {
         refresh();
         return;
       }
-      // fallback: try integrations delete
+
+      // fallback
       const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}`, {
         method: "DELETE",
         credentials: "same-origin",
@@ -211,7 +218,9 @@ export default function IntegrationsPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-baseline gap-3">
-                              <div className="font-medium truncate text-lg">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
+                              <div className="font-medium truncate text-lg">
+                                {i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}
+                              </div>
                               <div className={`text-xs px-2 py-0.5 rounded-full font-medium ${active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
                                 {active ? "Active" : (i.status ?? "Unknown")}
                               </div>
@@ -224,7 +233,7 @@ export default function IntegrationsPage() {
                       </div>
 
                       <div className="flex items-center gap-2 relative">
-                        {/* Actions menu trigger only */}
+                        {/* Actions menu trigger only (no quick Sync button) */}
                         <button
                           onClick={() => setActionMenuFor(menuOpen ? null : i.id)}
                           className="px-3 py-1 rounded border text-sm hover:bg-slate-50"
@@ -282,11 +291,6 @@ export default function IntegrationsPage() {
             ) : (
               <div className="p-6 text-center rounded-lg border bg-white shadow-sm">
                 <div className="text-sm text-slate-600">No active integrations. Connect a store from the catalog.</div>
-                <div className="mt-3">
-                  <button onClick={() => setConnectModalOpen(true)} className="rounded bg-sky-600 px-3 py-1.5 text-white text-sm shadow-sm hover:bg-sky-700">
-                    Connect a store
-                  </button>
-                </div>
               </div>
             )}
           </div>
