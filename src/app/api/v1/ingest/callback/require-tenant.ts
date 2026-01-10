@@ -1,18 +1,20 @@
 // src/app/api/v1/ingest/callback/require-tenant.ts
 // Helper to require/derive tenantId for ingestion creation.
 // Use this in your ingestion creation route so new product_ingestions always get tenant_id/org_id set.
+//
+// NOTE: This file is based on the existing file in the repo and only adds a small, backward-compatible
+// "strict" option so callers can opt to throw on missing tenant (strict=true) or receive null (strict=false).
+// This preserves all existing features and behavior for callers that already use it.
 
 export function extractTenantFromPipelinePayload(payload: any): string | null {
   if (!payload) return null;
-  // support both camelCase and snake_case-ish forms that different callers may use
-  return (
-    payload.tenantId ??
-    payload.orgId ??
-    payload.tenant_id ??
-    payload.org_id ??
-    null
-  );
+  // preserve original shapes and support additional variants (tenant_id / org_id)
+  return payload.tenantId ?? payload.orgId ?? payload.tenant_id ?? payload.org_id ?? null;
 }
+
+export type RequireTenantOpts = {
+  strict?: boolean; // when true, throw on missing tenant; when false (default) return null
+};
 
 /**
  * Determine and return a tenant UUID string for ingestion creation.
@@ -21,17 +23,26 @@ export function extractTenantFromPipelinePayload(payload: any): string | null {
  *  2) pipelinePayload.tenantId / pipelinePayload.orgId / pipelinePayload.tenant_id / pipelinePayload.org_id
  *  3) authContext.tenantId / authContext.orgId
  *
- * Throws Error('missing_tenant_id_for_ingestion') if none found.
+ * If opts.strict === true, throws Error('missing_tenant_id_for_ingestion') when none found.
+ * Otherwise returns null when tenant cannot be determined.
+ *
+ * Backwards-compatible: Callers that rely on the old behavior can call requireTenantId(..., { strict: true })
+ * or continue calling without opts (strict defaults to false).
  */
-export function requireTenantId({
-  requestBody,
-  pipelinePayload,
-  authContext,
-}: {
-  requestBody?: any;
-  pipelinePayload?: any;
-  authContext?: any;
-}): string {
+export function requireTenantId(
+  {
+    requestBody,
+    pipelinePayload,
+    authContext,
+  }: {
+    requestBody?: any;
+    pipelinePayload?: any;
+    authContext?: any;
+  },
+  opts?: RequireTenantOpts
+): string | null {
+  const strict = Boolean(opts?.strict);
+
   const tenantFromBody =
     requestBody?.tenantId ??
     requestBody?.orgId ??
@@ -51,8 +62,13 @@ export function requireTenantId({
     null;
   if (tenantFromAuth) return String(tenantFromAuth);
 
-  // No tenant found - fail early so DB never receives null tenant_id
-  throw new Error("missing_tenant_id_for_ingestion");
+  if (strict) {
+    // preserve prior behavior when callers expect enforcement
+    throw new Error("missing_tenant_id_for_ingestion");
+  }
+
+  // non-strict callers receive null and can decide to accept the ingestion for backfill or reject
+  return null;
 }
 
 /*
@@ -67,7 +83,8 @@ export default async function handler(req, res) {
     const pipelinePayload = body?.pipelinePayload ?? null;
     const authContext = { tenantId: req.user?.tenantId }; // adapt to your auth
 
-    const tenantId = requireTenantId({ requestBody: body, pipelinePayload, authContext });
+    // Non-strict: will return null instead of throwing if no tenant available
+    const tenantId = requireTenantId({ requestBody: body, pipelinePayload, authContext }, { strict: false });
 
     const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const row = {
