@@ -6,6 +6,15 @@ import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
 import ConnectModal from "@/components/integrations/ConnectModal";
+import ConnectorDetailsDrawer from "@/components/connectors/ConnectorDetailsDrawer";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+
+/**
+ * Integrations page — updated to use Actions menu per-connected-row:
+ * - Actions: Test connection, Sync, Details, Delete
+ * - Prefers ecommerce endpoints for ecommerce rows (platform present), falls back to legacy integrations endpoints
+ * - Shows per-row loading states and toasts
+ */
 
 const PROVIDERS = [
   { id: "bigcommerce", name: "BigCommerce", desc: "Full-featured storefront", available: true },
@@ -26,37 +35,14 @@ export default function IntegrationsPage() {
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
 
+  // UI action state
+  const [actionMenuFor, setActionMenuFor] = useState<string | null>(null);
+  const [testingFor, setTestingFor] = useState<string | null>(null);
+  const [syncingFor, setSyncingFor] = useState<string | null>(null);
+  const [confirmDeleteFor, setConfirmDeleteFor] = useState<string | null>(null);
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
+
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
-
-  async function handleDelete(id: string, platform?: string) {
-    if (!confirm("Delete this connection? This will remove stored credentials and cannot be undone.")) return;
-    try {
-      // endpoint: ecommerce_connections for ecommerce rows; integrations otherwise
-      const url = platform ? `/api/v1/ecommerce_connections/${encodeURIComponent(id)}` : `/api/v1/integrations/${encodeURIComponent(id)}`;
-      const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.ok) {
-        toast.error(json?.error ?? `Delete failed (${res.status})`);
-        return;
-      }
-      toast.success("Connection deleted");
-      refresh();
-    } catch (err: any) {
-      toast.error(String(err?.message ?? err));
-    }
-  }
-
-  async function handleTest(id: string) {
-    try {
-      const res = await testConnection(id);
-      const ok = res?.result?.ok ?? !!res?.ok;
-      toast.success(ok ? "Connection OK" : `Test result: ${res?.result?.status ?? "error"}`);
-      return res;
-    } catch (err: any) {
-      toast.error(String(err?.message ?? err));
-      throw err;
-    }
-  }
 
   function openConnect(providerId: string) {
     setConnectProvider(providerId);
@@ -68,6 +54,113 @@ export default function IntegrationsPage() {
     setConnectorManagerOpen(true);
     setConnectModalOpen(false);
     toast.info("Opening connector manager for advanced flow");
+  }
+
+  async function handleTest(id: string, platform?: string) {
+    setTestingFor(id);
+    try {
+      // prefer ecommerce validate endpoint if platform present
+      if (platform) {
+        const res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/validate`, {
+          credentials: "same-origin",
+        });
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json?.ok === false) {
+            throw new Error(json?.error ?? json?.detail ?? "Validation failed");
+          }
+          toast.success("Connection validated");
+          return;
+        }
+        // fallthrough to legacy
+      }
+
+      // fallback to integrations test
+      const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const j2 = await res2.json().catch(() => null);
+      if (!res2.ok || j2?.ok === false) throw new Error(j2?.error ?? j2?.detail ?? `Test failed (${res2.status})`);
+      toast.success("Connection validated");
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    } finally {
+      setTestingFor(null);
+      setActionMenuFor(null);
+    }
+  }
+
+  async function handleSync(id: string, platform?: string) {
+    if (syncingFor === id) return;
+    setSyncingFor(id);
+    try {
+      // Prefer ecommerce sync endpoint
+      if (platform) {
+        let res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`, {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        if (!res.ok) {
+          // fallback to legacy integrations sync
+          res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+            method: "POST",
+            credentials: "same-origin",
+          });
+        }
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
+        const jobId = json?.jobId ?? json?.id ?? json?.pipelineRunId ?? null;
+        toast.success(jobId ? `Sync queued (job ${jobId})` : "Sync started");
+        // refresh list after enqueue
+        refresh();
+        return;
+      }
+
+      // fallback generic sync
+      const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const json2 = await res2.json().catch(() => null);
+      if (!res2.ok || !json2?.ok) throw new Error(json2?.error ?? `Sync failed (${res2.status})`);
+      const jobId2 = json2?.jobId ?? json2?.id ?? json2?.pipelineRunId ?? null;
+      toast.success(jobId2 ? `Sync queued (job ${jobId2})` : "Sync started");
+      refresh();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    } finally {
+      setSyncingFor(null);
+      setActionMenuFor(null);
+    }
+  }
+
+  async function handleDelete(id: string, platform?: string) {
+    // open confirm dialog
+    setConfirmDeleteFor(id);
+    setActionMenuFor(null);
+  }
+
+  async function confirmDeleteNow(id: string, platform?: string) {
+    try {
+      // choose endpoint based on integration type
+      const url = platform
+        ? `/api/v1/ecommerce_connections/${encodeURIComponent(id)}`
+        : `/api/v1/integrations/${encodeURIComponent(id)}`;
+      const res = await fetch(url, { method: "DELETE", credentials: "same-origin" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        toast.error(json?.error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      toast.success("Connection deleted");
+      refresh();
+    } catch (err: any) {
+      toast.error(String(err?.message ?? err));
+    } finally {
+      setConfirmDeleteFor(null);
+      setActionMenuFor(null);
+    }
   }
 
   return (
@@ -86,49 +179,85 @@ export default function IntegrationsPage() {
 
           <div className="space-y-3">
             {(activeIntegrations && activeIntegrations.length > 0) ? (
-              activeIntegrations.map((i) => (
-                <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      {/* Show friendly name when present; fallback to provider / config.store_hash */}
-                      <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
-                      <div className="text-xs text-slate-500">{i.platform ?? i.provider}</div>
-                      <div className="text-xs text-slate-400 mt-1">Last update: {i.updated_at ?? "—"}</div>
-                    </div>
+              activeIntegrations.map((i) => {
+                const isTesting = testingFor === i.id;
+                const isSyncing = syncingFor === i.id;
+                const menuOpen = actionMenuFor === i.id;
+                const platform = i.platform ?? i.provider;
+                return (
+                  <div key={i.id} className="p-4 rounded-md border bg-white dark:bg-slate-900 relative">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{i.name ?? i.config?.store_name ?? i.config?.store_hash ?? i.provider ?? i.platform ?? i.id}</div>
+                        <div className="text-xs text-slate-500">{platform}</div>
+                        <div className="text-xs text-slate-400 mt-1">Last update: {i.updated_at ?? "—"}</div>
+                      </div>
 
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleTest(i.id)} className="px-3 py-1 bg-emerald-600 text-white rounded text-sm">
-                        Test connection
-                      </button>
+                      <div className="flex items-center gap-2 relative">
+                        {/* Quick Sync button */}
+                        <button
+                          onClick={() => handleSync(i.id, i.platform)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                          disabled={isSyncing}
+                        >
+                          {isSyncing ? "Syncing…" : "Sync"}
+                        </button>
 
-                      <button onClick={() => {
-                        // Sync endpoint: prefer ecommerce sync route if platform present
-                        const syncUrl = i.platform
-                          ? `/api/v1/ecommerce_connections/${encodeURIComponent(i.id)}/sync`
-                          : `/api/v1/integrations/${encodeURIComponent(i.id)}/sync`;
-                        (async () => {
-                          try {
-                            const res = await fetch(syncUrl, { method: "POST", credentials: "same-origin" });
-                            const json = await res.json().catch(() => null);
-                            if (!res.ok || !json?.ok) throw new Error(json?.error ?? `Sync failed (${res.status})`);
-                            toast.success("Sync started");
-                            refresh();
-                          } catch (err: any) {
-                            toast.error(String(err?.message ?? err));
-                          }
-                        })();
-                      }} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
-                        Sync
-                      </button>
+                        {/* Actions menu trigger */}
+                        <button
+                          onClick={() => setActionMenuFor(menuOpen ? null : i.id)}
+                          className="px-3 py-1 rounded border text-sm hover:bg-slate-50"
+                        >
+                          Actions
+                        </button>
 
-                      {/* Replace Manage with Delete to avoid duplication with ConnectorManager */}
-                      <button onClick={() => handleDelete(i.id, i.platform)} className="px-3 py-1 border rounded text-sm text-rose-600 hover:bg-rose-50">
-                        Delete
-                      </button>
+                        {/* Actions dropdown */}
+                        {menuOpen && (
+                          <div className="absolute right-0 top-12 z-50 w-44 rounded border bg-white shadow-md p-2">
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => handleTest(i.id, i.platform)}
+                                disabled={isTesting}
+                                className="text-left px-2 py-1 rounded hover:bg-slate-50 text-sm"
+                              >
+                                {isTesting ? "Testing…" : "Test connection"}
+                              </button>
+
+                              <button
+                                onClick={() => handleSync(i.id, i.platform)}
+                                disabled={isSyncing}
+                                className="text-left px-2 py-1 rounded hover:bg-slate-50 text-sm"
+                              >
+                                {isSyncing ? "Syncing…" : "Sync"}
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setDetailsFor(i.id);
+                                  setActionMenuFor(null);
+                                }}
+                                className="text-left px-2 py-1 rounded hover:bg-slate-50 text-sm"
+                              >
+                                Details
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  handleDelete(i.id, i.platform);
+                                  setActionMenuFor(null);
+                                }}
+                                className="text-left px-2 py-1 rounded text-rose-600 hover:bg-rose-50 text-sm"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="p-4 rounded-md border bg-white dark:bg-slate-900">
                 <div className="text-sm text-slate-600">No active integrations. Connect a store from the catalog.</div>
@@ -195,6 +324,25 @@ export default function IntegrationsPage() {
           </div>
         </div>
       )}
+
+      {/* Connector details drawer (opened from Actions -> Details) */}
+      <ConnectorDetailsDrawer
+        integrationId={detailsFor ?? ""}
+        isOpen={Boolean(detailsFor)}
+        onClose={() => setDetailsFor(null)}
+      />
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={Boolean(confirmDeleteFor)}
+        onCancel={() => setConfirmDeleteFor(null)}
+        title="Delete connection"
+        description={`Delete connection ${confirmDeleteFor}? This cannot be undone.`}
+        onConfirm={async () => {
+          if (!confirmDeleteFor) return;
+          await confirmDeleteNow(confirmDeleteFor);
+        }}
+      />
     </div>
   );
 }
