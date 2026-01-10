@@ -1,11 +1,17 @@
-/* src/lib/imports/runImportForIngestion.ts
+/**
+ * src/lib/imports/runImportForIngestion.ts
  *
- * Same behavior as before but accepts an optional `tenantId` in opts.
- * If product_ingestions row doesn't contain org/tenant ids, the supplied
- * opts.tenantId will be used as a fallback so imports invoked via the
- * pipeline-runner won't fail with missing_tenant_id_for_import.
+ * Full-featured import runner:
+ * - Robust SKU extraction from many ingestion shapes
+ * - Handles BigCommerce create/update, images, variants
+ * - Persists import_jobs + import_rows and product_id back to product_ingestions
+ * - Accepts optional tenantId fallback in opts when ingestion row lacks tenant
+ * - Accepts pipelineRunId and moduleIndex to mark module_runs/pipeline_runs
+ * - Non-fatal writes for pipeline bookkeeping so import success is preserved
  *
- * Drop this file over your existing implementation and deploy.
+ * Drop this file over the existing file and deploy. Requires:
+ *  - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+ *  - decryptSecrets helper at "@/lib/integrations/encryption"
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -21,6 +27,7 @@ const supaAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
+// ---------- Helpers ----------
 function bcBaseUrl(storeHash: string) {
   return `https://api.bigcommerce.com/stores/${encodeURIComponent(storeHash)}/v3`;
 }
@@ -43,7 +50,7 @@ async function fetchJson(url: string, opts: RequestInit = {}) {
   return { res, body, text };
 }
 
-/* ========== Helpers (unchanged behavior) ========== */
+// Shallow product extraction to handle many ingestion shapes
 function extractNormalizedProduct(ingestRow: any) {
   if (!ingestRow || typeof ingestRow !== "object") return null;
 
@@ -77,10 +84,16 @@ function extractNormalizedProduct(ingestRow: any) {
     const price = getFirst(o, "price", "list_price", "msrp", "price_cents");
     const variants = Array.isArray(o.variants) ? o.variants : Array.isArray(o.variant) ? o.variant : [];
     let images: string[] = [];
-    if (Array.isArray(o.images)) images = o.images.map((i: any) => (typeof i === "string" ? i : i.url ?? i.image_url ?? i.src ?? "")).filter(Boolean);
-    else if (Array.isArray(o.media)) images = o.media.map((m: any) => (typeof m === "string" ? m : m.url ?? m.src ?? m.image_url ?? "")).filter(Boolean);
-    else if (o.image && typeof o.image === "string") images = [o.image];
-    if (sku || title) return { sku, title, description, price, variants, images, raw: o };
+    if (Array.isArray(o.images)) {
+      images = o.images.map((i: any) => (typeof i === "string" ? i : i.url ?? i.image_url ?? i.src ?? "")).filter(Boolean);
+    } else if (Array.isArray(o.media)) {
+      images = o.media.map((m: any) => (typeof m === "string" ? m : m.url ?? m.src ?? m.image_url ?? "")).filter(Boolean);
+    } else if (o.image && typeof o.image === "string") {
+      images = [o.image];
+    }
+    if (sku || title) {
+      return { sku, title, description, price, variants, images, raw: o };
+    }
     return null;
   };
 
@@ -91,13 +104,16 @@ function extractNormalizedProduct(ingestRow: any) {
         const parsed = JSON.parse(c);
         const psc = scanObject(parsed);
         if (psc) return psc;
-      } catch {}
+      } catch {
+        // ignore non-JSON strings
+      }
     } else {
       const scanned = scanObject(c);
       if (scanned) return scanned;
     }
   }
 
+  // fallback: shallow walk top-level keys
   for (const k of Object.keys(ingestRow)) {
     const v = ingestRow[k];
     if (v && typeof v === "object") {
@@ -108,32 +124,61 @@ function extractNormalizedProduct(ingestRow: any) {
   return null;
 }
 
-/* ========== Main function ========== */
+// Upload an image into BigCommerce by image URL (POST /catalog/products/{id}/images)
+async function uploadProductImage(storeBase: string, token: string, productId: number, imageUrl: string, isThumbnail = false) {
+  try {
+    const url = `${storeBase}/catalog/products/${productId}/images`;
+    const body = JSON.stringify({ image_url: imageUrl, is_thumbnail: isThumbnail });
+    const { res } = await fetchJson(url, { method: "POST", headers: bcHeaders(token), body });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Find variant by SKU and product_id - returns variant object or null
+async function findVariantBySku(storeBase: string, token: string, sku: string) {
+  try {
+    const url = `${storeBase}/catalog/variants?sku=${encodeURIComponent(sku)}`;
+    const { res, body } = await fetchJson(url, { headers: bcHeaders(token) });
+    if (!res.ok) return null;
+    const items = body?.data ?? body;
+    if (!Array.isArray(items) || items.length === 0) return null;
+    return items[0];
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Main function ----------
 export async function runImportForIngestion(opts: {
   ingestionId: string;
   platform?: "bigcommerce";
   allowOverwriteExisting?: boolean;
   pipelineRunId?: string;
   moduleIndex?: number;
-  tenantId?: string; // NEW: optional fallback tenant id
+  tenantId?: string; // optional fallback
 }): Promise<any> {
   const ingestionId = String(opts.ingestionId || "");
   if (!ingestionId) throw new Error("missing_ingestionId");
 
-  // Find ingestion row (defensive across table names)
+  // Defensive table lookup
   const ingestionTables = ["product_ingestions", "ingestions", "product_ingestion", "ingestion"];
   let ingestionRow: any = null;
   for (const t of ingestionTables) {
     try {
       const q = await supaAdmin.from(t).select("*").eq("id", ingestionId).maybeSingle();
-      if (!q.error && q.data) { ingestionRow = q.data; break; }
+      if (!q.error && q.data) {
+        ingestionRow = q.data;
+        break;
+      }
     } catch {
-      /* ignore */
+      // ignore
     }
   }
   if (!ingestionRow) throw new Error("ingestion_not_found");
 
-  // Accept tenantId from ingestion row OR fallback to opts.tenantId
+  // tenant id from row or fallback to opts.tenantId
   const tenantId =
     ingestionRow.org_id ??
     ingestionRow.tenant_id ??
@@ -143,7 +188,7 @@ export async function runImportForIngestion(opts: {
 
   if (!tenantId) throw new Error("missing_tenant_id_for_import");
 
-  // Find active bigcommerce connection for tenant
+  // load connection
   const { data: connections, error: connErr } = await supaAdmin
     .from("ecommerce_connections")
     .select("*")
@@ -152,7 +197,6 @@ export async function runImportForIngestion(opts: {
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(1);
-
   if (connErr) throw new Error(`connection_load_failed:${String(connErr.message ?? connErr)}`);
   if (!connections || (Array.isArray(connections) && connections.length === 0)) throw new Error("connection_not_found");
 
@@ -161,34 +205,41 @@ export async function runImportForIngestion(opts: {
   if (!secretsBlob) throw new Error("connection_load_failed:missing_secrets");
 
   let secrets: any = {};
-  try { secrets = decryptSecrets(secretsBlob); } catch (e: any) { throw new Error(`connection_load_failed:decrypt_failed:${String(e?.message ?? e)}`); }
+  try {
+    secrets = decryptSecrets(secretsBlob);
+  } catch (e: any) {
+    throw new Error(`connection_load_failed:decrypt_failed:${String(e?.message ?? e)}`);
+  }
 
   const cfg = conn.config ?? {};
   const storeHash = cfg.store_hash ?? cfg.storeHash ?? undefined;
   const token = secrets.access_token ?? secrets.accessToken ?? secrets.token ?? undefined;
   if (!storeHash || !token) throw new Error("bigcommerce_connection_incomplete");
 
-  // create import job + import_row stub
+  // create import job
   const createdBy = "00000000-0000-5000-8000-000000000000";
   const { data: jobRow, error: jobErr } = await supaAdmin
     .from("import_jobs")
-    .insert([{
-      org_id: tenantId,
-      created_by: createdBy,
-      file_path: null,
-      file_name: `ingestion-${ingestionId}`,
-      status: "processing",
-      total_rows: 1,
-      processed_rows: 0,
-      result_summary: {},
-      meta: { ingestionId, connector_id: conn.id },
-    }])
+    .insert([
+      {
+        org_id: tenantId,
+        created_by: createdBy,
+        file_path: null,
+        file_name: `ingestion-${ingestionId}`,
+        status: "processing",
+        total_rows: 1,
+        processed_rows: 0,
+        result_summary: {},
+        meta: { ingestionId, connector_id: conn.id },
+      },
+    ])
     .select("*")
     .single();
 
   if (jobErr || !jobRow) throw new Error("import_persist_failed:create_job");
   const jobId = jobRow.id as string;
 
+  // insert import_rows stub
   const rowStub = { job_id: jobId, row_number: 1, data: ingestionRow, status: "pending", errors: [] };
   const { error: insertRowErr } = await supaAdmin.from("import_rows").insert([rowStub]);
   if (insertRowErr) {
@@ -196,7 +247,7 @@ export async function runImportForIngestion(opts: {
     throw new Error("import_persist_failed:insert_row");
   }
 
-  // Normalize product
+  // normalize product
   const norm = extractNormalizedProduct(ingestionRow);
   if (!norm || !norm.sku) {
     const msg = "missing_sku_in_ingestion";
@@ -230,10 +281,11 @@ export async function runImportForIngestion(opts: {
       const errText = typeof findBody === "string" ? findBody : JSON.stringify(findBody);
       throw new Error(`bigcommerce_find_failed:${findRes.status}:${errText}`);
     }
+
     const existingItems = (findBody && (findBody.data ?? findBody)) || [];
 
     if (Array.isArray(existingItems) && existingItems.length > 0) {
-      // update existing
+      // update existing product
       const existing = existingItems[0];
       const productId = existing.id;
       const updateUrl = `${storeBase}/catalog/products/${productId}`;
@@ -247,47 +299,51 @@ export async function runImportForIngestion(opts: {
         return { ok: false, reason: `bigcommerce_update_failed:${upRes.status}`, detail: upBody };
       }
 
-      // best-effort images/variants (omitted details)
+      // images
       if (Array.isArray(productPayload.images) && productPayload.images.length) {
         for (const im of productPayload.images) {
           try {
-            const imgUrl = `${storeBase}/catalog/products/${productId}/images`;
-            await fetchJson(imgUrl, { method: "POST", headers: bcHeaders(token), body: JSON.stringify({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }) });
-          } catch {}
+            await uploadProductImage(storeBase, token, productId, im.image_url, Boolean(im.is_thumbnail));
+          } catch {
+            // continue on image errors
+          }
         }
       }
 
+      // variants upsert (best-effort)
       if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
         for (const v of productPayload.variants) {
           try {
             const vSku = v.sku ?? null;
             if (!vSku) continue;
-            const vFindUrl = `${storeBase}/catalog/variants?sku=${encodeURIComponent(vSku)}`;
-            const { res: vFindRes, body: vFindBody } = await fetchJson(vFindUrl, { headers: bcHeaders(token) });
-            if (vFindRes.ok) {
-              const found = (vFindBody && (vFindBody.data ?? vFindBody)) || [];
-              const existingVariant = Array.isArray(found) && found.find((vv: any) => String(vv.sku) === String(vSku) && vv.product_id === productId);
-              if (existingVariant) {
-                const vUpdateUrl = `${storeBase}/catalog/variants/${existingVariant.id}`;
-                await fetchJson(vUpdateUrl, { method: "PUT", headers: bcHeaders(token), body: JSON.stringify({ price: v.price ?? undefined }) });
-                continue;
-              }
+            const foundVariant = await findVariantBySku(storeBase, token, vSku);
+            if (foundVariant && foundVariant.product_id === productId) {
+              // update variant
+              const vUpdateUrl = `${storeBase}/catalog/variants/${foundVariant.id}`;
+              await fetchJson(vUpdateUrl, { method: "PUT", headers: bcHeaders(token), body: JSON.stringify({ price: v.price ?? undefined }) });
+            } else {
+              // create variant under product
+              const vCreateUrl = `${storeBase}/catalog/products/${productId}/variants`;
+              await fetchJson(vCreateUrl, { method: "POST", headers: bcHeaders(token), body: JSON.stringify({ sku: vSku, price: v.price ?? undefined, option_values: v.option_values ?? undefined }) });
             }
-            const vCreateUrl = `${storeBase}/catalog/products/${productId}/variants`;
-            await fetchJson(vCreateUrl, { method: "POST", headers: bcHeaders(token), body: JSON.stringify({ sku: vSku, price: v.price ?? undefined, option_values: v.option_values ?? undefined }) });
-          } catch {}
+          } catch {
+            // ignore per-variant errors
+          }
         }
       }
 
-      // persist product_id to ingestion (non-fatal)
+      // persist product_id (non-fatal)
       try {
         await supaAdmin.from("product_ingestions").update({ product_id: String(productId) }).eq("id", ingestionId);
-      } catch {}
+      } catch {
+        // ignore
+      }
 
+      // finalize job/row
       await supaAdmin.from("import_rows").update({ status: "success", data: ingestionRow, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
 
-      // pipeline module updates (non-fatal)
+      // update module_runs/pipeline_runs if context provided (non-fatal)
       if (opts.pipelineRunId && typeof opts.moduleIndex === "number") {
         try {
           await supaAdmin.from("module_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("pipeline_run_id", opts.pipelineRunId).eq("module_index", opts.moduleIndex);
@@ -296,7 +352,9 @@ export async function runImportForIngestion(opts: {
           if (!pending || (Array.isArray(pending) && pending.length === 0)) {
             await supaAdmin.from("pipeline_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("id", opts.pipelineRunId);
           }
-        } catch {}
+        } catch {
+          // non-fatal
+        }
       }
 
       return { ok: true, action: "updated", product_id: productId, sku };
@@ -305,7 +363,9 @@ export async function runImportForIngestion(opts: {
       const createUrl = `${storeBase}/catalog/products`;
       const createPayload: any = { name: productPayload.name, description: productPayload.description, type: "physical" };
       if (productPayload.price) createPayload.price = productPayload.price;
-      if (Array.isArray(productPayload.images) && productPayload.images.length) createPayload.images = productPayload.images.map((im: any) => ({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }));
+      if (Array.isArray(productPayload.images) && productPayload.images.length) {
+        createPayload.images = productPayload.images.map((im: any) => ({ image_url: im.image_url, is_thumbnail: !!im.is_thumbnail }));
+      }
       if (Array.isArray(productPayload.variants) && productPayload.variants.length) {
         createPayload.variants = productPayload.variants.map((v: any) => ({ sku: v.sku ?? sku, price: v.price ?? undefined, option_values: v.option_values ?? undefined }));
       } else {
@@ -326,12 +386,16 @@ export async function runImportForIngestion(opts: {
       if (createdId) {
         try {
           await supaAdmin.from("product_ingestions").update({ product_id: String(createdId) }).eq("id", ingestionId);
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
 
+      // finalize job/row
       await supaAdmin.from("import_rows").update({ status: "success", data: { ...ingestionRow, product: createdProduct }, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
 
+      // pipeline updates (non-fatal)
       if (opts.pipelineRunId && typeof opts.moduleIndex === "number") {
         try {
           await supaAdmin.from("module_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("pipeline_run_id", opts.pipelineRunId).eq("module_index", opts.moduleIndex);
@@ -340,13 +404,16 @@ export async function runImportForIngestion(opts: {
           if (!pending || (Array.isArray(pending) && pending.length === 0)) {
             await supaAdmin.from("pipeline_runs").update({ status: "succeeded", finished_at: new Date().toISOString() }).eq("id", opts.pipelineRunId);
           }
-        } catch {}
+        } catch {
+          // non-fatal
+        }
       }
 
       return { ok: true, action: "created", product_id: createdId ?? null, sku };
     }
   } catch (e: any) {
     const errMsg = String(e?.message ?? e);
+    // Mark failure in DB
     await supaAdmin.from("import_rows").update({ status: "failed", errors: JSON.stringify([errMsg]) }).eq("job_id", jobId).eq("row_number", 1);
     await supaAdmin.from("import_jobs").update({ status: "failed", processed_rows: 0, result_summary: { successes: 0, failures: 1 }, errors: JSON.stringify([errMsg]) }).eq("id", jobId);
     throw e;
