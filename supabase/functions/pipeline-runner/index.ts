@@ -420,13 +420,33 @@ Deno.serve(async (req) => {
         if (moduleName === "import") {
           if (!ingestionId) throw new Error("missing_ingestionId_for_import");
 
-          // ===== MODIFIED: include pipelineRunId and moduleIndex in the import call body
-          const importBody = {
+          // --- START MODIFICATION ---
+          // Fetch ingestion row to surface tenant_id/org_id if present so import won't 422
+          let tenantIdToSend: string | null = null;
+          try {
+            const { data: ingRow, error: ingErr } = await supabase
+              .from("product_ingestions")
+              .select("id, tenant_id, org_id")
+              .eq("id", ingestionId)
+              .maybeSingle();
+            if (!ingErr && ingRow) {
+              tenantIdToSend = ingRow.tenant_id ?? ingRow.org_id ?? null;
+            }
+          } catch {
+            // ignore read errors; we'll still call import without tenantId if not found
+          }
+
+          // Also allow pipeline metadata to provide tenantId
+          tenantIdToSend = tenantIdToSend ?? (payload?.tenantId ?? payload?.orgId ?? null);
+
+          const importBody: any = {
             ingestionId,
             options: options?.import ?? null,
             pipelineRunId,
             moduleIndex,
           };
+          if (tenantIdToSend) importBody.tenantId = tenantIdToSend;
+          // --- END MODIFICATION ---
 
           const resp = await fetch(`${appUrl}/api/v1/pipeline/internal/import`, {
             method: "POST",
