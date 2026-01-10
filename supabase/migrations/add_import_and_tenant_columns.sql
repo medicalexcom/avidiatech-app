@@ -1,8 +1,7 @@
 -- Migration: Add import_jobs/import_rows and tenant columns expected by the import runner
--- Run this using your Supabase SQL editor (service-role) or psql against the app database.
 -- Safe / idempotent: uses IF NOT EXISTS and ADD COLUMN IF NOT EXISTS where available.
+-- Run this in Supabase SQL editor (service-role) or with psql as a privileged user.
 
--- Ensure gen_random_uuid() is available
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 BEGIN;
@@ -19,13 +18,13 @@ CREATE TABLE IF NOT EXISTS import_jobs (
   created_by uuid NOT NULL,
   file_path text,
   file_name text,
-  file_format text,                   -- csv | xlsx | json etc
+  file_format text,
   total_rows int DEFAULT 0,
   processed_rows int DEFAULT 0,
-  status text NOT NULL DEFAULT 'pending', -- pending|processing|complete|failed
-  result_summary jsonb DEFAULT '{}'::jsonb, -- { successes: n, failures: n }
-  errors jsonb DEFAULT '[]'::jsonb,   -- array of global errors / messages
-  meta jsonb DEFAULT '{}'::jsonb,     -- freeform meta (ingestionId, connector_id, etc.)
+  status text NOT NULL DEFAULT 'pending',
+  result_summary jsonb DEFAULT '{}'::jsonb,
+  errors jsonb DEFAULT '[]'::jsonb,
+  meta jsonb DEFAULT '{}'::jsonb,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
@@ -38,22 +37,20 @@ CREATE TABLE IF NOT EXISTS import_rows (
   job_id uuid REFERENCES import_jobs(id) ON DELETE CASCADE,
   row_number int,
   data jsonb,
-  status text DEFAULT 'pending', -- pending|success|failed
+  status text DEFAULT 'pending',
   errors jsonb DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS import_rows_job_idx ON import_rows (job_id);
 
--- 4) ecommerce_connections table (defensive: only create if missing)
--- This is a minimal compatible schema used by the app. If your project already has this table,
--- CREATE TABLE IF NOT EXISTS will do nothing; indexes/triggers below will also be skipped if already present.
+-- 4) ecommerce_connections table (minimal compatible schema)
 CREATE TABLE IF NOT EXISTS ecommerce_connections (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL,
-  platform text NOT NULL, -- e.g. 'bigcommerce'
+  platform text NOT NULL,
   status text NOT NULL DEFAULT 'active',
-  config jsonb NOT NULL DEFAULT '{}'::jsonb, -- non-sensitive config (store_hash etc.)
-  secrets_enc text NOT NULL,                -- encrypted token blob (base64/utf-8)
+  config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  secrets_enc text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -61,7 +58,7 @@ CREATE TABLE IF NOT EXISTS ecommerce_connections (
 CREATE INDEX IF NOT EXISTS idx_ecommerce_connections_tenant_platform
   ON ecommerce_connections (tenant_id, platform);
 
--- 5) set_updated_at trigger helper (create or replace is safe)
+-- 5) set_updated_at trigger helper
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger AS $$
 BEGIN
@@ -70,30 +67,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Add triggers to keep updated_at in sync for tables that have that column.
--- If trigger already exists, DROP then CREATE (harmless if present).
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'import_jobs') THEN
-    PERFORM (
-      CASE
-        WHEN EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_import_jobs_updated_at') THEN
-          pg_catalog.execute('DROP TRIGGER trg_import_jobs_updated_at ON import_jobs');
-      END
-    );
-    EXECUTE 'CREATE TRIGGER trg_import_jobs_updated_at BEFORE UPDATE ON import_jobs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()';
-  END IF;
+-- 6) Attach triggers to keep updated_at in sync (safe: DROP IF EXISTS then CREATE)
+DROP TRIGGER IF EXISTS trg_import_jobs_updated_at ON import_jobs;
+CREATE TRIGGER trg_import_jobs_updated_at
+BEFORE UPDATE ON import_jobs
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
 
-  IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = 'ecommerce_connections') THEN
-    PERFORM (
-      CASE
-        WHEN EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_ecommerce_connections_updated_at') THEN
-          pg_catalog.execute('DROP TRIGGER trg_ecommerce_connections_updated_at ON ecommerce_connections');
-      END
-    );
-    EXECUTE 'CREATE TRIGGER trg_ecommerce_connections_updated_at BEFORE UPDATE ON ecommerce_connections FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()';
-  END IF;
-END
-$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_ecommerce_connections_updated_at ON ecommerce_connections;
+CREATE TRIGGER trg_ecommerce_connections_updated_at
+BEFORE UPDATE ON ecommerce_connections
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
 
 COMMIT;
