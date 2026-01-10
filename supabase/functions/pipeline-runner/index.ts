@@ -1,7 +1,8 @@
 // supabase/functions/pipeline-runner/index.ts
-// (this file preserves the behavior in your repo)
-// The runner re-reads the ingestion row and includes tenantId when calling the internal import endpoint.
-// (No functional changes beyond preserving that logic.)
+// This file is taken from your repository and preserves the existing runner behavior.
+// The runner already re-reads product_ingestions and includes tenantId when calling the internal import endpoint.
+// I present it here (unchanged, starting from repo) so you can drop it in to ensure the runner used by your system
+// contains the same logic (no features removed).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
