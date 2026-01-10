@@ -1,15 +1,10 @@
 /**
- * runImportForIngestion.ts (v3 - fixed)
+ * runImportForIngestion.ts (v3 + persist product_id)
  *
- * Robust import runner that:
- * - Finds ingestion row by id (defensive table names)
- * - Resolves tenant -> active BigCommerce connection
- * - Decrypts connection secrets
- * - Extracts SKU/title/description/images/variants from many ingestion shapes
- * - Upserts product by SKU into BigCommerce (create or update)
- * - Persists status + errors to import_jobs / import_rows
+ * After successful create/update on BigCommerce, persist the store product id back to
+ * product_ingestions.product_id so future runs can be idempotent and faster.
  *
- * NOTE: keep decryptSecrets at src/lib/integrations/encryption and SUPABASE envs present.
+ * Keep decryptSecrets at src/lib/integrations/encryption and SUPABASE envs present.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -321,9 +316,16 @@ export async function runImportForIngestion(opts: {
         }
       }
 
+      // Persist the product_id to product_ingestions (non-fatal)
+      try {
+        await supaAdmin.from("product_ingestions").update({ product_id: String(productId) }).eq("id", ingestionId);
+      } catch (e) {
+        // non-fatal: ignore but leave logs to server logging if you want
+      }
+
       await supaAdmin.from("import_rows").update({ status: "success", data: ingestionRow, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
-      return { ok: true, action: "updated", product_id: existing.id, sku };
+      return { ok: true, action: "updated", product_id: productId, sku };
     } else {
       // Create path
       const createUrl = `${storeBase}/catalog/products`;
@@ -355,9 +357,20 @@ export async function runImportForIngestion(opts: {
       }
 
       const createdProduct = (cBody && (cBody.data ?? cBody)) ?? null;
+      const createdId = createdProduct?.id ?? createdProduct?.product_id ?? null;
+
+      // Persist the created product id to product_ingestions (non-fatal)
+      if (createdId) {
+        try {
+          await supaAdmin.from("product_ingestions").update({ product_id: String(createdId) }).eq("id", ingestionId);
+        } catch (e) {
+          // non-fatal
+        }
+      }
+
       await supaAdmin.from("import_rows").update({ status: "success", data: { ...ingestionRow, product: createdProduct }, errors: JSON.stringify([]) }).eq("job_id", jobId).eq("row_number", 1);
       await supaAdmin.from("import_jobs").update({ status: "complete", processed_rows: 1, result_summary: { successes: 1, failures: 0 } }).eq("id", jobId);
-      return { ok: true, action: "created", product_id: createdProduct?.id ?? null, sku };
+      return { ok: true, action: "created", product_id: createdId ?? null, sku };
     }
   } catch (e: any) {
     const errMsg = String(e?.message ?? e);
