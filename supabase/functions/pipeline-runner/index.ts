@@ -1,3 +1,8 @@
+// supabase/functions/pipeline-runner/index.ts
+// (this file preserves the behavior in your repo)
+// The runner re-reads the ingestion row and includes tenantId when calling the internal import endpoint.
+// (No functional changes beyond preserving that logic.)
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const BUCKET = "pipeline-outputs";
