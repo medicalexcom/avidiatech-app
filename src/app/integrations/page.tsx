@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import ConnectorManager from "@/components/integrations/ConnectorManager";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useToast } from "@/components/ui/toast";
@@ -10,10 +10,9 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
  * Integrations page — refined UI and correct Actions wiring
- * - Removed "Connect a store" button from the empty state
- * - Actions dropdown items (Test, Sync, Details, Delete) are wired to prefer ecommerce endpoints
- *   and fall back to legacy integrations endpoints when needed.
- * - After actions, the UI refreshes where appropriate and action menus close.
+ * - Ensures Sync calls include org_id/tenantId where required (legacy endpoints require org_id)
+ * - Caches resolved org_id from /api/v1/me to avoid repeated calls
+ * - Removed quick Connect button, improved card styling and Actions dropdown
  */
 
 const PROVIDERS = [
@@ -51,6 +50,24 @@ export default function IntegrationsPage() {
   const [confirmDeleteFor, setConfirmDeleteFor] = useState<string | null>(null);
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
 
+  // cached org id (resolved once)
+  const [resolvedOrgId, setResolvedOrgId] = useState<string | null>(null);
+
+  // resolve org id (cached)
+  const resolveOrgId = useCallback(async (): Promise<string | null> => {
+    if (resolvedOrgId) return resolvedOrgId;
+    try {
+      const res = await fetch("/api/v1/me", { credentials: "same-origin" });
+      if (!res.ok) return null;
+      const json = await res.json().catch(() => null);
+      const org = json?.org_id ?? null;
+      if (org) setResolvedOrgId(org);
+      return org;
+    } catch {
+      return null;
+    }
+  }, [resolvedOrgId]);
+
   const ecommerceList = useMemo(() => (integrations || []).filter((i) => i.platform || i.provider), [integrations]);
 
   function openConnect(providerId: string) {
@@ -80,13 +97,17 @@ export default function IntegrationsPage() {
           refresh();
           return;
         }
-        // if the ecommerce validate endpoint doesn't exist or returns non-OK, fallthrough to legacy
+        // fallthrough to legacy
       }
 
       // Fallback to legacy integrations test
+      const org = await resolveOrgId();
+      const body = org ? JSON.stringify({ org_id: org }) : undefined;
       const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/test`, {
         method: "POST",
         credentials: "same-origin",
+        headers: body ? { "content-type": "application/json" } : undefined,
+        body,
       });
       const j2 = await res2.json().catch(() => null);
       if (!res2.ok || j2?.ok === false) throw new Error(j2?.error ?? j2?.detail ?? `Test failed (${res2.status})`);
@@ -104,18 +125,28 @@ export default function IntegrationsPage() {
     if (syncingFor === id) return;
     setSyncingFor(id);
     try {
-      // Prefer ecommerce sync endpoint
+      const org = await resolveOrgId();
+
+      // Prefer ecommerce sync endpoint for ecommerce connections
       if (platform) {
-        let res = await fetch(`/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`, {
+        // include tenantId query param when available (some handlers expect it)
+        const ecoUrl = org
+          ? `/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync?tenantId=${encodeURIComponent(org)}`
+          : `/api/v1/ecommerce_connections/${encodeURIComponent(id)}/sync`;
+
+        let res = await fetch(ecoUrl, {
           method: "POST",
           credentials: "same-origin",
         });
 
-        // If ecommerce sync not implemented or returned non-ok, try legacy integrations sync
         if (!res.ok) {
+          // fallback to legacy integrations sync - include org_id in body if known (legacy requires org_id)
+          const legacyBody = org ? JSON.stringify({ org_id: org }) : undefined;
           res = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
             method: "POST",
             credentials: "same-origin",
+            headers: legacyBody ? { "content-type": "application/json" } : undefined,
+            body: legacyBody,
           });
         }
 
@@ -127,10 +158,13 @@ export default function IntegrationsPage() {
         return;
       }
 
-      // fallback generic sync
+      // No platform (legacy integration) - send org_id in body if available (legacy endpoint expects it)
+      const body = org ? JSON.stringify({ org_id: org }) : undefined;
       const res2 = await fetch(`/api/v1/integrations/${encodeURIComponent(id)}/sync`, {
         method: "POST",
         credentials: "same-origin",
+        headers: body ? { "content-type": "application/json" } : undefined,
+        body,
       });
       const json2 = await res2.json().catch(() => null);
       if (!res2.ok || !json2?.ok) throw new Error(json2?.error ?? `Sync failed (${res2.status})`);
