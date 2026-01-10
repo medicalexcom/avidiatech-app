@@ -39,6 +39,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
   }, [fields]);
 
   const [form, setForm] = useState<Record<string, string>>(initialState);
+  const [connectionName, setConnectionName] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,7 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
         return acc;
       }, {})
     );
+    setConnectionName("");
     setError(null);
     setLoading(false);
   }, [provider, open]);
@@ -78,17 +80,31 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
     setLoading(true);
     setError(null);
     try {
-      const url = `/api/v1/integrations/ecommerce/${encodeURIComponent(provider!)}`;
+      // unified endpoint for ecommerce connections
+      const url = `/api/v1/ecommerce_connections`;
+      // build payload: include provider + provider-specific fields + optional name
+      const payload: any = { provider };
+      // copy fields as-is (server accepts storeHash / accessToken etc)
+      for (const f of fields!) {
+        payload[f.name] = form[f.name];
+        // also include snake_case fallback for some servers that check it
+        const snake = f.name.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+        payload[snake] = form[f.name];
+      }
+      if (connectionName && connectionName.trim()) payload.name = connectionName.trim();
+
       const res = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
+
       const json = await res.json().catch(() => null);
+
       if (!res.ok || !json?.ok) {
-        // if endpoint not implemented, open ConnectorManager fallback
-        if (res.status === 404 || (json && json.error && json.error.includes("not implemented"))) {
+        // fallback to ConnectorManager if server doesn't implement ecommerce route
+        if (res.status === 404 || (json && typeof json.error === "string" && json.error.includes("not implemented"))) {
           setError(null);
           toast.info("Falling back to ConnectorManager (server-side flow required)");
           onOpenConnectorManager?.();
@@ -134,6 +150,17 @@ export default function ConnectModal({ provider, open, onClose, onSuccess, onOpe
             </div>
           ) : (
             <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-slate-600">Connection name (optional)</label>
+                <input
+                  placeholder="Friendly name (e.g. My Store)"
+                  value={connectionName}
+                  onChange={(e) => setConnectionName(e.target.value)}
+                  className="w-full rounded border px-3 py-2"
+                />
+                <div className="text-xs text-slate-500 mt-1">This name will be shown in the UI instead of store hash.</div>
+              </div>
+
               {fields!.map((f) => (
                 <div key={f.name}>
                   <label className="block text-xs text-slate-600">{f.label}</label>
