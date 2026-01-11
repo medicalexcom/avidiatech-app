@@ -1,9 +1,24 @@
-// src/lib/bulk/db.ts
-// Small server-side DAL for bulk_jobs & bulk_job_items using service Supabase client.
+/**
+ * src/lib/bulk/db.ts
+ *
+ * Small server‑side DAL for bulk_jobs & bulk_job_items using the service Supabase client.
+ *
+ * In 2026-01 a NOT NULL constraint was added to bulk_jobs.org_id to prevent jobs from
+ * being created without a tenant.  The createBulkJob helper now requires a non‑null
+ * orgId and will throw an error if one is not provided.
+ */
 
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import type { BulkInputItem } from "./parse";
 
+/**
+ * createBulkJob
+ *
+ * Create a new bulk job row and insert its items.  The caller must provide a
+ * valid tenant/org identifier (`orgId`); this helper will reject undefined or
+ * empty values.  If you need to derive the tenant from the current Clerk
+ * organisation, use resolveTenantIdForServerRequest() in your API route.
+ */
 export async function createBulkJob({
   orgId,
   name,
@@ -11,19 +26,27 @@ export async function createBulkJob({
   options = {},
   items,
 }: {
-  orgId?: string | null;
+  orgId: string; // orgId is required; null or undefined values will cause an error
   name?: string | null;
   createdBy?: string | null;
   options?: Record<string, any>;
   items: BulkInputItem[];
 }) {
+  // Defensive check: ensure orgId is a non-empty string
+  if (!orgId) {
+    throw new Error(
+      "createBulkJob: orgId is required and cannot be null or undefined."
+    );
+  }
+
   const supabase = getServiceSupabaseClient();
 
+  // Insert the bulk job; note org_id is always set, never null
   const { data: jobRow, error: jobErr } = await supabase
     .from("bulk_jobs")
     .insert([
       {
-        org_id: orgId ?? null,
+        org_id: orgId,
         name: name ?? null,
         created_by: createdBy ?? null,
         options,
@@ -34,7 +57,6 @@ export async function createBulkJob({
     .single();
 
   if (jobErr) throw jobErr;
-
   const bulkJobId = (jobRow as any).id;
 
   // batch insert items
@@ -50,7 +72,9 @@ export async function createBulkJob({
   const chunkSize = 500;
   for (let i = 0; i < toInsert.length; i += chunkSize) {
     const chunk = toInsert.slice(i, i + chunkSize);
-    const { error: insertErr } = await supabase.from("bulk_job_items").insert(chunk);
+    const { error: insertErr } = await supabase
+      .from("bulk_job_items")
+      .insert(chunk);
     if (insertErr) throw insertErr;
   }
 
@@ -59,12 +83,19 @@ export async function createBulkJob({
 
 export async function getBulkJob(bulkJobId: string) {
   const supabase = getServiceSupabaseClient();
-  const { data, error } = await supabase.from("bulk_jobs").select("*").eq("id", bulkJobId).maybeSingle();
+  const { data, error } = await supabase
+    .from("bulk_jobs")
+    .select("*")
+    .eq("id", bulkJobId)
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
 
-export async function listBulkItems(bulkJobId: string, opts?: { limit?: number; offset?: number }) {
+export async function listBulkItems(
+  bulkJobId: string,
+  opts?: { limit?: number; offset?: number }
+) {
   const supabase = getServiceSupabaseClient();
   let query: any = supabase
     .from("bulk_job_items")
@@ -83,7 +114,10 @@ export async function listBulkItems(bulkJobId: string, opts?: { limit?: number; 
   return data;
 }
 
-export async function updateBulkItemStatus(bulkJobItemId: string, updates: Record<string, any>) {
+export async function updateBulkItemStatus(
+  bulkJobItemId: string,
+  updates: Record<string, any>
+) {
   const supabase = getServiceSupabaseClient();
   const { data, error } = await supabase
     .from("bulk_job_items")
@@ -91,7 +125,6 @@ export async function updateBulkItemStatus(bulkJobItemId: string, updates: Recor
     .eq("id", bulkJobItemId)
     .select()
     .maybeSingle();
-
   if (error) throw error;
   return data;
 }
@@ -99,16 +132,9 @@ export async function updateBulkItemStatus(bulkJobItemId: string, updates: Recor
 /**
  * incrementBulkCounters
  *
- * Compatibility helper for bulk workers.
- *
- * IMPORTANT:
- * - Your current production bulk_jobs table does NOT have queued_items or in_progress_items.
- * - Therefore this function ONLY updates the known-safe columns:
- *   - total_items
- *   - completed_items
- *   - failed_items
- *
- * Accepts both legacy keys (completed/failed/total) and canonical keys (*_items).
+ * Compatibility helper for bulk workers.  Updates the aggregate counters on
+ * bulk_jobs.  Note that queued and in_progress items are ignored on your
+ * current production schema because those columns do not exist.
  */
 export async function incrementBulkCounters(
   bulkJobId: string,
@@ -158,7 +184,10 @@ export async function incrementBulkCounters(
   // nothing to do
   if (Object.keys(updates).length === 1) return true;
 
-  const { error: updErr } = await supabase.from("bulk_jobs").update(updates).eq("id", bulkJobId);
+  const { error: updErr } = await supabase
+    .from("bulk_jobs")
+    .update(updates)
+    .eq("id", bulkJobId);
   if (updErr) throw updErr;
 
   return true;
