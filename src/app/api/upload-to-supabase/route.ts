@@ -30,6 +30,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
  *
  * IMPORTANT (2026-01):
  * - Always resolve tenant_id before inserting into product_ingestions.
+ * - Also set org_id = tenant_id to satisfy the new NOT NULL constraint.
  * - This prevents null-tenant ingestion rows which later break Import (422) and connectors.
  */
 export async function POST(req: Request) {
@@ -94,12 +95,13 @@ export async function POST(req: Request) {
     const rawPath =
       (uploadData && ((uploadData as any).path || (uploadData as any).fullPath || (uploadData as any).Key)) ??
       pathRelative;
-    const relativePath = String(rawPath).replace(new RegExp(`^${BUCKET}\\/`), "").replace(/^\/+/, "");
+    const relativePath = String(rawPath).replace(new RegExp(`^${BUCKET}\/`), "").replace(/^\/+/, "");
     const canonicalFilePath = `${BUCKET}/${relativePath}`;
 
     // Prepare ingestion row payload
     const payload: any = {
-      tenant_id, // FIX: always set
+      tenant_id, // always set
+      org_id: tenant_id, // NEW: set org_id to tenant_id for NOT NULL constraint
       file_path: canonicalFilePath,
       file_name: originalName,
       file_format: originalName.split(".").pop() ?? null,
