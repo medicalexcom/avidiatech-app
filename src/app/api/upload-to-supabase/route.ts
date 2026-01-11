@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuth } from "@clerk/nextjs/server";
 import { randomUUID } from "crypto";
 import { createWatchForIngestion } from "@/lib/monitor/hooks";
+import { resolveTenantIdForServerRequest } from "@/lib/tenancy/resolveTenantIdForServerRequest";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,10 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
  * Additionally: best-effort creates a monitor watch for the uploaded item by calling
  * createWatchForIngestion(...) with a canonical source_url (if provided) or a supabase:// placeholder.
  * The watch creation runs asynchronously and does not block the response.
+ *
+ * IMPORTANT (2026-01):
+ * - Always resolve tenant_id before inserting into product_ingestions.
+ * - This prevents null-tenant ingestion rows which later break Import (422) and connectors.
  */
 export async function POST(req: Request) {
   try {
@@ -40,7 +45,31 @@ export async function POST(req: Request) {
     if (!file) return NextResponse.json({ ok: false, error: "No file provided" }, { status: 400 });
 
     // Optional canonical source URL provided by the client (if available)
-    const canonicalUrlFromForm = (form.get("source_url") as string) || (form.get("canonical_url") as string) || null;
+    const canonicalUrlFromForm =
+      (form.get("source_url") as string) || (form.get("canonical_url") as string) || null;
+
+    // Optional explicit tenant_id (for internal tooling). Must be UUID.
+    const requestedTenantIdRaw =
+      (form.get("tenant_id") as string) || (form.get("tenantId") as string) || null;
+
+    // Resolve tenant_id from Clerk org mapping (or explicit tenant_id)
+    const resolved = await resolveTenantIdForServerRequest(req, {
+      requestedTenantId: requestedTenantIdRaw,
+    });
+
+    if (!resolved.tenantId) {
+      // strict: uploads create ingestions that must be importable.
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "missing_tenant",
+          detail: "Could not resolve tenant_id for this request (missing orgId or tenant mapping).",
+        },
+        { status: 422 }
+      );
+    }
+
+    const tenant_id = resolved.tenantId;
 
     // Read file into buffer
     const arrayBuffer = await file.arrayBuffer();
@@ -69,7 +98,8 @@ export async function POST(req: Request) {
     const canonicalFilePath = `${BUCKET}/${relativePath}`;
 
     // Prepare ingestion row payload
-    const payload = {
+    const payload: any = {
+      tenant_id, // FIX: always set
       file_path: canonicalFilePath,
       file_name: originalName,
       file_format: originalName.split(".").pop() ?? null,
@@ -111,8 +141,10 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             ok: true,
-            warning: "Could not create DB row; returning synthetic jobId. Please check product_ingestions table/permissions.",
+            warning:
+              "Could not create DB row; returning synthetic jobId. Please check product_ingestions table/permissions.",
             jobId: syntheticId,
+            tenant_id,
             file_path: canonicalFilePath,
             file_name: originalName,
             file_format: payload.file_format,
@@ -133,7 +165,7 @@ export async function POST(req: Request) {
       if (!jobId) jobId = randomUUID();
 
       // Best-effort: create a monitor watch for this uploaded file (async, non-blocking)
-      (async () => {
+      ;(async () => {
         try {
           const sourceUrl = canonicalUrlFromForm ?? `supabase://${canonicalFilePath}`;
           await createWatchForIngestion({
@@ -152,6 +184,7 @@ export async function POST(req: Request) {
         {
           ok: true,
           jobId,
+          tenant_id,
           file_path: canonicalFilePath,
           file_name: originalName,
           file_format: payload.file_format,
@@ -165,7 +198,7 @@ export async function POST(req: Request) {
       const syntheticId = randomUUID();
 
       // Attempt best-effort watch creation
-      (async () => {
+      ;(async () => {
         try {
           const sourceUrl = canonicalUrlFromForm ?? `supabase://${canonicalFilePath}`;
           await createWatchForIngestion({
@@ -184,6 +217,7 @@ export async function POST(req: Request) {
           ok: true,
           warning: "Unexpected DB error while creating ingestion; returning synthetic jobId.",
           jobId: syntheticId,
+          tenant_id,
           file_path: canonicalFilePath,
           file_name: originalName,
           file_format: payload.file_format,
