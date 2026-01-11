@@ -71,7 +71,6 @@ function normalizeErrorMessage(err: any): string {
 
   if (typeof nested === "string" && nested.trim()) return nested;
 
-  // Sometimes payload.error is an object with {code,message}
   const code = err?.payload?.error?.code || err?.error?.code;
   if (typeof code === "string" && code.trim()) return code;
 
@@ -186,7 +185,13 @@ async function fetchBulkJob(bulkJobId: string) {
   return data as any;
 }
 
-function serviceHeaders() {
+/**
+ * Build headers for internal service calls.
+ * - Always include content-type.
+ * - Include x-service-api-key when available.
+ * - Include x-pipeline-secret for internal endpoints when provided.
+ */
+function buildServiceHeaders(includePipelineSecret = false): Record<string, string> {
   const h: Record<string, string> = { "content-type": "application/json" };
   if (SERVICE_API_KEY) {
     h["x-service-api-key"] = SERVICE_API_KEY;
@@ -197,6 +202,9 @@ function serviceHeaders() {
     if (process.env.DEBUG_BULK) {
       console.log("[bulk-item][debug] no service key available; header will NOT be sent");
     }
+  }
+  if (includePipelineSecret && PIPELINE_INTERNAL_SECRET) {
+    h["x-pipeline-secret"] = PIPELINE_INTERNAL_SECRET;
   }
   return h;
 }
@@ -220,22 +228,31 @@ function normalizeAbsoluteUrl(input: string): string {
 
 /* ---- Ingest: POST and transient retry wrapper ---- */
 
-async function postIngest(itemUrl: string) {
+/**
+ * postIngest
+ * - Accepts tenantId and includes it in the request body so server-side ingestion creation
+ *   can set tenant_id on the created row.
+ */
+async function postIngest(itemUrl: string, tenantId: string | null) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
 
   if (process.env.DEBUG_BULK) {
-    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized);
+    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized, "tenant_id=", tenantId);
   }
+
+  const body: any = {
+    url: normalized,
+    persist: true,
+    options: { includeSeo: true },
+    // Include tenant context explicitly so ingestion creation uses it
+    tenantId: tenantId ?? null,
+  };
 
   const res = await fetch(url, {
     method: "POST",
-    headers: serviceHeaders(),
-    body: JSON.stringify({
-      url: normalized,
-      persist: true,
-      options: { includeSeo: true },
-    }),
+    headers: buildServiceHeaders(true), // include pipeline secret for internal ingest
+    body: JSON.stringify(body),
   });
 
   const text = await res.text().catch(() => "");
@@ -256,7 +273,7 @@ async function postIngest(itemUrl: string) {
  * - Exponential backoff between attempts
  * - Throws an Error with payload if still failing after retries
  */
-async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
+async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3, tenantId: string | null = null) {
   let attempt = 0;
   let lastErr: any = null;
 
@@ -265,7 +282,7 @@ async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
     while (attempt < maxAttempts) {
       attempt++;
       try {
-        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl);
+        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl, tenantId);
 
         // If success or normal non-transient error, return as usual
         if (res.ok) {
@@ -330,7 +347,7 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
 
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/ingest/job/${encodeURIComponent(jobId)}`, {
-      headers: serviceHeaders(),
+      headers: buildServiceHeaders(true),
     });
 
     lastStatus = res.status;
@@ -363,7 +380,7 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
 
 /* ---- Start ingest (uses retry wrapper) ---- */
 
-async function startIngestAndReturnIngestionId(itemUrl: string) {
+async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string | null) {
   let attempt = 0;
   let lastTimeoutPayload: any = null;
 
@@ -371,7 +388,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
     attempt++;
 
     // Use the transient retry wrapper that also enforces per-domain concurrency.
-    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, 3);
+    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, 3, tenantId);
 
     if (!res.ok) {
       const msg = j?.error ?? `ingest failed (${res.status})`;
@@ -473,7 +490,7 @@ async function startPipeline(ingestionId: string, steps: string[], options: Reco
 
   const res = await fetch(url, {
     method: "POST",
-    headers: serviceHeaders(),
+    headers: buildServiceHeaders(true),
     body: JSON.stringify({
       ingestionId,
       triggerModule: "seo",
@@ -511,7 +528,7 @@ async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 25
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
-      headers: serviceHeaders(),
+      headers: buildServiceHeaders(true),
     });
 
     const text = await res.text().catch(() => "");
@@ -585,6 +602,21 @@ async function handleJob(job: any) {
       console.warn("[bulk-item] tenant/role lookup failed, continuing:", lookupErr?.message ?? lookupErr);
     }
 
+    // If we still cannot resolve a tenant, fail this item early and record clear error.
+    if (!tenantId) {
+      const norm = normalizeErrorPayload({ message: "missing_tenant_for_bulk_item", payload: { info: "No tenant resolved from bulk job or team membership" } });
+      console.error("[bulk-item] missing tenant, aborting item", { bulkJobItemId, payload: norm.payload });
+      await markItem(bulkJobItemId, {
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        last_error: norm,
+      });
+      await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
+        console.warn("incrementBulkCounters failed on missing tenant", e)
+      );
+      return;
+    }
+
     await requireSubscriptionAndUsage({
       userId,
       requestedTenantId: tenantId ?? undefined,
@@ -600,7 +632,7 @@ async function handleJob(job: any) {
     // Ingestion: create if missing
     let ingestionId = item.ingestion_id ?? null;
     if (!ingestionId) {
-      ingestionId = await startIngestAndReturnIngestionId(item.input_url);
+      ingestionId = await startIngestAndReturnIngestionId(item.input_url, tenantId);
       if (!ingestionId) throw new Error("ingestion creation returned no id");
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
