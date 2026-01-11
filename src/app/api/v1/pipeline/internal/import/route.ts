@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 import { runImportForIngestion } from "@/lib/imports/runImportForIngestion";
 
 export async function POST(req: Request) {
@@ -17,6 +18,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing_ingestionId" }, { status: 400 });
   }
 
+  // Preflight: always re-read ingestion row for tenant_id before invoking import.
+  // This makes missing tenant failures deterministic and improves debugging.
+  try {
+    const supabase = getServiceSupabaseClient();
+    const { data: ingestion, error: ingErr } = await supabase
+      .from("product_ingestions")
+      .select("id, tenant_id, status, source_url, normalized_payload, updated_at, created_at")
+      .eq("id", ingestionId)
+      .maybeSingle();
+
+    if (ingErr) {
+      return NextResponse.json(
+        { error: "ingestion_load_failed", detail: ingErr.message ?? String(ingErr) },
+        { status: 500 }
+      );
+    }
+    if (!ingestion) {
+      return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
+    }
+
+    if (!ingestion.tenant_id) {
+      return NextResponse.json(
+        {
+          error: "missing_tenant_id_for_import",
+          detail:
+            "product_ingestions.tenant_id is NULL. Fix ingestion creation paths and/or run tenant backfill before import.",
+          ingestion: {
+            id: ingestion.id,
+            status: ingestion.status ?? null,
+            source_url: ingestion.source_url ?? null,
+            created_at: ingestion.created_at ?? null,
+            updated_at: ingestion.updated_at ?? null,
+          },
+        },
+        { status: 422 }
+      );
+    }
+  } catch (e: any) {
+    return NextResponse.json({ error: "ingestion_preflight_failed", detail: String(e?.message ?? e) }, { status: 500 });
+  }
+
   try {
     const platform = (options?.platform ?? "bigcommerce") as "bigcommerce";
     const allowOverwriteExisting = Boolean(options?.allowOverwriteExisting);
@@ -33,7 +75,8 @@ export async function POST(req: Request) {
 
     if (msg === "ingestion_not_found") return NextResponse.json({ error: "ingestion_not_found" }, { status: 404 });
     if (msg === "ingestion_not_ready") return NextResponse.json({ error: "ingestion_not_ready" }, { status: 409 });
-    if (msg === "missing_tenant_id_for_import") return NextResponse.json({ error: "missing_tenant_id_for_import" }, { status: 422 });
+    if (msg === "missing_tenant_id_for_import")
+      return NextResponse.json({ error: "missing_tenant_id_for_import" }, { status: 422 });
 
     if (msg === "connection_not_found") return NextResponse.json({ error: "connection_not_found" }, { status: 409 });
     if (msg.startsWith("connection_load_failed:"))
