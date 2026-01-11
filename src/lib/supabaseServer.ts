@@ -1,62 +1,71 @@
-// Simple Supabase server helper for AvidiaDescribe
-// - Uses SERVICE_ROLE key (server only)
-// - Exposes: saveIngestion, incrementUsageCounter, checkQuota
-//
-// IMPORTANT: keep SUPABASE_SERVICE_ROLE_KEY secret and only use on server side.
-
-import { createClient } from "@supabase/supabase-js";
-
-const url = process.env.SUPABASE_URL ?? "";
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-// Fallback tenant id used when tenantId is null
-const GLOBAL_TENANT_ID = process.env.SUPABASE_GLOBAL_TENANT_ID ?? "global";
-
-if (!url || !serviceKey) {
-  console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
-}
-
-const supabase = (url && serviceKey) ? createClient(url, serviceKey, {
-  auth: { persistSession: false },
-}) : null;
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * saveIngestion - non-destructive insertion that avoids inserting explicit NULLs
+ * Server-side Supabase service client helper.
+ *
+ * IMPORTANT TENANCY NOTE:
+ * Historically this file used a GLOBAL_TENANT_ID fallback to avoid null inserts.
+ * That is unsafe for connector imports (BigCommerce etc.) because it can route data
+ * to the wrong tenant context.
+ *
+ * New behavior:
+ * - saveIngestion is strict by default: tenantId must be present unless allowTenantFallback=true
+ * - allowTenantFallback is only for controlled maintenance/dev workflows
  */
-export async function saveIngestion({
-  tenantId,
-  type = "describe",
-  status = "success",
-  normalizedPayload,
-  rawPayload,
-  userId,
-  sourceUrl,
-}: {
+
+const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+let supabase: SupabaseClient | null = null;
+if (url && serviceKey) {
+  supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
+}
+
+const GLOBAL_TENANT_ID = process.env.GLOBAL_TENANT_ID || "";
+
+export function getServiceSupabaseClient(): SupabaseClient {
+  if (!supabase) {
+    throw new Error("supabase_not_configured: Missing SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return supabase;
+}
+
+export async function saveIngestion(opts: {
   tenantId: string | null;
-  type?: string;
-  status?: "success" | "failed";
+  userId: string | null;
+  type: string;
+  status: "created" | "processing" | "succeeded" | "failed";
+  sourceUrl?: string | null;
   normalizedPayload?: any;
   rawPayload?: any;
-  userId?: string | null;
-  sourceUrl?: string | null;
+  allowTenantFallback?: boolean; // default false
 }) {
-  if (!url || !serviceKey || !supabase) return { id: null };
+  const supabase = getServiceSupabaseClient();
+
+  const allowFallback = Boolean(opts.allowTenantFallback);
+  const tenantId = (opts.tenantId ?? "").toString().trim();
+
+  // Strict by default
+  if (!tenantId) {
+    if (!allowFallback || !GLOBAL_TENANT_ID) {
+      throw new Error("missing_tenant_id_for_insert");
+    }
+  }
 
   const payload: Record<string, any> = {
-    // Use explicit fallback tenant ID to avoid null inserts
-    tenant_id: tenantId ?? GLOBAL_TENANT_ID,
-    user_id: userId ?? null,
-    type,
-    status,
-    normalized_payload: normalizedPayload ?? null,
-    raw_payload: rawPayload ?? null,
+    tenant_id: tenantId || GLOBAL_TENANT_ID,
+    user_id: opts.userId ?? null,
+    type: opts.type,
+    status: opts.status,
+    normalized_payload: opts.normalizedPayload ?? null,
+    raw_payload: opts.rawPayload ?? null,
     created_at: new Date().toISOString(),
   };
 
-  if (typeof sourceUrl === "string" && sourceUrl.length > 0) {
-    payload.source_url = sourceUrl;
+  if (typeof opts.sourceUrl === "string" && opts.sourceUrl.length > 0) {
+    payload.source_url = opts.sourceUrl;
   }
 
-  // Wrap payload in an array to match Supabase typings for insert/upsert calls
   const { data, error } = await supabase
     .from("product_ingestions")
     .insert([payload])
@@ -72,10 +81,8 @@ export async function saveIngestion({
 }
 
 /**
- * incrementUsageCounter
- *
- * - Uses fallback tenant key instead of null
- * - Matches/updates by tenant_id + metric
+ * incrementUsageCounter / checkQuota keep old fallback semantics because quotas/usage
+ * are not connector-critical and we don't want to break existing flows.
  */
 export async function incrementUsageCounter({
   tenantId,
@@ -92,7 +99,6 @@ export async function incrementUsageCounter({
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
 
   try {
-    // Find existing counter row by tenantKey + metric
     const { data: existing, error: fetchErr } = await supabase
       .from("usage_counters")
       .select("count")
@@ -106,8 +112,8 @@ export async function incrementUsageCounter({
       throw fetchErr;
     }
 
-    if (existing && typeof existing.count !== "undefined") {
-      const newCount = Number(existing.count ?? 0) + Number(incrementBy);
+    if (existing && typeof (existing as any).count !== "undefined") {
+      const newCount = Number((existing as any).count ?? 0) + Number(incrementBy);
       const { error: updateErr } = await supabase
         .from("usage_counters")
         .update({ count: newCount, updated_at: now })
@@ -119,16 +125,13 @@ export async function incrementUsageCounter({
       }
       return true;
     } else {
-      // Insert a new row for tenantKey+metric (wrap payload in array to match TS typings)
       const insertPayload: Record<string, any> = {
         tenant_id: tenantKey,
         metric,
         count: incrementBy,
         updated_at: now,
       };
-      const { error: insertErr } = await supabase
-        .from("usage_counters")
-        .insert([insertPayload]);
+      const { error: insertErr } = await supabase.from("usage_counters").insert([insertPayload]);
       if (insertErr) {
         console.error("incrementUsageCounter: insert error", insertErr);
         throw insertErr;
@@ -141,11 +144,6 @@ export async function incrementUsageCounter({
   }
 }
 
-/**
- * checkQuota
- *
- * - Uses fallback tenant key instead of null
- */
 export async function checkQuota({
   tenantId,
   metric = "describe_calls",
@@ -159,25 +157,19 @@ export async function checkQuota({
 
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
 
-  try {
-    const { data, error } = await supabase
-      .from("usage_counters")
-      .select("count")
-      .eq("tenant_id", tenantKey)
-      .eq("metric", metric)
-      .limit(1)
-      .maybeSingle();
+  const { data: existing, error } = await supabase
+    .from("usage_counters")
+    .select("count")
+    .eq("tenant_id", tenantKey)
+    .eq("metric", metric)
+    .limit(1)
+    .maybeSingle();
 
-    if (error) {
-      console.error("checkQuota query error:", error);
-      throw error;
-    }
-
-    const current = Number(data?.count ?? 0);
-    return current < limit;
-  } catch (err) {
-    console.error("checkQuota unexpected error:", err);
-    // Fail-open to avoid blocking when DB is unreachable; change if you prefer fail-closed
+  if (error) {
+    // fail open
     return true;
   }
+
+  const count = Number((existing as any)?.count ?? 0);
+  return count < limit;
 }
