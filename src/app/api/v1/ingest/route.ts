@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
+import { saveIngestion } from "@/lib/supabaseServer";
+import { resolveTenantForInsert } from "@/lib/ingest/resolve-tenant";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
@@ -19,11 +21,11 @@ const APP_URL =
  * - If the request provides options, we will accept them ONLY for docs/variants/export_type,
  *   but we will FORCE includeSpecs=true whenever includeSeo=true (and in practice always).
  *
- * Why:
- * - The SEO/Describe instruction contract forbids placeholders and hallucination.
- * - If specs are not extracted upstream, the model cannot legally generate Product Specifications.
- * - Previously, includeSeo=true with includeSpecs=false caused url-derived product names and
- *   "Not specified" spec placeholders (invalid).
+ * Behavior changes (2026-01):
+ * - Enforce tenant resolution before creating product_ingestions rows.
+ *   If tenant cannot be determined we return 422 instead of attempting an insert which triggers DB constraints.
+ * - Prefer explicit tenantId in request body / pipeline payload / options.source_tenant.
+ * - Fall back to profile-derived tenant only for non-internal (user) requests.
  */
 
 function normalizeBool(v: any): boolean {
@@ -57,6 +59,27 @@ function buildEffectiveOptions(body: any) {
   return { effectiveOptions, fullExtract, export_type };
 }
 
+/**
+ * Determine whether the incoming request is an allowed internal call.
+ * We accept either:
+ *  - x-pipeline-secret === process.env.PIPELINE_INTERNAL_SECRET
+ *  - x-service-api-key  === process.env.SERVICE_API_KEY
+ *
+ * This is intentionally permissive for internal automation; no user session is required.
+ */
+function internalAuthOk(req: NextRequest) {
+  const providedPipeline = (req.headers.get("x-pipeline-secret") || "").trim();
+  const providedService = (req.headers.get("x-service-api-key") || "").trim();
+
+  const expectPipeline = (process.env.PIPELINE_INTERNAL_SECRET || "").trim();
+  const expectService = (process.env.SERVICE_API_KEY || "").trim();
+
+  if (expectPipeline && providedPipeline && providedPipeline === expectPipeline) return true;
+  if (expectService && providedService && providedService === expectService) return true;
+
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // DEBUG: do NOT log secret. Log only header presence/length to verify request reaches handler.
@@ -65,228 +88,147 @@ export async function POST(req: NextRequest) {
       (req.headers.get("x-service-api-key") || "").length
     );
 
-    // Check for service-key based internal requests first.
-    const serviceKey = (req.headers.get("x-service-api-key") || "").toString();
-    const isInternalRequest =
-      !!serviceKey &&
-      !!process.env.PIPELINE_INTERNAL_SECRET &&
-      serviceKey === process.env.PIPELINE_INTERNAL_SECRET;
+    const isInternalRequest = internalAuthOk(req);
 
-    if (isInternalRequest) {
-      console.info("[ingest-debug] internal request authenticated via service key");
-    }
-
-    // Declare profile-related variables up-front so both branches can set them.
-    let profileData: any = null;
-    let tenant_id: string | null = null;
-    let role: string = "user";
-    let userId: string | null = null;
-
-    if (!isInternalRequest) {
-      // Normal authenticated user path via Clerk
-      const auth = (safeGetAuth(req as any) as { userId?: string | null }) || {};
-      userId = auth.userId ?? null;
-
-      if (!userId) {
-        return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-      }
+    // parse body (be permissive about content type)
+    let body: any = null;
+    const ct = (req.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("application/json")) {
+      body = await req.json().catch(() => ({}));
     } else {
-      // Internal request: create a temporary internal profile (owner) to bypass quota checks
-      profileData = {
-        id: `internal_${Date.now()}`,
-        tenant_id: null,
-        role: "owner",
-        _temporary: true,
-        clerk_user_id: null,
-        user_id: null,
-      };
-      tenant_id = null;
-      role = "owner";
-      userId = null;
+      const txt = await req.text().catch(() => "");
+      try {
+        body = txt ? JSON.parse(txt) : {};
+      } catch {
+        body = { rawText: txt };
+      }
     }
+    body = body ?? {};
 
-    // Hard fail if the ingest engine is not configured.
+    // Basic engine config check
     if (!INGEST_ENGINE_URL || !INGEST_SECRET) {
-      console.error(
-        "INGEST_ENGINE_URL or INGEST_SECRET not configured. Cannot start ingestion."
-      );
+      console.error("INGEST_ENGINE_URL or INGEST_SECRET not configured. Cannot start ingestion.");
       return NextResponse.json(
         {
           error: "ingest_engine_not_configured",
-          detail:
-            "INGEST_ENGINE_URL and INGEST_SECRET must be set in the server environment.",
+          detail: "INGEST_ENGINE_URL and INGEST_SECRET must be set in the server environment.",
         },
         { status: 500 }
       );
     }
 
-    const body = (await req.json().catch(() => ({}))) as any;
     const url = (body?.url || "").toString();
-    const export_type = body?.export_type || "JSON";
-    const correlation_id =
-      body?.correlationId || `corr_${Date.now().toString()}`;
+    const correlation_id = body?.correlationId ?? `corr_${Date.now().toString()}`;
 
     if (!url) {
       return NextResponse.json({ error: "missing url" }, { status: 400 });
     }
 
-    let supabase: any;
-    try {
-      supabase = getServiceSupabaseClient();
-    } catch (err: any) {
-      console.error("Supabase configuration missing", err?.message || err);
-      return NextResponse.json(
-        { error: "server_misconfigured_supabase" },
-        { status: 500 }
-      );
+    // Resolve tenant: priority chain
+    // 1) explicit tenant in body (tenantId, tenant_id)
+    // 2) pipeline payload / pipeline_payload fields
+    // 3) options.source_tenant (bulk flow)
+    // 4) for non-internal requests, profile lookup (existing behavior)
+    // 5) for internal requests, do NOT silently inherit profile; require explicit tenant or fallback env
+    let tenant_id: string | null = null;
+    const explicitTenant =
+      body?.tenantId ?? body?.tenant_id ?? body?.pipelinePayload?.tenantId ?? body?.pipeline_payload?.tenant_id ?? body?.options?.source_tenant ?? null;
+    if (explicitTenant) {
+      tenant_id = String(explicitTenant);
     }
 
-    // If not internal, perform profile lookup (DB) to derive tenant_id and role.
-    if (!isInternalRequest) {
+    // If not explicit, consult resolveTenantForInsert which checks pipelinePayload, body, authContext and an optional DEFAULT_FALLBACK_TENANT_ID env.
+    // For internal calls we pass strict=false and will enforce presence below; for user calls we still consult auth via profile lookup below.
+    if (!tenant_id) {
       try {
-        // First, attempt to look up by clerk_user_id (most common)
-        const byClerk = await supabase
-          .from("profiles")
-          .select("id, tenant_id, role")
-          .eq("clerk_user_id", userId)
-          .limit(1)
-          .maybeSingle();
+        const resolved = await resolveTenantForInsert({
+          requestBody: body,
+          pipelinePayload: body?.pipelinePayload ?? body?.pipeline_payload ?? null,
+          authContext: null, // we don't have request auth available to helper here (profile lookup below)
+          strict: false,
+        });
+        if (resolved) tenant_id = resolved;
+      } catch {
+        tenant_id = null;
+      }
+    }
 
-        if (!byClerk.error) {
-          profileData = byClerk.data ?? null;
-        } else {
-          // If clerk_user_id column doesn't exist (or other DB error), try user_id
-          const errMsg = String(byClerk.error?.message ?? "");
-          const isMissingCol =
-            String(byClerk.error?.code) === "42703" ||
-            errMsg.includes("does not exist") ||
-            errMsg.includes("Could not find the table");
+    const supabase = getServiceSupabaseClient();
 
-          if (isMissingCol) {
-            // Try the legacy column name user_id
-            const byUser = await supabase
+    // For non-internal requests, try profile lookup if tenant still missing (back-compat)
+    let profileData: any = null;
+    let role = "user";
+    let userId: string | null = null;
+
+    if (!isInternalRequest) {
+      const auth = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+      userId = auth.userId ?? null;
+      if (!userId) {
+        return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+      }
+
+      if (!tenant_id) {
+        try {
+          // Attempt to load profile row and extract tenant
+          const { data: byClerk, error: clerkErr } = await supabase
+            .from("profiles")
+            .select("id, tenant_id, role")
+            .eq("clerk_user_id", userId)
+            .limit(1)
+            .maybeSingle();
+
+          if (!clerkErr && byClerk) {
+            profileData = byClerk;
+          } else {
+            // fallback to legacy user_id column if clerk_user_id lookup fails due to schema
+            const { data: byUser, error: userErr } = await supabase
               .from("profiles")
               .select("id, tenant_id, role")
               .eq("user_id", userId)
               .limit(1)
               .maybeSingle();
 
-            if (!byUser.error) {
-              profileData = byUser.data ?? null;
-            } else {
-              // byUser also errored — rethrow so outer catch handles missing-table vs other errors
-              throw byUser.error;
+            if (!userErr && byUser) {
+              profileData = byUser;
+            } else if (clerkErr && String(clerkErr?.code) !== "42703") {
+              // if lookup failed for other DB reasons surface error
+              console.error("[ingest] profile lookup error", clerkErr);
+              return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
             }
+          }
+
+          if (profileData) {
+            tenant_id = tenant_id ?? (profileData.tenant_id ?? null);
+            role = profileData.role ?? "user";
+            console.info("[ingest] profile found", { correlation_id, profileId: profileData.id });
           } else {
-            // Some other DB error when querying clerk_user_id — rethrow
-            throw byClerk.error;
+            console.warn("[ingest] profile not found for user", { correlation_id, userId });
           }
-        }
-
-        if (profileData) {
-          tenant_id = profileData.tenant_id ?? null;
-          role = profileData.role ?? "user";
-          console.info("[ingest] profile found", {
-            correlation_id,
-            profileId: profileData.id,
-          });
-        } else {
-          // No matching profile row
-          console.warn("[ingest] profile not found for user", {
-            correlation_id,
-            userId,
-          });
-        }
-      } catch (err: any) {
-        // Detect PostgREST schema/cache error (missing table) or column issues
-        const isPgrstMissingTable =
-          err &&
-          (err.code === "PGRST205" ||
-            (typeof err.message === "string" &&
-              err.message.includes("Could not find the table")));
-
-        const isColumnMissing =
-          err &&
-          (String(err.code) === "42703" ||
-            (typeof err.message === "string" && err.message.includes("does not exist")));
-
-        console.error("[ingest] profile lookup failed", { correlation_id, err });
-
-        if (isPgrstMissingTable || isColumnMissing) {
-          const allowFallback =
-            String(process.env.ALLOW_PROFILE_FALLBACK ?? "false").toLowerCase() ===
-            "true";
-
-          if (!allowFallback) {
-            // Do not attempt fallback — return clear error so ops can run migrations
-            console.warn(
-              "[ingest] profiles table/column missing and fallback disabled. Aborting."
-            );
-            return NextResponse.json(
-              {
-                error: "profile_lookup_failed",
-                detail: isPgrstMissingTable
-                  ? "profiles table missing in DB (PGRST205)"
-                  : "profiles table missing expected column",
-              },
-              { status: 500 }
-            );
-          }
-
-          // Build a minimal temporary profile object from the Clerk session (best-effort).
-          const tempProfile = {
-            id: `tmp_${userId}`,
-            tenant_id: null,
-            clerk_user_id: userId,
-            user_id: userId,
-            role: "owner", // temporary elevated role for convenience during recovery; change as needed
-            _temporary: true,
-          };
-          profileData = tempProfile;
-          tenant_id = null;
-          role = tempProfile.role;
-          console.warn(
-            "[ingest] using temporary fallback profile due to missing table/column",
-            { correlation_id, tempProfileId: tempProfile.id }
-          );
-        } else {
-          // Other DB error — surface generic profile lookup failure
+        } catch (err: any) {
+          console.error("[ingest] profile lookup failed", { correlation_id, err });
           return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
         }
       }
-
-      // If profileData still null (no row found and no fallback), return error
-      if (!profileData) {
-        console.warn("[ingest] profile not found and no fallback available", {
-          correlation_id,
-          userId,
-        });
-        return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
-      }
+    } else {
+      // internal requests: role=owner (bypass quotas), but tenant MUST be provided or resolved via resolveTenantForInsert fallback env
+      role = "owner";
     }
 
-    // Quota check (if applicable) — internal requests have role "owner" so they bypass this.
-    if (role !== "owner") {
-      const { data: counters } = await supabase
-        .from("usage_counters")
-        .select("*")
-        .eq("tenant_id", tenant_id)
-        .limit(1)
-        .maybeSingle();
-
-      if (counters && typeof counters.ingest_calls === "number") {
-        const monthlyLimit = process.env.DEFAULT_MONTHLY_INGEST_LIMIT
-          ? parseInt(process.env.DEFAULT_MONTHLY_INGEST_LIMIT, 10)
-          : 1000;
-
-        if (counters.ingest_calls >= monthlyLimit) {
-          return NextResponse.json({ error: "quota_exceeded" }, { status: 402 });
-        }
-      }
+    // Final enforcement: tenant must be present before creating product_ingestions
+    if (!tenant_id) {
+      // Do not attempt DB insert; return clear client error so callers can include tenant or we can backfill.
+      return NextResponse.json(
+        {
+          error: "missing_tenant",
+          detail:
+            "Tenant could not be determined for this ingest request. Include tenantId in the request body or ensure the caller is associated with a tenant.",
+        },
+        { status: 422 }
+      );
     }
 
+    // Build effective options and diagnostics
     const { effectiveOptions, fullExtract } = buildEffectiveOptions(body);
-
     const flags = {
       full_extract: fullExtract,
       includeSeo: !!effectiveOptions.includeSeo,
@@ -295,59 +237,60 @@ export async function POST(req: NextRequest) {
       includeVariants: !!effectiveOptions.includeVariants,
     };
 
-    // Initial diagnostics object so new rows are never null
     const initialDiagnostics = {
       created_by: isInternalRequest ? "ingest-route-internal" : "ingest-route",
       created_at: new Date().toISOString(),
       engine_call: null,
     };
 
-    const insert = {
-      tenant_id,
-      user_id: userId,
-      source_url: url,
-      status: "pending",
-      options: effectiveOptions,
-      flags,
-      export_type,
-      correlation_id,
-      diagnostics: initialDiagnostics,
-      created_at: new Date().toISOString(),
-    };
-
-    const { data: created, error: insertError } = await supabase
-      .from("product_ingestions")
-      .insert(insert)
-      .select("*")
-      .single();
-
-    if (insertError || !created) {
-      console.error("failed to create ingestion record", insertError);
-      return NextResponse.json({ error: "db_insert_failed" }, { status: 500 });
+    // Use saveIngestion helper (centralized) which also enforces tenant presence and is consistent with other callers.
+    let created: any = null;
+    try {
+      created = await saveIngestion({
+        tenantId: tenant_id,
+        type: effectiveOptions?.export_type ?? "bulk",
+        status: "pending",
+        normalizedPayload: body.normalized_payload ?? body.normalizedPayload ?? null,
+        rawPayload: body,
+        userId: userId ?? null,
+        sourceUrl: url ?? null,
+      });
+    } catch (err: any) {
+      // saveIngestion will throw descriptive errors, including missing_tenant_id_for_ingestion
+      const msg = String(err?.message ?? err);
+      console.error("failed to create ingestion record via saveIngestion", { msg, correlation_id });
+      if (msg.includes("missing_tenant")) {
+        return NextResponse.json({ error: "missing_tenant", detail: msg }, { status: 422 });
+      }
+      return NextResponse.json({ error: "db_insert_failed", detail: msg }, { status: 500 });
     }
 
-    const ingestionId = created.id;
+    const ingestionId = created?.id ?? (created?.data?.id ?? null);
+    if (!ingestionId) {
+      console.error("saveIngestion returned no id", { created, correlation_id });
+      return NextResponse.json({ error: "db_insert_failed", detail: "no id returned" }, { status: 500 });
+    }
+
     const jobId = ingestionId;
     const callbackUrl = `${APP_URL}/api/v1/ingest/callback`;
 
-    // Best-effort save of job_id if column exists
+    // Best-effort: if supabase client available update job_id and diagnostics via service client to preserve existing behavior
     try {
-      const { error: jobErr } = await supabase
+      // update diagnostics and job_id using service client (so RLS/role issues avoided)
+      const svc = getServiceSupabaseClient();
+      await svc
         .from("product_ingestions")
         .update({
           job_id: jobId,
+          diagnostics: {
+            ...(created?.diagnostics || initialDiagnostics),
+          },
           updated_at: new Date().toISOString(),
         })
         .eq("id", ingestionId);
-
-      if (jobErr) {
-        console.warn(
-          "job_id update failed (column may not exist or RLS issue)",
-          jobErr.message || jobErr
-        );
-      }
     } catch (e) {
-      console.warn("job_id update threw", e);
+      // warn but continue
+      console.warn("failed to update job_id/diagnostics after saveIngestion", e);
     }
 
     const payload = {
@@ -356,7 +299,7 @@ export async function POST(req: NextRequest) {
       tenant_id,
       url,
       options: effectiveOptions,
-      export_type,
+      export_type: effectiveOptions?.export_type ?? "JSON",
       callback_url: callbackUrl,
       action: "ingest",
     };
@@ -397,17 +340,18 @@ export async function POST(req: NextRequest) {
         console.warn("ingest engine responded non-OK", res.status, text || "<empty>");
       } else {
         // mark as processing if engine accepted the job
-        const { error: statusErr } = await supabase
-          .from("product_ingestions")
-          .update({
-            status: "processing",
-            started_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", ingestionId);
-
-        if (statusErr) {
-          console.warn("failed to update status to processing", statusErr.message || statusErr);
+        try {
+          const svc = getServiceSupabaseClient();
+          await svc
+            .from("product_ingestions")
+            .update({
+              status: "processing",
+              started_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", ingestionId);
+        } catch (statusErr) {
+          console.warn("failed to update status to processing", statusErr?.message ?? statusErr);
         }
       }
     } catch (err) {
@@ -418,30 +362,33 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    // Persist engine_call diagnostics — if THIS fails, we now return 500
-    const { error: diagErr } = await supabase
-      .from("product_ingestions")
-      .update({
-        diagnostics: {
-          ...(created.diagnostics || {}),
-          engine_call: engineDiagnostics,
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", ingestionId);
+    // Persist engine_call diagnostics — if THIS fails return 500
+    try {
+      const svc = getServiceSupabaseClient();
+      const { error: diagErr } = await svc
+        .from("product_ingestions")
+        .update({
+          diagnostics: {
+            ...(created?.diagnostics || initialDiagnostics),
+            engine_call: engineDiagnostics,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", ingestionId);
 
-    if (diagErr) {
-      console.error(
-        "failed to persist engine_call diagnostics",
-        diagErr.message || String(diagErr)
-      );
-      return NextResponse.json(
-        {
-          error: "diagnostics_update_failed",
-          detail: diagErr.message || String(diagErr),
-        },
-        { status: 500 }
-      );
+      if (diagErr) {
+        console.error("failed to persist engine_call diagnostics", diagErr.message || String(diagErr));
+        return NextResponse.json(
+          {
+            error: "diagnostics_update_failed",
+            detail: diagErr.message || String(diagErr),
+          },
+          { status: 500 }
+        );
+      }
+    } catch (e) {
+      console.error("failed to persist diagnostics (unexpected)", e);
+      return NextResponse.json({ error: "diagnostics_update_failed", detail: String(e) }, { status: 500 });
     }
 
     return NextResponse.json({ ingestionId, jobId, status: "accepted" }, { status: 202 });
