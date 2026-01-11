@@ -31,7 +31,7 @@
 //   platform options are available to the pipeline-runner and internal modules.
 // - Compute pipeline steps from merged options (bulk job options + per-item metadata override).
 //
-// 2026-01 tenant hardening:
+// 2026-01 tenant hardening: 
 // - Always pass tenant_id into /api/v1/ingest when calling internally via x-service-api-key,
 //   so the ingest route can create tenant-scoped product_ingestions rows.
 // - Fail fast if bulkJob.org_id is missing, with a clear last_error code.
@@ -79,9 +79,9 @@ function normalizeErrorMessage(err: any): string {
     err?.detail ||
     err?.error;
 
-  if (typeof nested === "string" && nested. trim()) return nested;
+  if (typeof nested === "string" && nested.trim()) return nested;
 
-  // Sometimes payload.error is an object with {code,message}
+  // Sometimes payload. error is an object with {code,message}
   const code = err?.payload?.error?.code || err?.error?.code;
   if (typeof code === "string" && code.trim()) return code;
 
@@ -114,13 +114,13 @@ const PIPELINE_INTERNAL_SECRET = stripAnsiAndTrim(RAW_PIPELINE_SECRET);
 const SERVICE_API_KEY = stripAnsiAndTrim(PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY);
 
 // INTERNAL_API_BASE is required for the worker to call internal endpoints
-const internalApiBase = process.env. INTERNAL_API_BASE || ""; // e.g. https://app.example.com
+const internalApiBase = process.env. INTERNAL_API_BASE || ""; // e.g.  https://app.example.com
 
 // Version marker for deployment tracking
 const APP_VERSION = process.env.APP_VERSION || process.env. VERCEL_GIT_COMMIT_SHA || "unknown";
 
 // Bulk ingest tuning
-const INGEST_POLL_TIMEOUT_MS = parseInt(process.env. BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
+const INGEST_POLL_TIMEOUT_MS = parseInt(process.env.BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
 const INGEST_POLL_INTERVAL_MS = parseInt(process.env.BULK_INGEST_POLL_INTERVAL_MS || "3000", 10);
 const INGEST_RETRY_ON_TIMEOUT = (process.env.BULK_INGEST_RETRY_ON_TIMEOUT || "true").toLowerCase() !== "false";
 const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env. BULK_INGEST_RETRY_MAX || "1", 10)); // retries after timeout
@@ -144,7 +144,7 @@ function domainFromUrl(u: string | null | undefined): string | null {
 }
 
 /**
- * Acquire a slot for a domain.  Returns a release function to call when done.
+ * Acquire a slot for a domain. Returns a release function to call when done.
  * If domain can't be determined, returns a no-op release. 
  */
 async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => void> {
@@ -175,7 +175,7 @@ async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => 
 const supabase:  SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 async function markItem(id: string, updates: Record<string, any>) {
-  const { error } = await supabase. from("bulk_job_items").update(updates).eq("id", id);
+  const { error } = await supabase.from("bulk_job_items").update(updates).eq("id", id);
   if (error) {
     console.warn("markItem update error", error);
   }
@@ -231,10 +231,10 @@ async function postIngest(itemUrl: string, tenantId: string | null, orgId: strin
   const url = `${internalApiBase. replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
 
-  // STRUCTURED LOG:  identify insertion point before calling /api/v1/ingest
+  // STRUCTURED LOG: identify insertion point before calling /api/v1/ingest
   console.log("[bulk-item-insert-log]", JSON.stringify({
-    route: "bulkItemWorker. postIngest",
-    file:  "src/workers/bulkItemWorker.ts",
+    route: "bulkItemWorker.postIngest",
+    file: "src/workers/bulkItemWorker.ts",
     tenant_id: tenantId,
     org_id: orgId,
     normalized_url: normalized,
@@ -271,7 +271,7 @@ async function postIngest(itemUrl: string, tenantId: string | null, orgId: strin
   });
 
   const text = await res.text().catch(() => "");
-  let json: any = null;
+  let json:  any = null;
   try {
     json = text ? JSON.parse(text) : null;
   } catch {
@@ -375,11 +375,11 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
     lastPayload = j ??  text ??  null;
 
     if (res. status === 200) {
-      return j?. ingestionId ??  j?.id ??  null;
+      return j?. ingestionId ??  j?. id ??  null;
     }
     if (res.status === 409) {
       const msg = j?.error ??  j?.detail ?? "ingest_engine_error";
-      const err: any = new Error(msg);
+      const err:  any = new Error(msg);
       err.payload = j ??  { status: res.status, text };
       throw err;
     }
@@ -414,7 +414,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string, tenantId:  strin
 
     if (possibleIngestionId) {
       if (j?.status === "accepted" || res.status === 202) {
-        const jobId = j?.jobId ?? j?.ingestionId ?? possibleIngestionId;
+        const jobId = j?.jobId ?? j?.ingestionId ??  possibleIngestionId;
 
         try {
           const ing = await pollForIngestionJob(jobId);
@@ -573,12 +573,12 @@ async function handleJob(job: any) {
     const userId = bulkJob.created_by;
 
     // Canonical tenant context for billing/usage:  use org_id from bulk_jobs
-    let tenantId: string | null = bulkJob.org_id ??  null;
+    let tenantId:  string | null = bulkJob.org_id ??  null;
     let orgId: string | null = bulkJob.org_id ?? null;
     let isOwner = false;
 
-    // HARD FAIL: bulk jobs must be tenant-scoped
-    if (! tenantId || !orgId) {
+    // HARD FAIL:  bulk jobs must be tenant-scoped
+    if (!tenantId || !orgId) {
       const err: any = new Error("missing_org_id_for_bulk_job");
       err.payload = { bulkJobId: bulkJob. id, org_id: bulkJob.org_id ??  null };
       throw err;
@@ -619,7 +619,7 @@ async function handleJob(job: any) {
       requestedTenantId: tenantId ??  undefined,
       feature: "ingestion" as any,
       increment: 1,
-      userEmail: bulkJob.options?.requested_by_email ??  undefined,
+      userEmail: bulkJob.options?. requested_by_email ??  undefined,
     });
 
     if (process.env.DEBUG_BULK && isOwner) {
@@ -630,7 +630,7 @@ async function handleJob(job: any) {
     let ingestionId = item.ingestion_id ??  null;
     if (!ingestionId) {
       ingestionId = await startIngestAndReturnIngestionId(item.input_url, tenantId, orgId);
-      if (! ingestionId) throw new Error("ingestion creation returned no id");
+      if (!ingestionId) throw new Error("ingestion creation returned no id");
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
 
@@ -694,7 +694,7 @@ async function handleJob(job: any) {
     } else {
       await markItem(bulkJobItemId, {
         status: "failed",
-        finished_at:  new Date().toISOString(),
+        finished_at: new Date().toISOString(),
         last_error: { pipelineStatus: finalStatus, run: snap?.run ??  null, modules: snap?.modules ?? null },
       });
       await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
