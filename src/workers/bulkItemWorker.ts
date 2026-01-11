@@ -1,30 +1,30 @@
 // src/workers/bulkItemWorker.ts
 //
-// Bulk item worker: end-to-end per-item processing for bulk jobs.
+// Bulk item worker:  end-to-end per-item processing for bulk jobs. 
 //
 // Updated behavior:
 // - Uses bulkJob.org_id as requestedTenantId for billing (fixes "No tenant membership found").
-// - Owners bypass subscription/quota, but usage is still tracked (implemented in billing.ts).
+// - Owners bypass subscription/quota, but usage is still tracked (implemented in billing. ts).
 // - Normalizes input URLs to reduce "Invalid URL" / "Only absolute URLs" errors.
 //
 // Hardening (2026-01):
 // - Sanitize internal service secret before sending it in x-service-api-key header.
 //   We have observed env contamination with ANSI escape codes and/or whitespace/newlines which
-//   caused middleware to return 401 {"error":"unauthorized"}.
+//   caused middleware to return 401 {"error":"unauthorized"}. 
 //
 // NEW (2026-01-03):
 // - On ingest polling timeout, auto-retry by re-POSTing /api/v1/ingest once (configurable) and
-//   include rich diagnostics in bulk_job_items.last_error.
+//   include rich diagnostics in bulk_job_items. last_error.
 // - Improve pipeline start error capture (read text fallback; keep JSON if present).
 // - Increase default ingest polling timeout via envs.
 //
 // NEW (2026-01-06):
-// - Normalize thrown errors so UI/logs never show "[object Object]".
+// - Normalize thrown errors so UI/logs never show "[object Object]". 
 //   We always derive a meaningful message and preserve payload shape.
 //
 // NEW (2026-01-06): resiliency improvements
 // - Per-domain concurrency limit to avoid hammering a single host.
-// - Transient retry wrapper around POST /api/v1/ingest to retry render-timeouts and 5xx.
+// - Transient retry wrapper around POST /api/v1/ingest to retry render-timeouts and 5xx. 
 //
 // NEW (2026-01-07): pipeline options forwarding
 // - Forward bulk job / item options into pipeline run metadata so import/module toggles and
@@ -35,6 +35,11 @@
 // - Always pass tenant_id into /api/v1/ingest when calling internally via x-service-api-key,
 //   so the ingest route can create tenant-scoped product_ingestions rows.
 // - Fail fast if bulkJob.org_id is missing, with a clear last_error code.
+//
+// 2026-01-11:  org_id NOT NULL fix
+// - Pass BOTH tenant_id AND org_id to /api/v1/ingest to prevent NULL constraint violations
+// - Add structured logging before insert to identify code path
+// - Add version marker (APP_VERSION env) for deployment tracking
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -44,7 +49,7 @@ import { requireSubscriptionAndUsage } from "@/lib/billing";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // eslint-disable-next-line no-control-regex
-const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const ANSI_REGEX = /\x1B(? :[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 function stripAnsiAndTrim(v: any): string {
   if (v == null) return "";
@@ -53,7 +58,7 @@ function stripAnsiAndTrim(v: any): string {
 
 function safeJsonStringify(v: any, maxLen = 8000) {
   try {
-    const s = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+    const s = typeof v === "string" ? v :  JSON.stringify(v, null, 2);
     if (s.length <= maxLen) return s;
     return s.slice(0, maxLen) + "\n…(truncated)";
   } catch {
@@ -62,19 +67,19 @@ function safeJsonStringify(v: any, maxLen = 8000) {
 }
 
 function normalizeErrorMessage(err: any): string {
-  if (!err) return "unknown_error";
+  if (! err) return "unknown_error";
   if (typeof err === "string") return err;
 
-  if (typeof err?.message === "string" && err.message.trim()) return err.message;
+  if (typeof err?. message === "string" && err.message.trim()) return err.message;
 
   const nested =
-    err?.payload?.error?.message ||
+    err?. payload?.error?.message ||
     err?.payload?.message ||
     err?.error?.message ||
     err?.detail ||
     err?.error;
 
-  if (typeof nested === "string" && nested.trim()) return nested;
+  if (typeof nested === "string" && nested. trim()) return nested;
 
   // Sometimes payload.error is an object with {code,message}
   const code = err?.payload?.error?.code || err?.error?.code;
@@ -87,8 +92,8 @@ function normalizeErrorMessage(err: any): string {
 }
 
 function normalizeErrorPayload(err: any) {
-  const payload = err?.payload ?? null;
-  const core = payload ?? (typeof err === "object" ? { ...err } : { value: err });
+  const payload = err?.payload ??  null;
+  const core = payload ??  (typeof err === "object" ? { ...err } : { value: err });
 
   return {
     message: normalizeErrorMessage(err),
@@ -100,29 +105,32 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Prefer canonical PIPELINE_INTERNAL_SECRET first (middleware expects this),
-// then SERVICE_API_KEY, then NEXT_PUBLIC_SERVICE_API_KEY as last-resort fallback.
+// then SERVICE_API_KEY, then NEXT_PUBLIC_SERVICE_API_KEY as last-resort fallback. 
 const RAW_PIPELINE_SECRET = process.env.PIPELINE_INTERNAL_SECRET || "";
 const RAW_SERVICE_API_KEY = process.env.SERVICE_API_KEY || "";
-const RAW_NEXT_PUBLIC_SERVICE_API_KEY = process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
+const RAW_NEXT_PUBLIC_SERVICE_API_KEY = process.env. NEXT_PUBLIC_SERVICE_API_KEY || "";
 
 const PIPELINE_INTERNAL_SECRET = stripAnsiAndTrim(RAW_PIPELINE_SECRET);
 const SERVICE_API_KEY = stripAnsiAndTrim(PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY);
 
 // INTERNAL_API_BASE is required for the worker to call internal endpoints
-const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
+const internalApiBase = process.env. INTERNAL_API_BASE || ""; // e.g. https://app.example.com
+
+// Version marker for deployment tracking
+const APP_VERSION = process.env.APP_VERSION || process.env. VERCEL_GIT_COMMIT_SHA || "unknown";
 
 // Bulk ingest tuning
-const INGEST_POLL_TIMEOUT_MS = parseInt(process.env.BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
+const INGEST_POLL_TIMEOUT_MS = parseInt(process.env. BULK_INGEST_POLL_TIMEOUT_MS || "900000", 10); // 15 min default
 const INGEST_POLL_INTERVAL_MS = parseInt(process.env.BULK_INGEST_POLL_INTERVAL_MS || "3000", 10);
 const INGEST_RETRY_ON_TIMEOUT = (process.env.BULK_INGEST_RETRY_ON_TIMEOUT || "true").toLowerCase() !== "false";
-const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env.BULK_INGEST_RETRY_MAX || "1", 10)); // retries after timeout
+const INGEST_RETRY_MAX = Math.max(0, parseInt(process.env. BULK_INGEST_RETRY_MAX || "1", 10)); // retries after timeout
 
 // Per-domain concurrency defaults (to avoid hammering one site)
 const DOMAIN_CONCURRENCY_LIMIT = Math.max(1, parseInt(process.env.BULK_DOMAIN_CONCURRENCY_LIMIT || "2", 10));
-const DOMAIN_CONCURRENCY_WAIT_MS = Math.max(200, parseInt(process.env.BULK_DOMAIN_CONCURRENCY_WAIT_MS || "250", 10));
+const DOMAIN_CONCURRENCY_WAIT_MS = Math.max(200, parseInt(process.env. BULK_DOMAIN_CONCURRENCY_WAIT_MS || "250", 10));
 
 /* ---- Domain concurrency limiter ---- */
-// Simple in-memory domain concurrency map. Suitable for single-process workers.
+// Simple in-memory domain concurrency map.  Suitable for single-process workers.
 // For multi-process deployments you'd need a shared rate limiter (redis/DB).
 const domainConcurrency = new Map<string, number>();
 
@@ -136,8 +144,8 @@ function domainFromUrl(u: string | null | undefined): string | null {
 }
 
 /**
- * Acquire a slot for a domain. Returns a release function to call when done.
- * If domain can't be determined, returns a no-op release.
+ * Acquire a slot for a domain.  Returns a release function to call when done.
+ * If domain can't be determined, returns a no-op release. 
  */
 async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => void> {
   const domain = domainFromUrl(url);
@@ -145,7 +153,7 @@ async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => 
 
   const start = Date.now();
   while (true) {
-    const cur = domainConcurrency.get(domain) ?? 0;
+    const cur = domainConcurrency.get(domain) ??  0;
     if (cur < DOMAIN_CONCURRENCY_LIMIT) {
       domainConcurrency.set(domain, cur + 1);
       return () => {
@@ -164,17 +172,17 @@ async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => 
 
 /* ---- Helpers ---- */
 
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+const supabase:  SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
 async function markItem(id: string, updates: Record<string, any>) {
-  const { error } = await supabase.from("bulk_job_items").update(updates).eq("id", id);
+  const { error } = await supabase. from("bulk_job_items").update(updates).eq("id", id);
   if (error) {
     console.warn("markItem update error", error);
   }
 }
 
 async function fetchItemRow(bulkJobItemId: string) {
-  const { data, error } = await supabase.from("bulk_job_items").select("*").eq("id", bulkJobItemId).maybeSingle();
+  const { data, error } = await supabase. from("bulk_job_items").select("*").eq("id", bulkJobItemId).maybeSingle();
   if (error) throw error;
   return data as any;
 }
@@ -186,7 +194,7 @@ async function fetchBulkJob(bulkJobId: string) {
 }
 
 function serviceHeaders() {
-  const h: Record<string, string> = { "content-type": "application/json" };
+  const h:  Record<string, string> = { "content-type": "application/json" };
   if (SERVICE_API_KEY) {
     h["x-service-api-key"] = SERVICE_API_KEY;
     if (process.env.DEBUG_BULK) {
@@ -217,24 +225,44 @@ function normalizeAbsoluteUrl(input: string): string {
   }
 }
 
-/* ---- Ingest: POST and transient retry wrapper ---- */
+/* ---- Ingest:  POST and transient retry wrapper ---- */
 
-async function postIngest(itemUrl: string, tenantId: string | null) {
-  const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
+async function postIngest(itemUrl: string, tenantId: string | null, orgId: string | null) {
+  const url = `${internalApiBase. replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
 
+  // STRUCTURED LOG:  identify insertion point before calling /api/v1/ingest
+  console.log("[bulk-item-insert-log]", JSON.stringify({
+    route: "bulkItemWorker. postIngest",
+    file:  "src/workers/bulkItemWorker.ts",
+    tenant_id: tenantId,
+    org_id: orgId,
+    normalized_url: normalized,
+    app_version: APP_VERSION,
+    environment: process.env.NODE_ENV || process.env.VERCEL_ENV || "unknown",
+    timestamp: new Date().toISOString(),
+  }));
+
   if (process.env.DEBUG_BULK) {
-    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized, "tenant_id=", tenantId);
+    console.log("[bulk-item][debug] postIngest POST", url, "payload. url=", normalized, "tenant_id=", tenantId, "org_id=", orgId);
   }
 
-  const body: any = {
+  const body:  any = {
     url: normalized,
-    persist: true,
+    persist:  true,
     options: { includeSeo: true },
   };
 
-  // IMPORTANT: internal ingest must receive tenant context
+  // CRITICAL FIX: pass BOTH tenant_id AND org_id
   if (tenantId) body.tenant_id = tenantId;
+  if (orgId) body.org_id = orgId;
+
+  // Defensive guard:  fail fast if org_id is missing
+  if (! orgId) {
+    const err:  any = new Error("missing_org_id_for_ingest");
+    err.payload = { tenant_id: tenantId, org_id: orgId, url: normalized };
+    throw err;
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -260,7 +288,7 @@ async function postIngest(itemUrl: string, tenantId: string | null) {
  * - Exponential backoff between attempts
  * - Throws an Error with payload if still failing after retries
  */
-async function tryPostIngestWithRetries(itemUrl: string, tenantId: string | null, maxAttempts = 3) {
+async function tryPostIngestWithRetries(itemUrl: string, tenantId:  string | null, orgId: string | null, maxAttempts = 3) {
   let attempt = 0;
   let lastErr: any = null;
 
@@ -269,7 +297,7 @@ async function tryPostIngestWithRetries(itemUrl: string, tenantId: string | null
     while (attempt < maxAttempts) {
       attempt++;
       try {
-        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl, tenantId);
+        const { res, text, json:  j, normalizedUrl } = await postIngest(itemUrl, tenantId, orgId);
 
         if (res.ok) {
           return { res, text, json: j, normalizedUrl };
@@ -297,13 +325,13 @@ async function tryPostIngestWithRetries(itemUrl: string, tenantId: string | null
         const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
         await new Promise((r) => setTimeout(r, backoffMs));
         continue;
-      } catch (e: any) {
+      } catch (e:  any) {
         lastErr = e;
-        if (process.env.DEBUG_BULK) {
+        if (process. env.DEBUG_BULK) {
           console.warn("[bulk-item][debug] postIngest threw, will retry", {
             attempt,
             itemUrl,
-            err: String(e?.message || e),
+            err: String(e?. message || e),
           });
         }
         const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
@@ -344,15 +372,15 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
     } catch {
       j = null;
     }
-    lastPayload = j ?? text ?? null;
+    lastPayload = j ??  text ??  null;
 
-    if (res.status === 200) {
-      return j?.ingestionId ?? j?.id ?? null;
+    if (res. status === 200) {
+      return j?. ingestionId ??  j?.id ??  null;
     }
     if (res.status === 409) {
-      const msg = j?.error ?? j?.detail ?? "ingest_engine_error";
+      const msg = j?.error ??  j?.detail ?? "ingest_engine_error";
       const err: any = new Error(msg);
-      err.payload = j ?? { status: res.status, text };
+      err.payload = j ??  { status: res.status, text };
       throw err;
     }
 
@@ -366,14 +394,14 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
 
 /* ---- Start ingest (uses retry wrapper) ---- */
 
-async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string | null) {
+async function startIngestAndReturnIngestionId(itemUrl: string, tenantId:  string | null, orgId: string | null) {
   let attempt = 0;
   let lastTimeoutPayload: any = null;
 
   while (true) {
     attempt++;
 
-    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, tenantId, 3);
+    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, tenantId, orgId, 3);
 
     if (!res.ok) {
       const msg = j?.error ?? `ingest failed (${res.status})`;
@@ -382,7 +410,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string
       throw err;
     }
 
-    const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
+    const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ??  j?.data?.ingestionId ??  null;
 
     if (possibleIngestionId) {
       if (j?.status === "accepted" || res.status === 202) {
@@ -392,10 +420,10 @@ async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string
           const ing = await pollForIngestionJob(jobId);
           return ing;
         } catch (e: any) {
-          const msg = String(e?.message ?? e);
+          const msg = String(e?.message ??  e);
 
           if (msg === "ingest job timeout") {
-            lastTimeoutPayload = e?.payload ?? null;
+            lastTimeoutPayload = e?. payload ??  null;
 
             const canRetry = INGEST_RETRY_ON_TIMEOUT && attempt <= 1 + INGEST_RETRY_MAX;
 
@@ -423,8 +451,8 @@ async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string
       return possibleIngestionId;
     }
 
-    const jobId = j?.jobId ?? j?.job?.id ?? null;
-    if (!jobId) {
+    const jobId = j?.jobId ?? j?.job?. id ?? null;
+    if (! jobId) {
       const err: any = new Error("ingest did not return an ingestionId or jobId");
       err.payload = { status: res.status, body: j, text };
       throw err;
@@ -435,7 +463,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       if (msg === "ingest job timeout") {
-        lastTimeoutPayload = e?.payload ?? null;
+        lastTimeoutPayload = e?.payload ??  null;
         const canRetry = INGEST_RETRY_ON_TIMEOUT && attempt <= 1 + INGEST_RETRY_MAX;
 
         if (canRetry) {
@@ -483,9 +511,9 @@ async function startPipeline(ingestionId: string, steps: string[], options: Reco
     j = null;
   }
 
-  if (!res.ok) {
+  if (! res.ok) {
     const err: any = new Error(j?.error ?? `pipeline start failed (${res.status})`);
-    err.payload = { status: res.status, body: j, text: text || null };
+    err.payload = { status: res.status, body: j, text:  text || null };
     throw err;
   }
 
@@ -500,7 +528,7 @@ async function startPipeline(ingestionId: string, steps: string[], options: Reco
 }
 
 async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 2500) {
-  const start = Date.now();
+  const start = Date. now();
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run/${encodeURIComponent(runId)}`, {
       headers: serviceHeaders(),
@@ -514,8 +542,8 @@ async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 25
       j = null;
     }
 
-    if (res.ok && j?.run) {
-      const status = j.run.status;
+    if (res. ok && j?.run) {
+      const status = j. run.status;
       if (status === "succeeded" || status === "failed") return j;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -526,7 +554,7 @@ async function pollPipeline(runId: string, timeoutMs = 1800_000, intervalMs = 25
 /* ---- Core handler ---- */
 
 async function handleJob(job: any) {
-  const { bulkJobItemId } = job.data;
+  const { bulkJobItemId } = job. data;
   console.log("[bulk-item] processing", bulkJobItemId);
 
   const item = await fetchItemRow(bulkJobItemId);
@@ -538,33 +566,35 @@ async function handleJob(job: any) {
   await markItem(bulkJobItemId, {
     status: "in_progress",
     started_at: new Date().toISOString(),
-    tries: (item.tries ?? 0) + 1,
+    tries: (item.tries ??  0) + 1,
   });
 
   try {
     const userId = bulkJob.created_by;
 
-    // Canonical tenant context for billing/usage: use org_id from bulk_jobs
-    let tenantId: string | null = bulkJob.org_id ?? null;
+    // Canonical tenant context for billing/usage:  use org_id from bulk_jobs
+    let tenantId: string | null = bulkJob.org_id ??  null;
+    let orgId: string | null = bulkJob.org_id ?? null;
     let isOwner = false;
 
     // HARD FAIL: bulk jobs must be tenant-scoped
-    if (!tenantId) {
+    if (! tenantId || !orgId) {
       const err: any = new Error("missing_org_id_for_bulk_job");
-      err.payload = { bulkJobId: bulkJob.id, org_id: bulkJob.org_id ?? null };
+      err.payload = { bulkJobId: bulkJob. id, org_id: bulkJob.org_id ??  null };
       throw err;
     }
 
     try {
       if (tenantId === "<ORG_ID_FOUND>") {
-        const { data: tm, error: tmErr } = await supabase
+        const { data: tm, error:  tmErr } = await supabase
           .from("team_members")
           .select("tenant_id, role")
           .eq("user_id", userId)
-          .order("created_at", { ascending: true })
+          .order("created_at", { ascending:  true })
           .limit(1);
-        if (!tmErr && tm && tm.length > 0) {
+        if (! tmErr && tm && tm.length > 0) {
           tenantId = tm[0].tenant_id;
+          orgId = tm[0].tenant_id;
         }
       }
 
@@ -575,47 +605,47 @@ async function handleJob(job: any) {
           .eq("user_id", userId)
           .eq("tenant_id", tenantId)
           .limit(1);
-        if (!roleErr && roleRows && roleRows.length > 0) {
+        if (!roleErr && roleRows && roleRows. length > 0) {
           const role = roleRows[0].role;
           if (role === "owner" || role === "admin") isOwner = true;
         }
       }
     } catch (lookupErr: any) {
-      console.warn("[bulk-item] tenant/role lookup failed, continuing:", lookupErr?.message ?? lookupErr);
+      console.warn("[bulk-item] tenant/role lookup failed, continuing:", lookupErr?. message ??  lookupErr);
     }
 
     await requireSubscriptionAndUsage({
       userId,
-      requestedTenantId: tenantId ?? undefined,
+      requestedTenantId: tenantId ??  undefined,
       feature: "ingestion" as any,
       increment: 1,
-      userEmail: bulkJob.options?.requested_by_email ?? undefined,
+      userEmail: bulkJob.options?.requested_by_email ??  undefined,
     });
 
     if (process.env.DEBUG_BULK && isOwner) {
       console.log("[bulk-item][debug] owner/admin detected for user", userId, "tenant", tenantId);
     }
 
-    // Ingestion: create if missing
-    let ingestionId = item.ingestion_id ?? null;
+    // Ingestion:  create if missing
+    let ingestionId = item.ingestion_id ??  null;
     if (!ingestionId) {
-      ingestionId = await startIngestAndReturnIngestionId(item.input_url, tenantId);
-      if (!ingestionId) throw new Error("ingestion creation returned no id");
+      ingestionId = await startIngestAndReturnIngestionId(item.input_url, tenantId, orgId);
+      if (! ingestionId) throw new Error("ingestion creation returned no id");
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
 
-    // Merge bulk job options with per-item metadata.options (item-level overrides)
-    const mergedOptions: Record<string, any> = {
-      ...(bulkJob.options ?? {}),
+    // Merge bulk job options with per-item metadata. options (item-level overrides)
+    const mergedOptions:  Record<string, any> = {
+      .. .(bulkJob.options ??  {}),
       ...(item.metadata?.options ?? {}),
     };
 
-    const modeFull = String(mergedOptions?.mode ?? "").toLowerCase() === "full";
-    const steps: string[] = ["extract", "seo"];
+    const modeFull = String(mergedOptions?. mode ?? "").toLowerCase() === "full";
+    const steps:  string[] = ["extract", "seo"];
 
     if (
       mergedOptions?.includeAudit !== false &&
-      (mergedOptions.includeAudit === true || modeFull || mergedOptions.includeAudit === undefined)
+      (mergedOptions. includeAudit === true || modeFull || mergedOptions.includeAudit === undefined)
     ) {
       steps.push("audit");
     }
@@ -636,7 +666,7 @@ async function handleJob(job: any) {
 
     if (
       mergedOptions?.includePrice !== false &&
-      (mergedOptions.includePrice === true || modeFull || mergedOptions.includePrice === undefined)
+      (mergedOptions.includePrice === true || modeFull || mergedOptions. includePrice === undefined)
     ) {
       steps.push("price");
     }
@@ -651,10 +681,10 @@ async function handleJob(job: any) {
     }
 
     const pipelineRunId = await startPipeline(ingestionId, steps, mergedOptions);
-    await markItem(bulkJobItemId, { pipeline_run_id: pipelineRunId });
+    await markItem(bulkJobItemId, { pipeline_run_id:  pipelineRunId });
 
     const snap = await pollPipeline(pipelineRunId);
-    const finalStatus = snap?.run?.status;
+    const finalStatus = snap?. run?.status;
 
     if (finalStatus === "succeeded") {
       await markItem(bulkJobItemId, { status: "succeeded", finished_at: new Date().toISOString() });
@@ -664,8 +694,8 @@ async function handleJob(job: any) {
     } else {
       await markItem(bulkJobItemId, {
         status: "failed",
-        finished_at: new Date().toISOString(),
-        last_error: { pipelineStatus: finalStatus, run: snap?.run ?? null, modules: snap?.modules ?? null },
+        finished_at:  new Date().toISOString(),
+        last_error: { pipelineStatus: finalStatus, run: snap?.run ??  null, modules: snap?.modules ?? null },
       });
       await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
         console.warn("incrementBulkCounters failed (failed)", e)
@@ -686,7 +716,7 @@ async function handleJob(job: any) {
       last_error: norm,
     });
 
-    await incrementBulkCounters(item.bulk_job_id, { failed: 1 }).catch((e) =>
+    await incrementBulkCounters(item. bulk_job_id, { failed: 1 }).catch((e) =>
       console.warn("incrementBulkCounters failed on exception", e)
     );
   }
@@ -703,7 +733,7 @@ async function handleJob(job: any) {
 
   const worker = new Worker(
     "bulk-item",
-    async (job: any) => {
+    async (job:  any) => {
       await handleJob(job);
     },
     {
@@ -721,5 +751,5 @@ async function handleJob(job: any) {
     console.error(`[bulk-item] failed ${job.id}`, norm.message);
   });
 
-  console.log(`[bulk-item] worker started (concurrency=${concurrency})`);
+  console.log(`[bulk-item] worker started (concurrency=${concurrency}, version=${APP_VERSION})`);
 })();
