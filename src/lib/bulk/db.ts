@@ -97,16 +97,28 @@ export async function updateBulkItemStatus(bulkJobItemId: string, updates: Recor
  * incrementBulkCounters
  *
  * Best-effort counters update for bulk_jobs.*_items fields.
- * This exists because the bulk worker imports it.
+ * The worker historically calls this with { completed: 1 } and { failed: 1 }.
+ * Other code paths may call with *_items column names.
+ *
+ * This helper accepts BOTH:
+ * - legacy keys: completed, failed, queued, in_progress, total
+ * - canonical keys: completed_items, failed_items, queued_items, in_progress_items, total_items
  *
  * Notes:
- * - This is not perfectly atomic (Supabase-js lacks raw SQL increment for all environments).
- * - It is safe and idempotent enough for dashboards when combined with periodic recompute.
- * - `delta` values are applied as: new = max(0, old + delta)
+ * - Not perfectly atomic (Supabase-js lacks raw SQL increment universally).
+ * - Good enough for live UI when paired with recomputeBulkJobCounters for reconciliation.
  */
 export async function incrementBulkCounters(
   bulkJobId: string,
   delta: {
+    // legacy keys used by worker
+    total?: number;
+    completed?: number;
+    failed?: number;
+    queued?: number;
+    in_progress?: number;
+
+    // canonical db column keys
     total_items?: number;
     completed_items?: number;
     failed_items?: number;
@@ -115,6 +127,16 @@ export async function incrementBulkCounters(
   }
 ) {
   const supabase = getServiceSupabaseClient();
+
+  const toNum = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const clamp0 = (n: any) => Math.max(0, Number(n ?? 0));
+
+  // Map legacy -> canonical (canonical wins if both provided)
+  const dTotal = toNum(delta.total_items ?? delta.total);
+  const dCompleted = toNum(delta.completed_items ?? delta.completed);
+  const dFailed = toNum(delta.failed_items ?? delta.failed);
+  const dQueued = toNum(delta.queued_items ?? delta.queued);
+  const dInProgress = toNum(delta.in_progress_items ?? delta.in_progress);
 
   // Read current counters
   const { data: cur, error: readErr } = await supabase
@@ -126,23 +148,23 @@ export async function incrementBulkCounters(
   if (readErr) throw readErr;
   if (!cur) throw new Error("bulk_job_not_found");
 
-  const clamp0 = (n: any) => Math.max(0, Number(n ?? 0));
-
   const updates: any = {
     updated_at: new Date().toISOString(),
   };
 
-  if (typeof delta.total_items === "number") updates.total_items = clamp0(cur.total_items) + delta.total_items;
-  if (typeof delta.completed_items === "number") updates.completed_items = clamp0(cur.completed_items) + delta.completed_items;
-  if (typeof delta.failed_items === "number") updates.failed_items = clamp0(cur.failed_items) + delta.failed_items;
-  if (typeof delta.queued_items === "number") updates.queued_items = clamp0(cur.queued_items) + delta.queued_items;
-  if (typeof delta.in_progress_items === "number")
-    updates.in_progress_items = clamp0(cur.in_progress_items) + delta.in_progress_items;
+  if (dTotal) updates.total_items = clamp0(cur.total_items) + dTotal;
+  if (dCompleted) updates.completed_items = clamp0(cur.completed_items) + dCompleted;
+  if (dFailed) updates.failed_items = clamp0(cur.failed_items) + dFailed;
+  if (dQueued) updates.queued_items = clamp0(cur.queued_items) + dQueued;
+  if (dInProgress) updates.in_progress_items = clamp0(cur.in_progress_items) + dInProgress;
 
   // Ensure no negatives
   for (const k of ["total_items", "completed_items", "failed_items", "queued_items", "in_progress_items"]) {
     if (k in updates) updates[k] = clamp0(updates[k]);
   }
+
+  // Nothing to update
+  if (Object.keys(updates).length === 1) return true;
 
   const { error: updErr } = await supabase.from("bulk_jobs").update(updates).eq("id", bulkJobId);
   if (updErr) throw updErr;
@@ -159,7 +181,6 @@ export async function incrementBulkCounters(
 export async function recomputeBulkJobCounters(bulkJobId: string) {
   const supabase = getServiceSupabaseClient();
 
-  // Fetch statuses for this bulk job
   const { data: items, error: itemsErr } = await supabase
     .from("bulk_job_items")
     .select("status")
