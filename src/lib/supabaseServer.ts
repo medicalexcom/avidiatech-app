@@ -1,9 +1,10 @@
 // src/lib/supabaseServer.ts
 // Central Supabase server helper used across ingestion/import flows.
 //
-// saveIngestion now tolerantly retries if PostgREST reports missing columns
-// (e.g. different environments with slightly different schema migrations).
-// Long-term: prefer to run the DB migration to add missing columns.
+// saveIngestion now:
+// - enforces tenant presence (unless GLOBAL_TENANT_ID configured)
+// - writes both tenant_id and org_id (org_id required by DB)
+// - tolerantly strips unknown columns reported by PostgREST and retries
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -30,7 +31,6 @@ function parseMissingColumnFromError(err: any): string | null {
   const msg = String(err?.message ?? err ?? "");
   const m = msg.match(/Could not find the '([^']+)' column/);
   if (m && m[1]) return m[1];
-  // also support generic patterns
   const m2 = msg.match(/column "(.*?)" does not exist/i);
   if (m2 && m2[1]) return m2[1];
   return null;
@@ -39,6 +39,8 @@ function parseMissingColumnFromError(err: any): string | null {
 /**
  * saveIngestion - insertion helper that enforces tenant presence (unless global fallback configured)
  * and tolerantly strips unknown columns reported by PostgREST on insert.
+ *
+ * Important: sets both tenant_id AND org_id to the effective tenant value to satisfy NOT NULL constraints.
  */
 export async function saveIngestion({
   tenantId,
@@ -70,6 +72,7 @@ export async function saveIngestion({
   // Build a conservative payload using snake_case column names that are expected in DB.
   const basePayload: Record<string, any> = {
     tenant_id: effectiveTenant,
+    org_id: effectiveTenant, // <- ensure org_id is written (DB requires it)
     user_id: userId ?? null,
     export_type: type,
     status,
@@ -98,20 +101,15 @@ export async function saveIngestion({
         .maybeSingle();
 
       if (error) {
-        // If PostgREST reports a missing column, we'll attempt to remove that field and retry.
         const missingColumn = parseMissingColumnFromError(error);
         if (missingColumn && attempt <= maxRetries) {
           console.warn(`saveIngestion: postgrest missing column '${missingColumn}' - removing and retrying (attempt ${attempt})`);
-          // Remove matching key(s) from payload. Try exact key and camelCase variants.
           delete payload[missingColumn];
-          // also try alternate keys (camelCase)
           const camel = missingColumn.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
           delete payload[camel];
-          // continue to retry
           continue;
         }
 
-        // For other errors, throw
         console.error("saveIngestion error from supabase:", error);
         throw error;
       }
@@ -119,7 +117,6 @@ export async function saveIngestion({
       // success
       return data;
     } catch (e: any) {
-      // If we parsed missing column earlier but supabase threw something else, check string message for column and retry
       const missingColumn = parseMissingColumnFromError(e);
       if (missingColumn && attempt <= maxRetries) {
         console.warn(`saveIngestion caught missing column '${missingColumn}' in exception - removing and retrying (attempt ${attempt})`);
@@ -128,7 +125,6 @@ export async function saveIngestion({
         delete payload[camel];
         continue;
       }
-      // Not a missing-column scenario or retries exhausted
       throw e;
     }
   }
