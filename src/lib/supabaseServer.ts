@@ -1,9 +1,9 @@
 // src/lib/supabaseServer.ts
 // Central Supabase server helper used across ingestion/import flows.
 //
-// Important change: do not silently insert a fallback tenant by default.
-// Set SUPABASE_GLOBAL_TENANT_ID in env to enable a global fallback for local/dev only.
-// Otherwise saveIngestion will throw if tenantId is null to enforce app-level tenant validation.
+// saveIngestion now tolerantly retries if PostgREST reports missing columns
+// (e.g. different environments with slightly different schema migrations).
+// Long-term: prefer to run the DB migration to add missing columns.
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -11,31 +11,39 @@ const url = process.env.SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 // Fallback tenant id used ONLY when explicitly configured in env (dev convenience).
-// If not set, we treat tenant as required for ingestion creation.
 const GLOBAL_TENANT_ID = process.env.SUPABASE_GLOBAL_TENANT_ID ?? null;
 
 if (!url || !serviceKey) {
   console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
 }
 
-const supabase = (url && serviceKey) ? createClient(url, serviceKey, {
-  auth: { persistSession: false },
-}) : null;
+const supabase = (url && serviceKey)
+  ? createClient(url, serviceKey, { auth: { persistSession: false } })
+  : null;
 
 /**
- * saveIngestion - non-destructive insertion that enforces tenant presence.
- *
- * - tenantId must be provided by callers (UI, bulk worker, API). If tenantId is null/undefined
- *   and SUPABASE_GLOBAL_TENANT_ID is NOT set, this function will throw an error to prevent
- *   accidental NULL tenant inserts.
- * - You may set SUPABASE_GLOBAL_TENANT_ID in non-production environments if you intentionally
- *   want a fallback tenant for legacy/one-off workflows.
+ * Parse missing column name from PostgREST schema-cache error message.
+ * Example message:
+ * "Could not find the 'raw_payload' column of 'product_ingestions' in the schema cache"
+ */
+function parseMissingColumnFromError(err: any): string | null {
+  const msg = String(err?.message ?? err ?? "");
+  const m = msg.match(/Could not find the '([^']+)' column/);
+  if (m && m[1]) return m[1];
+  // also support generic patterns
+  const m2 = msg.match(/column "(.*?)" does not exist/i);
+  if (m2 && m2[1]) return m2[1];
+  return null;
+}
+
+/**
+ * saveIngestion - insertion helper that enforces tenant presence (unless global fallback configured)
+ * and tolerantly strips unknown columns reported by PostgREST on insert.
  */
 export async function saveIngestion({
   tenantId,
   type = "describe",
-  // Accept 'pending' as a valid status in addition to success/failed because some flows create
-  // ingestion rows in a pending state before the engine runs.
+  // Allow 'pending' to reflect pre-engine state
   status = "success",
   normalizedPayload,
   rawPayload,
@@ -52,50 +60,82 @@ export async function saveIngestion({
 }) {
   if (!url || !serviceKey || !supabase) return { id: null };
 
-  // Determine the effective tenant key:
   const effectiveTenant = tenantId ?? GLOBAL_TENANT_ID ?? null;
-
-  // Enforce presence: do not allow NULL tenant unless GLOBAL_TENANT_ID explicitly configured.
   if (!effectiveTenant) {
     const err = new Error("missing_tenant_id_for_ingestion");
-    // Log for observability
     console.error("saveIngestion blocked: missing tenant and no GLOBAL_TENANT_ID configured");
     throw err;
   }
 
-  const payload: Record<string, any> = {
+  // Build a conservative payload using snake_case column names that are expected in DB.
+  const basePayload: Record<string, any> = {
     tenant_id: effectiveTenant,
     user_id: userId ?? null,
-    // Keep same shape as existing code to avoid breaking callers
     export_type: type,
     status,
     normalized_payload: normalizedPayload ?? null,
+    // raw_payload may not exist in all environments
     raw_payload: rawPayload ?? null,
     created_at: new Date().toISOString(),
   };
 
   if (typeof sourceUrl === "string" && sourceUrl.length > 0) {
-    payload.source_url = sourceUrl;
+    basePayload.source_url = sourceUrl;
   }
 
-  // Insert and return created id
-  const { data, error } = await supabase
-    .from("product_ingestions")
-    .insert([payload])
-    .select("id")
-    .limit(1)
-    .maybeSingle();
+  // Attempt insert. If DB complains about missing column(s), remove them and retry.
+  const payload = { ...basePayload };
+  const maxRetries = 5;
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    try {
+      const { data, error } = await supabase
+        .from("product_ingestions")
+        .insert([payload])
+        .select("id")
+        .limit(1)
+        .maybeSingle();
 
-  if (error) {
-    console.error("saveIngestion error:", error);
-    throw error;
+      if (error) {
+        // If PostgREST reports a missing column, we'll attempt to remove that field and retry.
+        const missingColumn = parseMissingColumnFromError(error);
+        if (missingColumn && attempt <= maxRetries) {
+          console.warn(`saveIngestion: postgrest missing column '${missingColumn}' - removing and retrying (attempt ${attempt})`);
+          // Remove matching key(s) from payload. Try exact key and camelCase variants.
+          delete payload[missingColumn];
+          // also try alternate keys (camelCase)
+          const camel = missingColumn.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+          delete payload[camel];
+          // continue to retry
+          continue;
+        }
+
+        // For other errors, throw
+        console.error("saveIngestion error from supabase:", error);
+        throw error;
+      }
+
+      // success
+      return data;
+    } catch (e: any) {
+      // If we parsed missing column earlier but supabase threw something else, check string message for column and retry
+      const missingColumn = parseMissingColumnFromError(e);
+      if (missingColumn && attempt <= maxRetries) {
+        console.warn(`saveIngestion caught missing column '${missingColumn}' in exception - removing and retrying (attempt ${attempt})`);
+        delete payload[missingColumn];
+        const camel = missingColumn.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        delete payload[camel];
+        continue;
+      }
+      // Not a missing-column scenario or retries exhausted
+      throw e;
+    }
   }
-  return data;
 }
 
-/**
- * incrementUsageCounter - uses tenant fallback same as above.
- */
+/* ---- Other helpers unchanged ---- */
+
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
@@ -158,12 +198,6 @@ export async function incrementUsageCounter({
   }
 }
 
-/**
- * checkQuota - returns boolean whether tenant is within quota.
- *
- * - opts.limit may be a number or Infinity. If limit is Infinity or not provided, this function returns true.
- * - On DB error this function returns true (fail-open).
- */
 export async function checkQuota(opts: {
   tenantId: string | null;
   metric?: string;
@@ -171,19 +205,13 @@ export async function checkQuota(opts: {
 }): Promise<boolean> {
   const { tenantId, metric = "describe_calls", limit = Infinity } = opts;
 
-  // If limit is infinite, allow
   if (!isFinite(limit)) return true;
-
   if (!url || !serviceKey || !supabase) {
-    // Fail-open if DB not configured
     return true;
   }
 
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
-  if (!tenantKey) {
-    // If no tenant and no global fallback configured, be conservative and allow (fail-open)
-    return true;
-  }
+  if (!tenantKey) return true;
 
   try {
     const { data, error } = await supabase
