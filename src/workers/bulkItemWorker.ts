@@ -30,6 +30,11 @@
 // - Forward bulk job / item options into pipeline run metadata so import/module toggles and
 //   platform options are available to the pipeline-runner and internal modules.
 // - Compute pipeline steps from merged options (bulk job options + per-item metadata override).
+//
+// 2026-01 tenant hardening:
+// - Always pass tenant_id into /api/v1/ingest when calling internally via x-service-api-key,
+//   so the ingest route can create tenant-scoped product_ingestions rows.
+// - Fail fast if bulkJob.org_id is missing, with a clear last_error code.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -83,11 +88,7 @@ function normalizeErrorMessage(err: any): string {
 
 function normalizeErrorPayload(err: any) {
   const payload = err?.payload ?? null;
-  const core =
-    payload ??
-    (typeof err === "object"
-      ? { ...err }
-      : { value: err });
+  const core = payload ?? (typeof err === "object" ? { ...err } : { value: err });
 
   return {
     message: normalizeErrorMessage(err),
@@ -105,9 +106,7 @@ const RAW_SERVICE_API_KEY = process.env.SERVICE_API_KEY || "";
 const RAW_NEXT_PUBLIC_SERVICE_API_KEY = process.env.NEXT_PUBLIC_SERVICE_API_KEY || "";
 
 const PIPELINE_INTERNAL_SECRET = stripAnsiAndTrim(RAW_PIPELINE_SECRET);
-const SERVICE_API_KEY = stripAnsiAndTrim(
-  PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY
-);
+const SERVICE_API_KEY = stripAnsiAndTrim(PIPELINE_INTERNAL_SECRET || RAW_SERVICE_API_KEY || RAW_NEXT_PUBLIC_SERVICE_API_KEY);
 
 // INTERNAL_API_BASE is required for the worker to call internal endpoints
 const internalApiBase = process.env.INTERNAL_API_BASE || ""; // e.g. https://app.example.com
@@ -220,22 +219,27 @@ function normalizeAbsoluteUrl(input: string): string {
 
 /* ---- Ingest: POST and transient retry wrapper ---- */
 
-async function postIngest(itemUrl: string) {
+async function postIngest(itemUrl: string, tenantId: string | null) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/ingest`;
   const normalized = normalizeAbsoluteUrl(itemUrl);
 
   if (process.env.DEBUG_BULK) {
-    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized);
+    console.log("[bulk-item][debug] postIngest POST", url, "payload.url=", normalized, "tenant_id=", tenantId);
   }
+
+  const body: any = {
+    url: normalized,
+    persist: true,
+    options: { includeSeo: true },
+  };
+
+  // IMPORTANT: internal ingest must receive tenant context
+  if (tenantId) body.tenant_id = tenantId;
 
   const res = await fetch(url, {
     method: "POST",
     headers: serviceHeaders(),
-    body: JSON.stringify({
-      url: normalized,
-      persist: true,
-      options: { includeSeo: true },
-    }),
+    body: JSON.stringify(body),
   });
 
   const text = await res.text().catch(() => "");
@@ -256,7 +260,7 @@ async function postIngest(itemUrl: string) {
  * - Exponential backoff between attempts
  * - Throws an Error with payload if still failing after retries
  */
-async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
+async function tryPostIngestWithRetries(itemUrl: string, tenantId: string | null, maxAttempts = 3) {
   let attempt = 0;
   let lastErr: any = null;
 
@@ -265,42 +269,42 @@ async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
     while (attempt < maxAttempts) {
       attempt++;
       try {
-        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl);
+        const { res, text, json: j, normalizedUrl } = await postIngest(itemUrl, tenantId);
 
-        // If success or normal non-transient error, return as usual
         if (res.ok) {
           return { res, text, json: j, normalizedUrl };
         }
 
-        // Determine if transient:
-        // - res.status === 0 (network)
-        // - 5xx server errors
-        // - text contains known render-timeout/network indicators
         const isTransient =
           res.status === 0 ||
           (res.status >= 500 && res.status < 600) ||
           /render-timeout|timeout|ENOTFOUND|ECONNRESET|ERR_SOCKET_NOT_CONNECTED/i.test(text || String(j || ""));
 
         if (!isTransient) {
-          // Non-transient -> return the response so caller handles it
           return { res, text, json: j, normalizedUrl };
         }
 
         lastErr = { res, text, json: j, normalizedUrl };
 
         if (process.env.DEBUG_BULK) {
-          console.warn("[bulk-item][debug] transient ingest POST detected, will retry", { attempt, itemUrl, status: res.status });
+          console.warn("[bulk-item][debug] transient ingest POST detected, will retry", {
+            attempt,
+            itemUrl,
+            status: res.status,
+          });
         }
 
-        // backoff then retry
         const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
         await new Promise((r) => setTimeout(r, backoffMs));
         continue;
       } catch (e: any) {
-        // Network/throwable error - considered transient
         lastErr = e;
         if (process.env.DEBUG_BULK) {
-          console.warn("[bulk-item][debug] postIngest threw, will retry", { attempt, itemUrl, err: String(e?.message || e) });
+          console.warn("[bulk-item][debug] postIngest threw, will retry", {
+            attempt,
+            itemUrl,
+            err: String(e?.message || e),
+          });
         }
         const backoffMs = Math.min(5000, 250 * Math.pow(2, attempt - 1));
         await new Promise((r) => setTimeout(r, backoffMs));
@@ -308,7 +312,6 @@ async function tryPostIngestWithRetries(itemUrl: string, maxAttempts = 3) {
       }
     }
 
-    // After retries, throw a descriptive error
     const err: any = new Error("ingest_post_transient_failed");
     err.payload = lastErr;
     throw err;
@@ -363,15 +366,14 @@ async function pollForIngestionJob(jobId: string, timeoutMs = INGEST_POLL_TIMEOU
 
 /* ---- Start ingest (uses retry wrapper) ---- */
 
-async function startIngestAndReturnIngestionId(itemUrl: string) {
+async function startIngestAndReturnIngestionId(itemUrl: string, tenantId: string | null) {
   let attempt = 0;
   let lastTimeoutPayload: any = null;
 
   while (true) {
     attempt++;
 
-    // Use the transient retry wrapper that also enforces per-domain concurrency.
-    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, 3);
+    const { res, text, json: j } = await tryPostIngestWithRetries(itemUrl, tenantId, 3);
 
     if (!res.ok) {
       const msg = j?.error ?? `ingest failed (${res.status})`;
@@ -380,8 +382,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
       throw err;
     }
 
-    const possibleIngestionId =
-      j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
+    const possibleIngestionId = j?.ingestionId ?? j?.id ?? j?.data?.id ?? j?.data?.ingestionId ?? null;
 
     if (possibleIngestionId) {
       if (j?.status === "accepted" || res.status === 202) {
@@ -396,8 +397,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
           if (msg === "ingest job timeout") {
             lastTimeoutPayload = e?.payload ?? null;
 
-            const canRetry =
-              INGEST_RETRY_ON_TIMEOUT && attempt <= (1 + INGEST_RETRY_MAX);
+            const canRetry = INGEST_RETRY_ON_TIMEOUT && attempt <= 1 + INGEST_RETRY_MAX;
 
             if (canRetry) {
               console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
@@ -436,8 +436,7 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
       const msg = String(e?.message ?? e);
       if (msg === "ingest job timeout") {
         lastTimeoutPayload = e?.payload ?? null;
-        const canRetry =
-          INGEST_RETRY_ON_TIMEOUT && attempt <= (1 + INGEST_RETRY_MAX);
+        const canRetry = INGEST_RETRY_ON_TIMEOUT && attempt <= 1 + INGEST_RETRY_MAX;
 
         if (canRetry) {
           console.warn("[bulk-item] ingest poll timeout; retrying ingest POST", {
@@ -459,12 +458,6 @@ async function startIngestAndReturnIngestionId(itemUrl: string) {
 
 /* ---- Pipeline start/poll (now supports forwarding options) ---- */
 
-/**
- * startPipeline
- * - ingestionId: ingestion to run pipeline for
- * - steps: ordered list of module names to execute
- * - options: free-form options forwarded into pipeline metadata.payload.options
- */
 async function startPipeline(ingestionId: string, steps: string[], options: Record<string, any> = {}) {
   const url = `${internalApiBase.replace(/\/$/, "")}/api/v1/pipeline/run`;
   if (process.env.DEBUG_BULK) {
@@ -482,7 +475,6 @@ async function startPipeline(ingestionId: string, steps: string[], options: Reco
     }),
   });
 
-  // Read text first to preserve non-JSON error bodies
   const text = await res.text().catch(() => "");
   let j: any = null;
   try {
@@ -556,8 +548,15 @@ async function handleJob(job: any) {
     let tenantId: string | null = bulkJob.org_id ?? null;
     let isOwner = false;
 
+    // HARD FAIL: bulk jobs must be tenant-scoped
+    if (!tenantId) {
+      const err: any = new Error("missing_org_id_for_bulk_job");
+      err.payload = { bulkJobId: bulkJob.id, org_id: bulkJob.org_id ?? null };
+      throw err;
+    }
+
     try {
-      if (!tenantId || tenantId === "<ORG_ID_FOUND>") {
+      if (tenantId === "<ORG_ID_FOUND>") {
         const { data: tm, error: tmErr } = await supabase
           .from("team_members")
           .select("tenant_id, role")
@@ -600,7 +599,7 @@ async function handleJob(job: any) {
     // Ingestion: create if missing
     let ingestionId = item.ingestion_id ?? null;
     if (!ingestionId) {
-      ingestionId = await startIngestAndReturnIngestionId(item.input_url);
+      ingestionId = await startIngestAndReturnIngestionId(item.input_url, tenantId);
       if (!ingestionId) throw new Error("ingestion creation returned no id");
       await markItem(bulkJobItemId, { ingestion_id: ingestionId });
     }
@@ -611,30 +610,44 @@ async function handleJob(job: any) {
       ...(item.metadata?.options ?? {}),
     };
 
-    // Compute pipeline steps from merged options. Defaults:
-    // - If options.mode === "full" (or unspecified and bulkJob.options.mode === 'full'), include audit/import/monitor/price
-    // - Individual include flags (includeAudit/includeImport/includeMonitor/includePrice) can override.
     const modeFull = String(mergedOptions?.mode ?? "").toLowerCase() === "full";
     const steps: string[] = ["extract", "seo"];
 
-    if (mergedOptions?.includeAudit !== false && (mergedOptions.includeAudit === true || modeFull || mergedOptions.includeAudit === undefined)) {
+    if (
+      mergedOptions?.includeAudit !== false &&
+      (mergedOptions.includeAudit === true || modeFull || mergedOptions.includeAudit === undefined)
+    ) {
       steps.push("audit");
     }
 
-    if (mergedOptions?.includeImport !== false && (mergedOptions.includeImport === true || modeFull || mergedOptions.includeImport === undefined)) {
+    if (
+      mergedOptions?.includeImport !== false &&
+      (mergedOptions.includeImport === true || modeFull || mergedOptions.includeImport === undefined)
+    ) {
       steps.push("import");
     }
 
-    if (mergedOptions?.includeMonitor !== false && (mergedOptions.includeMonitor === true || modeFull || mergedOptions.includeMonitor === undefined)) {
+    if (
+      mergedOptions?.includeMonitor !== false &&
+      (mergedOptions.includeMonitor === true || modeFull || mergedOptions.includeMonitor === undefined)
+    ) {
       steps.push("monitor");
     }
 
-    if (mergedOptions?.includePrice !== false && (mergedOptions.includePrice === true || modeFull || mergedOptions.includePrice === undefined)) {
+    if (
+      mergedOptions?.includePrice !== false &&
+      (mergedOptions.includePrice === true || modeFull || mergedOptions.includePrice === undefined)
+    ) {
       steps.push("price");
     }
 
     if (process.env.DEBUG_BULK) {
-      console.log("[bulk-item][debug] computed steps for item", { bulkJobId: bulkJob.id, itemId: bulkJobItemId, steps, mergedOptions });
+      console.log("[bulk-item][debug] computed steps for item", {
+        bulkJobId: bulkJob.id,
+        itemId: bulkJobItemId,
+        steps,
+        mergedOptions,
+      });
     }
 
     const pipelineRunId = await startPipeline(ingestionId, steps, mergedOptions);
