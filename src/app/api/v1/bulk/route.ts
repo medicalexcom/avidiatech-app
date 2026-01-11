@@ -1,4 +1,3 @@
-// src/app/api/v1/bulk/route.ts
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { parsePastedUrls } from "@/lib/bulk/parse";
@@ -12,15 +11,17 @@ import { resolveTenantIdForServerRequest } from "@/lib/tenancy/resolveTenantIdFo
  * POST /api/v1/bulk
  *
  * Accepts JSON: { name?, pasted?: string, items?: [{ url, metadata }], options?: any, orgId? }
- * Creates a bulk job and enqueues a bulk-master job.
+ * Creates a bulk job and enqueues a bulk‑master job.
  *
  * NOTE: We do NOT run requireSubscriptionAndUsage here to avoid blocking the UI.
- *       Billing and quota enforcement happens per-item inside the worker.
+ *       Billing and quota enforcement happens per‑item inside the worker.
  *
- * 2026-01 tenant hardening:
- * - Always resolve a real tenant UUID and persist it to bulk_jobs.org_id.
- * - Previously org_id could be null (payload.orgId missing), causing ingest/pipeline to fail early
- *   and bulk items to end as ingest_post_transient_failed.
+ * Tenant hardening (2026‑01):
+ *  - Always resolve a real tenant UUID and persist it to bulk_jobs.org_id.
+ *  - If you pass orgId in the request body, it will be validated and used only if
+ *    the caller belongs to that tenant.  Otherwise, the Clerk organization mapping
+ *    will be used.  Requests without a resolvable tenant will fail with a 422.
+ *  - createBulkJob requires a non‑null orgId and will throw if no tenant is resolved.
  */
 export async function POST(request: NextRequest) {
   const { userId, sessionClaims } = await auth();
@@ -28,7 +29,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const userEmail = extractEmailFromSessionClaims(sessionClaims);
-
     const contentType = request.headers.get("content-type") || "";
     let payload: any = null;
 
@@ -54,10 +54,9 @@ export async function POST(request: NextRequest) {
     if (pasted && typeof pasted === "string") {
       items = items.concat(parsePastedUrls(pasted));
     }
-
     if (!items.length) return NextResponse.json({ error: "No items provided" }, { status: 400 });
 
-    // Default bulk pipeline mode to "full" so items go through audit like single-run URLs.
+    // Default bulk pipeline mode to "full" so items go through audit like single‑run URLs.
     const mode =
       typeof optionsFromBody?.mode === "string" && optionsFromBody.mode.trim()
         ? String(optionsFromBody.mode).trim()
@@ -81,9 +80,7 @@ export async function POST(request: NextRequest) {
         { status: 422 }
       );
     }
-
     const tenantId = resolved.tenantId;
-
     const options = {
       ...optionsFromBody,
       mode,
@@ -91,7 +88,6 @@ export async function POST(request: NextRequest) {
       source_tenant: tenantId ?? tenantFromRequest(request) ?? null,
       requested_by_email: userEmail,
     };
-
     const bulkJobId = await createBulkJob({
       orgId: tenantId,
       name,
@@ -99,11 +95,9 @@ export async function POST(request: NextRequest) {
       options,
       items,
     });
-
     // enqueue master job
     const q = getQueue("bulk-master");
     await q.add("bulk-master", { bulkJobId }, { attempts: 3 });
-
     return NextResponse.json({ ok: true, bulkJobId });
   } catch (err) {
     return handleRouteError(err);
