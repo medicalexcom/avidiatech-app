@@ -3,7 +3,7 @@ import { safeGetAuth } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 
-const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
+const INGEST_ENGINE_URL = process.env. INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
 const APP_URL =
   process.env.APP_URL ||
@@ -51,9 +51,9 @@ function buildEffectiveOptions(body: any) {
   const includeSeo = true;
   const includeSpecs = true;
 
-  // Docs/Variants may remain optional because they can be expensive. 
-  const includeDocs = fullExtract ?  true : normalizeBool(clientOptions.includeDocs);
-  const includeVariants = fullExtract ? true :  normalizeBool(clientOptions. includeVariants);
+  // Docs/Variants may remain optional because they can be expensive.
+  const includeDocs = fullExtract ?  true : normalizeBool(clientOptions. includeDocs);
+  const includeVariants = fullExtract ?  true : normalizeBool(clientOptions.includeVariants);
 
   const effectiveOptions = {
     includeSeo,
@@ -195,7 +195,7 @@ async function handleIngestWithParsedBody(opts: {
   const body = opts.body;
 
   // Hard fail if the ingest engine is not configured.
-  if (! INGEST_ENGINE_URL || !INGEST_SECRET) {
+  if (!INGEST_ENGINE_URL || !INGEST_SECRET) {
     console.error("INGEST_ENGINE_URL or INGEST_SECRET not configured.  Cannot start ingestion.");
     return NextResponse. json(
       {
@@ -227,13 +227,13 @@ async function handleIngestWithParsedBody(opts: {
     try {
       // First, attempt to look up by clerk_user_id (most common)
       const byClerk = await supabase
-        . from("profiles")
+        .from("profiles")
         .select("id, tenant_id, role")
         .eq("clerk_user_id", userId)
         .limit(1)
         .maybeSingle();
 
-      if (!byClerk. error) {
+      if (! byClerk. error) {
         (opts as any).profileData = byClerk.data ??  null;
       } else {
         // If clerk_user_id column doesn't exist (or other DB error), try user_id
@@ -267,17 +267,17 @@ async function handleIngestWithParsedBody(opts: {
       if ((opts as any).profileData) {
         tenant_id = (opts as any).profileData.tenant_id ??  null;
         org_id = tenant_id; // Derive org_id from tenant_id
-        role = (opts as any).profileData.role ??  "user";
+        role = (opts as any).profileData.role ?? "user";
         console.info("[ingest] profile found", { correlation_id, profileId: (opts as any).profileData.id });
       } else {
         // No matching profile row
         console.warn("[ingest] profile not found for user", { correlation_id, userId });
       }
-    } catch (err: any) {
+    } catch (err:  any) {
       // Detect PostgREST schema/cache error (missing table) or column issues
       const isPgrstMissingTable =
         err &&
-        (err.code === "PGRST205" || (typeof err. message === "string" && err. message.includes("Could not find the table")));
+        (err.code === "PGRST205" || (typeof err. message === "string" && err.message.includes("Could not find the table")));
 
       const isColumnMissing =
         err && (String(err.code) === "42703" || (typeof err.message === "string" && err.message.includes("does not exist")));
@@ -329,7 +329,7 @@ async function handleIngestWithParsedBody(opts: {
     }
   }
 
-  // Defensive guard: fail fast if org_id is missing
+  // Defensive guard:  fail fast if org_id is missing
   if (! org_id) {
     console.error("[ingest] org_id is null - cannot insert product_ingestion", {
       tenant_id,
@@ -347,7 +347,7 @@ async function handleIngestWithParsedBody(opts: {
 
   // Quota check (if applicable) — internal requests have role "owner" so they bypass this.
   if (role !== "owner") {
-    const { data: counters } = await supabase
+    const { data:  counters } = await supabase
       .from("usage_counters")
       .select("*")
       .eq("tenant_id", tenant_id)
@@ -379,7 +379,7 @@ async function handleIngestWithParsedBody(opts: {
     engine_call:  null,
   };
 
-  // STRUCTURED LOG:  identify insertion point before DB insert
+  // STRUCTURED LOG: identify insertion point before DB insert
   console.log("[ingest-insert-log]", JSON.stringify({
     route: "/api/v1/ingest",
     file: "src/app/api/v1/ingest/route.ts",
