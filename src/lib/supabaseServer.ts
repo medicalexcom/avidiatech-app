@@ -3,24 +3,68 @@
 // - Exposes: saveIngestion, incrementUsageCounter, checkQuota
 //
 // IMPORTANT: keep SUPABASE_SERVICE_ROLE_KEY secret and only use on server side.
+//
+// 2026-01 tenant enforcement update:
+// - We must NOT create product_ingestions rows without a real tenant_id because:
+//   * Import requires tenant context (connectors) and returns 422 otherwise
+//   * Null tenants cause recurring pipeline failures
+// - Previous behavior used SUPABASE_GLOBAL_TENANT_ID fallback ("global"), which hides the bug
+//   and breaks multi-tenant correctness.
+// - New behavior:
+//   * By default, saveIngestion requires tenantId (strict)
+//   * Optional escape hatch: allowGlobalFallback=true (explicit opt-in only)
+//   * Optional env override: SUPABASE_ALLOW_GLOBAL_TENANT_FALLBACK=true
 
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-// Fallback tenant id used when tenantId is null
+
+// Legacy fallback tenant id (deprecated; only used when explicitly allowed)
 const GLOBAL_TENANT_ID = process.env.SUPABASE_GLOBAL_TENANT_ID ?? "global";
+
+// Explicit opt-in env escape hatch (defaults to false)
+const ALLOW_GLOBAL_TENANT_FALLBACK =
+  String(process.env.SUPABASE_ALLOW_GLOBAL_TENANT_FALLBACK ?? "false").toLowerCase() === "true";
 
 if (!url || !serviceKey) {
   console.warn("Supabase service role or URL not configured. Supabase helpers will no-op when used.");
 }
 
-const supabase = (url && serviceKey) ? createClient(url, serviceKey, {
-  auth: { persistSession: false },
-}) : null;
+const supabase =
+  url && serviceKey
+    ? createClient(url, serviceKey, {
+        auth: { persistSession: false },
+      })
+    : null;
+
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+function resolveTenantKeyStrict(tenantId: string | null | undefined, allowGlobalFallback?: boolean): string {
+  const t = (tenantId ?? "").trim();
+
+  if (t && isUuid(t)) return t;
+
+  // Only allow the legacy fallback when EXPLICITLY opted-in
+  if (allowGlobalFallback === true || ALLOW_GLOBAL_TENANT_FALLBACK) {
+    if (GLOBAL_TENANT_ID && isUuid(GLOBAL_TENANT_ID)) return GLOBAL_TENANT_ID;
+    // If global is not UUID, still allow as last resort for legacy schemas that use text tenant keys.
+    // Prefer migrating those schemas to UUID.
+    return GLOBAL_TENANT_ID || "global";
+  }
+
+  throw new Error("missing_tenant_id_for_ingestion_insert");
+}
 
 /**
- * saveIngestion - non-destructive insertion that avoids inserting explicit NULLs
+ * saveIngestion - creates a product_ingestions row.
+ *
+ * IMPORTANT:
+ * - tenantId is now REQUIRED by default (strict), because downstream Import/connectors need it.
+ * - If you are doing a controlled maintenance operation and truly need a fallback,
+ *   pass allowGlobalFallback=true or set SUPABASE_ALLOW_GLOBAL_TENANT_FALLBACK=true.
  */
 export async function saveIngestion({
   tenantId,
@@ -30,6 +74,7 @@ export async function saveIngestion({
   rawPayload,
   userId,
   sourceUrl,
+  allowGlobalFallback = false,
 }: {
   tenantId: string | null;
   type?: string;
@@ -38,12 +83,14 @@ export async function saveIngestion({
   rawPayload?: any;
   userId?: string | null;
   sourceUrl?: string | null;
+  allowGlobalFallback?: boolean;
 }) {
   if (!url || !serviceKey || !supabase) return { id: null };
 
+  const tenantKey = resolveTenantKeyStrict(tenantId, allowGlobalFallback);
+
   const payload: Record<string, any> = {
-    // Use explicit fallback tenant ID to avoid null inserts
-    tenant_id: tenantId ?? GLOBAL_TENANT_ID,
+    tenant_id: tenantKey,
     user_id: userId ?? null,
     type,
     status,
@@ -57,12 +104,7 @@ export async function saveIngestion({
   }
 
   // Wrap payload in an array to match Supabase typings for insert/upsert calls
-  const { data, error } = await supabase
-    .from("product_ingestions")
-    .insert([payload])
-    .select("id")
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await supabase.from("product_ingestions").insert([payload]).select("id").limit(1).maybeSingle();
 
   if (error) {
     console.error("saveIngestion error:", error);
@@ -74,22 +116,26 @@ export async function saveIngestion({
 /**
  * incrementUsageCounter
  *
- * - Uses fallback tenant key instead of null
- * - Matches/updates by tenant_id + metric
+ * Notes:
+ * - usage_counters may be keyed by tenant_id text in some schemas.
+ * - We keep the legacy fallback option here to avoid breaking older deployments,
+ *   but you should pass tenantId whenever possible.
  */
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
   incrementBy = 1,
+  allowGlobalFallback = true,
 }: {
   tenantId: string | null;
   metric?: string;
   incrementBy?: number;
+  allowGlobalFallback?: boolean;
 }) {
   if (!url || !serviceKey || !supabase) return null;
 
   const now = new Date().toISOString();
-  const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
+  const tenantKey = resolveTenantKeyStrict(tenantId, allowGlobalFallback);
 
   try {
     // Find existing counter row by tenantKey + metric
@@ -106,13 +152,14 @@ export async function incrementUsageCounter({
       throw fetchErr;
     }
 
-    if (existing && typeof existing.count !== "undefined") {
-      const newCount = Number(existing.count ?? 0) + Number(incrementBy);
+    if (existing && typeof (existing as any).count !== "undefined") {
+      const newCount = Number((existing as any).count ?? 0) + Number(incrementBy);
       const { error: updateErr } = await supabase
         .from("usage_counters")
         .update({ count: newCount, updated_at: now })
         .eq("tenant_id", tenantKey)
         .eq("metric", metric);
+
       if (updateErr) {
         console.error("incrementUsageCounter: update error", updateErr);
         throw updateErr;
@@ -126,9 +173,7 @@ export async function incrementUsageCounter({
         count: incrementBy,
         updated_at: now,
       };
-      const { error: insertErr } = await supabase
-        .from("usage_counters")
-        .insert([insertPayload]);
+      const { error: insertErr } = await supabase.from("usage_counters").insert([insertPayload]);
       if (insertErr) {
         console.error("incrementUsageCounter: insert error", insertErr);
         throw insertErr;
@@ -144,20 +189,23 @@ export async function incrementUsageCounter({
 /**
  * checkQuota
  *
- * - Uses fallback tenant key instead of null
+ * - Defaults to allowGlobalFallback=true for backwards compatibility,
+ *   but callers should pass tenantId for correct multi-tenant enforcement.
  */
 export async function checkQuota({
   tenantId,
   metric = "describe_calls",
   limit = Infinity,
+  allowGlobalFallback = true,
 }: {
   tenantId: string | null;
   metric?: string;
   limit?: number;
+  allowGlobalFallback?: boolean;
 }) {
   if (!url || !serviceKey || !supabase) return true;
 
-  const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
+  const tenantKey = resolveTenantKeyStrict(tenantId, allowGlobalFallback);
 
   try {
     const { data, error } = await supabase
@@ -173,7 +221,7 @@ export async function checkQuota({
       throw error;
     }
 
-    const current = Number(data?.count ?? 0);
+    const current = Number((data as any)?.count ?? 0);
     return current < limit;
   } catch (err) {
     console.error("checkQuota unexpected error:", err);
