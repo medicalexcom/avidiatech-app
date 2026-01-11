@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Build effective options and diagnostics
-    const { effectiveOptions, fullExtract } = buildEffectiveOptions(body);
+    const { effectiveOptions, fullExtract, export_type } = buildEffectiveOptions(body);
     const flags = {
       full_extract: fullExtract,
       includeSeo: !!effectiveOptions.includeSeo,
@@ -248,7 +248,7 @@ export async function POST(req: NextRequest) {
     try {
       created = await saveIngestion({
         tenantId: tenant_id,
-        type: effectiveOptions?.export_type ?? "bulk",
+        type: export_type ?? "bulk",
         status: "pending",
         normalizedPayload: body.normalized_payload ?? body.normalizedPayload ?? null,
         rawPayload: body,
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
       tenant_id,
       url,
       options: effectiveOptions,
-      export_type: effectiveOptions?.export_type ?? "JSON",
+      export_type: export_type ?? "JSON",
       callback_url: callbackUrl,
       action: "ingest",
     };
