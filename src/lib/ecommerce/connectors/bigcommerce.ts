@@ -25,6 +25,10 @@ export type BigCommerceCredentials = {
 
 export type BigCommerceUpsertOptions = {
   allowOverwriteExisting?: boolean; // default false (safe)
+
+  // Optional, operator-provided helpers (best-effort)
+  brand_name?: string | null;
+  category_ids?: Array<number | string> | null;
 };
 
 export type BigCommerceImportResult = {
@@ -73,6 +77,128 @@ export function extractSkuFromIngestion(row: any): string | null {
   return null;
 }
 
+function parseNumberCandidate(v: any): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim().replace(/^\$/, "");
+    if (!s) return null;
+    const n = Number.parseFloat(s);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function normalizeImageUrls(normalized: any): string[] {
+  const imgs = normalized?.images;
+  if (!Array.isArray(imgs)) return [];
+  const out: string[] = [];
+  for (const it of imgs) {
+    const u = typeof it === "string" ? it : it?.url;
+    if (typeof u === "string" && u.trim()) out.push(u.trim());
+  }
+  return out;
+}
+
+/* ---------- Brand helpers (best-effort find or create) ---------- */
+
+async function findBrandByName(args: { storeHash: string; token: string; name: string }): Promise<any | null> {
+  // BigCommerce supports /catalog/brands
+  const url = `${bcBaseUrl(args.storeHash)}/catalog/brands?limit=250`;
+
+  const res = await safeFetch(url, {
+    method: "GET",
+    headers: headers(args.token),
+    timeoutMs: 15_000,
+  });
+
+  const text = await res.text().catch(() => "");
+  const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+
+  if (!res.ok) {
+    // best-effort: don't throw (brand is optional)
+    return null;
+  }
+
+  const list = body?.data ?? [];
+  const target = args.name.trim().toLowerCase();
+  const found = list.find((b: any) => String(b?.name ?? "").trim().toLowerCase() === target);
+  return found ?? null;
+}
+
+async function createBrand(args: { storeHash: string; token: string; name: string }): Promise<any | null> {
+  const url = `${bcBaseUrl(args.storeHash)}/catalog/brands`;
+  const payload = { name: args.name.trim() };
+
+  const res = await safeFetch(url, {
+    method: "POST",
+    headers: headers(args.token),
+    body: JSON.stringify(payload),
+    timeoutMs: 15_000,
+  });
+
+  const text = await res.text().catch(() => "");
+  const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+
+  if (!res.ok) return null;
+  return body?.data ?? null;
+}
+
+async function resolveBrandIdBestEffort(args: { storeHash: string; token: string; brandName?: string | null }): Promise<number | null> {
+  const name = String(args.brandName ?? "").trim();
+  if (!name) return null;
+
+  const existing = await findBrandByName({ storeHash: args.storeHash, token: args.token, name });
+  if (existing?.id != null) return Number(existing.id);
+
+  const created = await createBrand({ storeHash: args.storeHash, token: args.token, name });
+  if (created?.id != null) return Number(created.id);
+
+  return null;
+}
+
+/* ---------- Category helpers (best-effort validate IDs) ---------- */
+
+async function fetchCategoryById(args: { storeHash: string; token: string; id: number }): Promise<boolean> {
+  const url = `${bcBaseUrl(args.storeHash)}/catalog/categories/${args.id}`;
+  const res = await safeFetch(url, {
+    method: "GET",
+    headers: headers(args.token),
+    timeoutMs: 12_000,
+  });
+  // If 200 => exists, else not
+  return res.ok;
+}
+
+async function normalizeCategoryIdsBestEffort(args: {
+  storeHash: string;
+  token: string;
+  categoryIds?: Array<number | string> | null;
+}): Promise<number[]> {
+  const raw = args.categoryIds;
+  if (!Array.isArray(raw) || !raw.length) return [];
+
+  const parsed = raw
+    .map((v) => parseNumberCandidate(v))
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    .map((v) => Math.trunc(v))
+    .filter((v) => v > 0);
+
+  // Validate existence best-effort; skip invalids
+  const out: number[] = [];
+  for (const id of parsed) {
+    try {
+      const ok = await fetchCategoryById({ storeHash: args.storeHash, token: args.token, id });
+      if (ok) out.push(id);
+    } catch {
+      // ignore validation errors; treat as non-existent
+    }
+  }
+  return out;
+}
+
+/* ---------- Product helpers ---------- */
+
 export async function findProductBySku(args: { creds: BigCommerceCredentials; sku: string }) {
   const storeHash = (args.creds.storeHash ?? args.creds.store_hash) as string;
   const token = (args.creds.accessToken ?? args.creds.access_token) as string;
@@ -105,55 +231,7 @@ export async function findProductBySku(args: { creds: BigCommerceCredentials; sk
   return exact ?? null;
 }
 
-function parseNumberCandidate(v: any): number | null {
-  if (v == null) return null;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const s = v.trim().replace(/^\$/, "");
-    if (!s) return null;
-    const n = Number.parseFloat(s);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
-function normalizeCustomUrlPath(input: any): string | null {
-  if (typeof input !== "string") return null;
-  const s = input.trim();
-  if (!s) return null;
-
-  // Accept:
-  // - "my-slug"
-  // - "/my-slug"
-  // - "/my-slug/"
-  // - "https://domain.com/my-slug"
-  try {
-    if (s.startsWith("http://") || s.startsWith("https://")) {
-      const u = new URL(s);
-      const p = u.pathname || "/";
-      return p.startsWith("/") ? p : `/${p}`;
-    }
-  } catch {
-    // ignore
-  }
-
-  // If it looks like a slug, make it a path
-  const path = s.startsWith("/") ? s : `/${s}`;
-  return path.endsWith("/") ? path : `${path}/`;
-}
-
-function normalizeImageUrls(normalized: any): string[] {
-  const imgs = normalized?.images;
-  if (!Array.isArray(imgs)) return [];
-  const out: string[] = [];
-  for (const it of imgs) {
-    const u = typeof it === "string" ? it : it?.url;
-    if (typeof u === "string" && u.trim()) out.push(u.trim());
-  }
-  return out;
-}
-
-export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
+export function buildProductPayloadFromIngestion(row: any, sku: string | null, resolved?: { brand_id?: number | null; categories?: number[] }) {
   const normalized = row?.normalized_payload ?? {};
   const seo = row?.seo_payload ?? {};
   const description_html = row?.description_html ?? null;
@@ -165,19 +243,18 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
         ? seo.h1.trim()
         : "New Product";
 
-  // PRICE (required by BigCommerce) — prefer normalized fields; otherwise default to 1 (per your instruction).
+  // Price (required): prefer normalized; fallback to 1
   const priceCandidate =
     parseNumberCandidate(normalized?.price) ??
     parseNumberCandidate(normalized?.msrp) ??
     parseNumberCandidate(normalized?.specs?.price) ??
     parseNumberCandidate(normalized?.specs?.msrp);
 
-  // WEIGHT — prefer normalized fields; fallback to 1.
+  // Weight: prefer normalized; fallback to 1
   const weightCandidate =
     parseNumberCandidate(normalized?.weight) ??
     parseNumberCandidate(normalized?.specs?.weight) ??
-    parseNumberCandidate(normalized?.shipping?.weight) ??
-    parseNumberCandidate(normalized?.specifications?.weight);
+    parseNumberCandidate(normalized?.shipping?.weight);
 
   const payload: any = {
     name,
@@ -193,42 +270,17 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
     ].filter((x) => x.value),
   };
 
-  // SEO
+  // Images
+  const imageUrls = normalizeImageUrls(normalized);
+  if (imageUrls.length) payload.images = imageUrls.map((url) => ({ image_url: url }));
+
+  // SEO metadata
   if (typeof seo?.pageTitle === "string" && seo.pageTitle.trim()) payload.page_title = seo.pageTitle.trim();
   if (typeof seo?.metaDescription === "string" && seo.metaDescription.trim()) payload.meta_description = seo.metaDescription.trim();
 
-  // CUSTOM URL (only if your pipeline generated it)
-  // We support multiple possible keys to reduce breakage.
-  const customUrlCandidate =
-    normalizeCustomUrlPath(seo?.custom_url) ??
-    normalizeCustomUrlPath(seo?.customUrl) ??
-    normalizeCustomUrlPath(seo?.slug) ??
-    normalizeCustomUrlPath(normalized?.slug) ??
-    normalizeCustomUrlPath(normalized?.url_slug) ??
-    normalizeCustomUrlPath(normalized?.custom_url);
-
-  if (customUrlCandidate) {
-    payload.custom_url = { url: customUrlCandidate, is_customized: true };
-  }
-
-  // IMAGES
-  const imageUrls = normalizeImageUrls(normalized);
-  if (imageUrls.length) {
-    payload.images = imageUrls.map((url) => ({ image_url: url }));
-  }
-
-  // BRAND + CATEGORIES (ONLY if explicit numeric IDs exist; no guessing / no creation here)
-  const brandId = parseNumberCandidate(normalized?.brand_id ?? normalized?.brandId);
-  if (brandId != null) payload.brand_id = Math.trunc(brandId);
-
-  const categoriesRaw = normalized?.category_ids ?? normalized?.categories ?? null;
-  if (Array.isArray(categoriesRaw)) {
-    const catIds = categoriesRaw
-      .map((v) => parseNumberCandidate(v))
-      .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
-      .map((v) => Math.trunc(v));
-    if (catIds.length) payload.categories = catIds;
-  }
+  // Apply optional resolved brand/category IDs (NO hallucination)
+  if (resolved?.brand_id != null) payload.brand_id = Math.trunc(resolved.brand_id);
+  if (Array.isArray(resolved?.categories) && resolved!.categories.length) payload.categories = resolved!.categories;
 
   return payload;
 }
@@ -268,6 +320,20 @@ export async function importToBigCommerce(args: {
     }
   }
 
+  // Resolve optional brand/categories best-effort (do not block import)
+  let resolvedBrandId: number | null = null;
+  let resolvedCategoryIds: number[] = [];
+  try {
+    resolvedBrandId = await resolveBrandIdBestEffort({ storeHash, token, brandName: args.opts?.brand_name ?? null });
+  } catch {
+    // ignore
+  }
+  try {
+    resolvedCategoryIds = await normalizeCategoryIdsBestEffort({ storeHash, token, categoryIds: args.opts?.category_ids ?? null });
+  } catch {
+    // ignore
+  }
+
   if (existing && !allowOverwriteExisting) {
     return {
       ok: true,
@@ -283,7 +349,10 @@ export async function importToBigCommerce(args: {
 
   if (existing && allowOverwriteExisting) {
     const updateUrl = `${bcBaseUrl(storeHash)}/catalog/products/${existing.id}`;
-    const updatePayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
+    const updatePayload = buildProductPayloadFromIngestion(args.ingestionRow, sku, {
+      brand_id: resolvedBrandId,
+      categories: resolvedCategoryIds,
+    });
 
     try {
       const res = await safeFetch(updateUrl, {
@@ -334,7 +403,10 @@ export async function importToBigCommerce(args: {
 
   // Create new product
   const createUrl = `${bcBaseUrl(storeHash)}/catalog/products`;
-  const createPayload = buildProductPayloadFromIngestion(args.ingestionRow, sku);
+  const createPayload = buildProductPayloadFromIngestion(args.ingestionRow, sku, {
+    brand_id: resolvedBrandId,
+    categories: resolvedCategoryIds,
+  });
 
   try {
     const res = await safeFetch(createUrl, {
