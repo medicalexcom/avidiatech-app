@@ -56,7 +56,6 @@ type BulkItem = { input_url: string; metadata: Record<string, any> };
 type ToastTone = "info" | "success" | "error" | "warn";
 type Toast = { id: string; tone: ToastTone; message: string };
 
-
 const SEO_ONLY_STEPS = ["extract", "seo"] as const;
 const FULL_STEPS = ["extract", "seo", "audit", "import", "monitor", "price"] as const;
 
@@ -111,7 +110,6 @@ function statusPillTone(status?: string | null) {
   if (s === "queued" || s === "pending") return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
-
 
 function Spinner({ className }: { className?: string }) {
   return (
@@ -280,7 +278,6 @@ export default function AvidiaSeoPage() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, ttlMs);
   }
-
 
   // Debug / polling state
   const [rawIngestResponse, setRawIngestResponse] = useState<any | null>(null);
@@ -706,7 +703,6 @@ export default function AvidiaSeoPage() {
     !generating &&
     ((sourceMode === "url" && urlInput.trim().length > 0) || (sourceMode === "ingestion" && ingestionIdInput.trim().length > 0));
 
-
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const isEnter = e.key === "Enter";
@@ -813,13 +809,17 @@ export default function AvidiaSeoPage() {
         body: JSON.stringify({ name, pasted: bulkText }),
       });
       const j = await res.json().catch(() => null);
-      if (!res.ok || !j?.bulkJobId) {
+
+      const bulkJobIdFromResponse = j?.bulkJobId ?? j?.data?.bulkJobId;
+
+      if (!res.ok || !bulkJobIdFromResponse) {
         throw new Error(j?.error || j?.message || `Bulk create failed: ${res?.status}`);
       }
-      setBulkJobId(String(j.bulkJobId));
+
+      setBulkJobId(String(bulkJobIdFromResponse));
       pushToast("Bulk job created", "success");
       // Navigate to bulk dashboard (existing page) with the id as param for operator convenience
-      router.push(`/dashboard/bulk?bulkJobId=${encodeURIComponent(String(j.bulkJobId))}`);
+      router.push(`/dashboard/bulk?bulkJobId=${encodeURIComponent(String(bulkJobIdFromResponse))}`);
     } catch (err: any) {
       const msg = String(err?.message || err);
       setBulkError(msg);
