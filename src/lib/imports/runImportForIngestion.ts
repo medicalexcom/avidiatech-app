@@ -6,6 +6,9 @@ export async function runImportForIngestion(args: {
   ingestionId: string;
   platform?: "bigcommerce";
   allowOverwriteExisting?: boolean;
+  // NEW: pass-through import options (best-effort)
+  brand_name?: string | null;
+  category_ids?: Array<number | string> | null;
 }) {
   const supabase = getServiceSupabaseClient();
 
@@ -34,7 +37,13 @@ export async function runImportForIngestion(args: {
   const result = await importToBigCommerce({
     creds: { store_hash: storeHash, access_token: token },
     ingestionRow: ingestion,
-    opts: { allowOverwriteExisting: Boolean(args.allowOverwriteExisting) },
+    opts: {
+      allowOverwriteExisting: Boolean(args.allowOverwriteExisting),
+
+      // NEW: optional operator guidance (do not block import)
+      brand_name: args.brand_name ?? null,
+      category_ids: args.category_ids ?? null,
+    },
   });
 
   const finishedAt = new Date().toISOString();
