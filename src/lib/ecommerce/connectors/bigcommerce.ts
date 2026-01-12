@@ -105,7 +105,7 @@ export async function findProductBySku(args: { creds: BigCommerceCredentials; sk
   return exact ?? null;
 }
 
-function parsePriceCandidate(v: any): number | null {
+function parseNumberCandidate(v: any): number | null {
   if (v == null) return null;
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
@@ -117,6 +117,42 @@ function parsePriceCandidate(v: any): number | null {
   return null;
 }
 
+function normalizeCustomUrlPath(input: any): string | null {
+  if (typeof input !== "string") return null;
+  const s = input.trim();
+  if (!s) return null;
+
+  // Accept:
+  // - "my-slug"
+  // - "/my-slug"
+  // - "/my-slug/"
+  // - "https://domain.com/my-slug"
+  try {
+    if (s.startsWith("http://") || s.startsWith("https://")) {
+      const u = new URL(s);
+      const p = u.pathname || "/";
+      return p.startsWith("/") ? p : `/${p}`;
+    }
+  } catch {
+    // ignore
+  }
+
+  // If it looks like a slug, make it a path
+  const path = s.startsWith("/") ? s : `/${s}`;
+  return path.endsWith("/") ? path : `${path}/`;
+}
+
+function normalizeImageUrls(normalized: any): string[] {
+  const imgs = normalized?.images;
+  if (!Array.isArray(imgs)) return [];
+  const out: string[] = [];
+  for (const it of imgs) {
+    const u = typeof it === "string" ? it : it?.url;
+    if (typeof u === "string" && u.trim()) out.push(u.trim());
+  }
+  return out;
+}
+
 export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
   const normalized = row?.normalized_payload ?? {};
   const seo = row?.seo_payload ?? {};
@@ -126,21 +162,27 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
     typeof normalized?.name === "string" && normalized.name.trim()
       ? normalized.name.trim()
       : typeof seo?.h1 === "string" && seo.h1.trim()
-      ? seo.h1.trim()
-      : "New Product";
+        ? seo.h1.trim()
+        : "New Product";
 
-  // BigCommerce requires "price" for product creation.
-  // Prefer normalized payload price fields; otherwise default to 1.
+  // PRICE (required by BigCommerce) — prefer normalized fields; otherwise default to 1 (per your instruction).
   const priceCandidate =
-    parsePriceCandidate(normalized?.price) ??
-    parsePriceCandidate(normalized?.msrp) ??
-    parsePriceCandidate(normalized?.specs?.price) ??
-    parsePriceCandidate(normalized?.specs?.msrp);
+    parseNumberCandidate(normalized?.price) ??
+    parseNumberCandidate(normalized?.msrp) ??
+    parseNumberCandidate(normalized?.specs?.price) ??
+    parseNumberCandidate(normalized?.specs?.msrp);
+
+  // WEIGHT — prefer normalized fields; fallback to 1.
+  const weightCandidate =
+    parseNumberCandidate(normalized?.weight) ??
+    parseNumberCandidate(normalized?.specs?.weight) ??
+    parseNumberCandidate(normalized?.shipping?.weight) ??
+    parseNumberCandidate(normalized?.specifications?.weight);
 
   const payload: any = {
     name,
     type: "physical",
-    weight: 1,
+    weight: weightCandidate ?? 1,
     price: priceCandidate ?? 1,
     description: typeof description_html === "string" ? description_html : "",
     sku: sku || undefined,
@@ -151,8 +193,42 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
     ].filter((x) => x.value),
   };
 
+  // SEO
   if (typeof seo?.pageTitle === "string" && seo.pageTitle.trim()) payload.page_title = seo.pageTitle.trim();
   if (typeof seo?.metaDescription === "string" && seo.metaDescription.trim()) payload.meta_description = seo.metaDescription.trim();
+
+  // CUSTOM URL (only if your pipeline generated it)
+  // We support multiple possible keys to reduce breakage.
+  const customUrlCandidate =
+    normalizeCustomUrlPath(seo?.custom_url) ??
+    normalizeCustomUrlPath(seo?.customUrl) ??
+    normalizeCustomUrlPath(seo?.slug) ??
+    normalizeCustomUrlPath(normalized?.slug) ??
+    normalizeCustomUrlPath(normalized?.url_slug) ??
+    normalizeCustomUrlPath(normalized?.custom_url);
+
+  if (customUrlCandidate) {
+    payload.custom_url = { url: customUrlCandidate, is_customized: true };
+  }
+
+  // IMAGES
+  const imageUrls = normalizeImageUrls(normalized);
+  if (imageUrls.length) {
+    payload.images = imageUrls.map((url) => ({ image_url: url }));
+  }
+
+  // BRAND + CATEGORIES (ONLY if explicit numeric IDs exist; no guessing / no creation here)
+  const brandId = parseNumberCandidate(normalized?.brand_id ?? normalized?.brandId);
+  if (brandId != null) payload.brand_id = Math.trunc(brandId);
+
+  const categoriesRaw = normalized?.category_ids ?? normalized?.categories ?? null;
+  if (Array.isArray(categoriesRaw)) {
+    const catIds = categoriesRaw
+      .map((v) => parseNumberCandidate(v))
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+      .map((v) => Math.trunc(v));
+    if (catIds.length) payload.categories = catIds;
+  }
 
   return payload;
 }
