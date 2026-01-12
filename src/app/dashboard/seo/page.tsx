@@ -300,6 +300,9 @@ export default function AvidiaSeoPage() {
   const [preRunModalOpen, setPreRunModalOpen] = useState(false);
   const [preRunTarget, setPreRunTarget] = useState<"single" | "bulk" | null>(null);
 
+  // NEW: persist import defaults between sessions
+  const [saveImportDefaults, setSaveImportDefaults] = useState<boolean>(false);
+
   function currentImportOptions() {
     const brand = importBrandName.trim();
     const cats = parseCategoryIds(importCategoryIdsText);
@@ -310,6 +313,17 @@ export default function AvidiaSeoPage() {
   }
 
   async function confirmPreRun() {
+    // Persist import defaults if user requested
+    try {
+      const opts = currentImportOptions();
+      if (saveImportDefaults) {
+        localStorage.setItem("seoImportDefaults", JSON.stringify(opts));
+      } else {
+        localStorage.removeItem("seoImportDefaults");
+      }
+    } catch {
+      // ignore storage errors
+    }
     const target = preRunTarget;
     setPreRunModalOpen(false);
     setPreRunTarget(null);
@@ -341,9 +355,34 @@ export default function AvidiaSeoPage() {
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkCsvName, setBulkCsvName] = useState<string | null>(null);
 
+  // NEW: optionally remove duplicate URLs from bulk jobs
+  const [dedupeBulk, setDedupeBulk] = useState<boolean>(false);
+
   useEffect(() => {
     if (pipelineRunIdParam) setPipelineRunId(pipelineRunIdParam);
   }, [pipelineRunIdParam]);
+
+  // Load persisted import defaults on first render (brand name and category IDs)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("seoImportDefaults");
+      if (stored) {
+        const parsed: any = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          if (typeof parsed.brand_name === "string") {
+            setImportBrandName(parsed.brand_name);
+            setSaveImportDefaults(true);
+          }
+          if (Array.isArray(parsed.category_ids) && parsed.category_ids.length > 0) {
+            setImportCategoryIdsText(parsed.category_ids.join(", "));
+            setSaveImportDefaults(true);
+          }
+        }
+      }
+    } catch {
+      // ignore JSON or storage errors
+    }
+  }, []);
 
   useEffect(() => {
     // Keep UI sensible when page loads with params.
@@ -695,6 +734,33 @@ export default function AvidiaSeoPage() {
     }
   }, [descriptionHtml, searchTerm]);
 
+  // NEW: Preview category ID tokens and classify as valid or invalid
+  const categoryIdPreview = useMemo(() => {
+    const raw = (importCategoryIdsText || "").trim();
+    if (!raw) return [] as Array<{ value: string; valid: boolean }>;
+    const parts = raw.split(/[,\s]+/g).filter((t) => t.length > 0);
+    return parts.map((tok) => {
+      const n = parseInt(tok, 10);
+      return { value: tok, valid: Number.isFinite(n) && n > 0 };
+    });
+  }, [importCategoryIdsText]);
+
+  // NEW: compute unique domain count for current bulk preview
+  const bulkDomainStats = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of bulkPreview || []) {
+      const u = (it.input_url || "").trim();
+      if (!u) continue;
+      try {
+        const hostname = new URL(u).hostname;
+        set.add(hostname);
+      } catch {
+        // ignore malformed URLs
+      }
+    }
+    return { domains: set.size };
+  }, [bulkPreview]);
+
   const knownSeoKeys = [
     "h1",
     "pageTitle",
@@ -785,7 +851,18 @@ export default function AvidiaSeoPage() {
   /* ---------------- Bulk helpers ---------------- */
   function previewBulk() {
     try {
-      const items = parseBulkText(bulkText);
+      let items = parseBulkText(bulkText);
+      // If dedupeBulk is enabled, remove duplicate URLs
+      if (dedupeBulk) {
+        const seen = new Set<string>();
+        items = items.filter((it) => {
+          const key = (it.input_url || "").trim();
+          if (!key) return false;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
       setBulkPreview(items);
       setBulkError(null);
     } catch (e: any) {
@@ -864,12 +941,34 @@ export default function AvidiaSeoPage() {
       // basic validation
       if (!bulkText.trim()) throw new Error("Paste at least one URL");
       const name = bulkName.trim() || `bulk-${new Date().toISOString()}`;
+      // Build pasted body; dedupe lines if toggled
+      let pastedToSend: string = bulkText;
+      if (dedupeBulk) {
+        try {
+          const items = parseBulkText(bulkText);
+          const seenLines = new Set<string>();
+          const outLines: string[] = [];
+          for (const it of items) {
+            const url = (it.input_url || "").trim();
+            if (!url || seenLines.has(url)) continue;
+            seenLines.add(url);
+            const line =
+              it.metadata && typeof it.metadata.price !== "undefined"
+                ? `${url}, ${it.metadata.price}`
+                : url;
+            outLines.push(line);
+          }
+          pastedToSend = outLines.join("\n");
+        } catch {
+          pastedToSend = bulkText;
+        }
+      }
       const res = await fetch("/api/v1/bulk", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           name,
-          pasted: bulkText,
+          pasted: pastedToSend,
           // NEW: pass options through so bulk processing can use them later
           options: {
             mode: "full",
@@ -943,7 +1042,37 @@ export default function AvidiaSeoPage() {
                 <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                   IDs only. Invalid or non-existent category IDs will be ignored (best-effort).
                 </div>
+                {/* Show parsed category tokens as chips */}
+                {categoryIdPreview.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {categoryIdPreview.map((it, idx) => (
+                      <span
+                        key={idx}
+                        className={
+                          it.valid
+                            ? "rounded-full bg-emerald-200/50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                            : "rounded-full bg-rose-200/50 px-2 py-0.5 text-xs font-medium text-rose-800 dark:bg-rose-900/40 dark:text-rose-200"
+                        }
+                      >
+                        {it.value}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
+            </div>
+            {/* Option to save import inputs as defaults */}
+            <div className="mt-4 flex items-center gap-2">
+              <input
+                id="save-import-defaults"
+                type="checkbox"
+                checked={saveImportDefaults}
+                onChange={(e) => setSaveImportDefaults(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <label htmlFor="save-import-defaults" className="text-xs text-slate-600 dark:text-slate-300">
+                Save as default for future runs
+              </label>
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-2">
@@ -1366,6 +1495,20 @@ export default function AvidiaSeoPage() {
                           className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
                         />
 
+                        {/* Toggle to dedupe URLs */}
+                        <div className="mt-3 flex items-center gap-2">
+                          <input
+                            id="dedupe-bulk"
+                            type="checkbox"
+                            checked={dedupeBulk}
+                            onChange={(e) => setDedupeBulk(e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-800"
+                          />
+                          <label htmlFor="dedupe-bulk" className="text-xs text-slate-600 dark:text-slate-300">
+                            Remove duplicate URLs
+                          </label>
+                        </div>
+
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             className="inline-flex items-center justify-center rounded-2xl bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-[1.05]"
@@ -1412,6 +1555,9 @@ export default function AvidiaSeoPage() {
                           </span>
                           <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
                             Deduped: <span className="font-semibold">{bulkStats.deduped}</span>
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-white/60 px-2 py-1 text-slate-700 dark:border-slate-800 dark:bg-slate-950/30 dark:text-slate-200">
+                            Domains: <span className="font-semibold">{bulkDomainStats.domains}</span>
                           </span>
                         </div>
 
