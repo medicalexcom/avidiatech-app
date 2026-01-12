@@ -122,6 +122,12 @@ function normalizeWarranty(row: any): string | null {
   );
 }
 
+function normalizeH1Strict(row: any): string | null {
+  const seo = row?.seo_payload ?? {};
+  const h1 = typeof seo?.h1 === "string" ? seo.h1.trim() : "";
+  return h1 || null;
+}
+
 /* ---------- Brand helpers (best-effort find or create) ---------- */
 
 async function findBrandByName(args: { storeHash: string; token: string; name: string }): Promise<any | null> {
@@ -135,7 +141,13 @@ async function findBrandByName(args: { storeHash: string; token: string; name: s
   });
 
   const text = await res.text().catch(() => "");
-  const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+  const body = text ? (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  })() : null;
 
   if (!res.ok) {
     // best-effort: don't throw (brand is optional)
@@ -160,7 +172,13 @@ async function createBrand(args: { storeHash: string; token: string; name: strin
   });
 
   const text = await res.text().catch(() => "");
-  const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+  const body = text ? (() => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  })() : null;
 
   if (!res.ok) return null;
   return body?.data ?? null;
@@ -262,12 +280,10 @@ export function buildProductPayloadFromIngestion(
   const seo = row?.seo_payload ?? {};
   const description_html = row?.description_html ?? null;
 
-  const name =
-    typeof normalized?.name === "string" && normalized.name.trim()
-      ? normalized.name.trim()
-      : typeof seo?.h1 === "string" && seo.h1.trim()
-        ? seo.h1.trim()
-        : "New Product";
+  // REQUIREMENT: Product name must equal H1 (no fallback).
+  // To avoid throwing (per request), we don't throw here; the caller will return ok:false.
+  const h1 = normalizeH1Strict(row);
+  const name = h1 || ""; // allow caller to detect missing name and fail structured
 
   // Price (required): prefer normalized; fallback to 1
   const priceCandidate =
@@ -294,10 +310,10 @@ export function buildProductPayloadFromIngestion(
     // NOTE: custom_fields intentionally removed (do not sync Avidia metadata to the store)
   };
 
-  // Images (+ required image description == Product name or H1)
+  // Images (+ required image description == Product name/H1)
   const imageUrls = normalizeImageUrls(normalized);
   if (imageUrls.length) {
-    payload.images = imageUrls.map((url) => ({ image_url: url, description: name }));
+    payload.images = imageUrls.map((url) => ({ image_url: url, description: name || undefined }));
   }
 
   // Warranty
@@ -364,6 +380,40 @@ export async function importToBigCommerce(args: {
     // ignore
   }
 
+  // Build payload + enforce H1 requirement WITHOUT throwing (structured failure)
+  let payload: any;
+  try {
+    payload = buildProductPayloadFromIngestion(args.ingestionRow, sku, {
+      brand_id: resolvedBrandId,
+      categories: resolvedCategoryIds,
+    });
+  } catch (e: any) {
+    return {
+      ok: false,
+      platform: "bigcommerce",
+      action: "failed",
+      sku,
+      warnings,
+      reason: "bigcommerce_payload_build_exception",
+      error: { message: String(e?.message ?? e) },
+    };
+  }
+
+  if (!payload?.name || typeof payload.name !== "string" || !payload.name.trim()) {
+    return {
+      ok: false,
+      platform: "bigcommerce",
+      action: "failed",
+      sku,
+      warnings,
+      reason: "bigcommerce_missing_required_h1",
+      error: {
+        message: "Missing required SEO H1 (product name must equal H1; no fallback).",
+        seo_h1: args.ingestionRow?.seo_payload?.h1 ?? null,
+      },
+    };
+  }
+
   if (existing && !allowOverwriteExisting) {
     return {
       ok: true,
@@ -379,21 +429,25 @@ export async function importToBigCommerce(args: {
 
   if (existing && allowOverwriteExisting) {
     const updateUrl = `${bcBaseUrl(storeHash)}/catalog/products/${existing.id}`;
-    const updatePayload = buildProductPayloadFromIngestion(args.ingestionRow, sku, {
-      brand_id: resolvedBrandId,
-      categories: resolvedCategoryIds,
-    });
 
     try {
       const res = await safeFetch(updateUrl, {
         method: "PUT",
         headers: headers(token),
-        body: JSON.stringify(updatePayload),
+        body: JSON.stringify(payload),
         timeoutMs: 15_000,
       });
 
       const text = await res.text().catch(() => "");
-      const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+      const body = text
+        ? (() => {
+            try {
+              return JSON.parse(text);
+            } catch {
+              return text;
+            }
+          })()
+        : null;
 
       if (!res.ok) {
         // return structured failure instead of throwing
@@ -433,21 +487,25 @@ export async function importToBigCommerce(args: {
 
   // Create new product
   const createUrl = `${bcBaseUrl(storeHash)}/catalog/products`;
-  const createPayload = buildProductPayloadFromIngestion(args.ingestionRow, sku, {
-    brand_id: resolvedBrandId,
-    categories: resolvedCategoryIds,
-  });
 
   try {
     const res = await safeFetch(createUrl, {
       method: "POST",
       headers: headers(token),
-      body: JSON.stringify(createPayload),
+      body: JSON.stringify(payload),
       timeoutMs: 15_000,
     });
 
     const text = await res.text().catch(() => "");
-    const body = text ? (() => { try { return JSON.parse(text); } catch { return text; } })() : null;
+    const body = text
+      ? (() => {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return text;
+          }
+        })()
+      : null;
 
     if (!res.ok) {
       return {
@@ -474,7 +532,7 @@ export async function importToBigCommerce(args: {
   } catch (e: any) {
     return {
       ok: false,
-     platform: "bigcommerce",
+      platform: "bigcommerce",
       action: "failed",
       sku,
       warnings,
