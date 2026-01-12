@@ -1,5 +1,5 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
-import { decryptJson } from "@/lib/ecommerce/crypto";
+import { decryptSecrets } from "@/lib/integrations/encryption";
 
 export type EcommercePlatform = "bigcommerce" | "shopify" | "woocommerce" | "magento" | "squarespace";
 
@@ -30,7 +30,11 @@ export async function getActiveConnectionForTenant(args: {
   if (error) throw new Error(`connection_load_failed: ${error.message}`);
   if (!data) throw new Error("connection_not_found");
 
-  const secrets = decryptJson((data as any).secrets_enc);
+  const secretsEnc = (data as any).secrets_enc as string | null;
+
+  // secrets_enc for ecommerce_connections is written by encryptSecrets()
+  // which produces a single base64 blob (iv||tag||ciphertext), not dot-separated segments.
+  const secrets = secretsEnc ? decryptSecrets(secretsEnc) : {};
 
   return {
     id: data.id,
