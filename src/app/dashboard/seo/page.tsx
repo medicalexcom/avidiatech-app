@@ -241,6 +241,18 @@ function csvToBulkText(csv: string): string {
   return lines.join("\n");
 }
 
+
+function parseCategoryIds(input: string): number[] {
+  const s = (input || "").trim();
+  if (!s) return [];
+  return s
+    .split(/[,\s]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => Number.parseInt(x, 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
 /* ----------------- Component ----------------- */
 export default function AvidiaSeoPage() {
   const params = useSearchParams();
@@ -277,6 +289,39 @@ export default function AvidiaSeoPage() {
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, ttlMs);
+  }
+
+
+  // NEW: optional operator inputs for import guidance (best-effort)
+  const [importBrandName, setImportBrandName] = useState<string>("");
+  const [importCategoryIdsText, setImportCategoryIdsText] = useState<string>("");
+
+  // NEW: run confirmation modal
+  const [preRunModalOpen, setPreRunModalOpen] = useState(false);
+  const [preRunTarget, setPreRunTarget] = useState<"single" | "bulk" | null>(null);
+
+  function currentImportOptions() {
+    const brand = importBrandName.trim();
+    const cats = parseCategoryIds(importCategoryIdsText);
+    return {
+      brand_name: brand || null,
+      category_ids: cats.length ? cats : null,
+    };
+  }
+
+  async function confirmPreRun() {
+    const target = preRunTarget;
+    setPreRunModalOpen(false);
+    setPreRunTarget(null);
+
+    if (target === "single") {
+      await runNowImpl();
+      return;
+    }
+    if (target === "bulk") {
+      await createBulkImpl();
+      return;
+    }
   }
 
   // Debug / polling state
@@ -445,6 +490,7 @@ export default function AvidiaSeoPage() {
 
   async function startPipelineRun(forIngestionId: string, mode: RunMode) {
     const steps = mode === "seo" ? SEO_ONLY_STEPS : FULL_STEPS;
+    const importOptions = currentImportOptions();
 
     setStatusMessage("Starting pipeline");
     const res = await fetch("/api/v1/pipeline/run", {
@@ -454,7 +500,9 @@ export default function AvidiaSeoPage() {
         ingestionId: forIngestionId,
         triggerModule: "seo",
         steps,
-        options: {},
+        options: {
+          import: importOptions,
+        },
       }),
     });
 
@@ -529,6 +577,13 @@ export default function AvidiaSeoPage() {
   }
 
   async function runNow() {
+    // show modal (optional guidance) then proceed
+    if (generating) return;
+    setPreRunTarget("single");
+    setPreRunModalOpen(true);
+  }
+
+  async function runNowImpl() {
     if (generating) return;
 
     setGenerating(true);
@@ -795,6 +850,12 @@ export default function AvidiaSeoPage() {
 
   async function createBulk() {
     if (bulkCreating) return;
+    setPreRunTarget("bulk");
+    setPreRunModalOpen(true);
+  }
+
+  async function createBulkImpl() {
+    if (bulkCreating) return;
     setBulkCreating(true);
     setBulkError(null);
     setBulkJobId(null);
@@ -806,7 +867,15 @@ export default function AvidiaSeoPage() {
       const res = await fetch("/api/v1/bulk", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, pasted: bulkText }),
+        body: JSON.stringify({
+          name,
+          pasted: bulkText,
+          // NEW: pass options through so bulk processing can use them later
+          options: {
+            mode: "full",
+            import: currentImportOptions(),
+          },
+        }),
       });
       const j = await res.json().catch(() => null);
 
@@ -832,6 +901,73 @@ export default function AvidiaSeoPage() {
   /* ---------------- Layout ---------------- */
   return (
     <main className="relative min-h-[calc(100vh-64px)]">
+
+      {/* Pre-run modal */}
+      {preRunModalOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              setPreRunModalOpen(false);
+              setPreRunTarget(null);
+            }}
+          />
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-slate-950">
+            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import guidance (optional)</div>
+            <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              These values help map products into your BigCommerce catalog. Leave blank to continue without them.
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Brand name (optional)</label>
+                <input
+                  value={importBrandName}
+                  onChange={(e) => setImportBrandName(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                  placeholder="e.g. McKesson"
+                />
+                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  If brand exists (case-insensitive exact match), it will be used. Otherwise, it will be created.
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-200">Category IDs (optional)</label>
+                <input
+                  value={importCategoryIdsText}
+                  onChange={(e) => setImportCategoryIdsText(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-sky-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-100"
+                  placeholder="e.g. 12, 34, 56"
+                />
+                <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  IDs only. Invalid or non-existent category IDs will be ignored (best-effort).
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200"
+                onClick={() => {
+                  setPreRunModalOpen(false);
+                  setPreRunTarget(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-2xl bg-gradient-to-r from-sky-600 via-emerald-600 to-amber-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-[1.05]"
+                onClick={confirmPreRun}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+
       {/* Background treatment (artsy, module-gradients) */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-950" />
