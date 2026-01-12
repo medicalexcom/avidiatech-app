@@ -105,6 +105,18 @@ export async function findProductBySku(args: { creds: BigCommerceCredentials; sk
   return exact ?? null;
 }
 
+function parsePriceCandidate(v: any): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim().replace(/^\$/, "");
+    if (!s) return null;
+    const n = Number.parseFloat(s);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
   const normalized = row?.normalized_payload ?? {};
   const seo = row?.seo_payload ?? {};
@@ -117,10 +129,19 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null) {
       ? seo.h1.trim()
       : "New Product";
 
+  // BigCommerce requires "price" for product creation.
+  // Prefer normalized payload price fields; otherwise default to 1.
+  const priceCandidate =
+    parsePriceCandidate(normalized?.price) ??
+    parsePriceCandidate(normalized?.msrp) ??
+    parsePriceCandidate(normalized?.specs?.price) ??
+    parsePriceCandidate(normalized?.specs?.msrp);
+
   const payload: any = {
     name,
     type: "physical",
     weight: 1,
+    price: priceCandidate ?? 1,
     description: typeof description_html === "string" ? description_html : "",
     sku: sku || undefined,
     is_visible: false, // safe default: keep hidden until reviewed
