@@ -100,6 +100,28 @@ function normalizeImageUrls(normalized: any): string[] {
   return out;
 }
 
+function firstString(...values: any[]): string | null {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+function normalizeWarranty(row: any): string | null {
+  // Best-effort: we only use real scraped/normalized fields; no guessing.
+  const normalized = row?.normalized_payload ?? {};
+  const specs = normalized?.specs ?? normalized?.specifications ?? {};
+
+  return firstString(
+    normalized?.warranty,
+    normalized?.warranty_information,
+    normalized?.warrantyInformation,
+    specs?.warranty,
+    specs?.warranty_information,
+    specs?.warrantyInformation
+  );
+}
+
 /* ---------- Brand helpers (best-effort find or create) ---------- */
 
 async function findBrandByName(args: { storeHash: string; token: string; name: string }): Promise<any | null> {
@@ -231,7 +253,11 @@ export async function findProductBySku(args: { creds: BigCommerceCredentials; sk
   return exact ?? null;
 }
 
-export function buildProductPayloadFromIngestion(row: any, sku: string | null, resolved?: { brand_id?: number | null; categories?: number[] }) {
+export function buildProductPayloadFromIngestion(
+  row: any,
+  sku: string | null,
+  resolved?: { brand_id?: number | null; categories?: number[] }
+) {
   const normalized = row?.normalized_payload ?? {};
   const seo = row?.seo_payload ?? {};
   const description_html = row?.description_html ?? null;
@@ -264,15 +290,19 @@ export function buildProductPayloadFromIngestion(row: any, sku: string | null, r
     description: typeof description_html === "string" ? description_html : "",
     sku: sku || undefined,
     is_visible: false, // safe default: keep hidden until reviewed
-    custom_fields: [
-      { name: "Avidia Ingestion ID", value: String(row?.id ?? "") },
-      { name: "Avidia Source URL", value: String(row?.source_url ?? "") },
-    ].filter((x) => x.value),
+
+    // NOTE: custom_fields intentionally removed (do not sync Avidia metadata to the store)
   };
 
-  // Images
+  // Images (+ required image description == Product name or H1)
   const imageUrls = normalizeImageUrls(normalized);
-  if (imageUrls.length) payload.images = imageUrls.map((url) => ({ image_url: url }));
+  if (imageUrls.length) {
+    payload.images = imageUrls.map((url) => ({ image_url: url, description: name }));
+  }
+
+  // Warranty
+  const warranty = normalizeWarranty(row);
+  if (warranty) payload.warranty = warranty;
 
   // SEO metadata
   if (typeof seo?.pageTitle === "string" && seo.pageTitle.trim()) payload.page_title = seo.pageTitle.trim();
@@ -444,7 +474,7 @@ export async function importToBigCommerce(args: {
   } catch (e: any) {
     return {
       ok: false,
-      platform: "bigcommerce",
+     platform: "bigcommerce",
       action: "failed",
       sku,
       warnings,
