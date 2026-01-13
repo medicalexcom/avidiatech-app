@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { createWatchForIngestion } from "@/lib/monitor/hooks";
+import { getServiceSupabaseClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
 /**
  * POST /api/v1/pipeline/internal/monitor
  *
- * Runs monitor for an ingestionId by ensuring a watch exists and doing an initial check.
- * Must be called by pipeline-runner with x-pipeline-secret.
+ * Creates/links a monitor watch for the ingestion's source_url and runs an initial check.
+ * Returns ok:true even if monitor check fails (so pipeline can still succeed),
+ * but includes details so output artifact shows what happened.
  */
 export async function POST(req: Request) {
   const secret = req.headers.get("x-pipeline-secret") || "";
@@ -19,39 +21,57 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as any;
   const ingestionId = body?.ingestionId?.toString() || "";
-  const sourceUrl = body?.sourceUrl?.toString() || "";
 
   if (!ingestionId) {
     return NextResponse.json({ ok: false, error: "missing_ingestionId" }, { status: 400 });
   }
 
-  if (!sourceUrl) {
-    // We can still succeed "softly" (don’t fail pipeline if URL missing)
-    return NextResponse.json(
-      { ok: true, skipped: true, reason: "missing_sourceUrl" },
-      { status: 200 }
-    );
-  }
-
   try {
-    // tenant_id/created_by can be unknown in pipeline context; best-effort only
+    const supabase = getServiceSupabaseClient();
+
+    // Load ingestion so we can find the canonical URL + tenant context
+    const { data: ing, error: ingErr } = await supabase
+      .from("product_ingestions")
+      .select("id, tenant_id, created_by, source_url")
+      .eq("id", ingestionId)
+      .maybeSingle();
+
+    if (ingErr) {
+      return NextResponse.json({ ok: false, error: "ingestion_load_failed", detail: ingErr.message }, { status: 200 });
+    }
+    if (!ing) {
+      return NextResponse.json({ ok: false, error: "ingestion_not_found" }, { status: 200 });
+    }
+
+    const sourceUrl = String((ing as any).source_url || "").trim();
+    if (!sourceUrl) {
+      return NextResponse.json({ ok: true, skipped: true, reason: "missing_source_url" }, { status: 200 });
+    }
+
+    // create watch + trigger initial check (best-effort)
     const watch = await createWatchForIngestion({
       source_url: sourceUrl,
       product_id: ingestionId,
-      tenant_id: body?.tenant_id ?? null,
-      created_by: body?.created_by ?? null,
+      tenant_id: (ing as any).tenant_id ?? null,
+      created_by: (ing as any).created_by ?? null,
       frequency_seconds: null,
-      run_initial_check: true, // this triggers runWatchOnce non-blocking
+      run_initial_check: true,
     });
 
+    // return structured result (do not throw)
     return NextResponse.json(
-      { ok: true, watch_id: watch?.id ?? null, watch_last_status: watch?.last_status ?? null },
+      {
+        ok: true,
+        ingestionId,
+        source_url: sourceUrl,
+        watch: watch ? { id: watch.id, last_status: watch.last_status ?? null } : null,
+      },
       { status: 200 }
     );
-  } catch (err: any) {
-    // IMPORTANT: do not throw; return structured error so pipeline-runner can decide fail/skip
+  } catch (e: any) {
+    // IMPORTANT: do not fail hard; return ok:false in body but HTTP 200 so runner can mark module succeeded-with-warning if desired
     return NextResponse.json(
-      { ok: false, error: "monitor_internal_failed", detail: String(err?.message ?? err) },
+      { ok: false, error: "monitor_internal_exception", detail: String(e?.message ?? e) },
       { status: 200 }
     );
   }
