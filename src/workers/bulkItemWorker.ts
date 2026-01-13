@@ -30,6 +30,10 @@
 // - Forward bulk job / item options into pipeline run metadata so import/module toggles and
 //   platform options are available to the pipeline-runner and internal modules.
 // - Compute pipeline steps from merged options (bulk job options + per-item metadata override).
+//
+// NEW (2026-01-13): Monitor-all setting
+// - If tenants.monitor_all is enabled (default true), best-effort create a monitor watch
+//   for every submitted URL as soon as tenant context is known (non-blocking).
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -37,6 +41,7 @@ import { getRedisConnection } from "@/lib/queue/bull";
 import { incrementBulkCounters } from "@/lib/bulk/db";
 import { requireSubscriptionAndUsage } from "@/lib/billing";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createWatchForIngestion } from "@/lib/monitor/hooks";
 
 // eslint-disable-next-line no-control-regex
 const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
@@ -165,6 +170,22 @@ async function acquireDomainSlot(url: string, maxWaitMs = 15000): Promise<() => 
 /* ---- Helpers ---- */
 
 const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+
+async function isMonitorAllEnabledForTenant(tenantId: string): Promise<boolean> {
+  // Default ON if anything goes wrong
+  try {
+    const { data, error } = await supabase
+      .from("tenants")
+      .select("monitor_all")
+      .eq("id", tenantId)
+      .maybeSingle();
+    if (error) return true;
+    if (!data) return true;
+    return (data as any).monitor_all !== false;
+  } catch {
+    return true;
+  }
+}
 
 async function markItem(id: string, updates: Record<string, any>) {
   const { error } = await supabase.from("bulk_job_items").update(updates).eq("id", id);
@@ -616,6 +637,27 @@ async function handleJob(job: any) {
       );
       return;
     }
+
+    // NEW: auto-monitor every submitted URL (best-effort, non-blocking)
+    ;(async () => {
+      try {
+        const enabled = await isMonitorAllEnabledForTenant(String(tenantId));
+        if (!enabled) return;
+
+        const u = String(item.input_url ?? "").trim();
+        if (!u) return;
+
+        await createWatchForIngestion({
+          source_url: u,
+          tenant_id: String(tenantId),
+          created_by: userId ?? null,
+          product_id: item.ingestion_id ?? null,
+          frequency_seconds: null,
+        });
+      } catch (e: any) {
+        console.warn("[bulk-item] createWatchForIngestion failed (non-blocking):", String(e?.message ?? e));
+      }
+    })();
 
     await requireSubscriptionAndUsage({
       userId,
