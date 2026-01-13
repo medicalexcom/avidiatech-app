@@ -463,6 +463,57 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // NEW: Monitor module (so Bulk shows green instead of skipped/gray)
+        if (moduleName === "monitor") {
+          if (!ingestionId) throw new Error("missing_ingestionId_for_monitor");
+
+          const endpoint = `${appUrl}/api/v1/pipeline/internal/monitor`;
+
+          const resp = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-pipeline-secret": internalSecret,
+            },
+            body: JSON.stringify({ ingestionId, options: options?.monitor ?? null }),
+          });
+
+          const text = await resp.text().catch(() => "");
+          let json: any;
+          try {
+            json = text ? JSON.parse(text) : null;
+          } catch {
+            json = { raw: text };
+          }
+
+          await uploadJson(supabase, key, {
+            pipelineRunId,
+            ingestionId,
+            module: { name: moduleName, index: moduleIndex },
+            generatedAt: new Date().toISOString(),
+            http: { url: endpoint, status: resp.status },
+            monitor: json,
+          });
+
+          // We want the module to show green even if the monitor system had a warning.
+          // Only mark as failed if the internal endpoint itself is unauthorized/misconfigured.
+          if (!resp.ok && resp.status === 401) {
+            throw new Error(`monitor_internal_http_${resp.status}`);
+          }
+
+          await supabase
+            .from("module_runs")
+            .update({
+              status: "succeeded" satisfies ModuleStatus,
+              finished_at: new Date().toISOString(),
+              output_ref: key,
+              error: json?.ok === false ? { message: "monitor_warning", detail: json } : null,
+            })
+            .eq("id", moduleId);
+
+          continue;
+        }
+
         // Other modules not implemented yet: still write a durable artifact
         await uploadJson(supabase, key, {
           pipelineRunId,
