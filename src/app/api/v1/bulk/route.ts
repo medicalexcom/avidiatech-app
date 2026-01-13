@@ -89,13 +89,15 @@ export async function POST(request: NextRequest) {
     }));
 
     // Create the bulk job (createBulkJob enforces non-null orgId)
+    // IMPORTANT: persist the resolved tenant into options.source_tenant so downstream modules
+    // and the UI have canonical tenant context.
     let bulkJobId: string;
     try {
       bulkJobId = await createBulkJob({
         orgId,
         name,
         createdBy,
-        options: { ...optionsFromBody, mode, source_tenant: payload?.orgId ?? null },
+        options: { ...optionsFromBody, mode, source_tenant: orgId },
         items: sanitizedItems,
       });
     } catch (err: any) {
