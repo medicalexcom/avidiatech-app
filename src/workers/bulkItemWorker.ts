@@ -34,6 +34,7 @@
 // NEW (2026-01-13): Monitor-all setting
 // - If tenants.monitor_all is enabled (default true), best-effort create a monitor watch
 //   for every submitted URL as soon as tenant context is known (non-blocking).
+// - Also best-effort run an initial check so watch last_status becomes ok/changed quickly.
 
 import { createClient } from "@supabase/supabase-js";
 import fetch from "node-fetch";
@@ -638,7 +639,7 @@ async function handleJob(job: any) {
       return;
     }
 
-    // NEW: auto-monitor every submitted URL (best-effort, non-blocking)
+    // Auto-monitor every submitted URL (best-effort, non-blocking)
     ;(async () => {
       try {
         const enabled = await isMonitorAllEnabledForTenant(String(tenantId));
@@ -653,6 +654,7 @@ async function handleJob(job: any) {
           created_by: userId ?? null,
           product_id: item.ingestion_id ?? null,
           frequency_seconds: null,
+          run_initial_check: true, // NEW
         });
       } catch (e: any) {
         console.warn("[bulk-item] createWatchForIngestion failed (non-blocking):", String(e?.message ?? e));
