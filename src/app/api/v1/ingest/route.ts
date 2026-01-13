@@ -31,6 +31,7 @@ const APP_URL =
  * Monitor changes (2026-01-13):
  * - If tenant.monitor_all is enabled (default true), best-effort create a monitor watch
  *   for every submitted URL immediately after ingestion row is created.
+ * - Also best-effort run an initial watch check so last_status becomes ok/changed quickly.
  * - This must never block ingestion (errors swallowed).
  */
 
@@ -317,17 +318,19 @@ export async function POST(req: NextRequest) {
       console.warn("failed to update job_id/diagnostics after saveIngestion", e);
     }
 
-    // NEW: best-effort monitor watch creation for every submitted URL (if enabled; default ON)
+    // Auto-monitor: create watch + run initial check (non-blocking)
     (async () => {
       try {
         const enabled = await isMonitorAllEnabledForTenant(String(tenant_id));
         if (!enabled) return;
+
         await createWatchForIngestion({
           source_url: url,
           product_id: String(ingestionId),
           tenant_id: String(tenant_id),
           created_by: userId ?? null,
           frequency_seconds: null,
+          run_initial_check: true, // NEW: makes watch status update quickly
         });
       } catch (e: any) {
         console.warn("[ingest] createWatchForIngestion failed (non-blocking):", String(e?.message ?? e));
