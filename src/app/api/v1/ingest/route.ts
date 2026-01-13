@@ -4,6 +4,7 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
 import { signPayload } from "@/lib/ingest/signature";
 import { saveIngestion } from "@/lib/supabaseServer";
 import { resolveTenantForInsert } from "@/lib/ingest/resolve-tenant";
+import { createWatchForIngestion } from "@/lib/monitor/hooks";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
@@ -26,6 +27,11 @@ const APP_URL =
  *   If tenant cannot be determined we return 422 instead of attempting an insert which triggers DB constraints.
  * - Prefer explicit tenantId in request body / pipeline payload / options.source_tenant.
  * - Fall back to profile-derived tenant only for non-internal (user) requests.
+ *
+ * Monitor changes (2026-01-13):
+ * - If tenant.monitor_all is enabled (default true), best-effort create a monitor watch
+ *   for every submitted URL immediately after ingestion row is created.
+ * - This must never block ingestion (errors swallowed).
  */
 
 function normalizeBool(v: any): boolean {
@@ -80,6 +86,19 @@ function internalAuthOk(req: NextRequest) {
   return false;
 }
 
+async function isMonitorAllEnabledForTenant(tenantId: string): Promise<boolean> {
+  // Default ON if anything goes wrong (per requirement)
+  try {
+    const svc = getServiceSupabaseClient();
+    const { data, error } = await svc.from("tenants").select("monitor_all").eq("id", tenantId).maybeSingle();
+    if (error) return true;
+    if (!data) return true;
+    return data.monitor_all !== false;
+  } catch {
+    return true;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // DEBUG: do NOT log secret. Log only header presence/length to verify request reaches handler.
@@ -132,7 +151,12 @@ export async function POST(req: NextRequest) {
     // 5) for internal requests, do NOT silently inherit profile; require explicit tenant or fallback env
     let tenant_id: string | null = null;
     const explicitTenant =
-      body?.tenantId ?? body?.tenant_id ?? body?.pipelinePayload?.tenantId ?? body?.pipeline_payload?.tenant_id ?? body?.options?.source_tenant ?? null;
+      body?.tenantId ??
+      body?.tenant_id ??
+      body?.pipelinePayload?.tenantId ??
+      body?.pipeline_payload?.tenant_id ??
+      body?.options?.source_tenant ??
+      null;
     if (explicitTenant) {
       tenant_id = String(explicitTenant);
     }
@@ -292,6 +316,23 @@ export async function POST(req: NextRequest) {
       // warn but continue
       console.warn("failed to update job_id/diagnostics after saveIngestion", e);
     }
+
+    // NEW: best-effort monitor watch creation for every submitted URL (if enabled; default ON)
+    (async () => {
+      try {
+        const enabled = await isMonitorAllEnabledForTenant(String(tenant_id));
+        if (!enabled) return;
+        await createWatchForIngestion({
+          source_url: url,
+          product_id: String(ingestionId),
+          tenant_id: String(tenant_id),
+          created_by: userId ?? null,
+          frequency_seconds: null,
+        });
+      } catch (e: any) {
+        console.warn("[ingest] createWatchForIngestion failed (non-blocking):", String(e?.message ?? e));
+      }
+    })();
 
     const payload = {
       correlation_id,
