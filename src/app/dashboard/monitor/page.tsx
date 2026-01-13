@@ -71,7 +71,6 @@ function StatCard({
         t.border
       )}
     >
-      {/* subtle top accent (per-card) */}
       <div
         className={cx(
           "pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r",
@@ -79,13 +78,11 @@ function StatCard({
         )}
       />
 
-      {/* soft wash + glows */}
       <div className={cx("pointer-events-none absolute inset-0 bg-gradient-to-br", t.wash)} />
       <div className={cx("pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl", t.glowA)} />
       <div className={cx("pointer-events-none absolute -left-10 -bottom-12 h-28 w-28 rounded-full blur-2xl", t.glowB)} />
 
       <div className="relative">
-        {/* Force single line title (shrink text slightly so it never wraps) */}
         <div className="text-[13px] font-semibold leading-none text-slate-900 dark:text-slate-50">
           <span className="block truncate whitespace-nowrap">{title}</span>
         </div>
@@ -118,7 +115,8 @@ function SoftButton({
   className?: string;
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-50 dark:focus-visible:ring-offset-slate-950";
+    "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition active:translate-y-[0.5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-[3px]";
+
   if (variant === "primary") {
     return (
       <a
@@ -164,8 +162,8 @@ function TinyChip({
     tone === "signal"
       ? "border-amber-200/60 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100"
       : tone === "success"
-      ? "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100"
-      : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
+        ? "border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100"
+        : "border-slate-200/70 bg-white/75 text-slate-600 dark:border-slate-700/70 dark:bg-slate-950/45 dark:text-slate-300";
 
   return (
     <span
@@ -179,6 +177,39 @@ function TinyChip({
   );
 }
 
+function Toggle({
+  enabled,
+  onChange,
+  disabled,
+}: {
+  enabled: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!enabled)}
+      className={cx(
+        "relative inline-flex h-6 w-11 items-center rounded-full border transition",
+        enabled
+          ? "border-emerald-300/60 bg-emerald-500/20"
+          : "border-slate-300/70 bg-slate-200/60 dark:border-slate-700/70 dark:bg-slate-900/40",
+        disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+      )}
+      aria-pressed={enabled}
+    >
+      <span
+        className={cx(
+          "inline-block h-5 w-5 transform rounded-full bg-white shadow transition",
+          enabled ? "translate-x-5" : "translate-x-1"
+        )}
+      />
+    </button>
+  );
+}
+
 export default function MonitorPage() {
   const [watches, setWatches] = useState<any[] | null>(null);
   const [events, setEvents] = useState<any[] | null>(null);
@@ -186,6 +217,55 @@ export default function MonitorPage() {
   const [notifications, setNotifications] = useState<any[] | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [lastCheckSample, setLastCheckSample] = useState<any | null>(null);
+
+  // NEW: tenant setting UI
+  const [monitorAll, setMonitorAll] = useState<boolean>(true);
+  const [monitorAllLoading, setMonitorAllLoading] = useState<boolean>(false);
+  const [monitorAllError, setMonitorAllError] = useState<string | null>(null);
+
+  async function loadTenantSettings() {
+    setMonitorAllLoading(true);
+    setMonitorAllError(null);
+    try {
+      const res = await fetch("/api/v1/tenant/settings");
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.ok) {
+        setMonitorAll(json?.settings?.monitor_all !== false);
+      } else {
+        // default ON if endpoint fails (align with server behavior)
+        setMonitorAll(true);
+        setMonitorAllError(json?.error || `settings_load_failed:${res.status}`);
+      }
+    } catch (e: any) {
+      setMonitorAll(true);
+      setMonitorAllError(String(e?.message ?? e));
+    } finally {
+      setMonitorAllLoading(false);
+    }
+  }
+
+  async function updateMonitorAll(next: boolean) {
+    setMonitorAllLoading(true);
+    setMonitorAllError(null);
+    try {
+      const res = await fetch("/api/v1/tenant/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ monitor_all: next }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        setMonitorAllError(json?.error || `settings_update_failed:${res.status}`);
+        // keep UI value unchanged on failure
+        return;
+      }
+      setMonitorAll(json?.settings?.monitor_all !== false);
+    } catch (e: any) {
+      setMonitorAllError(String(e?.message ?? e));
+    } finally {
+      setMonitorAllLoading(false);
+    }
+  }
 
   async function loadSummary() {
     setLoadingSummary(true);
@@ -223,6 +303,7 @@ export default function MonitorPage() {
   }
 
   useEffect(() => {
+    loadTenantSettings();
     loadSummary();
     const t = setInterval(() => loadSummary(), 30_000);
     return () => clearInterval(t);
@@ -311,10 +392,10 @@ export default function MonitorPage() {
         <div className="absolute -bottom-44 right-[-12rem] h-[28rem] w-[28rem] rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/14" />
         <div className="absolute top-24 right-12 h-56 w-56 rounded-full bg-emerald-300/12 blur-3xl dark:bg-emerald-500/10" />
 
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.92)_58%,_rgba(15,23,42,1)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(15,23,42,0.90)_58%,_rgba(2,6,23,1)_100%)]" />
 
         <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
-          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)]" />
+          <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#334155_1px,transparent_1px),linear-gradient(to_bottom,#334155_1px,transparent_1px)]" />
         </div>
       </div>
 
@@ -322,7 +403,7 @@ export default function MonitorPage() {
         <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm backdrop-blur dark:border-amber-400/35 dark:bg-slate-950/55 dark:text-amber-100">
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/60 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-amber-700 shadow-sm dark:border-amber-400/30 dark:bg-slate-950/55 dark:text-amber-200">
                 <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 bg-slate-100 dark:border-amber-400/35 dark:bg-slate-900">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500 dark:bg-amber-300" />
                 </span>
@@ -350,6 +431,26 @@ export default function MonitorPage() {
                 Watch product sources, detect deltas, and trigger pipelines or
                 alerts. Manage watches, rules, and notifications here.
               </p>
+            </div>
+
+            {/* NEW: tenant setting toggle */}
+            <div className="flex flex-wrap items-center gap-3">
+              <TinyChip>
+                <span className={cx("h-1.5 w-1.5 rounded-full", monitorAll ? "bg-emerald-400" : "bg-slate-400")} />
+                Auto-monitor submitted URLs
+              </TinyChip>
+
+              <Toggle enabled={monitorAll} onChange={updateMonitorAll} disabled={monitorAllLoading} />
+
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                {monitorAllLoading ? "Saving…" : monitorAll ? "ON (default)" : "OFF"}
+              </span>
+
+              {monitorAllError ? (
+                <span className="text-[11px] text-amber-700 dark:text-amber-200">
+                  {monitorAllError}
+                </span>
+              ) : null}
             </div>
           </div>
 
