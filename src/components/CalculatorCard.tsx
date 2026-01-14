@@ -125,9 +125,8 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
     ctx.setProfileOverrideLocal(profileOverride);
     // sync storeFormula into context if available
     if (storeFormula) {
-      ctx.saveStorewide(storeFormula).then(() => {
-        /* we use saveStorewide mainly to refresh on server; if you prefer not to call PUT on load, remove this */
-      }).catch(() => {});
+      // do not call saveStorewide here (it writes). Instead just update context's internal storeFormula if needed.
+      // If you want to refresh server, call saveStorewide explicitly from UI.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSource, profileOverride, storeFormula]);
@@ -399,7 +398,8 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
 
             <div className="mt-3 space-y-2">
               {legacyOptions.tiers.map((t, idx) => (
-                <div key={t.id} className="flex gap-2 items-center">
+                // Use items-end so the input column (label + input) and the buttons align on the same baseline
+                <div key={t.id} className="flex gap-2 items-end">
                   <div className="w-1/3">
                     <label className="text-xs text-slate-500">Max cost</label>
                     <input
@@ -416,7 +416,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                     <label className="text-xs text-slate-500">Multiplier</label>
                     <input type="number" step="0.01" value={t.mult} onChange={(e) => updateTier(t.id, { mult: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
                   </div>
-                  <div className="flex gap-2 items-end">
+                  <div className="flex gap-2 items-center">
                     <button className="text-xs px-2 py-1 rounded border" onClick={() => addTier(t.id)}>
                       Insert
                     </button>
@@ -443,7 +443,8 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
             <div className="mt-2 text-xs text-slate-600">Applied after multipliers for costs ≤ configured ranges.</div>
             <div className="mt-3 space-y-2">
               {legacyOptions.shippingBuffer.map((s, idx) => (
-                <div key={s.id} className="flex gap-2 items-center">
+                // align inputs and action buttons on the same line
+                <div key={s.id} className="flex gap-2 items-end">
                   <div className="w-1/2">
                     <label className="text-xs text-slate-500">Max cost</label>
                     <input type="number" step="0.01" value={s.max} onChange={(e) => updateShipping(s.id, { max: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
@@ -452,7 +453,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                     <label className="text-xs text-slate-500">Buffer ($)</label>
                     <input type="number" step="0.01" value={s.buffer} onChange={(e) => updateShipping(s.id, { buffer: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
                   </div>
-                  <div className="flex gap-2 items-end">
+                  <div className="flex gap-2 items-center">
                     <button className="text-xs px-2 py-1 rounded border" onClick={() => addShipping(s.id)}>
                       Insert
                     </button>
