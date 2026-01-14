@@ -141,13 +141,15 @@ async function findBrandByName(args: { storeHash: string; token: string; name: s
   });
 
   const text = await res.text().catch(() => "");
-  const body = text ? (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  })() : null;
+  const body = text
+    ? (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })()
+    : null;
 
   if (!res.ok) {
     // best-effort: don't throw (brand is optional)
@@ -172,19 +174,25 @@ async function createBrand(args: { storeHash: string; token: string; name: strin
   });
 
   const text = await res.text().catch(() => "");
-  const body = text ? (() => {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  })() : null;
+  const body = text
+    ? (() => {
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      })()
+    : null;
 
   if (!res.ok) return null;
   return body?.data ?? null;
 }
 
-async function resolveBrandIdBestEffort(args: { storeHash: string; token: string; brandName?: string | null }): Promise<number | null> {
+async function resolveBrandIdBestEffort(args: {
+  storeHash: string;
+  token: string;
+  brandName?: string | null;
+}): Promise<number | null> {
   const name = String(args.brandName ?? "").trim();
   if (!name) return null;
 
@@ -285,8 +293,12 @@ export function buildProductPayloadFromIngestion(
   const h1 = normalizeH1Strict(row);
   const name = h1 || ""; // allow caller to detect missing name and fail structured
 
-  // Price (required): prefer normalized; fallback to 1
+  // Price (required):
+  // NEW: Prefer price set by Price module (product_ingestions.store_price) if present/valid.
+  const storePriceCandidate = parseNumberCandidate(row?.store_price);
+
   const priceCandidate =
+    storePriceCandidate ??
     parseNumberCandidate(normalized?.price) ??
     parseNumberCandidate(normalized?.msrp) ??
     parseNumberCandidate(normalized?.specs?.price) ??
@@ -552,7 +564,12 @@ export type NormalizedProduct = {
   raw?: any;
 };
 
-export function createBigCommerceAdapter(opts: { storeHash?: string; accessToken?: string; store_hash?: string; access_token?: string }) {
+export function createBigCommerceAdapter(opts: {
+  storeHash?: string;
+  accessToken?: string;
+  store_hash?: string;
+  access_token?: string;
+}) {
   const storeHash = (opts.storeHash ?? opts.store_hash) as string;
   const accessToken = (opts.accessToken ?? opts.access_token) as string;
   if (!storeHash || !accessToken) {
