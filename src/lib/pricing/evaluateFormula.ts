@@ -1,16 +1,22 @@
 // src/lib/pricing/evaluateFormula.ts
-import vm from "vm";
-import type { IncomingMessage } from "http";
+// Safe-ish formula evaluator used by the price calculator.
+// - Evaluates a stored JS function `calculatePrice(input)` inside Node's vm with a short timeout.
+// - Provides a legacy, structured pricing engine (calculatePriceLegacy) copied from the old system.
+// - Exports helpers and types for use by API routes / frontend tester.
+//
+// Security note:
+// - This is NOT a perfect sandbox; vm provides limited isolation. Restrict edit access to admins only.
+// - For untrusted editors, run evaluations in an isolated service (e.g. serverless with enforced timeout and no network).
 
-// Input shape the formula should expect (this is what we pass)
+import vm from "vm";
+
 export type PriceInput = {
-  cost: number;       // item cost
-  shipping?: number;  // shipping cost (optional override)
-  metadata?: Record<string, any>; // any other product metadata
-  options?: Record<string, any>;  // job-level options (e.g. includeSeo, source_tenant)
+  cost: number;
+  shipping?: number;
+  metadata?: Record<string, any>;
+  options?: Record<string, any>;
 };
 
-// Result structure
 export type PriceResult = {
   ok: boolean;
   price?: number;
@@ -18,94 +24,96 @@ export type PriceResult = {
   debug?: any;
 };
 
-/**
- * evaluateFormulaString
- * - formulaSource should define a function named `calculatePrice` that accepts cost (number) or (input: PriceInput)
- *   Examples:
- *     - function calculatePrice(cost) { return Math.round(cost * 2) / 100; }
- *     - function calculatePrice(input) { const cost = input.cost; ... }
- *
- * - This evaluator executes formulaSource in a VM with:
- *   - a `sanitizeMoneyG` utility available
- *   - a limited global API (Math, Number, Date)
- *   - a short timeout (default 50ms)
- *
- * Security note:
- * - This approach is relatively safe for moderately trusted admins. For untrusted editors, run formulas only via a dedicated sandbox service or use a math-expression engine (mathjs, jexl).
- */
 export async function evaluateFormulaString(
   formulaSource: string,
-  input: PriceInput,
+  input: PriceInput | number,
   opts?: { timeoutMs?: number }
 ): Promise<PriceResult> {
-  const timeoutMs = opts?.timeoutMs ?? 100; // small
-  // build the script: we expect calculatePrice to be defined
+  const timeoutMs = opts?.timeoutMs ?? 100;
+
+  // Build script that defines calculatePrice (from formulaSource) and writes result to globalThis.__result
   const scriptSrc = `
     "use strict";
+    // provide sanitizeMoneyG helper
     const sanitizeMoneyG = ${sanitizeMoneyG.toString()};
     ${formulaSource}
+
     if (typeof calculatePrice !== 'function') {
       throw new Error('calculatePrice function not defined');
     }
-    // unify input: allow both number or object
+
     const _input = (typeof input === 'number') ? { cost: input } : input;
-    const out = calculatePrice(_input);
-    // coerce numeric
-    return (typeof out === 'number' && Number.isFinite(out)) ? out : (function(){ throw new Error('calculatePrice did not return finite number'); })();
+
+    // Execute and store result on globalThis so host can retrieve it
+    const __res = (function() {
+      try {
+        return calculatePrice(_input);
+      } catch (err) {
+        // rethrow to be handled by VM runner
+        throw err;
+      }
+    })();
+    globalThis.__result = __res;
   `;
 
-  // Create a new VM context with only safe globals
+  // Prepare sandboxed context with limited globals
   const sandbox: any = {
     input,
     Math,
     Number,
     Date,
-    // keep console but restrict in production (optional)
+    // minimal console to avoid noisy behavior; do not expose process, require, etc.
     console: {
-      log: (...args: any[]) => { /* no-op or capture to debug */ },
-      warn: (...args: any[]) => { /* no-op */ },
-      error: (...args: any[]) => { /* no-op */ }
+      log: (..._args: any[]) => {},
+      warn: (..._args: any[]) => {},
+      error: (..._args: any[]) => {},
     },
+    // result will be written here by the script as globalThis.__result
+    __result: undefined,
   };
 
   try {
-    const script = new vm.Script(scriptSrc, { filename: "pricing-formula.js", displayErrors: true });
+    const script = new vm.Script(scriptSrc, { filename: "pricing-formula.js" });
     const ctx = vm.createContext(sandbox, { name: "pricing-formula-context" });
-    // run with timeout; Node's vm has a timeout option for runInContext
-    const res = script.runInContext(ctx, { timeout: timeoutMs });
-    // If the script returns a value via `return` top-level, Node VM will not return it.
-    // To retrieve the value we expose it into sandbox. Adapt pattern: put result into sandbox.__result.
-    // Because above used return, fallback: check sandbox.__result or returned res.
-    const price = (typeof res === "number" && Number.isFinite(res)) ? res : sandbox.__result ?? res;
+
+    // Run synchronously with a timeout (ms). This prevents runaway execution.
+    script.runInContext(ctx, { timeout: timeoutMs });
+
+    const price = sandbox.__result;
+
     if (typeof price !== "number" || !Number.isFinite(price)) {
-      return { ok: false, error: "formula returned non-numeric result" };
+      return { ok: false, error: "formula returned non-numeric result", debug: { raw: price } };
     }
+
     return { ok: true, price };
   } catch (err: any) {
-    return { ok: false, error: String(err?.message ?? err) };
+    return { ok: false, error: String(err?.message ?? err), debug: { message: err?.stack ?? String(err) } };
   }
 }
 
-/* --- Legacy helper (your old engine) --- */
-export function roundPrice(n: number) { return Math.floor(n) + 0.99; }
+/* --- Legacy engine (copied and adapted) --- */
 
-export function calculatePriceLegacy(input: PriceInput) {
-  const cost = Number(input?.cost ?? NaN);
+export function roundPrice(n: number) {
+  return Math.floor(n) + 0.99;
+}
+
+export function calculatePriceLegacy(input: PriceInput | number) {
+  const cost = Number(typeof input === "number" ? input : input?.cost ?? NaN);
   if (!isFinite(cost)) throw new Error("invalid cost");
 
   const tiers = [
-    { max: 5,    mult: 3.0 },
-    { max: 10,   mult: 2.75 },
-    { max: 25,   mult: 2.5 },
-    { max: 50,   mult: 2.0 },
-    { max: 100,  mult: 1.75 },
-    { max: 300,  mult: 1.5 },
-    { max: 500,  mult: 1.4 },
+    { max: 5, mult: 3.0 },
+    { max: 10, mult: 2.75 },
+    { max: 25, mult: 2.5 },
+    { max: 50, mult: 2.0 },
+    { max: 100, mult: 1.75 },
+    { max: 300, mult: 1.5 },
+    { max: 500, mult: 1.4 },
     { max: 1000, mult: 1.3 },
-    { max: Infinity, mult: 1.275 }
+    { max: Infinity, mult: 1.275 },
   ];
 
-  const upper = tiers.find(t => cost <= t.max) || tiers[tiers.length - 1];
+  const upper = tiers.find((t) => cost <= t.max) || tiers[tiers.length - 1];
   const lowerIndex = Math.max(0, tiers.indexOf(upper) - 1);
   const lower = lowerIndex >= 0 ? tiers[lowerIndex] : { max: 0, mult: 3.0 };
   const range = upper.max - lower.max;
@@ -119,53 +127,65 @@ export function calculatePriceLegacy(input: PriceInput) {
 
   if (cost <= 50) {
     let shippingBuffer = 0;
-    if (cost <= 10)      shippingBuffer = 8;
+    if (cost <= 10) shippingBuffer = 8;
     else if (cost <= 25) shippingBuffer = 7;
-    else                 shippingBuffer = 6;
+    else shippingBuffer = 6;
     adjusted += shippingBuffer;
   }
 
   adjusted = roundPrice(adjusted);
 
   if (adjusted < 14.99) adjusted = 14.99;
+
   return adjusted;
 }
 
-/* --- sanitizeMoneyG (copied/polite adaptation of your routine) --- */
+/* --- sanitizeMoneyG (adapted from your routine) --- */
+
 export function sanitizeMoneyG(val: any) {
   if (val == null) return NaN;
   let s = String(val).trim();
 
+  // (123) => -123
   let negative = false;
-  if (/^\s*\(.+\)\s*$/.test(s)) { negative = true; s = s.replace(/^\s*\(|\)\s*$/g, ''); }
-  s = s.replace(/\u2212/g, '-'); // unicode minus → ascii
-  s = s.replace(/[A-Za-z$€£¥₩₹₽₺₫RSDZŁ₴₦₱₪₡₲₸₮₭₼]/g, '');
-  s = s.replace(/[\u00A0\s]/g, '');
-  s = s.replace(/(?!^)-/g, '');
+  if (/^\s*\(.+\)\s*$/.test(s)) {
+    negative = true;
+    s = s.replace(/^\s*\(|\)\s*$/g, "");
+  }
+  s = s.replace(/\u2212/g, "-"); // unicode minus → ascii
 
-  const hasComma = s.indexOf(',') !== -1;
-  const hasDot   = s.indexOf('.') !== -1;
+  // strip currency symbols/codes & spaces
+  s = s.replace(/[A-Za-z$€£¥₩₹₽₺₫RSDZŁ₴₦₱₪₡₲₸₮₭₼]/g, "");
+  s = s.replace(/[\u00A0\s]/g, "");
+
+  // keep only a leading minus
+  s = s.replace(/(?!^)-/g, "");
+
+  const hasComma = s.indexOf(",") !== -1;
+  const hasDot = s.indexOf(".") !== -1;
 
   if (hasComma && hasDot) {
-    const lastComma = s.lastIndexOf(',');
-    const lastDot   = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(",");
+    const lastDot = s.lastIndexOf(".");
     if (lastComma > lastDot) {
-      s = s.replace(/\./g, '').replace(/,/g, '.'); // EU
+      s = s.replace(/\./g, "").replace(/,/g, "."); // EU
     } else {
-      s = s.replace(/,/g, '');                     // US
+      s = s.replace(/,/g, ""); // US
     }
   } else if (hasComma) {
-    s = /,\d{1,2}$/.test(s) ? s.replace(/,/g, '.') : s.replace(/,/g, '');
+    s = /,\d{1,2}$/.test(s) ? s.replace(/,/g, ".") : s.replace(/,/g, "");
   } else if (hasDot) {
     const dotCount = (s.match(/\./g) || []).length;
     if (dotCount > 1) {
       if (/\.\d{1,2}$/.test(s)) {
-        const parts = s.split('.'); const dec = parts.pop(); s = parts.join('') + '.' + dec;
+        const parts = s.split(".");
+        const dec = parts.pop();
+        s = parts.join("") + "." + dec;
       } else {
-        s = s.replace(/\./g, '');
+        s = s.replace(/\./g, "");
       }
     } else {
-      if (/\.\d{3}$/.test(s)) s = s.replace(/\./g, '');
+      if (/\.\d{3}$/.test(s)) s = s.replace(/\./g, ""); // lone thousands dot
     }
   }
 
