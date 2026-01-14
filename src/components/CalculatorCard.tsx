@@ -91,7 +91,9 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
-        setProfileOverride(JSON.parse(raw));
+        // parse and cast to FormulaValue
+        const parsed = JSON.parse(raw) as FormulaValue;
+        setProfileOverride(parsed);
       }
     } catch {
       setProfileOverride(null);
@@ -190,7 +192,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
 
   // Save storewide formula (this writes to DB via PUT). Admin-only in production.
   async function saveStorewideFormula() {
-    const value = selectedSource === "custom" ? { type: "js", code: editingCode } : selectedSource === "profile" ? profileOverride : storeFormula;
+    const value = selectedSource === "custom" ? ({ type: "js", code: editingCode } as FormulaValue) : selectedSource === "profile" ? profileOverride : storeFormula;
     if (!value) {
       setStatusMessage("No formula to save");
       return;
@@ -355,7 +357,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
               setSelectedSource("profile");
               // Save local
               try {
-                const value = { type: "js", code: editingCode };
+                const value: FormulaValue = { type: "js", code: editingCode };
                 const key = profileOverrideKey ?? "price_profile_override";
                 localStorage.setItem(key, JSON.stringify(value));
                 setProfileOverride(value);
@@ -401,7 +403,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
             {smallBtn("Save legacy as storewide (admin)", async () => {
               try {
                 const parsed = JSON.parse(legacyJson);
-                const payload = { type: "legacy", legacyOptions: parsed };
+                const payload = { type: "legacy", legacyOptions: parsed } as FormulaValue;
                 // Save storewide via API
                 const res = await fetch("/api/v1/settings/price-formula", {
                   method: "PUT",
