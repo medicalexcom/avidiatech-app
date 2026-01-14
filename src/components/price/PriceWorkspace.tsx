@@ -1,3 +1,4 @@
+// src/components/price/PriceWorkspace.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -85,10 +86,7 @@ export default function PriceWorkspace() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [history, setHistory] = useState<any | null>(null);
 
-  const selected = useMemo(
-    () => ingestions.find((x) => x.id === selectedId) ?? null,
-    [ingestions, selectedId]
-  );
+  const selected = useMemo(() => ingestions.find((x) => x.id === selectedId) ?? null, [ingestions, selectedId]);
 
   async function loadIngestions() {
     setLoading(true);
@@ -244,22 +242,14 @@ export default function PriceWorkspace() {
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
       {/* LEFT: ingestion list */}
-      <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(148,163,184,0.25)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_16px_40px_rgba(15,23,42,0.7)]">
+      <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(148,163,184,0.25)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_16px_40px_rgba(15,23,42,0.35)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-              Pricing workspace
-            </div>
-            <h2 className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-50">
-              Recent ingestions
-            </h2>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Pricing workspace</div>
+            <h2 className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-50">Recent ingestions</h2>
           </div>
 
-          <button
-            onClick={loadIngestions}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-            type="button"
-          >
+          <button onClick={loadIngestions} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" type="button">
             Refresh
           </button>
         </div>
@@ -306,9 +296,7 @@ export default function PriceWorkspace() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold text-slate-900 dark:text-slate-50">
-                          {row.source_url ? row.source_url : shortId(row.id)}
-                        </div>
+                        <div className="text-[11px] font-semibold text-slate-900 dark:text-slate-50">{row.source_url ? row.source_url : shortId(row.id)}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
                           <span>ID {shortId(row.id)}</span>
                           {row.created_at ? <span>· {formatDate(row.created_at)}</span> : null}
@@ -316,16 +304,14 @@ export default function PriceWorkspace() {
                         </div>
                       </div>
 
-                      <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", pill.cls)}>
-                        {pill.text}
-                      </span>
+                      <span className={cx("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", pill.cls)}>{pill.text}</span>
                     </div>
 
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-700 dark:text-slate-200">
                       <span className="text-slate-500 dark:text-slate-400">store:</span>
                       <span className="font-semibold">{formatMoney(row.store_price ?? pr?.storePrice)}</span>
                       {pr?.warnings?.length ? (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
                           warnings {pr.warnings.length}
                         </span>
                       ) : null}
@@ -338,22 +324,14 @@ export default function PriceWorkspace() {
         </div>
       </div>
 
-      {/* RIGHT: calculator */}
+      {/* RIGHT: compact status + controls (replaces the previous full calculator to avoid duplication) */}
       <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(148,163,184,0.25)] dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-[0_16px_40px_rgba(15,23,42,0.7)]">
+        <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(148,163,184,0.12)] dark:border-slate-800 dark:bg-slate-900/85">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-                Calculator
-              </div>
-              <h3 className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-50">
-                {selected ? "Compute & enforce price" : "Select an ingestion"}
-              </h3>
-              {selected?.source_url ? (
-                <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-300 break-all">
-                  {selected.source_url}
-                </div>
-              ) : null}
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Calculator</div>
+              <h3 className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-50">{selected ? "Quick compute" : "Select an ingestion"}</h3>
+              {selected?.source_url ? <div className="mt-1 text-[11px] text-slate-600 dark:text-slate-300 break-all">{selected.source_url}</div> : null}
             </div>
 
             <span
@@ -369,191 +347,112 @@ export default function PriceWorkspace() {
             </span>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
+          {/* Compact controls: mode + cost */}
+          <div className="mt-3 grid grid-cols-1 gap-3">
+            <label className="space-y-1 text-xs">
               <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Mode</div>
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as PriceMode)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                disabled={!selected}
-              >
+              <select value={mode} onChange={(e) => setMode(e.target.value as PriceMode)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected}>
                 <option value="monitor">monitor</option>
                 <option value="suggest">suggest</option>
                 <option value="auto">auto</option>
               </select>
             </label>
 
-            <label className="space-y-1">
+            <label className="space-y-1 text-xs">
               <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Cost</div>
-              <input
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-                placeholder="e.g. 82.00"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                disabled={!selected}
-                inputMode="decimal"
-              />
+              <input value={cost} onChange={(e) => setCost(e.target.value)} placeholder="e.g. 82.00" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected} inputMode="decimal" />
             </label>
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+          {/* Compact profile overrides */}
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40">
             <div className="flex items-center justify-between">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                Profile overrides (MVP)
-              </div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Profile overrides</div>
               <label className="flex items-center gap-2 text-[11px] text-slate-700 dark:text-slate-200">
                 <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={!selected} />
                 Enabled
               </label>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="space-y-1">
+            <div className="mt-3 grid grid-cols-1 gap-3">
+              <label className="space-y-1 text-xs">
                 <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Formula</div>
-                <select
-                  value={profileMode}
-                  onChange={(e) => setProfileMode(e.target.value as any)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                  disabled={!selected}
-                >
+                <select value={profileMode} onChange={(e) => setProfileMode(e.target.value as any)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected}>
                   <option value="margin">margin</option>
                   <option value="markup">markup</option>
                 </select>
               </label>
 
-              <label className="space-y-1">
-                <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                  Value (decimal)
-                </div>
-                <input
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="0.22"
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                  disabled={!selected}
-                  inputMode="decimal"
-                />
+              <label className="space-y-1 text-xs">
+                <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Value (decimal)</div>
+                <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="0.22" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected} inputMode="decimal" />
               </label>
 
-              <label className="space-y-1">
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-[11px] text-slate-700 dark:text-slate-200">
+                  <input type="checkbox" checked={includeShippingBuffer} onChange={(e) => setIncludeShippingBuffer(e.target.checked)} disabled={!selected} />
+                  Include shipping buffer
+                </label>
+                <input value={shippingBuffer} onChange={(e) => setShippingBuffer(e.target.value)} placeholder="0" className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected || !includeShippingBuffer} inputMode="decimal" />
+              </div>
+
+              <label className="space-y-1 text-xs">
                 <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Rounding</div>
-                <select
-                  value={rounding}
-                  onChange={(e) => setRounding(e.target.value as any)}
-                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                  disabled={!selected}
-                >
+                <select value={rounding} onChange={(e) => setRounding(e.target.value as any)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950" disabled={!selected}>
                   <option value="none">none</option>
                   <option value="nearest_0_05">nearest_0_05</option>
                   <option value="nearest_0_10">nearest_0_10</option>
                   <option value="ends_99">ends_99</option>
                 </select>
               </label>
-
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">Shipping buffer</div>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 text-[11px] text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={includeShippingBuffer}
-                      onChange={(e) => setIncludeShippingBuffer(e.target.checked)}
-                      disabled={!selected}
-                    />
-                    Include
-                  </label>
-                  <input
-                    value={shippingBuffer}
-                    onChange={(e) => setShippingBuffer(e.target.value)}
-                    placeholder="0"
-                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                    disabled={!selected || !includeShippingBuffer}
-                    inputMode="decimal"
-                  />
-                </div>
-              </div>
             </div>
           </div>
 
+          {/* Action buttons */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={compute}
-              className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(16,185,129,0.40)] hover:bg-emerald-400 disabled:opacity-50"
-              disabled={!selected}
-              type="button"
-            >
+            <button onClick={compute} className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-[0_12px_32px_rgba(16,185,129,0.40)] hover:bg-emerald-600" disabled={!selected} type="button">
               Compute
             </button>
 
-            <button
-              onClick={approve}
-              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
-              disabled={!selected || !activeCalcId || Boolean(activeResult?.blocked)}
-              type="button"
-            >
+            <button onClick={approve} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm" disabled={!selected || !activeCalcId || Boolean(activeResult?.blocked)} type="button">
               Approve
             </button>
 
-            <button
-              onClick={push}
-              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
-              disabled={!selected || !activeCalcId || Boolean(activeResult?.blocked)}
-              type="button"
-            >
+            <button onClick={push} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm" disabled={!selected || !activeCalcId || Boolean(activeResult?.blocked)} type="button">
               Push to store
             </button>
 
-            <button
-              onClick={openHistory}
-              className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-              disabled={!selected}
-              type="button"
-            >
+            <button onClick={openHistory} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50" disabled={!selected} type="button">
               History
             </button>
           </div>
 
-          {/* Result preview */}
+          {/* Compact latest preview */}
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Latest compute
-            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Latest compute</div>
 
             <div className="mt-2 grid grid-cols-2 gap-3 text-[12px]">
               <div>
                 <div className="text-[10px] text-slate-500 dark:text-slate-400">Computed</div>
-                <div className="font-semibold text-slate-900 dark:text-slate-50">
-                  {formatMoney(activeResult?.computedPrice)}
-                </div>
+                <div className="font-semibold text-slate-900 dark:text-slate-50">{formatMoney(activeResult?.computedPrice)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 dark:text-slate-400">Store price</div>
-                <div className="font-semibold text-slate-900 dark:text-slate-50">
-                  {formatMoney(activeResult?.storePrice)}
-                </div>
+                <div className="font-semibold text-slate-900 dark:text-slate-50">{formatMoney(activeResult?.storePrice)}</div>
               </div>
             </div>
 
             {activeResult?.blocked ? (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-900 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
-                Blocked: {activeResult.blockReason ?? "unknown"}
-              </div>
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-900 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">Blocked: {activeResult.blockReason ?? "unknown"}</div>
             ) : null}
 
             {activeExplain ? (
               <details className="mt-3">
-                <summary className="cursor-pointer text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                  Explain
-                </summary>
-                <pre className="mt-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[10px] text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-                  {activeExplain}
-                </pre>
+                <summary className="cursor-pointer text-[11px] font-semibold text-slate-700 dark:text-slate-200">Explain</summary>
+                <pre className="mt-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[10px] text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">{activeExplain}</pre>
               </details>
             ) : (
-              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                Run compute to generate an explanation trail.
-              </div>
+              <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Run compute to generate an explanation trail.</div>
             )}
           </div>
         </div>
@@ -562,25 +461,13 @@ export default function PriceWorkspace() {
         {historyOpen ? (
           <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 dark:border-slate-800 dark:bg-slate-900/85">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                Price history
-              </div>
-              <button
-                onClick={() => setHistoryOpen(false)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-                type="button"
-              >
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Price history</div>
+              <button onClick={() => setHistoryOpen(false)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" type="button">
                 Close
               </button>
             </div>
 
-            {historyLoading ? (
-              <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading…</div>
-            ) : (
-              <pre className="mt-3 max-h-[340px] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
-                {JSON.stringify(history, null, 2)}
-              </pre>
-            )}
+            {historyLoading ? <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">Loading…</div> : <pre className="mt-3 max-h-[340px] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-[10px] text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-200">{JSON.stringify(history, null, 2)}</pre>}
           </div>
         ) : null}
       </div>
