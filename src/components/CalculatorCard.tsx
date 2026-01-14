@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useCalculator } from "@/components/Calculator/CalculatorContext";
 
 type LegacyTier = { id: string; max: number; mult: number };
 type ShippingRule = { id: string; max: number; buffer: number };
@@ -39,7 +40,7 @@ const defaultLegacyOptions = (): LegacyOptions => ({
     { id: uid("t"), max: 300, mult: 1.5 },
     { id: uid("t"), max: 500, mult: 1.4 },
     { id: uid("t"), max: 1000, mult: 1.3 },
-    { id: uid("t"), max: Infinity as any, mult: 1.275 },
+    { id: uid("t"), max: Number.POSITIVE_INFINITY as any, mult: 1.275 },
   ],
   shippingBuffer: [
     { id: uid("s"), max: 10, buffer: 8 },
@@ -52,6 +53,8 @@ const defaultLegacyOptions = (): LegacyOptions => ({
 });
 
 export default function CalculatorCard({ tenantId }: { tenantId?: string | null }) {
+  const ctx = useCalculator();
+
   const [tab, setTab] = useState<"basic" | "rules">("basic");
 
   // store formula loaded from server (legacy-only)
@@ -62,18 +65,13 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
   const [profileOverrideKey] = useState<string>("price_profile_override");
   const [profileOverride, setProfileOverride] = useState<FormulaValue | null>(null);
 
-  // Source selection
+  // Source selection (kept local but mirrored to ctx.selectedSource)
   const [selectedSource, setSelectedSource] = useState<"store" | "profile" | "custom">("store");
 
   // Local editable legacy options (custom/source editor)
   const [legacyOptions, setLegacyOptions] = useState<LegacyOptions>(defaultLegacyOptions);
 
-  // Basic UI controls
-  const [basicValue, setBasicValue] = useState<number | "">(0.22);
-  const [basicRounding, setBasicRounding] = useState<LegacyOptions["rounding"]>("ends_99");
-  const [includeShippingBuffer, setIncludeShippingBuffer] = useState<boolean>(false);
-
-  // Test input & result
+  // Rule-testing state
   const [testInput, setTestInput] = useState<string>('{"cost": 12}');
   const [testResult, setTestResult] = useState<EvalResponse | null>(null);
   const [evaluating, setEvaluating] = useState(false);
@@ -81,23 +79,25 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
   // Status
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Load storewide formula
+  // Sync top-level store formula load
   useEffect(() => {
+    let mounted = true;
     async function load() {
       setLoadingStoreFormula(true);
       try {
         const res = await fetch("/api/v1/settings/price-formula");
         const j = await res.json();
-        if (j?.ok && j.value?.type === "legacy") {
-          setStoreFormula({ type: "legacy", legacyOptions: j.value.legacyOptions });
+        if (mounted && j?.ok && j.value?.type === "legacy") {
+          const payload: FormulaValue = { type: "legacy", legacyOptions: j.value.legacyOptions };
+          setStoreFormula(payload);
           setLegacyOptions(j.value.legacyOptions);
-        } else {
+        } else if (mounted) {
           setStoreFormula(null);
         }
       } catch {
-        setStoreFormula(null);
+        if (mounted) setStoreFormula(null);
       } finally {
-        setLoadingStoreFormula(false);
+        if (mounted) setLoadingStoreFormula(false);
       }
     }
     load();
@@ -112,7 +112,25 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
     } catch {
       setProfileOverride(null);
     }
+
+    return () => {
+      mounted = false;
+    };
   }, [profileOverrideKey]);
+
+  // Keep calculator context's selectedSource in sync with local selectedSource
+  useEffect(() => {
+    ctx.setSelectedSource(selectedSource);
+    // ensure context profile override mirrors local
+    ctx.setProfileOverrideLocal(profileOverride);
+    // sync storeFormula into context if available
+    if (storeFormula) {
+      ctx.saveStorewide(storeFormula).then(() => {
+        /* we use saveStorewide mainly to refresh on server; if you prefer not to call PUT on load, remove this */
+      }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSource, profileOverride, storeFormula]);
 
   // Helpers to mutate policy structured options
   const updateTier = (id: string, patch: Partial<LegacyTier>) => {
@@ -166,14 +184,10 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
     try {
       const body: any = { input: inputObj };
       if (payloadFormula) body.formula = payloadFormula;
-      const res = await fetch("/api/v1/price/evaluate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const j = await res.json();
-      setTestResult(j);
-      return j as EvalResponse;
+      // Use context evaluate so lastResult stays in sync across UI
+      const res = await ctx.evaluate(inputObj, payloadFormula ?? undefined);
+      setTestResult(res);
+      return res as EvalResponse;
     } catch (err: any) {
       const e: EvalResponse = { ok: false, error: String(err?.message ?? err) };
       setTestResult(e);
@@ -201,38 +215,29 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
       localStorage.setItem(profileOverrideKey, JSON.stringify(payload));
       setProfileOverride(payload);
       setSelectedSource("profile");
+      ctx.setProfileOverrideLocal(payload);
       setStatusMessage("Profile override saved locally (this browser).");
     } catch {
       setStatusMessage("Failed to save profile override locally.");
     }
   }
 
-  // Save storewide (admin) — writes to DB
+  // Save storewide (admin) — uses context.saveStorewide
   async function saveStorewide() {
-    const payload: FormulaValue = { type: "legacy", legacyOptions };
-    try {
-      const res = await fetch("/api/v1/settings/price-formula", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tenantId: tenantId ?? null, value: payload }),
-      });
-      const j = await res.json();
-      if (j?.ok) {
-        setStoreFormula(payload);
-        setStatusMessage("Saved storewide formula.");
-      } else {
-        setStatusMessage("Failed to save storewide formula: " + (j?.error ?? JSON.stringify(j)));
-      }
-    } catch (e: any) {
-      setStatusMessage("Error saving storewide formula: " + String(e?.message ?? e));
+    const payload: FormulaValue = { type: "legacy", legacyOptions: normalizeTiers(legacyOptions) };
+    const r = await ctx.saveStorewide(payload);
+    if (r.ok) {
+      setStoreFormula(payload);
+      setStatusMessage("Saved storewide formula.");
+    } else {
+      setStatusMessage("Failed to save storewide formula.");
     }
   }
 
-  // Basic compute uses basicValue or active formula
+  // Basic compute uses context.computeActive
   async function handleBasicCompute() {
-    const cost = Number(basicValue) || 0;
-    const input = { cost };
-    await runEvaluate(activeFormula, input);
+    const cost = Number(ctx.basicValue) || 0;
+    await ctx.computeActive({ cost });
   }
 
   // Simple UI helpers
@@ -257,6 +262,10 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
     });
     return copy;
   }
+
+  // UI: show shared last result by default in Basic; show rule-test result in Test area
+  const lastResult = ctx.lastResult;
+  const shownResult = tab === "basic" ? lastResult : testResult;
 
   return (
     <div className="p-4">
@@ -318,14 +327,14 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
               <input
                 type="number"
                 step="0.01"
-                value={basicValue as number}
-                onChange={(e) => setBasicValue(e.target.value === "" ? "" : Number(e.target.value))}
+                value={ctx.basicValue as number}
+                onChange={(e) => ctx.setBasicValue(e.target.value === "" ? "" : Number(e.target.value))}
                 className="w-full rounded-md border px-3 py-2"
               />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Rounding</label>
-              <select value={basicRounding} onChange={(e) => setBasicRounding(e.target.value as LegacyOptions["rounding"])} className="w-full rounded-md border px-3 py-2">
+              <select value={ctx.basicRounding} onChange={(e) => ctx.setBasicRounding(e.target.value)} className="w-full rounded-md border px-3 py-2">
                 <option value="ends_99">Ends .99</option>
                 <option value="round_05">Round to .05</option>
                 <option value="round_int">Round to integer</option>
@@ -335,22 +344,25 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
 
           <div className="flex items-center gap-3">
             <label className="inline-flex items-center gap-2">
-              <input type="checkbox" checked={includeShippingBuffer} onChange={(e) => setIncludeShippingBuffer(e.target.checked)} />
+              <input type="checkbox" checked={ctx.includeShippingBuffer} onChange={(e) => ctx.setIncludeShippingBuffer(e.target.checked)} />
               Include shipping buffer
             </label>
 
             {smallBtn("Compute", async () => {
-              // compute using active formula
-              await handleBasicCompute();
+              try {
+                await handleBasicCompute();
+              } catch {
+                setStatusMessage("Compute failed");
+              }
             })}
             {smallBtn("Approve", () => setStatusMessage("Approve action (not implemented)"))}
             {smallBtn("Push to store", () => setStatusMessage("Push to store (not implemented)"))}
           </div>
 
-          {testResult && (
+          {shownResult && (
             <div className="mt-3 bg-slate-50 p-3 rounded-md text-sm">
               <div>Result:</div>
-              <pre className="text-xs mt-1">{JSON.stringify(testResult, null, 2)}</pre>
+              <pre className="text-xs mt-1">{JSON.stringify(shownResult, null, 2)}</pre>
             </div>
           )}
         </div>
@@ -367,7 +379,6 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                 <button
                   className="inline-flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs"
                   onClick={() => {
-                    // add to end with sensible defaults
                     addTier();
                   }}
                 >
@@ -376,7 +387,6 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                 <button
                   className="inline-flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs"
                   onClick={() => {
-                    // reset to defaults
                     setLegacyOptions(defaultLegacyOptions());
                   }}
                 >
@@ -385,9 +395,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
               </div>
             </div>
 
-            <div className="mt-3 text-xs text-slate-600">
-              The table defines a multiplier for cost ranges. Use "Infinity" for the last tier's max.
-            </div>
+            <div className="mt-3 text-xs text-slate-600">The table defines a multiplier for cost ranges. Use "Infinity" for the last tier's max.</div>
 
             <div className="mt-3 space-y-2">
               {legacyOptions.tiers.map((t, idx) => (
@@ -399,20 +407,14 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                       value={Number.isFinite(t.max) ? String(t.max) : "Infinity"}
                       onChange={(e) => {
                         const v = e.target.value.trim();
-                        updateTier(t.id, { max: v.toLowerCase() === "infinity" ? Infinity : Number(v === "" ? 0 : Number(v)) });
+                        updateTier(t.id, { max: v.toLowerCase() === "infinity" ? Number.POSITIVE_INFINITY : Number(v === "" ? 0 : Number(v)) });
                       }}
                       className="w-full rounded-md border px-2 py-1 text-sm"
                     />
                   </div>
                   <div className="w-1/3">
                     <label className="text-xs text-slate-500">Multiplier</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={t.mult}
-                      onChange={(e) => updateTier(t.id, { mult: Number(e.target.value || 0) })}
-                      className="w-full rounded-md border px-2 py-1 text-sm"
-                    />
+                    <input type="number" step="0.01" value={t.mult} onChange={(e) => updateTier(t.id, { mult: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
                   </div>
                   <div className="flex gap-2 items-end">
                     <button className="text-xs px-2 py-1 rounded border" onClick={() => addTier(t.id)}>
@@ -433,10 +435,7 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium">Shipping buffer rules</h4>
               <div className="flex gap-2">
-                <button
-                  className="inline-flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs"
-                  onClick={() => addShipping()}
-                >
+                <button className="inline-flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs" onClick={() => addShipping()}>
                   + Add rule
                 </button>
               </div>
@@ -447,23 +446,11 @@ export default function CalculatorCard({ tenantId }: { tenantId?: string | null 
                 <div key={s.id} className="flex gap-2 items-center">
                   <div className="w-1/2">
                     <label className="text-xs text-slate-500">Max cost</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={s.max}
-                      onChange={(e) => updateShipping(s.id, { max: Number(e.target.value || 0) })}
-                      className="w-full rounded-md border px-2 py-1 text-sm"
-                    />
+                    <input type="number" step="0.01" value={s.max} onChange={(e) => updateShipping(s.id, { max: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
                   </div>
                   <div className="w-1/3">
                     <label className="text-xs text-slate-500">Buffer ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={s.buffer}
-                      onChange={(e) => updateShipping(s.id, { buffer: Number(e.target.value || 0) })}
-                      className="w-full rounded-md border px-2 py-1 text-sm"
-                    />
+                    <input type="number" step="0.01" value={s.buffer} onChange={(e) => updateShipping(s.id, { buffer: Number(e.target.value || 0) })} className="w-full rounded-md border px-2 py-1 text-sm" />
                   </div>
                   <div className="flex gap-2 items-end">
                     <button className="text-xs px-2 py-1 rounded border" onClick={() => addShipping(s.id)}>
