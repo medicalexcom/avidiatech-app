@@ -1,20 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import PlanModal from "../../components/PlanModal";
-import TopNav from "../../components/TopNav";
-import Sidebar from "../../components/Sidebar";
-import MobileTopNav from "../../components/MobileTopNav"; // ✅ NEW
+import PlanModal from "@/components/PlanModal";
+import TopNav from "@/components/TopNav";
+import Sidebar from "@/components/Sidebar";
+import MobileTopNav from "@/components/MobileTopNav";
 import { useUser } from "@clerk/nextjs";
 
 /**
  * Dashboard layout (shell)
- * - Renders your real TopNav and Sidebar so the true shell is visible under the modal
- * - Shows hard-blocking PlanModal when the user is signed-in and has no active subscription/trial
+ * - Renders TopNav and Sidebar
+ * - Shows hard-blocking PlanModal when the signed-in user has no active subscription/trial
  *
- * Notes:
- * - PlanModal is portaled to document.body and uses a high z-index so it will sit above TopNav/Sidebar.
- * - Ensure there are no client-side redirects to /dashboard/pricing; users should land on /dashboard so the shell is visible.
+ * NOTE: Removed `overflow-hidden` on the dashboard-shell wrapper so position:sticky
+ * for elements inside the dashboard will work (e.g. the quick calculator).
  */
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -73,8 +72,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <MobileTopNav />
       </div>
 
-      {/* Shell layout: render your Sidebar component (short sidebar) and main content */}
-      <div className="dashboard-shell min-h-[calc(100vh-56px)] flex overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/* Shell layout: render Sidebar and main content.
+          IMPORTANT: removed overflow-hidden so sticky children inside the main content can stick to the viewport. */}
+      <div className="dashboard-shell min-h-[calc(100vh-56px)] flex bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
         <aside className="hidden md:block">
           <Sidebar />
         </aside>
