@@ -10,6 +10,8 @@ import { CalculatorProvider } from "@/components/Calculator/CalculatorContext";
  * - PriceWorkspace below contains the compact, sticky right-column widget which now
  *   reflects the CalculatorProvider's basic fields and only appears when an ingestion
  *   is selected (pop behavior).
+ *
+ * NOTE: `overflow-hidden` was removed so sticky positioning inside the workspace works.
  */
 
 export default function PricePage() {
@@ -17,7 +19,7 @@ export default function PricePage() {
 
   return (
     <CalculatorProvider tenantId={tenantId}>
-      <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-hidden">
+      <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 relative overflow-visible">
         {/* Ambient background */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-28 -left-24 h-72 w-72 rounded-full bg-emerald-300/26 blur-3xl dark:bg-emerald-500/25" />
