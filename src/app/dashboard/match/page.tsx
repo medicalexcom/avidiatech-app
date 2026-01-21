@@ -43,7 +43,6 @@ function escapeCsv(value: any) {
 
 function pickFirstField(row: any, keys: string[]) {
   for (const k of keys) {
-    // support both exact and slightly normalized keys
     if (row && Object.prototype.hasOwnProperty.call(row, k)) return row[k];
   }
   return undefined;
@@ -106,43 +105,17 @@ export default function MatchPage() {
       const rawJson = XLSX.utils.sheet_to_json(ws, { defval: "", blankrows: false }) as any[];
 
       const mapped: PreviewRow[] = rawJson.slice(0, 200).map((r: any, i: number) => {
-        // Required: supplier + sku (everything else optional)
         const supplier_name = toStr(
-          pickFirstField(r, [
-            "Supplier Name",
-            "supplier_name",
-            "supplier",
-            "Vendor",
-            "vendor",
-            "Supplier",
-            "supplierName",
-          ]) ?? ""
+          pickFirstField(r, ["Supplier Name", "supplier_name", "supplier", "Vendor", "vendor", "Supplier", "supplierName"]) ?? ""
         );
 
         const sku = toStr(
-          pickFirstField(r, [
-            "SKU",
-            "sku",
-            "Item SKU",
-            "item_sku",
-            "MPN",
-            "mpn",
-            "Part Number",
-            "part_number",
-          ]) ?? ""
+          pickFirstField(r, ["SKU", "sku", "Item SKU", "item_sku", "MPN", "mpn", "Part Number", "part_number"]) ?? ""
         );
 
-        const ndc_item_code = toStr(
-          pickFirstField(r, ["NDC Item Code", "ndc_item_code", "NDC", "ndc"]) ?? ""
-        );
-
-        const product_name = toStr(
-          pickFirstField(r, ["Product Name", "product_name", "Item Name", "name", "title"]) ?? ""
-        );
-
-        const brand_name = toStr(
-          pickFirstField(r, ["Brand Name", "brand_name", "Brand", "brand"]) ?? ""
-        );
+        const ndc_item_code = toStr(pickFirstField(r, ["NDC Item Code", "ndc_item_code", "NDC", "ndc"]) ?? "");
+        const product_name = toStr(pickFirstField(r, ["Product Name", "product_name", "Item Name", "name", "title"]) ?? "");
+        const brand_name = toStr(pickFirstField(r, ["Brand Name", "brand_name", "Brand", "brand"]) ?? "");
 
         return {
           row_id: String(i + 1),
@@ -151,7 +124,7 @@ export default function MatchPage() {
           ndc_item_code,
           product_name,
           brand_name,
-          raw: r, // keep everything (Price, UOM, etc.)
+          raw: r
         };
       });
 
@@ -172,7 +145,6 @@ export default function MatchPage() {
     return { total, valid, missing };
   }, [filePreviewRows]);
 
-  // fetch job status
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
@@ -188,7 +160,6 @@ export default function MatchPage() {
     }
   }, []);
 
-  // fetch rows
   const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
     setResultsLoading(true);
     try {
@@ -213,7 +184,6 @@ export default function MatchPage() {
     }
   }, []);
 
-  // poll job status
   const pollJobStatus = useCallback(async (id: string) => {
     if (!id) return;
     setPolling(true);
@@ -235,7 +205,6 @@ export default function MatchPage() {
     }
   }, [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
 
-  // create job
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
@@ -243,14 +212,12 @@ export default function MatchPage() {
       return null;
     }
 
-    // Hard stop if nothing has required fields (supplier+sku)
     const good = payloadRows.filter((r) => (r.supplier_name || "").trim() && (r.sku || "").trim());
     if (!good.length) {
       alert("No valid rows found. Required columns: Supplier Name + SKU.");
       return null;
     }
 
-    // Warn but allow (because you may want to run partial files)
     const dropped = payloadRows.length - good.length;
     if (dropped > 0) {
       const ok = confirm(
@@ -285,7 +252,6 @@ export default function MatchPage() {
     }
   }, [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // start job
   const startJob = useCallback(async (id?: string | null) => {
     const jid = id ?? jobId;
     if (!jid) return alert("No job selected to start.");
@@ -305,13 +271,11 @@ export default function MatchPage() {
     }
   }, [jobId, pollJobStatus]);
 
-  // combined action: create then start
   const createAndStart = useCallback(async () => {
     const jid = await createJob();
     if (jid) await startJob(jid);
   }, [createJob, startJob]);
 
-  // retry unresolved: requeue rows with status unresolved | failed then start processing
   const retryUnresolved = useCallback(async () => {
     if (!jobId) return alert("No job selected");
     try {
@@ -329,7 +293,6 @@ export default function MatchPage() {
     }
   }, [jobId, startJob, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
-  // when jobId changes fetch rows once
   useEffect(() => {
     if (!jobId) {
       setResultsRows([]);
@@ -339,7 +302,6 @@ export default function MatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  // Approve candidate (calls server approve endpoint)
   const approveCandidate = useCallback(async (rowIdentifier: string, candidateUrl: string) => {
     if (!jobId) return alert("No job context");
     if (!confirm("Approve this candidate URL and mark row resolved?")) return;
@@ -362,7 +324,6 @@ export default function MatchPage() {
     }
   }, [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
-  // bulk approve
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
@@ -380,7 +341,6 @@ export default function MatchPage() {
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter, clearSelection, fetchResultsRows]);
 
-  // CSV export: build headers from original raw fields + core fields + added columns
   const exportResultsCsv = useCallback(() => {
     if (!resultsRows || resultsRows.length === 0) return alert("No results to export");
     const baseCols = ["row_id", "supplier_name", "sku", "ndc_item_code", "product_name", "brand_name"];
@@ -431,7 +391,6 @@ export default function MatchPage() {
     URL.revokeObjectURL(url);
   }, [resultsRows, jobId]);
 
-  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
   const resultsTableProps = useMemo(() => ({
     rows: resultsRows,
@@ -464,25 +423,29 @@ export default function MatchPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-      <div className="px-4 py-6 sm:px-6 lg:px-10 lg:py-8 max-w-7xl mx-auto">
+      <div className="px-4 py-4 sm:px-6 lg:px-10 lg:py-6 max-w-7xl mx-auto">
         {/* Header */}
-        <header className="mb-6 flex items-start justify-between gap-6">
+        <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-slate-500">Data Intelligence · AvidiaMatch</div>
-            <h1 className="mt-3 text-2xl font-bold">Match — SKU → Product URL</h1>
-            <p className="text-sm text-slate-600">Upload competitor/product sheets, create jobs and verify candidate URLs.</p>
+            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-slate-500">
+              Data Intelligence · AvidiaMatch
+            </div>
+            <h1 className="mt-2 text-2xl font-bold">Match — SKU → Product URL</h1>
+            <p className="text-sm text-slate-600">
+              Upload competitor/product sheets, create jobs and verify candidate URLs.
+            </p>
           </div>
 
-          <div className="w-72">
-            <div className="rounded-xl border p-3 bg-white">
+          <div className="w-64">
+            <div className="rounded-xl border p-2 bg-white">
               <div className="text-xs text-slate-500">Job</div>
-              <div className="mt-2 font-mono text-sm break-all">{jobId ? `job:${jobId}` : "No job"}</div>
-              <div className="mt-2 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
-              <div className="mt-3 space-y-2">
+              <div className="mt-1.5 font-mono text-xs break-all">{jobId ? `job:${jobId}` : "No job"}</div>
+              <div className="mt-1 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
+              <div className="mt-2 space-y-1.5">
                 <button
                   onClick={() => createAndStart()}
                   disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
-                  className="w-full rounded bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-60"
+                  className="w-full rounded bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-60"
                 >
                   {creatingJob || startingJob ? "Working…" : "Upload & Create"}
                 </button>
@@ -490,7 +453,7 @@ export default function MatchPage() {
                 <button
                   onClick={() => void createJob()}
                   disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
-                  className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60"
+                  className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
                 >
                   {creatingJob ? "Creating…" : "Create job from preview"}
                 </button>
@@ -498,31 +461,33 @@ export default function MatchPage() {
                 <button
                   onClick={() => void startJob(jobId)}
                   disabled={!jobId || startingJob || polling}
-                  className="w-full rounded border px-3 py-2 text-sm disabled:opacity-60"
+                  className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
                 >
                   {startingJob || polling ? "Starting…" : "Start resolve"}
                 </button>
 
-                <button
-                  onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
-                  disabled={!jobId}
-                  className="w-full rounded border px-3 py-2 text-sm mt-1"
-                >
-                  Refresh rows
-                </button>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
+                    disabled={!jobId}
+                    className="w-full rounded border px-2 py-1.5 text-xs"
+                  >
+                    Refresh
+                  </button>
 
-                <button
-                  onClick={() => retryUnresolved()}
-                  disabled={!jobId}
-                  className="w-full rounded border px-3 py-2 text-sm mt-1"
-                >
-                  Retry unresolved
-                </button>
+                  <button
+                    onClick={() => retryUnresolved()}
+                    disabled={!jobId}
+                    className="w-full rounded border px-2 py-1.5 text-xs"
+                  >
+                    Retry
+                  </button>
+                </div>
 
                 <button
                   onClick={() => exportResultsCsv()}
                   disabled={!resultsRows || resultsRows.length === 0}
-                  className="w-full rounded border px-3 py-2 text-sm mt-2"
+                  className="w-full rounded border px-3 py-1.5 text-xs"
                 >
                   Download CSV
                 </button>
@@ -532,68 +497,67 @@ export default function MatchPage() {
         </header>
 
         {/* Main grid */}
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)]">
-          <div className="space-y-4">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)]">
+          <div className="space-y-3">
             {/* Upload panel */}
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="flex items-center justify-between">
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold">1 · Upload or paste data</h2>
                   <p className="text-xs text-slate-500">Upload XLSX/CSV or paste rows.</p>
                 </div>
               </div>
 
-              <div className="mt-3 space-y-3">
+              <div className="mt-2 space-y-2">
                 <UploadComp {...uploadProps} />
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <input
                     id="match-upload-file"
                     type="file"
                     accept=".xlsx,.xls,.csv"
                     onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-                    className="rounded border p-2"
+                    className="rounded border p-2 text-xs"
                   />
                   <label htmlFor="match-upload-file" className="text-xs text-slate-500">Upload XLSX/CSV</label>
                   {parsing && <div className="text-xs text-slate-500">Parsing…</div>}
                 </div>
 
-                {/* Required headers hint */}
-                <div className="rounded-lg border bg-slate-50 p-3 text-xs text-slate-700">
+                <div className="rounded-lg border bg-slate-50 p-2 text-xs text-slate-700">
                   <div className="font-semibold text-slate-800">Required columns</div>
-                  <div className="mt-1">
+                  <div className="mt-0.5">
                     <span className="font-medium">Supplier Name</span> and <span className="font-medium">SKU</span>.
-                    NDC, Product Name, Brand, Price, etc. are optional and will be preserved in the export.
+                    Optional fields are preserved in export.
                   </div>
-                  <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  <div className="mt-1 grid gap-1 sm:grid-cols-2">
                     <div><span className="font-medium">Supplier Name</span> (aliases: supplier, supplier_name, Vendor)</div>
                     <div><span className="font-medium">SKU</span> (aliases: sku, Item SKU, mpn, Part Number)</div>
-                    <div><span className="font-medium">Optional</span>: Product Name, Brand Name, NDC Item Code, Price, etc.</div>
                   </div>
-                  <div className="mt-2 font-mono text-[11px] text-slate-600">
+                  <div className="mt-1 font-mono text-[11px] text-slate-600">
                     Example headers: Supplier Name,SKU,Product Name
                   </div>
                 </div>
 
                 {parsingError ? <div className="text-xs text-red-600">Parse error: {parsingError}</div> : null}
-                <div className="text-xs text-slate-500">Preview shows up to 200 rows.</div>
-                <div className="mt-2 text-xs text-slate-600">
-                  Preview rows: {previewStats.total} · Valid (Supplier+SKU): {previewStats.valid}
-                  {previewStats.missing ? <span className="text-amber-700"> · Missing required: {previewStats.missing}</span> : null}
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                  <div>Preview max: 200 rows</div>
+                  <div>Rows: {previewStats.total}</div>
+                  <div>Valid: {previewStats.valid}</div>
+                  {previewStats.missing ? <div className="text-amber-700">Missing required: {previewStats.missing}</div> : null}
                 </div>
               </div>
             </div>
 
             {/* Filters + bulk */}
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="flex items-center justify-between">
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold">2 · Refine matches</h2>
                   <p className="text-xs text-slate-500">Filter by status and apply bulk actions.</p>
                 </div>
               </div>
 
-              <div className="mt-3 flex gap-4">
+              <div className="mt-2 flex flex-wrap items-center gap-3">
                 <FiltersComp onChangeStatus={(s: string) => {
                   setResultsStatusFilter(s || undefined);
                   if (jobId) fetchResultsRows(jobId, s || undefined, resultsLimit, 0);
@@ -604,46 +568,45 @@ export default function MatchPage() {
 
             {/* Results */}
             <div className="rounded-2xl border bg-white p-3">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1">
                 <h2 className="text-sm font-semibold">3 · Review results</h2>
                 <div className="text-xs text-slate-500">Live match grid</div>
               </div>
 
-              <div className="mt-2">
+              <div className="mt-1">
                 <ResultsComp {...resultsTableProps} />
 
-                {/* Fallback simple table with resolved_url clickable */}
                 {resultsRows && resultsRows.length > 0 ? (
-                  <div className="mt-4 rounded-md border bg-white p-3">
-                    <h4 className="text-sm font-semibold mb-2">Fallback: Raw rows (simple view)</h4>
+                  <div className="mt-2 rounded-md border bg-white p-2">
+                    <h4 className="text-xs font-semibold mb-1">Fallback: Raw rows (simple view)</h4>
                     <div className="overflow-auto">
-                      <table className="w-full table-auto text-sm">
+                      <table className="w-full table-auto text-xs">
                         <thead>
                           <tr className="text-left">
-                            <th className="px-2 py-1">Row ID</th>
-                            <th className="px-2 py-1">SKU</th>
-                            <th className="px-2 py-1">Product Name</th>
-                            <th className="px-2 py-1">Supplier</th>
-                            <th className="px-2 py-1">Status</th>
-                            <th className="px-2 py-1">Resolved URL</th>
-                            <th className="px-2 py-1">Confidence</th>
+                            <th className="px-1.5 py-1">Row ID</th>
+                            <th className="px-1.5 py-1">SKU</th>
+                            <th className="px-1.5 py-1">Product Name</th>
+                            <th className="px-1.5 py-1">Supplier</th>
+                            <th className="px-1.5 py-1">Status</th>
+                            <th className="px-1.5 py-1">Resolved URL</th>
+                            <th className="px-1.5 py-1">Confidence</th>
                           </tr>
                         </thead>
                         <tbody>
                           {resultsRows.map((r: any) => (
                             <tr key={r.id} className="border-t align-top">
-                              <td className="px-2 py-1 align-top">{r.row_id ?? r.id}</td>
-                              <td className="px-2 py-1 align-top">{r.sku}</td>
-                              <td className="px-2 py-1 align-top">{r.product_name}</td>
-                              <td className="px-2 py-1 align-top">{r.supplier_name}</td>
-                              <td className="px-2 py-1 align-top">{r.status}</td>
-                              <td className="px-2 py-1 align-top">
+                              <td className="px-1.5 py-1 align-top">{r.row_id ?? r.id}</td>
+                              <td className="px-1.5 py-1 align-top">{r.sku}</td>
+                              <td className="px-1.5 py-1 align-top">{r.product_name}</td>
+                              <td className="px-1.5 py-1 align-top">{r.supplier_name}</td>
+                              <td className="px-1.5 py-1 align-top">{r.status}</td>
+                              <td className="px-1.5 py-1 align-top">
                                 {r.resolved_url ? (
                                   <a href={r.resolved_url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
                                     {r.resolved_url}
                                   </a>
                                 ) : (Array.isArray(r.candidates) && r.candidates.length ? (
-                                  <div className="text-xs">
+                                  <div className="text-[11px] leading-4">
                                     {r.candidates.slice(0, 3).map((c: any, idx: number) => (
                                       <div key={idx}>
                                         <a
@@ -657,9 +620,9 @@ export default function MatchPage() {
                                       </div>
                                     ))}
                                   </div>
-                                ) : <span className="text-xs text-slate-500">—</span>)}
+                                ) : <span className="text-[11px] text-slate-500">—</span>)}
                               </td>
-                              <td className="px-2 py-1 align-top">{r.confidence ?? ""}</td>
+                              <td className="px-1.5 py-1 align-top">{r.confidence ?? ""}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -667,17 +630,16 @@ export default function MatchPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500 mt-3">No rows to display yet.</div>
+                  <div className="text-xs text-slate-500 mt-2">No rows to display yet.</div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Right column */}
-          <aside className="space-y-4">
-            <div className="rounded-2xl border bg-white p-4">
+          <aside className="space-y-3">
+            <div className="rounded-2xl border bg-white p-3">
               <h3 className="text-sm font-semibold">Match queue</h3>
-              <div className="mt-3">
+              <div className="mt-2">
                 <JobProgressComp
                   jobId={jobId}
                   jobStatus={jobStatus}
@@ -688,9 +650,9 @@ export default function MatchPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border-dashed bg-slate-50 p-4">
+            <div className="rounded-2xl border-dashed bg-slate-50 p-3">
               <h3 className="text-xs font-semibold text-slate-500">Tips for better matching</h3>
-              <ul className="mt-2 text-xs text-slate-600">
+              <ul className="mt-1.5 text-xs text-slate-600 space-y-1">
                 <li>Supplier Name + SKU are required.</li>
                 <li>NDC is optional.</li>
                 <li>Product name/brand help verification for sites where SKU is not visible.</li>
