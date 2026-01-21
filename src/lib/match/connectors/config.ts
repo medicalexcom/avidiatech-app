@@ -12,6 +12,11 @@ export const SUPPLIER_CONFIG: Record<string, {
     },
     webSearchEnabled: false
   },
+  performance_health: {
+    allowDomains: ["www.performancehealth.com", "performancehealth.com"],
+    siteSearch: { baseUrl: "https://www.performancehealth.com/catalogsearch/result/", queryParam: "q" },
+    webSearchEnabled: false
+  },
 
   // Other suppliers can be added here over time.
 };
