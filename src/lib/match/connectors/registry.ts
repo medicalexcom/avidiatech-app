@@ -79,7 +79,7 @@ export function getConnector(supplierKey: string): SupplierConnector {
             const chosen = productLinks.length ? productLinks : links;
 
             for (const u of uniq(chosen).slice(0, 10)) {
-              cand.push({ url: u, domain: domainOf(u) || "", method: "siteSearch", confidence: 0.45, reasons: ["site_search"] });
+              cand.push({ url: u, domain: domainOf(u) || "", method: "site_search", confidence: 0.45, reasons: ["site_search"] });
             }
           } catch (err: any) {
             // swallow; return whatever we have
