@@ -145,6 +145,7 @@ export default function MatchPage() {
     return { total, valid, missing };
   }, [filePreviewRows]);
 
+  // fetch job status
   const fetchJobStatus = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/v1/match/url-jobs/${encodeURIComponent(id)}`);
@@ -160,6 +161,7 @@ export default function MatchPage() {
     }
   }, []);
 
+  // fetch rows
   const fetchResultsRows = useCallback(async (id: string, status?: string | undefined, limit = 50, offset = 0) => {
     setResultsLoading(true);
     try {
@@ -184,6 +186,7 @@ export default function MatchPage() {
     }
   }, []);
 
+  // poll job status
   const pollJobStatus = useCallback(async (id: string) => {
     if (!id) return;
     setPolling(true);
@@ -205,6 +208,7 @@ export default function MatchPage() {
     }
   }, [fetchJobStatus, fetchResultsRows, resultsStatusFilter, resultsLimit, resultsOffset]);
 
+  // create job
   const createJob = useCallback(async (rows?: PreviewRow[]) => {
     const payloadRows = (rows ?? filePreviewRows) || [];
     if (!payloadRows.length) {
@@ -229,11 +233,7 @@ export default function MatchPage() {
     setCreatingJob(true);
     try {
       const body = { file_name: `upload-${Date.now()}`, rows: good.map((r) => ({ ...r, raw: r.raw })) };
-      const res = await fetch("/api/v1/match/url-jobs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body)
-      });
+      const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         alert("Create job failed: " + (j?.error ?? res.statusText));
@@ -252,6 +252,7 @@ export default function MatchPage() {
     }
   }, [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
+  // start job
   const startJob = useCallback(async (id?: string | null) => {
     const jid = id ?? jobId;
     if (!jid) return alert("No job selected to start.");
@@ -271,11 +272,13 @@ export default function MatchPage() {
     }
   }, [jobId, pollJobStatus]);
 
+  // combined action: create then start
   const createAndStart = useCallback(async () => {
     const jid = await createJob();
     if (jid) await startJob(jid);
   }, [createJob, startJob]);
 
+  // retry unresolved
   const retryUnresolved = useCallback(async () => {
     if (!jobId) return alert("No job selected");
     try {
@@ -293,6 +296,7 @@ export default function MatchPage() {
     }
   }, [jobId, startJob, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
+  // when jobId changes fetch rows once
   useEffect(() => {
     if (!jobId) {
       setResultsRows([]);
@@ -302,6 +306,7 @@ export default function MatchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
+  // Approve candidate (calls server approve endpoint)
   const approveCandidate = useCallback(async (rowIdentifier: string, candidateUrl: string) => {
     if (!jobId) return alert("No job context");
     if (!confirm("Approve this candidate URL and mark row resolved?")) return;
@@ -324,6 +329,7 @@ export default function MatchPage() {
     }
   }, [jobId, fetchResultsRows, fetchJobStatus, resultsStatusFilter, resultsLimit, resultsOffset]);
 
+  // bulk approve
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
@@ -341,6 +347,7 @@ export default function MatchPage() {
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter, clearSelection, fetchResultsRows]);
 
+  // CSV export
   const exportResultsCsv = useCallback(() => {
     if (!resultsRows || resultsRows.length === 0) return alert("No results to export");
     const baseCols = ["row_id", "supplier_name", "sku", "ndc_item_code", "product_name", "brand_name"];
@@ -391,6 +398,7 @@ export default function MatchPage() {
     URL.revokeObjectURL(url);
   }, [resultsRows, jobId]);
 
+  // child props
   const uploadProps = useMemo(() => ({ onFile: handleFile }), [handleFile]);
   const resultsTableProps = useMemo(() => ({
     rows: resultsRows,
@@ -424,131 +432,127 @@ export default function MatchPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       <div className="px-4 py-4 sm:px-6 lg:px-10 lg:py-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-slate-500">
-              Data Intelligence · AvidiaMatch
-            </div>
-            <h1 className="mt-2 text-2xl font-bold">Match — SKU → Product URL</h1>
-            <p className="text-sm text-slate-600">
-              Upload competitor/product sheets, create jobs and verify candidate URLs.
-            </p>
+        {/* Header (title + subtitle only) */}
+        <div className="mb-3">
+          <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-slate-500">
+            Data Intelligence · AvidiaMatch
           </div>
+          <h1 className="mt-2 text-2xl font-bold">Match — SKU → Product URL</h1>
+          <p className="text-sm text-slate-600">Upload competitor/product sheets, create jobs and verify candidate URLs.</p>
+        </div>
 
-          <div className="w-64">
-            <div className="rounded-xl border p-2 bg-white">
-              <div className="text-xs text-slate-500">Job</div>
-              <div className="mt-1.5 font-mono text-xs break-all">{jobId ? `job:${jobId}` : "No job"}</div>
-              <div className="mt-1 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
-              <div className="mt-2 space-y-1.5">
-                <button
-                  onClick={() => createAndStart()}
-                  disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
-                  className="w-full rounded bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-60"
-                >
-                  {creatingJob || startingJob ? "Working…" : "Upload & Create"}
-                </button>
+        {/* TOP ROW: Upload (left) + Job (right) */}
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          {/* Upload panel should be the main card on load (left) */}
+          <div className="rounded-2xl border bg-white p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">1 · Upload or paste data</h2>
+                <p className="text-xs text-slate-500">Upload XLSX/CSV or paste rows.</p>
+              </div>
+            </div>
 
-                <button
-                  onClick={() => void createJob()}
-                  disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
-                  className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
-                >
-                  {creatingJob ? "Creating…" : "Create job from preview"}
-                </button>
+            <div className="mt-2 space-y-2">
+              <UploadComp {...uploadProps} />
 
-                <button
-                  onClick={() => void startJob(jobId)}
-                  disabled={!jobId || startingJob || polling}
-                  className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
-                >
-                  {startingJob || polling ? "Starting…" : "Start resolve"}
-                </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="match-upload-file"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+                  className="rounded border p-2 text-xs"
+                />
+                <label htmlFor="match-upload-file" className="text-xs text-slate-500">Upload XLSX/CSV</label>
+                {parsing && <div className="text-xs text-slate-500">Parsing…</div>}
+              </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
-                    disabled={!jobId}
-                    className="w-full rounded border px-2 py-1.5 text-xs"
-                  >
-                    Refresh
-                  </button>
-
-                  <button
-                    onClick={() => retryUnresolved()}
-                    disabled={!jobId}
-                    className="w-full rounded border px-2 py-1.5 text-xs"
-                  >
-                    Retry
-                  </button>
+              <div className="rounded-lg border bg-slate-50 p-2 text-xs text-slate-700">
+                <div className="font-semibold text-slate-800">Required columns</div>
+                <div className="mt-0.5">
+                  <span className="font-medium">Supplier Name</span> and <span className="font-medium">SKU</span>.
+                  Optional columns (NDC, Price, etc.) are preserved in export.
                 </div>
+                <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                  <div><span className="font-medium">Supplier Name</span> (aliases: supplier, supplier_name, Vendor)</div>
+                  <div><span className="font-medium">SKU</span> (aliases: sku, Item SKU, mpn, Part Number)</div>
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-slate-600">Example headers: Supplier Name,SKU,Product Name</div>
+              </div>
 
-                <button
-                  onClick={() => exportResultsCsv()}
-                  disabled={!resultsRows || resultsRows.length === 0}
-                  className="w-full rounded border px-3 py-1.5 text-xs"
-                >
-                  Download CSV
-                </button>
+              {parsingError ? <div className="text-xs text-red-600">Parse error: {parsingError}</div> : null}
+
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                <div>Preview max: 200 rows</div>
+                <div>Rows: {previewStats.total}</div>
+                <div>Valid: {previewStats.valid}</div>
+                {previewStats.missing ? <div className="text-amber-700">Missing required: {previewStats.missing}</div> : null}
               </div>
             </div>
           </div>
-        </header>
 
-        {/* Main grid */}
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)]">
+          {/* Job card stays on the right */}
+          <div className="rounded-xl border p-2 bg-white">
+            <div className="text-xs text-slate-500">Job</div>
+            <div className="mt-1.5 font-mono text-xs break-all">{jobId ? `job:${jobId}` : "No job"}</div>
+            <div className="mt-1 text-xs text-slate-500">{jobStatus ? jobStatus.status : "status: —"}</div>
+
+            <div className="mt-2 space-y-1.5">
+              <button
+                onClick={() => createAndStart()}
+                disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
+                className="w-full rounded bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+              >
+                {creatingJob || startingJob ? "Working…" : "Upload & Create"}
+              </button>
+
+              <button
+                onClick={() => void createJob()}
+                disabled={parsing || creatingJob || !filePreviewRows.length || previewStats.valid === 0}
+                className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
+              >
+                {creatingJob ? "Creating…" : "Create job from preview"}
+              </button>
+
+              <button
+                onClick={() => void startJob(jobId)}
+                disabled={!jobId || startingJob || polling}
+                className="w-full rounded border px-3 py-1.5 text-sm disabled:opacity-60"
+              >
+                {startingJob || polling ? "Starting…" : "Start resolve"}
+              </button>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => jobId && fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset)}
+                  disabled={!jobId}
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                >
+                  Refresh
+                </button>
+                <button
+                  onClick={() => retryUnresolved()}
+                  disabled={!jobId}
+                  className="w-full rounded border px-2 py-1.5 text-xs"
+                >
+                  Retry
+                </button>
+              </div>
+
+              <button
+                onClick={() => exportResultsCsv()}
+                disabled={!resultsRows || resultsRows.length === 0}
+                className="w-full rounded border px-3 py-1.5 text-xs"
+              >
+                Download CSV
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* SECOND ROW: Filters/Bulk + Results + JobProgress/Tips */}
+        <section className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-3">
-            {/* Upload panel */}
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold">1 · Upload or paste data</h2>
-                  <p className="text-xs text-slate-500">Upload XLSX/CSV or paste rows.</p>
-                </div>
-              </div>
-
-              <div className="mt-2 space-y-2">
-                <UploadComp {...uploadProps} />
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <input
-                    id="match-upload-file"
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-                    className="rounded border p-2 text-xs"
-                  />
-                  <label htmlFor="match-upload-file" className="text-xs text-slate-500">Upload XLSX/CSV</label>
-                  {parsing && <div className="text-xs text-slate-500">Parsing…</div>}
-                </div>
-
-                <div className="rounded-lg border bg-slate-50 p-2 text-xs text-slate-700">
-                  <div className="font-semibold text-slate-800">Required columns</div>
-                  <div className="mt-0.5">
-                    <span className="font-medium">Supplier Name</span> and <span className="font-medium">SKU</span>.
-                    Optional fields are preserved in export.
-                  </div>
-                  <div className="mt-1 grid gap-1 sm:grid-cols-2">
-                    <div><span className="font-medium">Supplier Name</span> (aliases: supplier, supplier_name, Vendor)</div>
-                    <div><span className="font-medium">SKU</span> (aliases: sku, Item SKU, mpn, Part Number)</div>
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] text-slate-600">
-                    Example headers: Supplier Name,SKU,Product Name
-                  </div>
-                </div>
-
-                {parsingError ? <div className="text-xs text-red-600">Parse error: {parsingError}</div> : null}
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
-                  <div>Preview max: 200 rows</div>
-                  <div>Rows: {previewStats.total}</div>
-                  <div>Valid: {previewStats.valid}</div>
-                  {previewStats.missing ? <div className="text-amber-700">Missing required: {previewStats.missing}</div> : null}
-                </div>
-              </div>
-            </div>
-
-            {/* Filters + bulk */}
             <div className="rounded-2xl border bg-white p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -566,7 +570,6 @@ export default function MatchPage() {
               </div>
             </div>
 
-            {/* Results */}
             <div className="rounded-2xl border bg-white p-3">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-sm font-semibold">3 · Review results</h2>
