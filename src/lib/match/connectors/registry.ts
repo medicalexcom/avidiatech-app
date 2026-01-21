@@ -3,10 +3,11 @@ import { SUPPLIER_CONFIG } from "./config";
 import { domainOf, isSafePublicUrl } from "../netSafety";
 import { fetchWithTimeout } from "../http";
 import { extractLinksFromHtml, keepSameHost } from "../htmlExtract";
+import { applyPathRules, canonicalizeUrl, pathLooksLikeDownload } from "../url";
 
 const registry: Record<string, SupplierConnector> = {};
 
-/** Generic connector: pattern + site search (very conservative) */
+/** Generic connector: no candidates by default */
 class GenericConnector implements SupplierConnector {
   key = "generic";
   displayName = "Generic connector (no-op)";
@@ -45,11 +46,14 @@ export function getConnector(supplierKey: string): SupplierConnector {
           const val = (p.key === "skuNorm" ? input.skuNorm : input.ndcItemCodeNorm) ?? "";
           if (!val) continue;
           const url = p.template.replace(`{${p.key}}`, encodeURIComponent(val));
-          cand.push({ url, domain: domainOf(url) || "", method: "pattern", confidence: 0.5, reasons: ["pattern"] });
+          const canon = canonicalizeUrl(url);
+          if (!isSafePublicUrl(canon)) continue;
+          if (!applyPathRules(canon, cfg)) continue;
+          cand.push({ url: canon, domain: domainOf(canon) || "", method: "pattern", confidence: 0.5, reasons: ["pattern"] });
         }
       }
 
-      // 2) site search (implemented)
+      // 2) site search
       if (cfg.siteSearch) {
         const q = (input.skuNorm || input.sku || input.ndcItemCodeNorm || input.ndcItemCode || input.productNameNorm || input.productName || "").toString().trim();
         if (q) {
@@ -59,30 +63,58 @@ export function getConnector(supplierKey: string): SupplierConnector {
           try {
             const resp = await fetchWithTimeout(searchUrl.toString(), { timeoutMs: 12_000 });
             const html = resp?.text ?? "";
-            let links = extractLinksFromHtml(html, searchUrl.toString());
 
-            // stay on same host as searchUrl (prevents picking up external links)
+            // Extract links from HTML and keep same host as search page.
+            let links = extractLinksFromHtml(html, searchUrl.toString());
             links = keepSameHost(links, searchUrl.toString());
 
-            // filter safe and (if allowDomains configured) keep only allowlisted domains
-            const allowDomains = (cfg.allowDomains ?? []).map((d) => d.toLowerCase());
+            // Canonicalize and basic safety filter
             links = links
-              .filter((u) => isSafePublicUrl(u))
-              .filter((u) => {
-                if (!allowDomains.length) return true;
-                return allowDomains.includes(domainOf(u).toLowerCase());
+              .map((u) => {
+                try {
+                  return canonicalizeUrl(u);
+                } catch {
+                  return "";
+                }
+              })
+              .filter(Boolean)
+              .filter((u) => isSafePublicUrl(u));
+
+            // Domain allowlist (if configured)
+            const allowDomains = (cfg.allowDomains ?? []).map((d) => d.toLowerCase());
+            if (allowDomains.length) {
+              links = links.filter((u) => allowDomains.includes(domainOf(u).toLowerCase()));
+            }
+
+            // Hard drop obvious downloads regardless of supplier (helps PH a lot)
+            links = links.filter((u) => {
+              try {
+                return !pathLooksLikeDownload(new URL(u).pathname);
+              } catch {
+                return false;
+              }
+            });
+
+            // Apply supplier path rules if present (deny + allow regex)
+            links = links.filter((u) => applyPathRules(u, cfg));
+
+            // McKesson-specific preference: product pages
+            if (lower === "mckesson") {
+              const productLinks = links.filter((u) => /\/product\/\d+\//i.test(u));
+              if (productLinks.length) links = productLinks.concat(links);
+            }
+
+            const final = uniq(links).slice(0, 10);
+            for (const u of final) {
+              cand.push({
+                url: u,
+                domain: domainOf(u) || "",
+                method: "site_search",
+                confidence: 0.45,
+                reasons: ["site_search"]
               });
-
-            // McKesson-specific: prefer product pages
-            // (Still safe for other suppliers because it only boosts/filters candidates)
-            const productLinks = links.filter((u) => /\/product\/\d+\//i.test(u));
-            const chosen = productLinks.length ? productLinks : links;
-
-            for (const u of uniq(chosen).slice(0, 10)) {
-              cand.push({ url: u, domain: domainOf(u) || "", method: "site_search", confidence: 0.45, reasons: ["site_search"] });
             }
           } catch (err: any) {
-            // swallow; return whatever we have
             return { candidates: cand, debug: { siteSearchError: String(err?.message ?? err) } };
           }
         }
