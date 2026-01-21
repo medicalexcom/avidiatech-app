@@ -4,11 +4,14 @@ export const SUPPLIER_CONFIG: Record<string, {
   siteSearch?: { baseUrl: string; queryParam: string; resultLinkSelector?: string; };
   webSearchEnabled?: boolean;
 }> = {
-  // Example entry:
-  // "acorn": {
-  //   allowDomains: ["acorn.example.com"],
-  //   urlPatterns: [{ template: "https://acorn.example.com/p/{skuNorm}", key: "skuNorm" }],
-  //   siteSearch: { baseUrl: "https://acorn.example.com/search", queryParam: "q" },
-  //   webSearchEnabled: false
-  // }
+  mckesson: {
+    allowDomains: ["mms.mckesson.com"],
+    siteSearch: {
+      baseUrl: "https://mms.mckesson.com/catalog",
+      queryParam: "query",
+    },
+    webSearchEnabled: false
+  },
+
+  // Other suppliers can be added here over time.
 };
