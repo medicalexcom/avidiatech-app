@@ -25,6 +25,19 @@ function isUuid(s?: string | null) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+function safeHostnameFromUrl(u?: string | null) {
+  if (!u) return null;
+  const raw = String(u).trim();
+  if (!raw) return null;
+  try {
+    // allow "example.com" without protocol
+    const normalized = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+    return new URL(normalized).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Try to resolve tenant uuid using:
  *  - explicitTenant (if provided and valid UUID)
@@ -52,7 +65,7 @@ async function findExistingTenant(explicitTenant?: string | null, orgId?: string
     if (!error && data && data[TENANT_MAPPING_ID_COLUMN] && isUuid(String(data[TENANT_MAPPING_ID_COLUMN]))) {
       return String(data[TENANT_MAPPING_ID_COLUMN]);
     }
-  } catch (err) {
+  } catch {
     // ignore and continue
   }
 
@@ -67,12 +80,11 @@ async function findExistingTenant(explicitTenant?: string | null, orgId?: string
     if (!error && data && data.tenant_id && isUuid(String(data.tenant_id))) {
       return String(data.tenant_id);
     }
-  } catch (err) {
+  } catch {
     // ignore
   }
 
   // 3) Heuristics (best-effort). Try some common table/column combos.
-  // Keep this as a non-failing attempt — if DB lacks a table we continue.
   const candidateTables = ["workspaces", "tenants", "organizations", "accounts", "customers", "teams"];
   const candidateCols = ["clerk_org_id", "org_id", "orgId", "external_org_id", "external_id", "clerkId", "org"];
   for (const tbl of candidateTables) {
@@ -85,13 +97,12 @@ async function findExistingTenant(explicitTenant?: string | null, orgId?: string
           .limit(1)
           .maybeSingle();
         if (!error && data) {
-          // try to find any uuid-like property in the row
           for (const key of Object.keys(data)) {
             if (isUuid(String((data as any)[key]))) return String((data as any)[key]);
           }
         }
-      } catch (err) {
-        // table or column may not exist; ignore and continue
+      } catch {
+        // ignore
       }
     }
   }
@@ -105,7 +116,7 @@ async function findExistingTenant(explicitTenant?: string | null, orgId?: string
       .limit(1)
       .maybeSingle();
     if (!error && data && data.tenant_id && isUuid(String(data.tenant_id))) return String(data.tenant_id);
-  } catch (err) {
+  } catch {
     // ignore
   }
 
@@ -119,7 +130,6 @@ async function findExistingTenant(explicitTenant?: string | null, orgId?: string
 async function ensureAutoMapping(orgId: string) {
   if (!orgId) throw new Error("orgId required for auto mapping");
 
-  // Try read again (race-safe)
   try {
     const { data } = await supabaseAdmin
       .from(AUTO_MAPPING_TABLE)
@@ -128,22 +138,17 @@ async function ensureAutoMapping(orgId: string) {
       .limit(1)
       .maybeSingle();
     if (data && data.tenant_id && isUuid(String(data.tenant_id))) return String(data.tenant_id);
-  } catch (err) {
-    // if table missing we'll fail on insert below
+  } catch {
+    // ignore
   }
 
-  // Create new mapping row with generated UUID
   const newTenantId = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : require("crypto").randomUUID();
   const payload = { clerk_org_id: orgId, tenant_id: newTenantId };
   try {
     const { error } = await supabaseAdmin.from(AUTO_MAPPING_TABLE).insert([payload]);
-    if (error) {
-      // If insert fails (e.g., table missing or constraints), throw so caller can decide
-      throw error;
-    }
+    if (error) throw error;
     return newTenantId;
   } catch (err: any) {
-    // Bubble a helpful error
     throw new Error(`Failed to create tenant mapping in ${AUTO_MAPPING_TABLE}: ${err?.message ?? String(err)}`);
   }
 }
@@ -155,6 +160,10 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const suppliedTenant = body?.tenant_id ?? body?.tenantId ?? null;
+
+    // NEW: optional manufacturer URL/domain for this job
+    const manufacturerUrl = body?.manufacturer_url ?? body?.manufacturerUrl ?? null;
+    const manufacturerDomain = safeHostnameFromUrl(manufacturerUrl);
 
     // Try to find an existing tenant id
     let tenantId: string | null = null;
@@ -187,7 +196,11 @@ export async function POST(req: Request) {
       meta: body.meta ?? {},
       input_count: rows.length,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+
+      // NEW: store manufacturer scope on job
+      manufacturer_url: manufacturerUrl,
+      manufacturer_domain: manufacturerDomain
     };
 
     const { data: job, error: jobErr } = await supabaseAdmin.from("match_url_jobs").insert([jobPayload]).select("*").maybeSingle();
@@ -215,12 +228,13 @@ export async function POST(req: Request) {
 
     if (inserts.length) {
       const { error: insErr } = await supabaseAdmin.from("match_url_job_rows").insert(inserts);
-      if (insErr) {
-        console.warn("insert rows error:", insErr);
-      }
+      if (insErr) console.warn("insert rows error:", insErr);
     }
 
-    return NextResponse.json({ ok: true, job_id: job.id }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, job_id: job.id, manufacturer_domain: manufacturerDomain },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error("create job error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
