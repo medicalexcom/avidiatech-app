@@ -5,6 +5,7 @@ import { signPayload } from "@/lib/ingest/signature";
 import { saveIngestion } from "@/lib/supabaseServer";
 import { resolveTenantForInsert } from "@/lib/ingest/resolve-tenant";
 import { createWatchForIngestion } from "@/lib/monitor/hooks";
+import { resolveTenantIdForServerRequest } from "@/lib/tenancy/resolveTenantIdForServerRequest";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
@@ -148,9 +149,14 @@ export async function POST(req: NextRequest) {
     // 1) explicit tenant in body (tenantId, tenant_id)
     // 2) pipeline payload / pipeline_payload fields
     // 3) options.source_tenant (bulk flow)
-    // 4) for non-internal requests, profile lookup (existing behavior)
-    // 5) for internal requests, do NOT silently inherit profile; require explicit tenant or fallback env
+    // 4) for non-internal requests:
+    //    4a) resolveTenantForInsert fallback (body/pipeline/env)
+    //    4b) resolveTenantIdForServerRequest (Clerk org -> tenants.id, may create tenant)
+    //    4c) profile lookup (legacy back-compat)
+    //
+    // 5) for internal requests, do NOT silently create/guess tenant from Clerk; require explicit tenant or fallback env.
     let tenant_id: string | null = null;
+
     const explicitTenant =
       body?.tenantId ??
       body?.tenant_id ??
@@ -158,18 +164,18 @@ export async function POST(req: NextRequest) {
       body?.pipeline_payload?.tenant_id ??
       body?.options?.source_tenant ??
       null;
+
     if (explicitTenant) {
       tenant_id = String(explicitTenant);
     }
 
     // If not explicit, consult resolveTenantForInsert which checks pipelinePayload, body, authContext and an optional DEFAULT_FALLBACK_TENANT_ID env.
-    // For internal calls we pass strict=false and will enforce presence below; for user calls we still consult auth via profile lookup below.
     if (!tenant_id) {
       try {
         const resolved = await resolveTenantForInsert({
           requestBody: body,
           pipelinePayload: body?.pipelinePayload ?? body?.pipeline_payload ?? null,
-          authContext: null, // we don't have request auth available to helper here (profile lookup below)
+          authContext: null, // profile lookup below (and Clerk org mapping below)
           strict: false,
         });
         if (resolved) tenant_id = resolved;
@@ -180,21 +186,35 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServiceSupabaseClient();
 
-    // For non-internal requests, try profile lookup if tenant still missing (back-compat)
+    // For non-internal requests, resolve tenant from Clerk org/session (preferred, auto-creates tenant if missing)
     let profileData: any = null;
     let role = "user";
     let userId: string | null = null;
 
     if (!isInternalRequest) {
-      const auth = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+      const auth = (safeGetAuth(req as any) as { userId?: string | null; orgId?: string | null }) || {};
       userId = auth.userId ?? null;
+
       if (!userId) {
         return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
       }
 
+      // NEW: if tenant still missing, derive canonical tenantId from Clerk org and create mapping if needed.
+      // This restores the behavior that Extract can POST /api/v1/ingest without tenantId in the body.
       if (!tenant_id) {
         try {
-          // Attempt to load profile row and extract tenant
+          const resolved = await resolveTenantIdForServerRequest(req as any, {});
+          if (resolved?.tenantId) {
+            tenant_id = String(resolved.tenantId);
+          }
+        } catch (e) {
+          // best-effort; fall through to profile lookup below
+        }
+      }
+
+      // Legacy fallback: profile lookup if tenant still missing (back-compat)
+      if (!tenant_id) {
+        try {
           const { data: byClerk, error: clerkErr } = await supabase
             .from("profiles")
             .select("id, tenant_id, role")
@@ -216,7 +236,6 @@ export async function POST(req: NextRequest) {
             if (!userErr && byUser) {
               profileData = byUser;
             } else if (clerkErr && String(clerkErr?.code) !== "42703") {
-              // if lookup failed for other DB reasons surface error
               console.error("[ingest] profile lookup error", clerkErr);
               return NextResponse.json({ error: "profile_lookup_failed" }, { status: 500 });
             }
@@ -241,7 +260,6 @@ export async function POST(req: NextRequest) {
 
     // Final enforcement: tenant must be present before creating product_ingestions
     if (!tenant_id) {
-      // Do not attempt DB insert; return clear client error so callers can include tenant or we can backfill.
       return NextResponse.json(
         {
           error: "missing_tenant",
@@ -281,7 +299,6 @@ export async function POST(req: NextRequest) {
         sourceUrl: url ?? null,
       });
     } catch (err: any) {
-      // saveIngestion will throw descriptive errors, including missing_tenant_id_for_ingestion
       const msg = String(err?.message ?? err);
       console.error("failed to create ingestion record via saveIngestion", { msg, correlation_id });
       if (msg.includes("missing_tenant")) {
@@ -299,9 +316,8 @@ export async function POST(req: NextRequest) {
     const jobId = ingestionId;
     const callbackUrl = `${APP_URL}/api/v1/ingest/callback`;
 
-    // Best-effort: if supabase client available update job_id and diagnostics via service client to preserve existing behavior
+    // Best-effort: update job_id and diagnostics via service client
     try {
-      // update diagnostics and job_id using service client (so RLS/role issues avoided)
       const svc = getServiceSupabaseClient();
       await svc
         .from("product_ingestions")
@@ -314,7 +330,6 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", ingestionId);
     } catch (e) {
-      // warn but continue
       console.warn("failed to update job_id/diagnostics after saveIngestion", e);
     }
 
@@ -330,7 +345,7 @@ export async function POST(req: NextRequest) {
           tenant_id: String(tenant_id),
           created_by: userId ?? null,
           frequency_seconds: null,
-          run_initial_check: true, // NEW: makes watch status update quickly
+          run_initial_check: true,
         });
       } catch (e: any) {
         console.warn("[ingest] createWatchForIngestion failed (non-blocking):", String(e?.message ?? e));
@@ -357,6 +372,8 @@ export async function POST(req: NextRequest) {
         options: effectiveOptions,
         callback_url: callbackUrl,
       },
+      flags,
+      role,
     };
 
     try {
@@ -394,7 +411,7 @@ export async function POST(req: NextRequest) {
               updated_at: new Date().toISOString(),
             })
             .eq("id", ingestionId);
-        } catch (statusErr) {
+        } catch (statusErr: any) {
           console.warn("failed to update status to processing", statusErr?.message ?? statusErr);
         }
       }
