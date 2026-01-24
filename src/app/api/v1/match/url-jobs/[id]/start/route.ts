@@ -23,6 +23,20 @@ export async function POST(req: Request, context: any) {
     const jobId = params?.id;
     if (!jobId) return NextResponse.json({ ok: false, error: "job id required" }, { status: 400 });
 
+    // NEW: load job header to get manufacturer_domain (authoritative scope if set)
+    const { data: job, error: jobErr } = await supabaseAdmin
+      .from("match_url_jobs")
+      .select("manufacturer_domain, manufacturer_url")
+      .eq("id", jobId)
+      .maybeSingle();
+
+    if (jobErr) {
+      console.error("failed to fetch job header:", jobErr);
+      return NextResponse.json({ ok: false, error: String(jobErr.message ?? jobErr) }, { status: 500 });
+    }
+
+    const manufacturerDomain = (job?.manufacturer_domain ?? null) as string | null;
+
     // fetch queued rows for this job (limit to avoid long requests)
     const batchLimit = Number(process.env.MATCH_BATCH_LIMIT ?? 25);
     const { data: rows, error: fetchErr } = await supabaseAdmin
@@ -53,9 +67,10 @@ export async function POST(req: Request, context: any) {
 
     for (const row of rows) {
       try {
-        const r = await processRow(row);
+        // NEW: attach manufacturer_domain to each row so matcher uses it instead of guessing
+        const r = await processRow({ ...row, manufacturer_domain: manufacturerDomain });
         results.push({ row_id: row.row_id ?? row.id, result: r });
-      } catch (err) {
+      } catch (err: any) {
         console.error("processRow error for", row.id, err);
         results.push({ row_id: row.row_id ?? row.id, error: String(err?.message ?? err) });
       }
@@ -70,7 +85,7 @@ export async function POST(req: Request, context: any) {
       // ignore
     }
 
-    return NextResponse.json({ ok: true, processed, results }, { status: 200 });
+    return NextResponse.json({ ok: true, processed, manufacturer_domain: manufacturerDomain, results }, { status: 200 });
   } catch (err: any) {
     console.error("start route error:", err);
     return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
