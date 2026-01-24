@@ -56,6 +56,9 @@ function toStr(v: any) {
 export default function MatchPage() {
   const featureEnabled = true;
 
+  // NEW: manufacturer scope for this job (optional but recommended)
+  const [manufacturerUrl, setManufacturerUrl] = useState<string>("");
+
   // upload / preview
   const [filePreviewRows, setFilePreviewRows] = useState<PreviewRow[]>([]);
   const [parsing, setParsing] = useState(false);
@@ -232,13 +235,25 @@ export default function MatchPage() {
 
     setCreatingJob(true);
     try {
-      const body = { file_name: `upload-${Date.now()}`, rows: good.map((r) => ({ ...r, raw: r.raw })) };
-      const res = await fetch("/api/v1/match/url-jobs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const body = {
+        file_name: `upload-${Date.now()}`,
+        rows: good.map((r) => ({ ...r, raw: r.raw })),
+        // NEW: pass manufacturer URL (server will normalize domain)
+        manufacturer_url: manufacturerUrl?.trim() ? manufacturerUrl.trim() : null
+      };
+
+      const res = await fetch("/api/v1/match/url-jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body)
+      });
+
       const j = await res.json().catch(() => null);
       if (!res.ok || !j?.ok) {
         alert("Create job failed: " + (j?.error ?? res.statusText));
         return null;
       }
+
       setJobId(j.job_id);
       await fetchJobStatus(j.job_id);
       await fetchResultsRows(j.job_id, resultsStatusFilter, resultsLimit, resultsOffset);
@@ -250,7 +265,7 @@ export default function MatchPage() {
     } finally {
       setCreatingJob(false);
     }
-  }, [filePreviewRows, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
+  }, [filePreviewRows, manufacturerUrl, fetchJobStatus, fetchResultsRows, resultsLimit, resultsOffset, resultsStatusFilter]);
 
   // start job
   const startJob = useCallback(async (id?: string | null) => {
@@ -333,16 +348,19 @@ export default function MatchPage() {
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
   const toggleRowSelection = useCallback((id: string) => setSelectedRowIds((m) => ({ ...m, [id]: !m[id] })), []);
   const clearSelection = useCallback(() => setSelectedRowIds({}), []);
+
   const bulkApproveSelected = useCallback(async () => {
     if (!jobId) return alert("No job selected");
     const ids = Object.keys(selectedRowIds).filter((k) => selectedRowIds[k]);
     if (!ids.length) return alert("No rows selected");
     if (!confirm(`Approve ${ids.length} selected rows using their top candidate?`)) return;
+
     for (const id of ids) {
       const row = resultsRows.find((r) => r.id === id || r.row_id === id);
       const top = row?.candidates?.[0]?.url ?? null;
       if (top) await approveCandidate(row.id ?? row.row_id, top);
     }
+
     clearSelection();
     if (jobId) await fetchResultsRows(jobId, resultsStatusFilter, resultsLimit, resultsOffset);
   }, [selectedRowIds, resultsRows, jobId, approveCandidate, resultsLimit, resultsOffset, resultsStatusFilter, clearSelection, fetchResultsRows]);
@@ -449,6 +467,22 @@ export default function MatchPage() {
               <div>
                 <h2 className="text-sm font-semibold">1 · Upload or paste data</h2>
                 <p className="text-xs text-slate-500">Upload XLSX/CSV or paste rows.</p>
+              </div>
+            </div>
+
+            {/* NEW: manufacturer domain scope */}
+            <div className="mt-2 rounded-lg border bg-slate-50 p-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Manufacturer URL (recommended)</label>
+                <input
+                  value={manufacturerUrl}
+                  onChange={(e) => setManufacturerUrl(e.target.value)}
+                  placeholder="https://www.performancehealth.com"
+                  className="w-full rounded border bg-white px-3 py-2 text-sm"
+                />
+                <div className="text-[11px] text-slate-600">
+                  If set, matching is restricted to this domain to prevent wrong-site matches.
+                </div>
               </div>
             </div>
 
@@ -659,6 +693,7 @@ export default function MatchPage() {
                 <li>Supplier Name + SKU are required.</li>
                 <li>NDC is optional.</li>
                 <li>Product name/brand help verification for sites where SKU is not visible.</li>
+                <li>Manufacturer URL restricts matching to the correct domain.</li>
               </ul>
             </div>
           </aside>
