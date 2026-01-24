@@ -644,7 +644,7 @@ export default function MatchPage() {
                                   </a>
                                 ) : (Array.isArray(r.candidates) && r.candidates.length ? (
                                   <div className="text-[11px] leading-4">
-                                    {r.candidates.slice(0, 3).map((c: any, idx: number) => (
+                                    {r.candidates.slice(0, 1).map((c: any, idx: number) => (
                                       <div key={idx}>
                                         <a
                                           href={c.url ?? (typeof c === "string" ? c : "")}
