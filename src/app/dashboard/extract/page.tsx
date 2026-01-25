@@ -185,7 +185,7 @@ export default function ExtractPage() {
       {/* BACKGROUND: layered gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/18" />
-        <div className="absolute -bottom-44 right-[-10rem] h-[28rem] w-[28rem] rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-500/16" />
+        <div className="absolute -bottom-0 right-[-10rem] h-[28rem] w-[28rem] rounded-full bg-violet-300/25 blur-3xl dark:bg-violet-500/16" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0)_0,_rgba(248,250,252,0.92)_58%,_rgba(248,250,252,1)_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0)_0,_rgba(2,6,23,0.92)_58%,_rgba(2,6,23,1)_100%)]" />
         <div className="absolute inset-0 opacity-[0.045] dark:opacity-[0.065]">
           <div className="h-full w-full bg-[linear-gradient(to_right,#e5e7eb_1px,transparent_1px),linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[size:46px_46px] dark:bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)]" />
