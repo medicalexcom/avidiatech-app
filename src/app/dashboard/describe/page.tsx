@@ -197,13 +197,13 @@ function StatCard({
 
 export default function DescribePage() {
   return (
-    {/*
-     * Like the Extract page, make the Describe page’s main container fill the
-     * available height. A flex column layout with `min-h-full` ensures the
-     * footer remains pinned to the bottom when content is short. Without this
-     * the dashboard layout leaves empty space above the footer.
-     */
     <main className="relative flex flex-col min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/*
+        Like the Extract page, make the Describe page’s main container fill the
+        available height. A flex column layout with `min-h-full` ensures the
+        footer remains pinned to the bottom when content is short. Without this
+        the dashboard layout leaves empty space above the footer.
+      */}
       {/* Background: premium glows + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-44 -left-36 h-96 w-96 rounded-full bg-fuchsia-300/20 blur-3xl dark:bg-fuchsia-500/14" />
@@ -217,12 +217,12 @@ export default function DescribePage() {
         </div>
       </div>
 
-      {/*
+      {/**
        * Apply a balanced vertical padding using `py-*` and make the container
        * flex-grow. This eliminates excessive bottom padding (`pb-8 lg:pb-10`)
        * that previously introduced a visible gap above the footer. The use of
        * `sm:px-6` matches spacing conventions across dashboard pages.
-       */
+       */}
       <div className="relative flex-1 mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         {/* HERO + INPUT */}
         <section className="rounded-[28px] bg-gradient-to-r from-fuchsia-200/60 via-pink-200/35 to-sky-200/55 p-[1px] shadow-[0_18px_55px_-35px_rgba(2,6,23,0.55)] dark:from-fuchsia-500/22 dark:via-pink-500/14 dark:to-sky-500/18 dark:shadow-[0_18px_55px_-35px_rgba(0,0,0,0.75)]">
