@@ -5,6 +5,7 @@ import PlanModal from "@/components/PlanModal";
 import TopNav from "@/components/TopNav";
 import Sidebar from "@/components/Sidebar";
 import MobileTopNav from "@/components/MobileTopNav";
+import AppFooter from "@/components/layout/AppFooter";
 import { useUser } from "@clerk/nextjs";
 
 /**
@@ -12,10 +13,10 @@ import { useUser } from "@clerk/nextjs";
  * - Renders TopNav and Sidebar
  * - Shows hard-blocking PlanModal when the signed-in user has no active subscription/trial
  *
- * NOTE: Removed `overflow-hidden` on the dashboard-shell wrapper so position:sticky
- * for elements inside the dashboard will work (e.g. the quick calculator).
+ * Footer:
+ * - Dashboard-only global footer (not fixed; sticky-footer layout)
+ * - Sits at bottom when content is short, below content when page scrolls
  */
-
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
   const [showModal, setShowModal] = useState(false);
@@ -62,26 +63,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  const version = process.env.NEXT_PUBLIC_APP_VERSION;
+
   return (
     <>
-      {/* Top navigation */}
-      <div className="hidden md:block">
-        <TopNav />
-      </div>
-      <div className="md:hidden">
-        <MobileTopNav />
-      </div>
-
-      {/* Shell layout: render Sidebar and main content.
-          IMPORTANT: removed overflow-hidden so sticky children inside the main content can stick to the viewport. */}
-      <div className="dashboard-shell min-h-[calc(100vh-56px)] flex bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-        <aside className="hidden md:block">
-          <Sidebar />
-        </aside>
-
-        <div className="flex-1 md:ml-56">
-          {children}
+      {/* Sticky footer column for dashboard routes */}
+      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+        {/* Top navigation */}
+        <div className="hidden md:block">
+          <TopNav />
         </div>
+        <div className="md:hidden">
+          <MobileTopNav />
+        </div>
+
+        {/* Shell layout: Sidebar + main content */}
+        <div className="dashboard-shell flex-1 flex">
+          <aside className="hidden md:block">
+            <Sidebar />
+          </aside>
+
+          {/* Use div (not <main>) to avoid nested <main> tags (pages already use <main>) */}
+          <div className="flex-1 md:ml-56">
+            {children}
+          </div>
+        </div>
+
+        <AppFooter version={version} />
       </div>
 
       {/* Hard-blocking PlanModal overlay (portaled) */}
