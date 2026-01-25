@@ -10,12 +10,15 @@ import { useUser } from "@clerk/nextjs";
 
 /**
  * Dashboard layout (shell)
- * - Renders TopNav and Sidebar
- * - Shows hard-blocking PlanModal when the signed-in user has no active subscription/trial
  *
- * Footer:
- * - Dashboard-only global footer (not fixed; sticky-footer layout)
- * - Sits at bottom when content is short, below content when page scrolls
+ * Footer-safe layout rules:
+ * - Root is flex-col with min-h-[100dvh]
+ * - The sidebar/content "row" is flex-1
+ * - Footer is rendered AFTER the row (full width)
+ * - Add bottom padding to the scroll/content area so it doesn't visually collide with footer.
+ *
+ * Note: Sidebar on desktop is position:fixed (see Sidebar.tsx), so it will not "shrink"
+ * for the footer. The pb-12 on the content row prevents the UI from feeling broken.
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
@@ -37,7 +40,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!mounted) return;
         setShowModal(!data?.active);
       } catch (err) {
-        // Conservative behavior: if we can't verify, block access with the modal
         console.error("subscription status fetch failed:", err);
         setShowModal(true);
       } finally {
@@ -54,7 +56,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setShowModal(false);
   }
 
-  // Avoid flashing content while status is loading
   if (!checked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -67,7 +68,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      {/* Sticky footer column for dashboard routes */}
       <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
         {/* Top navigation */}
         <div className="hidden md:block">
@@ -77,22 +77,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Shell layout: Sidebar + main content */}
-        <div className="dashboard-shell flex-1 flex">
+        {/* Row (sidebar + content). pb-12 reserves room matching footer height. */}
+        <div className="dashboard-shell flex-1 flex pb-12">
           <aside className="hidden md:block">
             <Sidebar />
           </aside>
 
-          {/* Use div (not <main>) to avoid nested <main> tags (pages already use <main>) */}
-          <div className="flex-1 md:ml-56">
-            {children}
-          </div>
+          {/* Use div (not <main>) so pages can keep their own <main> */}
+          <div className="flex-1 md:ml-56">{children}</div>
         </div>
 
+        {/* Full-width footer */}
         <AppFooter version={version} />
       </div>
 
-      {/* Hard-blocking PlanModal overlay (portaled) */}
       {showModal && <PlanModal onActivated={onActivated} />}
     </>
   );
