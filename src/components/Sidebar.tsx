@@ -168,7 +168,7 @@ export default function Sidebar({ variant = "desktop" }: SidebarProps) {
   const isDesktop = variant === "desktop";
 
   const positionClasses = isDesktop
-    ? "fixed top-[56px] bottom-0 left-0 w-56"
+    ? "fixed top-[56px] bottom-12 left-0 w-56"
     : "relative h-full w-full";
 
   // Light-mode-first for drawer, original dark rail for desktop
