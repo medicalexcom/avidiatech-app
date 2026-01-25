@@ -181,7 +181,7 @@ export default function ExtractPage() {
       : "Awaiting first URL";
 
   return (
-    <main className="relative min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+    <main className="relative bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       {/* BACKGROUND: layered gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/18" />
