@@ -38,6 +38,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!mounted) return;
         setShowModal(!data?.active);
       } catch (err) {
+        // Conservative behavior: if we can't verify, block access with the modal
         console.error("subscription status fetch failed:", err);
         setShowModal(true);
       } finally {
@@ -54,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setShowModal(false);
   }
 
+  // Avoid flashing content while status is loading
   if (!checked) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
@@ -73,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Shell layout (fills remaining height) */}
+        {/* Shell layout: Sidebar + main content (fills remaining height) */}
         <div className="dashboard-shell flex-1 flex">
           <aside className="hidden md:block">
             <Sidebar />
@@ -85,6 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
+      {/* Hard-blocking PlanModal overlay (portaled) */}
       {showModal && <PlanModal onActivated={onActivated} />}
     </>
   );
