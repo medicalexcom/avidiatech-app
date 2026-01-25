@@ -14,16 +14,10 @@ html {
   box-sizing: inherit;
 }
 
-/**
- * Global layout normalization:
- * - Use modern viewport unit 100dvh to avoid "phantom bottom space" on mobile Chrome/Safari
- *   due to dynamic address bar behavior with 100vh.
- * - Keep body styles consistent with Tailwind-driven themes; page modules can override background.
- */
 body {
   @apply bg-white text-gray-900 antialiased leading-6;
   margin: 0;
-  min-height: 100dvh;
+  min-height: 100vh;
 }
 
 /* responsive container utility */
