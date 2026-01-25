@@ -181,14 +181,14 @@ export default function ExtractPage() {
       : "Awaiting first URL";
 
   return (
-    {/*
-     * Stretch the page’s main element to fill the available height so the footer
-     * always sits flush against the bottom of the dashboard shell. The flex
-     * layout combined with `min-h-full` ensures that even when the content is
-     * short, it expands to occupy the full vertical space of its parent. See
-     * dashboard/layout.tsx for details on the sticky footer implementation.
-     */
     <main className="relative flex flex-col min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+      {/*
+        Stretch the page’s main element to fill the available height so the footer
+        always sits flush against the bottom of the dashboard shell. The flex
+        layout combined with `min-h-full` ensures that even when the content is
+        short, it expands to occupy the full vertical space of its parent. See
+        dashboard/layout.tsx for details on the sticky footer implementation.
+      */}
       {/* BACKGROUND: layered gradients + subtle grid */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-cyan-300/25 blur-3xl dark:bg-cyan-500/18" />
@@ -199,13 +199,13 @@ export default function ExtractPage() {
         </div>
       </div>
 
-      {/*
+      {/**
        * The container becomes a flex child (`flex-1`) to fill the main’s height.
        * Balanced vertical padding avoids large bottom padding that previously
        * created extra space above the footer. Use `py-*` rather than separate
        * `pt`/`pb` values so top and bottom padding stay symmetrical across
        * breakpoints. We also add `sm:px-6` for consistency with other pages.
-       */
+       */}
       <div className="relative flex-1 mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         {/* HERO (inputs visible immediately) */}
         <section className="rounded-[28px] bg-gradient-to-r from-cyan-200/60 via-sky-200/35 to-emerald-200/60 p-[1px] shadow-2xl shadow-slate-200/70 dark:from-cyan-500/22 dark:via-sky-500/14 dark:to-emerald-500/18">
