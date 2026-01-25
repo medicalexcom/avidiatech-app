@@ -10,9 +10,15 @@ import { useUser } from "@clerk/nextjs";
 
 /**
  * Dashboard layout (shell)
- * - Dashboard-only sticky footer (not fixed; no overlap)
- * - IMPORTANT: do NOT add extra bottom padding here (it creates extra scroll/gap).
- * - Use a content row that is flex-1, then render footer after it.
+ *
+ * Sticky footer rules (with fixed Sidebar):
+ * - Root: min-h-[100dvh] flex flex-col
+ * - Content row: flex-1 min-h-0 flex  (fills remaining height)
+ * - Footer: normal flow after content row (NOT fixed)
+ *
+ * Important:
+ * - Remove min-h calc hacks from the shell; they conflict with a real footer.
+ * - Sidebar is fixed on desktop; we reserve footer height via Sidebar bottom offset (see Sidebar.tsx).
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
@@ -52,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!checked) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <div className="text-sm text-slate-600">Checking access…</div>
       </div>
     );
@@ -71,14 +77,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Row: Sidebar + main content */}
-        <div className="dashboard-shell flex-1 flex">
+        {/* Content row */}
+        <div className="dashboard-shell flex-1 min-h-0 flex">
           <aside className="hidden md:block">
             <Sidebar />
           </aside>
 
-          {/* Use div to avoid nested <main> tags */}
-          <div className="flex-1 md:ml-56">{children}</div>
+          {/* Use div so pages can keep their own <main> */}
+          <div className="flex-1 min-h-0 md:ml-56">
+            {children}
+          </div>
         </div>
 
         <AppFooter version={version} />
