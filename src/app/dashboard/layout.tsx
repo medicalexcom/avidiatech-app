@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showModal, setShowModal] = useState(false);
   const [checked, setChecked] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let mounted = true;
     async function check() {
       if (!isLoaded) return;
@@ -40,6 +40,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, [isLoaded, isSignedIn]);
 
+  function onActivated() {
+    setShowModal(false);
+  }
+
   if (!checked) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
@@ -53,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <>
       <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+        {/* Top navigation */}
         <div className="hidden md:block">
           <TopNav />
         </div>
@@ -60,24 +65,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Row */}
-        <div className="dashboard-shell flex-1 min-h-0 flex">
+        {/* Content row; pb-12 reserves space for the fixed footer */}
+        <div className="dashboard-shell flex-1 min-h-0 flex pb-12">
           <aside className="hidden md:block">
             <Sidebar />
           </aside>
 
-          {/* Dashboard scroll container (not the whole window) */}
-          <div className="flex-1 min-h-0 md:ml-56 overflow-y-auto overscroll-y-none">
-            {/* children render their own <main> etc */}
-            {children}
-
-            {/* Sticky footer lives INSIDE scroller */}
-            <AppFooter version={version} />
-          </div>
+          <div className="flex-1 min-h-0 md:ml-56">{children}</div>
         </div>
+
+        {/* Fixed footer overlay */}
+        <AppFooter version={version} />
       </div>
 
-      {showModal && <PlanModal onActivated={() => setShowModal(false)} />}
+      {showModal && <PlanModal onActivated={onActivated} />}
     </>
   );
 }
