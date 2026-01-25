@@ -22,8 +22,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <html lang="en" suppressHydrationWarning>
-        {/* Keep body in normal document flow (NOT flex) to avoid phantom bottom gaps from nested layouts. */}
-        <body className="bg-slate-50 text-slate-950 antialiased">
+        {/* Light by default; dark mode comes from `html.dark` via next-themes */}
+        <body className="min-h-screen bg-slate-50 text-slate-950 antialiased flex flex-col">
           <ErrorBoundary>
             <Providers>
               <ToastProvider>{children}</ToastProvider>
