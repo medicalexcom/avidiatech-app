@@ -27,7 +27,42 @@ type TabsShellProps = {
  *   - Manuals / PDFs
  *
  * That separation avoids duplicate content on the screen.
+ *
+ * UI update (2026-01):
+ * - JSON-heavy tabs now render in a bounded scroll region (max-height) so the page
+ *   doesn't grow indefinitely. This keeps the tab area readable and consistent.
  */
+
+function JsonScrollPanel({
+  children,
+  tone = "dark",
+}: {
+  children: React.ReactNode;
+  tone?: "dark" | "amber";
+}) {
+  const base =
+    tone === "amber"
+      ? "border-amber-900/60 bg-amber-950"
+      : "border-slate-800 bg-slate-900";
+
+  const fade =
+    tone === "amber"
+      ? "from-amber-950"
+      : "from-slate-900";
+
+  return (
+    <div
+      className={`relative max-h-[60vh] overflow-auto overscroll-contain rounded-lg border ${base}`}
+    >
+      {children}
+      {/* subtle fade to indicate scroll */}
+      <div
+        className={`pointer-events-none absolute bottom-0 left-0 right-0 h-10 rounded-b-lg bg-gradient-to-t ${fade} to-transparent`}
+      />
+    </div>
+  );
+}
+
 export default function TabsShell({
   job,
   loading,
@@ -50,8 +85,7 @@ export default function TabsShell({
   const hasRaw = !!rawJsonSource;
 
   const diagnostics = job?.diagnostics || payload?.diagnostics || null;
-  const hasDiagnostics =
-    diagnostics && Object.keys(diagnostics).length > 0;
+  const hasDiagnostics = diagnostics && Object.keys(diagnostics).length > 0;
 
   // Handle outer states
   if (!job && !loading) {
@@ -82,16 +116,13 @@ export default function TabsShell({
   ] as const;
 
   // Pick initial tab: first enabled, otherwise Raw, otherwise Diagnostics.
-  const firstEnabled =
-    tabs.find((t) => t.enabled)?.id || TAB_RAW || TAB_DIAGNOSTICS;
+  const firstEnabled = tabs.find((t) => t.enabled)?.id || TAB_RAW || TAB_DIAGNOSTICS;
 
-  const [activeTab, setActiveTab] =
-    React.useState<string>(firstEnabled);
+  const [activeTab, setActiveTab] = React.useState<string>(firstEnabled);
 
   // When job changes, reset to first enabled tab
   React.useEffect(() => {
-    const nextFirst =
-      tabs.find((t) => t.enabled)?.id || TAB_RAW || TAB_DIAGNOSTICS;
+    const nextFirst = tabs.find((t) => t.enabled)?.id || TAB_RAW || TAB_DIAGNOSTICS;
     setActiveTab(nextFirst);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSourceSeo, hasSpecs, hasVariants, hasRaw]);
@@ -102,10 +133,8 @@ export default function TabsShell({
       <div className="mb-3 flex flex-wrap gap-2">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
-          const baseClasses =
-            "px-3 py-1.5 text-sm rounded border transition-colors";
-          const activeClasses =
-            "bg-slate-900 text-white border-slate-900";
+          const baseClasses = "px-3 py-1.5 text-sm rounded border transition-colors";
+          const activeClasses = "bg-slate-900 text-white border-slate-900";
           const inactiveClasses = tab.enabled
             ? "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
             : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed";
@@ -116,9 +145,7 @@ export default function TabsShell({
               type="button"
               disabled={!tab.enabled}
               onClick={() => tab.enabled && setActiveTab(tab.id)}
-              className={`${baseClasses} ${
-                isActive ? activeClasses : inactiveClasses
-              }`}
+              className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
             >
               {tab.label}
             </button>
@@ -145,7 +172,7 @@ export default function TabsShell({
         )}
 
         {activeTab === TAB_DIAGNOSTICS && (
-          <DiagnosticsPanel diagnostics={diagnostics} />
+          <DiagnosticsPanel diagnostics={diagnostics} hasDiagnostics={hasDiagnostics} />
         )}
       </div>
     </div>
@@ -176,21 +203,14 @@ function SourceSeoPanel({
         <tbody>
           <SeoRow label="Source H1" value={seo.source_h1} />
           <SeoRow label="Title Tag" value={seo.source_title_tag} />
-          <SeoRow
-            label="Meta Description"
-            value={seo.source_meta_description}
-          />
+          <SeoRow label="Meta Description" value={seo.source_meta_description} />
           <SeoRow label="Canonical" value={seo.canonical} />
           <SeoRow label="OG Title" value={seo.og_title} />
-          <SeoRow
-            label="OG Description"
-            value={seo.og_description}
-          />
+          <SeoRow label="OG Description" value={seo.og_description} />
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-600">
-        These SEO fields were extracted from the source website. They
-        are{" "}
+        These SEO fields were extracted from the source website. They are{" "}
         <strong>not generated or optimized by AvidiaTech</strong>.
       </p>
     </div>
@@ -226,13 +246,14 @@ function SpecsPanel({
     );
   }
 
-  const specsPayload =
-    payload.specs_json || payload.specs || payload.specs_payload;
+  const specsPayload = payload.specs_json || payload.specs || payload.specs_payload;
 
   return (
-    <pre className="bg-slate-900 text-slate-50 p-3 rounded text-xs whitespace-pre-wrap break-words">
-      {JSON.stringify(specsPayload, null, 2)}
-    </pre>
+    <JsonScrollPanel tone="dark">
+      <pre className="p-3 text-[11px] leading-5 text-slate-50 whitespace-pre-wrap break-words">
+        {JSON.stringify(specsPayload, null, 2)}
+      </pre>
+    </JsonScrollPanel>
   );
 }
 
@@ -253,9 +274,11 @@ function VariantsPanel({
   }
 
   return (
-    <pre className="bg-slate-900 text-slate-50 p-3 rounded text-xs whitespace-pre-wrap break-words">
-      {JSON.stringify(payload.variants, null, 2)}
-    </pre>
+    <JsonScrollPanel tone="dark">
+      <pre className="p-3 text-[11px] leading-5 text-slate-50 whitespace-pre-wrap break-words">
+        {JSON.stringify(payload.variants, null, 2)}
+      </pre>
+    </JsonScrollPanel>
   );
 }
 
@@ -276,15 +299,23 @@ function RawPanel({
   }
 
   return (
-    <pre className="bg-slate-900 text-slate-50 p-3 rounded text-xs whitespace-pre-wrap break-words">
-      {JSON.stringify(rawJsonSource, null, 2)}
-    </pre>
+    <JsonScrollPanel tone="dark">
+      <pre className="p-3 text-[11px] leading-5 text-slate-50 whitespace-pre-wrap break-words">
+        {JSON.stringify(rawJsonSource, null, 2)}
+      </pre>
+    </JsonScrollPanel>
   );
 }
 
 /** Diagnostics panel */
-function DiagnosticsPanel({ diagnostics }: { diagnostics: any }) {
-  if (!diagnostics || Object.keys(diagnostics).length === 0) {
+function DiagnosticsPanel({
+  diagnostics,
+  hasDiagnostics,
+}: {
+  diagnostics: any;
+  hasDiagnostics: boolean;
+}) {
+  if (!hasDiagnostics) {
     return (
       <div className="text-slate-500">
         No diagnostics were recorded for this extraction.
@@ -293,8 +324,10 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: any }) {
   }
 
   return (
-    <pre className="bg-amber-950 text-amber-50 p-3 rounded text-xs whitespace-pre-wrap break-words">
-      {JSON.stringify(diagnostics, null, 2)}
-    </pre>
+    <JsonScrollPanel tone="amber">
+      <pre className="p-3 text-[11px] leading-5 text-amber-50 whitespace-pre-wrap break-words">
+        {JSON.stringify(diagnostics, null, 2)}
+      </pre>
+    </JsonScrollPanel>
   );
 }
