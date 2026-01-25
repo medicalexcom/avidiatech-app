@@ -1,21 +1,21 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
-
 import PlanModal from "@/components/PlanModal";
 import TopNav from "@/components/TopNav";
 import Sidebar from "@/components/Sidebar";
 import MobileTopNav from "@/components/MobileTopNav";
+import { useUser } from "@clerk/nextjs";
 
 /**
  * Dashboard layout (shell)
  * - Renders TopNav and Sidebar
  * - Shows hard-blocking PlanModal when the signed-in user has no active subscription/trial
  *
- * NOTE:
- * - Keep layout height stable across browsers by using 100dvh (dynamic viewport height)
- * - Avoid calc(100vh - navHeight) because nav height differs between breakpoints and browsers
+ * Layout normalization (2026-01):
+ * - Use a flex-column root with 100dvh and make the shell `flex-1` so pages do not
+ *   show extra blank space at the bottom when content is short.
+ * - Avoid brittle calc(100vh - navHeight).
  */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
@@ -24,32 +24,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     let mounted = true;
-
     async function check() {
       if (!isLoaded) return;
-
       if (!isSignedIn) {
         setShowModal(false);
         setChecked(true);
         return;
       }
-
       try {
         const res = await fetch("/api/subscription/status");
         const data = await res.json();
         if (!mounted) return;
         setShowModal(!data?.active);
       } catch (err) {
-        console.error("subscription status fetch failed:", err);
         // Conservative behavior: if we can't verify, block access with the modal
-        if (mounted) setShowModal(true);
+        console.error("subscription status fetch failed:", err);
+        setShowModal(true);
       } finally {
         if (mounted) setChecked(true);
       }
     }
-
     check();
-
     return () => {
       mounted = false;
     };
@@ -63,9 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!checked) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-        <div className="text-sm text-slate-600 dark:text-slate-300">
-          Checking access…
-        </div>
+        <div className="text-sm text-slate-600 dark:text-slate-300">Checking access…</div>
       </div>
     );
   }
@@ -81,7 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Shell layout: Sidebar + main content */}
+        {/* Shell layout: render Sidebar and main content. */}
         <div className="dashboard-shell flex-1 flex">
           <aside className="hidden md:block">
             <Sidebar />
