@@ -68,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 overscroll-y-none">
+      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 overscroll-none">
         {/* Top navigation */}
         <div className="hidden md:block">
           <TopNav />
