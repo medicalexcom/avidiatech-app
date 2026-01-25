@@ -8,7 +8,7 @@ export default function AppFooter({ version }: AppFooterProps) {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/90">
+    <footer className="sticky bottom-0 z-30 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/90">
       <div className="mx-auto flex h-12 max-w-screen-2xl items-center justify-between px-6 text-xs text-slate-500 dark:text-slate-400">
         <div className="flex items-center gap-2">
           <span>© {year} AvidiaTech, Inc.</span>
