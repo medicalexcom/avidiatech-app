@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="flex-1 md:ml-56">
           {children}
-        </main>
+        </div>
       </div>
 
       {/* Hard-blocking PlanModal overlay (portaled) */}
