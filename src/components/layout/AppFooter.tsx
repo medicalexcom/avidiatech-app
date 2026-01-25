@@ -8,8 +8,8 @@ export default function AppFooter({ version }: AppFooterProps) {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-800/60 bg-slate-950">
-      <div className="mx-auto flex h-12 max-w-screen-2xl items-center justify-between px-6 text-xs text-slate-500">
+    <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/80 backdrop-blur-sm dark:border-slate-800/80 dark:bg-slate-950/90">
+      <div className="mx-auto flex h-12 max-w-screen-2xl items-center justify-between px-6 text-xs text-slate-500 dark:text-slate-400">
         <div className="flex items-center gap-2">
           <span>© {year} AvidiaTech, Inc.</span>
           <span className="opacity-60">·</span>
@@ -21,7 +21,7 @@ export default function AppFooter({ version }: AppFooterProps) {
             href="https://docs.avidiatech.com"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             Docs
           </a>
@@ -29,7 +29,7 @@ export default function AppFooter({ version }: AppFooterProps) {
             href="/api"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             API
           </a>
@@ -37,13 +37,13 @@ export default function AppFooter({ version }: AppFooterProps) {
             href="https://status.avidiatech.com"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             Status
           </a>
           <a
             href="mailto:support@avidiatech.com"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             Support
           </a>
@@ -51,7 +51,7 @@ export default function AppFooter({ version }: AppFooterProps) {
             href="/legal/terms"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             Terms
           </a>
@@ -59,7 +59,7 @@ export default function AppFooter({ version }: AppFooterProps) {
             href="/legal/privacy"
             target="_blank"
             rel="noreferrer"
-            className="hover:text-slate-300 hover:underline"
+            className="hover:text-slate-800 hover:underline dark:hover:text-slate-200"
           >
             Privacy
           </a>
