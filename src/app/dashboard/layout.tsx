@@ -8,18 +8,6 @@ import MobileTopNav from "@/components/MobileTopNav";
 import AppFooter from "@/components/layout/AppFooter";
 import { useUser } from "@clerk/nextjs";
 
-/**
- * Dashboard layout (shell)
- *
- * Sticky footer rules (with fixed Sidebar):
- * - Root: min-h-[100dvh] flex flex-col
- * - Content row: flex-1 min-h-0 flex  (fills remaining height)
- * - Footer: normal flow after content row (NOT fixed)
- *
- * Important:
- * - Remove min-h calc hacks from the shell; they conflict with a real footer.
- * - Sidebar is fixed on desktop; we reserve footer height via Sidebar bottom offset (see Sidebar.tsx).
- */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
   const [showModal, setShowModal] = useState(false);
@@ -68,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 overscroll-none">
+      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
         {/* Top navigation */}
         <div className="hidden md:block">
           <TopNav />
@@ -77,18 +65,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <MobileTopNav />
         </div>
 
-        {/* Content row */}
-        <div className="dashboard-shell flex-1 min-h-0 flex">
+        {/* Content row; pb-12 reserves space for the fixed footer */}
+        <div className="dashboard-shell flex-1 min-h-0 flex pb-12">
           <aside className="hidden md:block">
             <Sidebar />
           </aside>
 
-          {/* Use div so pages can keep their own <main> */}
-          <div className="flex-1 min-h-0 md:ml-56">
-            {children}
-          </div>
+          <div className="flex-1 min-h-0 md:ml-56">{children}</div>
         </div>
 
+        {/* Fixed footer overlay */}
         <AppFooter version={version} />
       </div>
 
