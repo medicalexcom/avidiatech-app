@@ -12,8 +12,10 @@ import { useUser } from "@clerk/nextjs";
  * - Renders TopNav and Sidebar
  * - Shows hard-blocking PlanModal when the signed-in user has no active subscription/trial
  *
- * NOTE: Removed `overflow-hidden` on the dashboard-shell wrapper so position:sticky
- * for elements inside the dashboard will work (e.g. the quick calculator).
+ * Layout fix (2026-01):
+ * - Use a flex-column dashboard root and make the shell `flex-1` so there is no
+ *   phantom blank space at the bottom of shorter pages.
+ * - Avoid brittle `calc(100vh-56px)`; use modern viewport sizing via 100dvh.
  */
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -36,7 +38,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (!mounted) return;
         setShowModal(!data?.active);
       } catch (err) {
-        // Conservative behavior: if we can't verify, block access with the modal
         console.error("subscription status fetch failed:", err);
         setShowModal(true);
       } finally {
@@ -53,10 +54,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setShowModal(false);
   }
 
-  // Avoid flashing content while status is loading
   if (!checked) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <div className="text-sm text-slate-600">Checking access…</div>
       </div>
     );
@@ -64,27 +64,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      {/* Top navigation */}
-      <div className="hidden md:block">
-        <TopNav />
-      </div>
-      <div className="md:hidden">
-        <MobileTopNav />
+      <div className="min-h-[100dvh] flex flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+        {/* Top navigation */}
+        <div className="hidden md:block">
+          <TopNav />
+        </div>
+        <div className="md:hidden">
+          <MobileTopNav />
+        </div>
+
+        {/* Shell layout (fills remaining height) */}
+        <div className="dashboard-shell flex-1 flex">
+          <aside className="hidden md:block">
+            <Sidebar />
+          </aside>
+
+          <main className="flex-1 md:ml-56">
+            {children}
+          </main>
+        </div>
       </div>
 
-      {/* Shell layout: render Sidebar and main content.
-          IMPORTANT: removed overflow-hidden so sticky children inside the main content can stick to the viewport. */}
-      <div className="dashboard-shell min-h-[calc(100vh-56px)] flex bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-        <aside className="hidden md:block">
-          <Sidebar />
-        </aside>
-
-        <main className="flex-1 md:ml-56">
-          {children}
-        </main>
-      </div>
-
-      {/* Hard-blocking PlanModal overlay (portaled) */}
       {showModal && <PlanModal onActivated={onActivated} />}
     </>
   );
