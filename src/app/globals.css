@@ -1,44 +1,36 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import "./globals.css";
+import type { ReactNode } from "react";
+import Providers from "./providers";
+import { ClerkProvider } from "@clerk/nextjs";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { ToastProvider } from "@/components/ui/toast";
 
-/* Mobile-first sensible defaults */
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  box-sizing: border-box;
-}
+export const metadata = {
+  title: "AvidiaTech | Product Data Automation",
+  description:
+    "AvidiaTech unifies product data ingestion, enrichment, and monitoring with secure, Clerk-powered access and Stripe-ready billing.",
+  openGraph: {
+    title: "AvidiaTech | Product Data Automation",
+    description:
+      "Ship faster with centralized workflows for product data extraction, translations, SEO formatting, and analytics—secured with Clerk.",
+  },
+};
 
-*, *::before, *::after {
-  box-sizing: inherit;
-}
+export default function RootLayout({ children }: { children: ReactNode }) {
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-body {
-  @apply bg-white text-gray-900 antialiased leading-6;
-  margin: 0;
-  min-height: 100vh;
-}
-
-/* responsive container utility */
-.container {
-  @apply mx-auto px-4 sm:px-6 lg:px-8;
-}
-
-/* fluid heading example */
-.h1 {
-  font-weight: 700;
-  font-size: clamp(1.25rem, 2.5vw, 1.875rem);
-}
-
-/* small-screen improvements */
-img, video {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
-
-/* prevent horizontal overflow on small screens */
-:root {
-  overscroll-behavior-x: none;
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <html lang="en" suppressHydrationWarning>
+        {/* Keep body in normal document flow (NOT flex) to avoid phantom bottom gaps from nested layouts. */}
+        <body className="bg-slate-50 text-slate-950 antialiased">
+          <ErrorBoundary>
+            <Providers>
+              <ToastProvider>{children}</ToastProvider>
+            </Providers>
+          </ErrorBoundary>
+        </body>
+      </html>
+    </ClerkProvider>
+  );
 }
