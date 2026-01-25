@@ -192,7 +192,7 @@ export default function ExtractPage() {
         </div>
       </div>
 
-      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-44 lg:px-8 lg:pt-6 lg:pb-66">
+      <div className="relative mx-auto max-w-7xl space-y-6 px-4 pt-4 pb-2 lg:px-8 lg:pt-6 lg:pb-2">
         {/* HERO (inputs visible immediately) */}
         <section className="rounded-[28px] bg-gradient-to-r from-cyan-200/60 via-sky-200/35 to-emerald-200/60 p-[1px] shadow-2xl shadow-slate-200/70 dark:from-cyan-500/22 dark:via-sky-500/14 dark:to-emerald-500/18">
           <div className="rounded-[27px] border border-white/50 bg-white/75 p-4 backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-950/52 lg:p-5">
