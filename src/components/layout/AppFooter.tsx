@@ -1,4 +1,3 @@
-// src/components/layout/AppFooter.tsx
 import React from "react";
 
 type AppFooterProps = {
@@ -9,7 +8,7 @@ export default function AppFooter({ version }: AppFooterProps) {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-slate-800/60 bg-slate-950">
+    <footer className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-800/60 bg-slate-950">
       <div className="mx-auto flex h-12 max-w-screen-2xl items-center justify-between px-6 text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <span>© {year} AvidiaTech, Inc.</span>
