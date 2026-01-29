@@ -137,13 +137,30 @@ function countPackagingRefs(h1: string): number {
 }
 
 /**
- * Brand handling rule:
- * - If normalized_payload.brand has multiple words (e.g., "Aspen Surgical"),
- *   enforce only the shortest single-word form at the front of H1 (e.g., "Aspen").
+ * Brand selection priority:
+ * 1) normalized_payload.__brand_override (set from UI popup brand_name)
+ * 2) normalized_payload.import_brand_name (optional alias)
+ * 3) normalized_payload.brand_override (optional alias)
+ * 4) normalized_payload.brand (fallback) -> shortest single token
  *
- * Deterministic approach:
- * - Take the brand, split on whitespace, choose the shortest token (ties -> first shortest).
- * - Only use alphanumeric-ish tokens to avoid punctuation fragments.
+ * This is deterministic and prevents "hallucinated brand" requirements.
+ */
+function getBrandOverride(normalizedPayload: any): string {
+  if (!normalizedPayload || typeof normalizedPayload !== "object") return "";
+  const candidates = [
+    normalizedPayload.__brand_override,
+    normalizedPayload.import_brand_name,
+    normalizedPayload.brand_override,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "";
+}
+
+/**
+ * If brand is multi-word (e.g. "Aspen Surgical"), enforce the shortest 1-word token (e.g. "Aspen").
+ * If brand is already 1 word, use that.
  */
 function chooseShortestBrandToken(brand: string): string {
   const tokens = brand
@@ -151,7 +168,7 @@ function chooseShortestBrandToken(brand: string): string {
     .split(/\s+/)
     .map((t) => t.trim())
     .filter(Boolean)
-    .map((t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")) // strip edge punctuation
+    .map((t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, ""))
     .filter((t) => /^[A-Za-z0-9]+$/.test(t));
 
   if (!tokens.length) return brand.trim();
@@ -180,6 +197,10 @@ function getSections(seo_payload: any): any | null {
   return null;
 }
 
+/**
+ * Option-1 enforcement: section fragments must appear in descriptionHtml in fixed order.
+ * We do not depend on heading text.
+ */
 function findOrderedSectionsInDescription(params: {
   descriptionHtml: string;
   sections: any;
@@ -306,8 +327,12 @@ export function lintSeoOutput(params: {
   const features = Array.isArray(params.features) ? params.features : [];
 
   const normalizedPayload = params.normalized_payload ?? null;
-  const brandRaw = typeof normalizedPayload?.brand === "string" ? normalizedPayload.brand.trim() : "";
-  const brandToken = brandRaw ? chooseShortestBrandToken(brandRaw) : "";
+
+  // Brand enforcement: prefer UI popup brand override if present
+  const overrideBrand = getBrandOverride(normalizedPayload);
+  const fallbackBrand = typeof normalizedPayload?.brand === "string" ? normalizedPayload.brand.trim() : "";
+  const effectiveBrandForH1 = (overrideBrand || fallbackBrand).trim();
+  const brandToken = effectiveBrandForH1 ? chooseShortestBrandToken(effectiveBrandForH1) : "";
 
   // --- H1 checks
   if (!h1.trim()) {
@@ -331,17 +356,24 @@ export function lintSeoOutput(params: {
       checks.push({ key: "h1_len", label: "H1 length 90–110", status: "pass", detail: `len=${len}` });
     }
 
-    // Brand-fronted H1: use shortest single-word brand token
+    // Brand-fronted H1: enforce shortest single-word token, preferring UI override
     if (brandToken) {
       const re = new RegExp(`^${escapeRegex(brandToken)}(?:\\b|\\s|\\-|–|—|:|\\|)`, "i");
       if (!re.test(h1.trim())) {
         blockers.push({
           severity: "blocker",
           code: "H1_NOT_BRAND_TOKEN_FRONTED",
-          message: `H1 must start with brand token (${brandToken}) derived from brand (${brandRaw}).`,
+          message: overrideBrand
+            ? `H1 must start with UI brand token (${brandToken}) derived from popup brand (${overrideBrand}).`
+            : `H1 must start with brand token (${brandToken}) derived from brand (${effectiveBrandForH1}).`,
           field: "seo.h1",
           snippet: safeSnippet(h1),
-          evidence: { brand: brandRaw, brandToken },
+          evidence: {
+            brand_override: overrideBrand || null,
+            brand_fallback: fallbackBrand || null,
+            brand_effective: effectiveBrandForH1 || null,
+            brandToken,
+          },
         });
       }
     }
@@ -427,7 +459,6 @@ export function lintSeoOutput(params: {
   } else {
     checks.push({ key: "html", label: "HTML description present", status: "pass" });
 
-    // Option-1 enforcement: section fragments + fixed ordering; no heading title dependence
     if (!sections || typeof sections !== "object") {
       blockers.push({
         severity: "blocker",
