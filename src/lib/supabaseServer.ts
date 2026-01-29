@@ -5,8 +5,10 @@
 // - enforces tenant presence (unless GLOBAL_TENANT_ID configured)
 // - writes both tenant_id and org_id (org_id required by DB)
 // - tolerantly strips unknown columns reported by PostgREST and retries
+// - BEST-EFFORT: auto-creates a Monitor watch for Extract/SEO-style ingestions
 
 import { createClient } from "@supabase/supabase-js";
+import { createWatchForIngestion } from "@/lib/monitor/hooks";
 
 const url = process.env.SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
@@ -41,6 +43,9 @@ function parseMissingColumnFromError(err: any): string | null {
  * and tolerantly strips unknown columns reported by PostgREST on insert.
  *
  * Important: sets both tenant_id AND org_id to the effective tenant value to satisfy NOT NULL constraints.
+ *
+ * NEW: best-effort auto-create monitor watch for ingestion types that represent Extract/SEO-style work
+ * (single or bulk). This is non-blocking and errors are swallowed so ingestion never fails because Monitor is down.
  */
 export async function saveIngestion({
   tenantId,
@@ -115,6 +120,34 @@ export async function saveIngestion({
       }
 
       // success
+
+      // Auto-monitor only for ingestion types that represent Extract/SEO-style work.
+      // This keeps Monitor focused on URLs that will be extracted/SEO'd/pipelined.
+      const MONITORED_INGEST_TYPES = new Set(["extract", "seo", "ingest", "full", "pipeline"]);
+      try {
+        const typeKey = (type || "").toString().toLowerCase();
+        if (sourceUrl && MONITORED_INGEST_TYPES.has(typeKey)) {
+          // fire-and-forget so ingestion never blocks
+          (async () => {
+            try {
+              await createWatchForIngestion({
+                source_url: sourceUrl,
+                product_id: (data as any)?.id ?? null,
+                tenant_id: effectiveTenant,
+                created_by: userId ?? null,
+                frequency_seconds: null,
+                run_initial_check: true,
+              });
+            } catch (cwErr) {
+              // swallow errors - do not block ingestion flow
+              console.warn("[saveIngestion] createWatchForIngestion failed (non-blocking):", String((cwErr as any)?.message ?? cwErr));
+            }
+          })();
+        }
+      } catch (guardErr) {
+        console.warn("[saveIngestion] monitor spawn guard failed:", String((guardErr as any)?.message ?? guardErr));
+      }
+
       return data;
     } catch (e: any) {
       const missingColumn = parseMissingColumnFromError(e);
