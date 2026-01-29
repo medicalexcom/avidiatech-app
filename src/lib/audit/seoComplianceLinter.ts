@@ -92,7 +92,7 @@ function isAllowedPlaceholderToken(match: string): boolean {
 
 /**
  * BANNED placeholders (blockers).
- * - "OK" is blocked per your instruction.
+ * - "OK" is blocked per instruction.
  * - NA/N/A/Not Applicable variants are explicitly allowed.
  */
 const BANNED_PLACEHOLDER_PATTERNS: Array<{ code: string; re: RegExp; example: string }> = [
@@ -137,10 +137,32 @@ function countPackagingRefs(h1: string): number {
 }
 
 /**
- * Section enforcement (Option 1):
- * - We do NOT look for heading text.
- * - We enforce that descriptionHtml contains the section fragments in a fixed order.
+ * Brand handling rule:
+ * - If normalized_payload.brand has multiple words (e.g., "Aspen Surgical"),
+ *   enforce only the shortest single-word form at the front of H1 (e.g., "Aspen").
+ *
+ * Deterministic approach:
+ * - Take the brand, split on whitespace, choose the shortest token (ties -> first shortest).
+ * - Only use alphanumeric-ish tokens to avoid punctuation fragments.
  */
+function chooseShortestBrandToken(brand: string): string {
+  const tokens = brand
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")) // strip edge punctuation
+    .filter((t) => /^[A-Za-z0-9]+$/.test(t));
+
+  if (!tokens.length) return brand.trim();
+
+  let best = tokens[0];
+  for (const t of tokens) {
+    if (t.length < best.length) best = t;
+  }
+  return best;
+}
+
 type SectionKey =
   | "overview"
   | "hook"
@@ -155,7 +177,6 @@ type SectionKey =
 function getSections(seo_payload: any): any | null {
   if (!seo_payload) return null;
   if (seo_payload.sections && typeof seo_payload.sections === "object") return seo_payload.sections;
-  // Some stored payloads may wrap under seo_payload.seo + seo_payload.sections already; above covers.
   return null;
 }
 
@@ -187,19 +208,17 @@ function findOrderedSectionsInDescription(params: {
       typeof raw === "string"
         ? raw.trim().length > 0
         : item.key === "manuals"
-          ? raw === null || typeof raw === "string" // manuals can be null or string
+          ? raw === null || typeof raw === "string"
           : false;
 
     if (!exists) {
       if (item.required) missing.push(item.key);
-      // If it's optional and missing/null, that's fine.
       positions[item.key] = -1;
       continue;
     }
 
-    // manuals == null is allowed; if null, skip containment checks
     if (item.key === "manuals" && raw === null) {
-      positions[item.key] = -2; // "present but intentionally null"
+      positions[item.key] = -2; // present but intentionally null
       continue;
     }
 
@@ -217,7 +236,6 @@ function findOrderedSectionsInDescription(params: {
       continue;
     }
 
-    // Found in order
     positions[item.key] = idx;
     if (idx < cursor) outOfOrder.push(item.key);
     cursor = idx + Math.max(1, normSection.length);
@@ -249,7 +267,6 @@ function buildGroundTruthText(normalizedPayload: any): string {
   const browsed = normalizedPayload.description_raw ?? normalizedPayload.browsed_text ?? "";
   if (typeof browsed === "string" && browsed.trim()) parts.push(browsed);
 
-  // engine_callback (if present) can help grounding too
   const engineCb = normalizedPayload.engine_callback ?? null;
   if (engineCb && typeof engineCb === "object") {
     try {
@@ -262,19 +279,9 @@ function buildGroundTruthText(normalizedPayload: any): string {
   return parts.join("\n---\n");
 }
 
-function normalizeBrandForRegex(brand: string): string {
-  return brand.trim().replace(/\s+/g, " ");
-}
-
 export function lintSeoOutput(params: {
   instructionsText: string | null;
-
-  /**
-   * IMPORTANT: pass the FULL stored seo_payload (including sections),
-   * not just seo_payload.seo, so we can enforce Option-1 ordering.
-   */
   seo_payload: any;
-
   description_html: string;
   features: any[];
   normalized_payload?: any;
@@ -299,7 +306,8 @@ export function lintSeoOutput(params: {
   const features = Array.isArray(params.features) ? params.features : [];
 
   const normalizedPayload = params.normalized_payload ?? null;
-  const brand = typeof normalizedPayload?.brand === "string" ? normalizedPayload.brand.trim() : "";
+  const brandRaw = typeof normalizedPayload?.brand === "string" ? normalizedPayload.brand.trim() : "";
+  const brandToken = brandRaw ? chooseShortestBrandToken(brandRaw) : "";
 
   // --- H1 checks
   if (!h1.trim()) {
@@ -323,18 +331,17 @@ export function lintSeoOutput(params: {
       checks.push({ key: "h1_len", label: "H1 length 90–110", status: "pass", detail: `len=${len}` });
     }
 
-    // brand-fronted H1 (only enforce if we actually have a brand)
-    if (brand) {
-      const b = normalizeBrandForRegex(brand);
-      const re = new RegExp(`^${escapeRegex(b)}(?:\\b|\\s|\\-|–|—|:|\\|)`, "i");
+    // Brand-fronted H1: use shortest single-word brand token
+    if (brandToken) {
+      const re = new RegExp(`^${escapeRegex(brandToken)}(?:\\b|\\s|\\-|–|—|:|\\|)`, "i");
       if (!re.test(h1.trim())) {
         blockers.push({
           severity: "blocker",
-          code: "H1_NOT_BRAND_FRONTED",
-          message: `H1 must start with brand name (${brand}).`,
+          code: "H1_NOT_BRAND_TOKEN_FRONTED",
+          message: `H1 must start with brand token (${brandToken}) derived from brand (${brandRaw}).`,
           field: "seo.h1",
           snippet: safeSnippet(h1),
-          evidence: { brand },
+          evidence: { brand: brandRaw, brandToken },
         });
       }
     }
@@ -420,7 +427,7 @@ export function lintSeoOutput(params: {
   } else {
     checks.push({ key: "html", label: "HTML description present", status: "pass" });
 
-    // Option-1 enforcement based on section fragments + order (no heading text dependence)
+    // Option-1 enforcement: section fragments + fixed ordering; no heading title dependence
     if (!sections || typeof sections !== "object") {
       blockers.push({
         severity: "blocker",
@@ -429,7 +436,6 @@ export function lintSeoOutput(params: {
         field: "seo_payload.sections",
       });
     } else {
-      // Required order matches your schema order (plus manuals allowed to be null/string).
       const requiredOrder: Array<{ key: SectionKey; required: boolean }> = [
         { key: "overview", required: true },
         { key: "hook", required: true },
@@ -479,7 +485,7 @@ export function lintSeoOutput(params: {
       }
     }
 
-    // FAQs count heuristic (still useful): count <h3> in the provided FAQ section fragment
+    // FAQs count heuristic: count <h3> in sections.faqs
     if (sections && typeof sections?.faqs === "string" && sections.faqs.trim()) {
       const qCount = (String(sections.faqs).match(/<h3\b/gi) ?? []).length;
       if (qCount < 5 || qCount > 7) {
