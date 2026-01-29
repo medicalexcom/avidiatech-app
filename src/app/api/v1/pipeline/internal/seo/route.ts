@@ -8,6 +8,12 @@ import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
  *
  * This version preserves and returns error.debug/details so the pipeline-runner can persist
  * normalizedOverview / normalizedDescription / tokenSimilarity when validation fails.
+ *
+ * UPDATE:
+ * - Accepts popup-provided brand override from pipeline options:
+ *     body.options.import.brand_name
+ * - Passes it into runSeoForIngestion so we can enforce brand-fronted H1 deterministically
+ *   without hallucinating brand values.
  */
 export async function POST(req: Request) {
   const secret = req.headers.get("x-pipeline-secret") || "";
@@ -19,13 +25,21 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as any;
   const ingestionId = body?.ingestionId?.toString() || "";
+  const options = body?.options ?? null;
 
   if (!ingestionId) {
     return NextResponse.json({ ok: false, error: "missing_ingestionId" }, { status: 400 });
   }
 
+  // Brand override from the Create Bulk Job popup (if present)
+  const brandOverride =
+    typeof options?.import?.brand_name === "string" && options.import.brand_name.trim()
+      ? options.import.brand_name.trim()
+      : null;
+
   try {
-    const result: any = await runSeoForIngestion(ingestionId);
+    // IMPORTANT: pass the popup brand override into SEO generation
+    const result: any = await runSeoForIngestion(ingestionId, { brandOverride });
 
     return NextResponse.json(
       {
@@ -43,6 +57,9 @@ export async function POST(req: Request) {
         // legacy aliases
         seo_payload: result.seo,
         description_html: result.descriptionHtml,
+
+        // helpful debug/trace
+        brandOverride: brandOverride,
       },
       { status: 200 }
     );
@@ -55,17 +72,32 @@ export async function POST(req: Request) {
     const innerStack = err?.innerStack ?? null;
     const stack = process.env.NODE_ENV === "production" ? null : err?.stack || innerStack || null;
 
-    console.error("[internal/seo] error for ingestion", ingestionId, { msg, raw, details, stack });
+    console.error("[internal/seo] error for ingestion", ingestionId, {
+      msg,
+      raw,
+      details,
+      stack,
+      brandOverride,
+    });
 
     if (msg === "ingestion_not_found")
-      return NextResponse.json({ ok: false, error: "ingestion_not_found", detail: msg, raw, details }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: "ingestion_not_found", detail: msg, raw, details },
+        { status: 404 }
+      );
 
     if (msg === "ingestion_not_ready" || msg.startsWith("ingestion_not_ready:")) {
-      return NextResponse.json({ ok: false, error: "ingestion_not_ready", detail: msg, raw, details }, { status: 409 });
+      return NextResponse.json(
+        { ok: false, error: "ingestion_not_ready", detail: msg, raw, details },
+        { status: 409 }
+      );
     }
 
     if (msg.startsWith("ingestion_load_failed:")) {
-      return NextResponse.json({ ok: false, error: "ingestion_load_failed", detail: msg, raw, details }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "ingestion_load_failed", detail: msg, raw, details },
+        { status: 500 }
+      );
     }
 
     if (
@@ -73,13 +105,22 @@ export async function POST(req: Request) {
       msg.startsWith("central_gpt_not_configured:") ||
       msg.startsWith("central_gpt_seo_error:")
     ) {
-      return NextResponse.json({ ok: false, error: "seo_model_failed", detail: msg, raw, details }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "seo_model_failed", detail: msg, raw, details },
+        { status: 500 }
+      );
     }
 
     if (msg.startsWith("seo_persist_failed:")) {
-      return NextResponse.json({ ok: false, error: "seo_persist_failed", detail: msg, raw, details }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, error: "seo_persist_failed", detail: msg, raw, details },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ ok: false, error: "seo_internal_failed", detail: msg, raw, details }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "seo_internal_failed", detail: msg, raw, details },
+      { status: 500 }
+    );
   }
 }
