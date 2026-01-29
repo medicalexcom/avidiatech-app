@@ -1,27 +1,21 @@
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
+import { repairSeoModel } from "@/lib/seo/repairSeoModel";
 import { mapSeoResultToStore } from "@/lib/seo/compatSeoMapping";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
+import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
+import { lintSeoOutput } from "@/lib/audit/seoComplianceLinter";
 
 /**
- * This module now optionally enriches the SEO input with the *full ingest engine callback body*
- * stored in Supabase Storage (private bucket).
- *
- * Goal (per your request):
- * - Prefer using the complete extracted data from ingest-engine-payloads for SEO input.
- * - Do NOT hard-fail / do NOT hard-code strict gates.
- * - Still persist seo_payload/description_html/features/diagnostics as before.
- *
- * Notes:
- * - We pass a merged payload to callSeoModel:
- *    - base: normalized_payload (avidia_standard)
- *    - plus: engine_callback (entire callback body JSON) under `engine_callback`
- * - This requires NO changes to pipeline/internal/seo route. It already calls runSeoForIngestion().
- * - If bucket/ref are missing or download fails, we gracefully fall back to normalized_payload only.
+ * This module enriches SEO input with the *full ingest engine callback body* (if available),
+ * and performs Option-B autoheal:
+ * - Generate SEO output
+ * - Deterministically lint against compliance rules
+ * - If blockers, repair up to 2 more attempts (total 3 attempts)
+ * - Persist best output even if still failing (status = needs_review), and DO NOT block pipeline
  */
 
-const ENGINE_PAYLOADS_BUCKET =
-  process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
+const ENGINE_PAYLOADS_BUCKET = process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
 
 function safeKeys(obj: any): string[] {
   if (!obj || typeof obj !== "object") return [];
@@ -51,9 +45,7 @@ async function loadEngineCallbackJson(opts: {
   }
 
   try {
-    const { data: blob, error } = await opts.supabase.storage
-      .from(ENGINE_PAYLOADS_BUCKET)
-      .download(ref);
+    const { data: blob, error } = await opts.supabase.storage.from(ENGINE_PAYLOADS_BUCKET).download(ref);
 
     if (error || !blob) {
       return {
@@ -82,15 +74,21 @@ async function loadEngineCallbackJson(opts: {
   }
 }
 
-/**
- * runSeoForIngestion
- *
- * - Loads normalized_payload (canonical avidia_standard after callback normalization)
- * - ALSO attempts to load full engine callback JSON from Storage and attaches it to the payload.
- * - No hard fail gates (per your request).
- * - Calls callSeoModel (which enforces your SEO instruction discipline).
- * - Persists seo_payload + description_html + features + seo_generated_at + diagnostics.seo metadata.
- */
+function buildLintSeoPayloadFromSeoResult(seoResult: any) {
+  // seoResult from callSeoModel already returns {seo:{h1,title,metaDescription,shortDescription,url}, ...}
+  // but we normalize defensively here.
+  const seo = seoResult?.seo ?? {};
+  return {
+    seo: {
+      h1: typeof seo?.h1 === "string" ? seo.h1 : "",
+      title: typeof seo?.title === "string" ? seo.title : "",
+      metaDescription: typeof seo?.metaDescription === "string" ? seo.metaDescription : "",
+      shortDescription: typeof seo?.shortDescription === "string" ? seo.shortDescription : "",
+      url: typeof seo?.url === "string" ? seo.url : "",
+    },
+  };
+}
+
 export async function runSeoForIngestion(ingestionId: string): Promise<{
   ingestionId: string;
 
@@ -111,9 +109,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   const { data: ingestion, error: loadErr } = await supabase
     .from("product_ingestions")
-    .select(
-      "id, tenant_id, source_url, normalized_payload, correlation_id, diagnostics, engine_payload_ref, engine_payload_sha256"
-    )
+    .select("id, tenant_id, source_url, normalized_payload, correlation_id, diagnostics, engine_payload_ref, engine_payload_sha256")
     .eq("id", ingestionId)
     .maybeSingle();
 
@@ -121,7 +117,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   if (!ingestion) throw new Error("ingestion_not_found");
 
   const normalized = (ingestion as any).normalized_payload as AvidiaStandardNormalizedPayload | any;
-
   const startedAt = new Date().toISOString();
 
   // Attempt to load full engine callback JSON (graceful fallback if missing)
@@ -131,10 +126,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     engine_payload_ref: (ingestion as any).engine_payload_ref ?? null,
   });
 
-  // Build SEO input payload:
-  // - Keep normalized_payload at the root so existing callSeoModel behavior stays compatible.
-  // - Attach the entire engine callback body under `engine_callback`.
-  //   (You can later update callSeoModel to use it fully.)
   const seoInput: any = {
     ...(normalized ?? {}),
     engine_callback: engineLoad.ok ? engineLoad.engineCallback : null,
@@ -144,23 +135,87 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       sha256: (ingestion as any).engine_payload_sha256 ?? null,
       loaded: engineLoad.ok,
       load_reason: engineLoad.ok ? null : (engineLoad as any).reason ?? "unknown",
-      // helpful for debugging what keys are present (no hardcoding)
       top_level_keys: engineLoad.ok ? safeKeys(engineLoad.engineCallback) : [],
     },
   };
 
-  // Call model. We still provide correlation/source/tenant like before.
-  // NOTE: callSeoModel currently expects an AvidiaStandardNormalizedPayload; we pass an enriched object.
-  const seoResult = await callSeoModel(
+  // Load canonical instructions once for lint traceability
+  const { text: instructionsText } = await loadCustomGptInstructionsWithInfo((ingestion as any).tenant_id ?? null);
+
+  const attempts: Array<{
+    attempt: number;
+    seoResult: any;
+    lint: ReturnType<typeof lintSeoOutput>;
+  }> = [];
+
+  // Attempt 1: initial generation
+  let currentSeoResult = await callSeoModel(
     seoInput as any,
     (ingestion as any).correlation_id || null,
     (ingestion as any).source_url || null,
     (ingestion as any).tenant_id || null
   );
 
+  let currentLint = lintSeoOutput({
+    instructionsText: instructionsText ?? null,
+    seo_payload: buildLintSeoPayloadFromSeoResult(currentSeoResult),
+    description_html: String(currentSeoResult?.descriptionHtml ?? ""),
+    features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
+    normalized_payload: normalized ?? null,
+  });
+
+  attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
+
+  // Attempts 2-3: repair if blockers exist
+  for (let attempt = 2; attempt <= 3; attempt++) {
+    if (currentLint.ok) break;
+
+    const violations = [
+      ...(currentLint.blockers || []),
+      ...(currentLint.warnings || []),
+    ];
+
+    currentSeoResult = await repairSeoModel({
+      normalizedPayload: seoInput,
+      correlationId: (ingestion as any).correlation_id || null,
+      sourceUrl: (ingestion as any).source_url || null,
+      tenantId: (ingestion as any).tenant_id || null,
+      attempt,
+      previousOutput: currentSeoResult,
+      violations,
+    });
+
+    currentLint = lintSeoOutput({
+      instructionsText: instructionsText ?? null,
+      seo_payload: buildLintSeoPayloadFromSeoResult(currentSeoResult),
+      description_html: String(currentSeoResult?.descriptionHtml ?? ""),
+      features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
+      normalized_payload: normalized ?? null,
+    });
+
+    attempts.push({ attempt, seoResult: currentSeoResult, lint: currentLint });
+  }
+
+  // Choose best attempt: prefer "ok"; else lowest blocker count; then lowest warning count
+  const best = attempts
+    .slice()
+    .sort((a, b) => {
+      const aOk = a.lint.ok ? 1 : 0;
+      const bOk = b.lint.ok ? 1 : 0;
+      if (aOk !== bOk) return bOk - aOk;
+
+      const aBlock = (a.lint.blockers || []).length;
+      const bBlock = (b.lint.blockers || []).length;
+      if (aBlock !== bBlock) return aBlock - bBlock;
+
+      const aWarn = (a.lint.warnings || []).length;
+      const bWarn = (b.lint.warnings || []).length;
+      return aWarn - bWarn;
+    })[0];
+
+  const seoResult = best.seoResult;
   const finishedAt = new Date().toISOString();
 
-  // Persist richer diagnostics for observability without schema changes
   const diagnostics = (ingestion as any).diagnostics || {};
   const updatedDiagnostics = {
     ...diagnostics,
@@ -173,7 +228,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
       model: seoResult?._meta?.model ?? null,
       iterations: seoResult?._meta?.iterations ?? null,
 
-      // record whether we used the storage snapshot (no hard fail)
       engine_payload: {
         bucket: ENGINE_PAYLOADS_BUCKET,
         ref: (ingestion as any).engine_payload_ref ?? null,
@@ -183,21 +237,22 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
         load_detail: (engineLoad as any).detail ?? null,
       },
 
-      // helpful operational summaries
+      // Autoheal/compliance diagnostics (new)
+      compliance: {
+        status: best.lint.ok ? "ok" : "needs_review",
+        attempts: attempts.length,
+        best_attempt: best.attempt,
+        blockers: best.lint.blockers ?? [],
+        warnings: best.lint.warnings ?? [],
+        meta: best.lint.meta ?? null,
+      },
+
       data_gaps: seoResult.data_gaps ?? [],
-      audit_score:
-        typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
-      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts)
-        ? seoResult.desc_audit.conflicts
-        : [],
+      audit_score: typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
+      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts) ? seoResult.desc_audit.conflicts : [],
     },
   };
 
-  /**
-   * Store full seo payload (recommended) but include compatibility aliases:
-   * Keeps desc_audit and structured outputs together while allowing legacy consumers
-   * to read top-level h1/title/meta fields.
-   */
   const seo_payload_to_store = mapSeoResultToStore(seoResult);
 
   const { data: updated, error: updErr } = await supabase
@@ -216,7 +271,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   if (updErr) throw new Error(`seo_persist_failed: ${updErr.message || String(updErr)}`);
 
-  // Prefer DB values (truth) but fall back to computed if needed
   const persistedSeoPayload = (updated as any)?.seo_payload ?? seo_payload_to_store;
   const persistedHtml = (updated as any)?.description_html ?? seoResult.descriptionHtml;
   const persistedFeatures = (updated as any)?.features ?? seoResult.features;
@@ -232,7 +286,6 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     desc_audit: seoResult.desc_audit ?? null,
     _meta: seoResult._meta ?? null,
 
-    // legacy aliases
     seo_payload: persistedSeoPayload,
     description_html: persistedHtml,
   };
