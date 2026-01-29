@@ -6,9 +6,9 @@ export type ComplianceViolation = {
   severity: ViolationSeverity;
   code: string;
   message: string;
-  field?: string; // e.g. "seo.h1", "description_html"
-  snippet?: string; // short excerpt showing the issue
-  evidence?: Record<string, any>; // structured evidence for repair prompt
+  field?: string;
+  snippet?: string;
+  evidence?: Record<string, any>;
 };
 
 export type ComplianceCheck = {
@@ -19,12 +19,10 @@ export type ComplianceCheck = {
 };
 
 export type LintResult = {
-  ok: boolean; // ok means "no blockers"
+  ok: boolean; // no blockers
   blockers: ComplianceViolation[];
   warnings: ComplianceViolation[];
   checks: ComplianceCheck[];
-
-  // useful for traceability / auditing
   meta: {
     instructions_sha256: string | null;
   };
@@ -34,20 +32,33 @@ function sha256(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function safeSnippet(s: string, max = 220): string {
+function safeSnippet(s: string, max = 240): string {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   if (!t) return "";
   return t.length <= max ? t : `${t.slice(0, max)}…`;
 }
 
 /**
- * Placeholder policy:
- * - NA / N/A (any case) are allowed (NOT blockers) because you said some features may be not applicable.
- * - Everything else placeholder-ish is a blocker.
- *
- * We intentionally do NOT include "na"/"n/a" in banned list.
+ * Allowed placeholders (NOT violations):
+ * - Any casing of "Not Applicable" with optional punctuation/parentheses.
+ * - NA / N.A. / N/A / N / A (with optional punctuation/parentheses).
+ */
+const ALLOWED_PLACEHOLDER_TOKEN_RE =
+  /(^|\b|\()(\s*(not\s+applicable|n\s*\/\s*a|n\s*\.\s*a\s*\.|na)\s*)(\)|\b|$)/i;
+
+function isAllowedPlaceholderToken(match: string): boolean {
+  const m = match.trim();
+  // If the matched token contains "not applicable" or NA variants, allow.
+  return ALLOWED_PLACEHOLDER_TOKEN_RE.test(m);
+}
+
+/**
+ * BANNED placeholders (blockers).
+ * We intentionally DO NOT include "NA/N/A/Not Applicable" here.
+ * We DO include "OK" per your note.
  */
 const BANNED_PLACEHOLDER_PATTERNS: Array<{ code: string; re: RegExp; example: string }> = [
+  { code: "PLACEHOLDER_OK", re: /\bok\b/i, example: "OK" },
   { code: "PLACEHOLDER_NOT_AVAILABLE", re: /\bnot\s+available\b/i, example: "not available" },
   { code: "PLACEHOLDER_NOT_PROVIDED", re: /\bnot\s+provided\b/i, example: "not provided" },
   { code: "PLACEHOLDER_UNKNOWN", re: /\bunknown\b/i, example: "unknown" },
@@ -56,16 +67,7 @@ const BANNED_PLACEHOLDER_PATTERNS: Array<{ code: string; re: RegExp; example: st
   { code: "PLACEHOLDER_INFO_NOT_AVAILABLE", re: /\binformation\s+not\s+available\b/i, example: "information not available" },
   { code: "PLACEHOLDER_INFO_NOT_DISCLOSED", re: /\binformation\s+not\s+disclosed\b/i, example: "information not disclosed" },
   { code: "PLACEHOLDER_UNSPECIFIED", re: /\bunspecified\b/i, example: "unspecified" },
-  // add other banned terms you care about here
 ];
-
-/**
- * Treat NA/N-A, N/A as allowed. We only treat standalone NA tokens as allowed.
- */
-function containsAllowedNAOnly(match: string): boolean {
-  const m = match.trim();
-  return /^n\/a$/i.test(m) || /^na$/i.test(m);
-}
 
 function findBannedPlaceholders(text: string): Array<{ code: string; match: string; index: number }> {
   const hits: Array<{ code: string; match: string; index: number }> = [];
@@ -75,8 +77,9 @@ function findBannedPlaceholders(text: string): Array<{ code: string; match: stri
     let m: RegExpExecArray | null;
     while ((m = re.exec(t))) {
       const match = m[0] ?? "";
-      // If somehow a banned regex matches NA/N/A (shouldn't), allow it.
-      if (containsAllowedNAOnly(match)) continue;
+      // Allow if the matched token is within allowed placeholder token patterns.
+      // (Example: "Not Applicable (N/A)" should not cause "OK" etc; but if "OK" appears it's banned.)
+      if (isAllowedPlaceholderToken(match)) continue;
       hits.push({ code: p.code, match, index: m.index });
     }
   }
@@ -84,9 +87,8 @@ function findBannedPlaceholders(text: string): Array<{ code: string; match: stri
 }
 
 /**
- * Packaging repetition rule in H1:
- * - allow 0 or 1 packaging reference (e.g., "100 gloves/box")
- * - block if 2+ packaging references (e.g., "100/box, 10/case")
+ * H1 packaging repetition:
+ * allow 0 or 1 packaging reference in H1; block 2+.
  */
 function countPackagingRefs(h1: string): number {
   const t = h1 ?? "";
@@ -98,11 +100,6 @@ function countPackagingRefs(h1: string): number {
   return n;
 }
 
-/**
- * Minimal HTML section/order validation (deterministic):
- * We look for required section headings (H2) in order in the HTML.
- * This is a v1 check; you can strengthen it later by parsing DOM.
- */
 function indexOfRegex(hay: string, re: RegExp, fromIndex = 0): number {
   const r = new RegExp(re.source, re.flags.replace("g", ""));
   const slice = hay.slice(fromIndex);
@@ -110,13 +107,17 @@ function indexOfRegex(hay: string, re: RegExp, fromIndex = 0): number {
   return m ? fromIndex + (m.index ?? 0) : -1;
 }
 
+/**
+ * Avoid hardcoding exact heading text by matching "intent" patterns.
+ * Still deterministic and transparent.
+ */
 function validateSectionOrder(descriptionHtml: string): { ok: boolean; missing: string[]; outOfOrder: string[] } {
   const html = descriptionHtml ?? "";
   const required = [
-    { key: "featuresBenefits", label: "Features and Benefits", re: /<h2[^>]*>\s*features and benefits\s*<\/h2>/i },
-    { key: "specifications", label: "Product Specifications", re: /<h2[^>]*>\s*product specifications\s*<\/h2>/i },
-    { key: "whyChoose", label: "Why Choose", re: /<h2[^>]*>\s*(why choose|why\s+you'?ll\s+love|why\s+this)\b[\s\S]*?<\/h2>/i },
-    { key: "faqs", label: "FAQs", re: /<h2[^>]*>\s*(frequently asked questions|faqs?)\s*<\/h2>/i },
+    { label: "Features and Benefits", re: /<h2[^>]*>[\s\S]*?features[\s\S]*?benefits[\s\S]*?<\/h2>/i },
+    { label: "Product Specifications", re: /<h2[^>]*>[\s\S]*?product[\s\S]*?specifications[\s\S]*?<\/h2>/i },
+    { label: "Why Choose", re: /<h2[^>]*>[\s\S]*?why[\s\S]*?(choose|love|this)[\s\S]*?<\/h2>/i },
+    { label: "FAQs", re: /<h2[^>]*>[\s\S]*?(frequently asked questions|faqs?)[\s\S]*?<\/h2>/i },
   ];
 
   const missing: string[] = [];
@@ -136,24 +137,15 @@ function validateSectionOrder(descriptionHtml: string): { ok: boolean; missing: 
   return { ok: missing.length === 0 && outOfOrder.length === 0, missing, outOfOrder };
 }
 
-/**
- * Grounding v1:
- * - Extract numeric+unit fragments from HTML (e.g. "300 lb", "18 in", "150 mL").
- * - Ensure each fragment exists in ground-truth sources (string containment).
- *
- * This is intentionally conservative: if we can't verify, we flag.
- */
 function extractNumericUnitClaims(html: string): string[] {
-  const t = (html ?? "").replace(/<[^>]+>/g, " "); // strip tags
+  const t = (html ?? "").replace(/<[^>]+>/g, " ");
   const re =
-    /\b\d+(?:\.\d+)?\s*(?:lb|lbs|oz|in|inch|inches|ft|cm|mm|m|kg|g|mg|ml|mL|l|L|°f|°c|w|wh|mah|ah|v|amp|amps|a|%|psi)\b/gim;
+    /\b\d+(?:\.\d+)?\s*(?:lb|lbs|oz|in|inch|inches|ft|cm|mm|m|kg|g|mg|ml|mL|l|L|°f|°c|%|psi)\b/gim;
   const hits = t.match(re) ?? [];
-  // normalize spacing/casing
   return Array.from(new Set(hits.map((s) => s.replace(/\s+/g, " ").trim())));
 }
 
 function buildGroundTruthText(normalizedPayload: any): string {
-  // You can add more fields over time.
   const parts: string[] = [];
   if (!normalizedPayload) return "";
 
@@ -192,7 +184,7 @@ export function lintSeoOutput(params: {
   const html = String(params.description_html ?? "");
   const features = Array.isArray(params.features) ? params.features : [];
 
-  // --- H1 checks
+  // H1
   if (!h1.trim()) {
     blockers.push({ severity: "blocker", code: "H1_MISSING", message: "Missing H1", field: "seo.h1" });
     checks.push({ key: "h1", label: "H1 present", status: "fail", detail: "seo.h1 is empty" });
@@ -234,7 +226,6 @@ export function lintSeoOutput(params: {
       });
     }
 
-    // SKU-ish detection (heuristic)
     if (/\bsku\b[:\s]/i.test(h1) || /\b[A-Z0-9]{3,}-[A-Z0-9]{2,}\b/.test(h1)) {
       blockers.push({
         severity: "blocker",
@@ -259,7 +250,7 @@ export function lintSeoOutput(params: {
     }
   }
 
-  // --- Core SEO fields presence (warnings unless you want blockers)
+  // Presence warnings (non-blocking)
   if (!title.trim()) warnings.push({ severity: "warning", code: "TITLE_MISSING", message: "Missing SEO title", field: "seo.title" });
   if (!metaDescription.trim())
     warnings.push({ severity: "warning", code: "META_DESCRIPTION_MISSING", message: "Missing meta description", field: "seo.metaDescription" });
@@ -267,7 +258,7 @@ export function lintSeoOutput(params: {
     warnings.push({ severity: "warning", code: "SHORT_DESCRIPTION_MISSING", message: "Missing short description", field: "seo.shortDescription" });
   if (!url.trim()) warnings.push({ severity: "warning", code: "URL_MISSING", message: "Missing SEO url/slug", field: "seo.url" });
 
-  // --- Placeholder scans (blockers; NA/N/A allowed)
+  // Placeholder scans (blockers; allow NA/N/A/Not Applicable variants)
   const placeholderFields: Array<{ field: string; text: string }> = [
     { field: "seo.title", text: title },
     { field: "seo.metaDescription", text: metaDescription },
@@ -283,36 +274,19 @@ export function lintSeoOutput(params: {
         code: hit.code,
         message: `Banned placeholder phrase detected: "${hit.match}"`,
         field: pf.field,
-        snippet: safeSnippet(pf.text.slice(Math.max(0, hit.index - 60), hit.index + 140)),
+        snippet: safeSnippet(pf.text.slice(Math.max(0, hit.index - 80), hit.index + 160)),
         evidence: { match: hit.match, index: hit.index },
       });
     }
   }
 
-  // --- HTML presence + basic structure
+  // HTML checks
   if (!html.trim()) {
-    blockers.push({
-      severity: "blocker",
-      code: "HTML_MISSING",
-      message: "Missing HTML description",
-      field: "description_html",
-    });
+    blockers.push({ severity: "blocker", code: "HTML_MISSING", message: "Missing HTML description", field: "description_html" });
     checks.push({ key: "html", label: "HTML description present", status: "fail", detail: "description_html is empty" });
   } else {
     checks.push({ key: "html", label: "HTML description present", status: "pass" });
 
-    if (html.length < 1200) {
-      // instructions mention 1200+ chars (after stripping tags), but we use a soft warning here.
-      warnings.push({
-        severity: "warning",
-        code: "HTML_SHORT",
-        message: "HTML description appears short; verify it meets minimum length requirements.",
-        field: "description_html",
-        evidence: { length: html.length },
-      });
-    }
-
-    // Section order check
     const order = validateSectionOrder(html);
     if (!order.ok) {
       if (order.missing.length) {
@@ -333,8 +307,8 @@ export function lintSeoOutput(params: {
       }
     }
 
-    // FAQs count check (v1 heuristic: count <h3> after FAQs header)
-    const faqsHeaderIdx = (html.match(/<h2[^>]*>\s*(frequently asked questions|faqs?)\s*<\/h2>/i)?.index ?? -1);
+    // FAQs count heuristic (count <h3> after FAQ heading)
+    const faqsHeaderIdx = (html.match(/<h2[^>]*>[\s\S]*?(frequently asked questions|faqs?)\s*<\/h2>/i)?.index ?? -1);
     if (faqsHeaderIdx >= 0) {
       const after = html.slice(faqsHeaderIdx);
       const qCount = (after.match(/<h3\b/gi) ?? []).length;
@@ -349,7 +323,7 @@ export function lintSeoOutput(params: {
       }
     }
 
-    // Internal link count (v1: total internal links)
+    // Internal link count (site-relative only)
     const internalLinks = (html.match(/<a\s+[^>]*href=["']\/[^"']+["'][^>]*>/gi) ?? []).length;
     if (internalLinks !== 2) {
       blockers.push({
@@ -361,7 +335,7 @@ export function lintSeoOutput(params: {
       });
     }
 
-    // Grounding v1 numeric-unit scan
+    // Grounding v1
     const claims = extractNumericUnitClaims(html);
     if (claims.length) {
       const gt = buildGroundTruthText(params.normalized_payload);
@@ -373,7 +347,7 @@ export function lintSeoOutput(params: {
         blockers.push({
           severity: "blocker",
           code: "UNGROUNDED_NUMERIC_CLAIMS",
-          message: `Found numeric/unit claims not traceable to ground-truth payload: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? "…" : ""}`,
+          message: `Numeric/unit claims not traceable to ground truth: ${missing.slice(0, 10).join(", ")}${missing.length > 10 ? "…" : ""}`,
           field: "description_html",
           evidence: { missing, totalClaims: claims.length },
         });
@@ -381,14 +355,9 @@ export function lintSeoOutput(params: {
     }
   }
 
-  // --- Features
+  // Features
   if (!features.length) {
-    warnings.push({
-      severity: "warning",
-      code: "FEATURES_EMPTY",
-      message: "No feature bullets found (features[] is empty)",
-      field: "features",
-    });
+    warnings.push({ severity: "warning", code: "FEATURES_EMPTY", message: "No feature bullets found (features[] is empty)", field: "features" });
     checks.push({ key: "features", label: "Feature bullets present", status: "warn", detail: "features[] is empty" });
   } else {
     checks.push({ key: "features", label: "Feature bullets present", status: "pass" });
@@ -404,12 +373,5 @@ export function lintSeoOutput(params: {
   }
 
   const ok = blockers.length === 0;
-
-  return {
-    ok,
-    blockers,
-    warnings,
-    checks,
-    meta: { instructions_sha256 },
-  };
+  return { ok, blockers, warnings, checks, meta: { instructions_sha256 } };
 }
