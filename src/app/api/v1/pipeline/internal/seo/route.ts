@@ -9,11 +9,8 @@ import { runSeoForIngestion } from "@/lib/seo/runSeoForIngestion";
  * This version preserves and returns error.debug/details so the pipeline-runner can persist
  * normalizedOverview / normalizedDescription / tokenSimilarity when validation fails.
  *
- * UPDATE:
- * - Accepts popup-provided brand override from pipeline options:
- *     body.options.import.brand_name
- * - Passes it into runSeoForIngestion so we can enforce brand-fronted H1 deterministically
- *   without hallucinating brand values.
+ * IMPORTANT:
+ * - Return store-ready seo_payload (includes seo + sections + aliases) so audit can lint correctly.
  */
 export async function POST(req: Request) {
   const secret = req.headers.get("x-pipeline-secret") || "";
@@ -31,14 +28,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "missing_ingestionId" }, { status: 400 });
   }
 
-  // Brand override from the Create Bulk Job popup (if present)
+  // Popup brand override (if present)
   const brandOverride =
     typeof options?.import?.brand_name === "string" && options.import.brand_name.trim()
       ? options.import.brand_name.trim()
       : null;
 
   try {
-    // IMPORTANT: pass the popup brand override into SEO generation
     const result: any = await runSeoForIngestion(ingestionId, { brandOverride });
 
     return NextResponse.json(
@@ -54,19 +50,20 @@ export async function POST(req: Request) {
         data_gaps: result.data_gaps ?? [],
         _meta: result._meta ?? null,
 
-        // legacy aliases
-        seo_payload: result.seo,
-        description_html: result.descriptionHtml,
+        /**
+         * IMPORTANT: store-ready payload (what was persisted to DB)
+         * This must include `sections` so audit can enforce Option-1.
+         */
+        seo_payload: result.seo_payload,
+        description_html: result.description_html,
 
-        // helpful debug/trace
-        brandOverride: brandOverride,
+        brandOverride,
       },
       { status: 200 }
     );
   } catch (err: any) {
     const msg = err?.message || String(err);
 
-    // Capture raw/debug fields if present on the error
     const raw = err?.raw ?? null;
     const details = err?.details ?? null;
     const innerStack = err?.innerStack ?? null;
