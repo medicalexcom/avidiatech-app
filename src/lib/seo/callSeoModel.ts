@@ -2,6 +2,10 @@
 // Added: detect when normalized description starts with normalized overview and auto-fix
 // by setting sections.overview = descriptionHtml (records autoFixedOverview in _meta).
 // Keeps existing similarity-based auto-fix and validations otherwise.
+//
+// UPDATED (Option-B autoheal support):
+// - Passes normalizedPayload.__repair_context through into the packet so the model can see:
+//   previous output + violations + rules for repair attempts.
 
 import OpenAI from "openai";
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
@@ -128,7 +132,11 @@ function decodeHtmlEntities(s: string): string {
   let out = s;
   for (const [k, v] of Object.entries(replacements)) out = out.replace(new RegExp(k, "gi"), v);
   out = out.replace(/&#(\d+);/g, (_m, code) => {
-    try { return String.fromCharCode(Number(code)); } catch { return ""; }
+    try {
+      return String.fromCharCode(Number(code));
+    } catch {
+      return "";
+    }
   });
   return out;
 }
@@ -257,8 +265,7 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
   }
 
   requireField(
-    typeof json.sections.specifications === "string" &&
-      json.sections.specifications.trim().length > 0,
+    typeof json.sections.specifications === "string" && json.sections.specifications.trim().length > 0,
     "central_gpt_seo_error: sections.specifications_missing"
   );
   requireField(
@@ -304,21 +311,24 @@ export async function callSeoModel(
 
   const packet = {
     dom: {
-      name_raw: normalizedPayload.name_raw || normalizedPayload.name,
-      name: normalizedPayload.name,
-      brand: normalizedPayload.brand ?? null,
-      sku: normalizedPayload.sku ?? null,
-      specs: normalizedPayload.specs ?? {},
-      features_raw: normalizedPayload.features_raw ?? [],
-      images: normalizedPayload.images ?? [],
-      pdf_manual_urls: normalizedPayload.pdf_manual_urls ?? [],
+      name_raw: normalizedPayload.name_raw || (normalizedPayload as any).name,
+      name: (normalizedPayload as any).name,
+      brand: (normalizedPayload as any).brand ?? null,
+      sku: (normalizedPayload as any).sku ?? null,
+      specs: (normalizedPayload as any).specs ?? {},
+      features_raw: (normalizedPayload as any).features_raw ?? [],
+      images: (normalizedPayload as any).images ?? [],
+      pdf_manual_urls: (normalizedPayload as any).pdf_manual_urls ?? [],
       source_url: sourceUrl ?? null,
     },
-    pdf_text: normalizedPayload.pdf_text ?? "",
+    pdf_text: (normalizedPayload as any).pdf_text ?? "",
     pdf_docs: [],
-    browsed_text: normalizedPayload.description_raw ?? "",
+    browsed_text: (normalizedPayload as any).description_raw ?? "",
     correlation_id: correlationId ?? null,
     tenant_id: tenantId ?? null,
+
+    // NEW (Option-B autoheal): makes repair attempts actionable
+    repair_context: (normalizedPayload as any).__repair_context ?? null,
   };
 
   const schema = {
@@ -463,7 +473,10 @@ export async function callSeoModel(
       requireField(isNonEmptyString(h1), "central_gpt_seo_error: missing seo.h1");
 
       if (!lockedNameBest) {
-        requireField(!looksUrlDerivedOrPlaceholderName(h1), "central_gpt_seo_error: h1_contains_url_or_placeholder");
+        requireField(
+          !looksUrlDerivedOrPlaceholderName(h1),
+          "central_gpt_seo_error: h1_contains_url_or_placeholder"
+        );
         lockedNameBest = h1;
       } else {
         requireField(h1 === lockedNameBest, "central_gpt_seo_error: name_best_changed");
@@ -489,9 +502,11 @@ export async function callSeoModel(
         const decodedMeta = decodeHtmlEntities(rawMeta);
         json.seo.title = truncatePreferSentenceBoundary(decodedTitle, 70, 12);
         json.seo.metaDescription = truncatePreferSentenceBoundary(decodedMeta, 160, 20);
-      } catch (tErr) {
+      } catch (_tErr) {
         json.seo.title = String(json.seo.title || json.seo?.pageTitle || "").trim().slice(0, 70);
-        json.seo.metaDescription = String(json.seo.metaDescription || json.seo?.meta_description || "").trim().slice(0, 160);
+        json.seo.metaDescription = String(json.seo.metaDescription || json.seo?.meta_description || "")
+          .trim()
+          .slice(0, 160);
       }
 
       // --- Auto-fix overview equality when overview is a prefix of description ---
@@ -523,7 +538,11 @@ export async function callSeoModel(
           const tokenSim = tokenJaccardSimilarity(normOverview, normDescFull);
           const SIMILARITY_THRESHOLD = 0.75;
 
-          if (normOverview && normFirstPara && (normOverview === normFirstPara || simOverviewFirst >= SIMILARITY_THRESHOLD)) {
+          if (
+            normOverview &&
+            normFirstPara &&
+            (normOverview === normFirstPara || simOverviewFirst >= SIMILARITY_THRESHOLD)
+          ) {
             json.sections.overview = json.descriptionHtml;
             autoFixedOverviewFlag = true;
           } else if (normOverview === normDescFull || tokenSim >= SIMILARITY_THRESHOLD) {
@@ -557,7 +576,11 @@ export async function callSeoModel(
     } catch (e: any) {
       lastViolation = e?.message || String(e);
       if (i === maxIterations) {
-        const err: any = new Error(lastViolation.startsWith("central_gpt_") ? lastViolation : `central_gpt_seo_error: ${lastViolation}`);
+        const err: any = new Error(
+          lastViolation.startsWith("central_gpt_")
+            ? lastViolation
+            : `central_gpt_seo_error: ${lastViolation}`
+        );
         err.raw = e?.raw ?? lastRaw ?? null;
         if (e?.details) err.details = e.details;
         if (e?.stack) err.innerStack = e.stack;
