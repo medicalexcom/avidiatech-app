@@ -1,16 +1,16 @@
 import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
-import { requireField } from "@/lib/utils/requireField"; // adjust import to your actual requireField location
-import { isNonEmptyString } from "@/lib/utils/strings"; // adjust to your actual helper
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 
 /**
- * Repair strategy:
- * - Same model as SEO generation (reuse callSeoModel)
- * - Feed previous output + violations and ask the model to regenerate a corrected output
+ * Repair strategy (Option B):
+ * - Use SAME model as SEO generation (re-use callSeoModel).
+ * - Provide previous output + violations to drive targeted correction.
+ * - Up to 2 repair attempts (total attempts = 3 including initial).
  *
- * NOTE: This implementation assumes you can add optional fields to callSeoModel's prompt-building,
- * or you can implement a second model call path internally. If you cannot easily modify callSeoModel,
- * you can instead create a "callSeoRepairModel" that shares the same lower-level OpenAI call.
+ * NOTE:
+ * This implementation injects __repair_context into the "packet" by adding it to the normalized payload object.
+ * If callSeoModel constructs a packet that ignores unknown fields, you should instead modify callSeoModel to
+ * explicitly include the repair context in its "system" or "user" prompt.
  */
 export async function repairSeoModel(params: {
   normalizedPayload: any;
@@ -20,18 +20,14 @@ export async function repairSeoModel(params: {
 
   attempt: number; // 2 or 3
   previousOutput: any;
-  violations: any[]; // from linter (blockers + warnings)
+  violations: any[]; // blockers + warnings (objects)
 }): Promise<any> {
   const { text: instructions } = await loadCustomGptInstructionsWithInfo(params.tenantId ?? null);
-  requireField(isNonEmptyString(instructions), "seo_missing_custom_instructions: custom_gpt_instructions are required");
+  if (!instructions || !instructions.trim()) {
+    // If instructions are missing, we cannot repair safely—fallback to prior output (non-blocking policy).
+    return params.previousOutput;
+  }
 
-  /**
-   * Minimal approach without refactoring callSeoModel internals:
-   * - We attach "repair context" into the normalizedPayload as additional fields
-   * - Then instruct model via existing custom instructions + packet
-   *
-   * Better approach (recommended): extend callSeoModel to accept a "repairContext" and insert it in the user prompt.
-   */
   const repairContext = {
     mode: "repair",
     attempt: params.attempt,
@@ -39,12 +35,13 @@ export async function repairSeoModel(params: {
     previous_output: params.previousOutput,
     rules: [
       "Fix ALL blocker violations. Reduce warnings where possible without inventing facts.",
-      "Do NOT add ungrounded facts. Use ONLY packet fields as grounding.",
-      "NA/N/A is allowed; all other placeholder words must be removed from customer-facing copy.",
-      "H1 must be 90–110 chars and MUST NOT include multiple packaging references (allow at most one, e.g., '100 gloves/box' only).",
-      "Do not skip required sections; ensure required sections exist and are in the correct order.",
+      "Use ONLY packet fields as grounding. Do NOT invent specs, warranty, capacity, dimensions, packaging, etc.",
+      "Allowed placeholders: NA / N/A and any 'Not Applicable' variants (including punctuation and parentheses).",
+      "Blocked placeholders include: OK, TBD, To Be Determined, Unknown, Not Provided, Not Available, etc.",
+      "H1 must be 90–110 chars and must NOT include multiple packaging references (allow at most one like '100 gloves/box').",
+      "Ensure required sections exist and appear in the correct order; ensure FAQs have 5–7 Q&A pairs.",
       "Exactly 2 internal links are required in the HTML.",
-      "Return the full JSON output matching the schema, not a patch.",
+      "Return the full JSON output matching the schema (not a patch).",
     ],
   };
 
@@ -53,8 +50,6 @@ export async function repairSeoModel(params: {
     __repair_context: repairContext,
   };
 
-  // For now, reuse callSeoModel; you will need to ensure callSeoModel includes packet fields verbatim,
-  // so __repair_context reaches the model in the ground truth packet.
   return callSeoModel(
     enrichedPayload,
     params.correlationId ?? null,
