@@ -13,9 +13,15 @@ import { lintSeoOutput } from "@/lib/audit/seoComplianceLinter";
  * - Deterministically lint against compliance rules
  * - If blockers, repair up to 2 more attempts (total 3 attempts)
  * - Persist best output even if still failing (status = needs_review), and DO NOT block pipeline
+ *
+ * UPDATED:
+ * - Accepts popup brand override and carries it through:
+ *     opts.brandOverride -> seoInput.__brand_override
+ * - Lints using FULL seo_payload (seo + sections), required for Option-1 section ordering enforcement
  */
 
-const ENGINE_PAYLOADS_BUCKET = process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
+const ENGINE_PAYLOADS_BUCKET =
+  process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
 
 function safeKeys(obj: any): string[] {
   if (!obj || typeof obj !== "object") return [];
@@ -45,7 +51,9 @@ async function loadEngineCallbackJson(opts: {
   }
 
   try {
-    const { data: blob, error } = await opts.supabase.storage.from(ENGINE_PAYLOADS_BUCKET).download(ref);
+    const { data: blob, error } = await opts.supabase.storage
+      .from(ENGINE_PAYLOADS_BUCKET)
+      .download(ref);
 
     if (error || !blob) {
       return {
@@ -74,22 +82,18 @@ async function loadEngineCallbackJson(opts: {
   }
 }
 
-function buildLintSeoPayloadFromSeoResult(seoResult: any) {
-  // seoResult from callSeoModel already returns {seo:{h1,title,metaDescription,shortDescription,url}, ...}
-  // but we normalize defensively here.
-  const seo = seoResult?.seo ?? {};
+function buildLintSeoPayloadFromCandidate(candidate: any) {
+  // IMPORTANT: linter needs BOTH seo + sections for Option-1 enforcement.
   return {
-    seo: {
-      h1: typeof seo?.h1 === "string" ? seo.h1 : "",
-      title: typeof seo?.title === "string" ? seo.title : "",
-      metaDescription: typeof seo?.metaDescription === "string" ? seo.metaDescription : "",
-      shortDescription: typeof seo?.shortDescription === "string" ? seo.shortDescription : "",
-      url: typeof seo?.url === "string" ? seo.url : "",
-    },
+    seo: candidate?.seo ?? null,
+    sections: candidate?.sections ?? null,
   };
 }
 
-export async function runSeoForIngestion(ingestionId: string): Promise<{
+export async function runSeoForIngestion(
+  ingestionId: string,
+  opts?: { brandOverride?: string | null }
+): Promise<{
   ingestionId: string;
 
   // canonical
@@ -109,7 +113,9 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   const { data: ingestion, error: loadErr } = await supabase
     .from("product_ingestions")
-    .select("id, tenant_id, source_url, normalized_payload, correlation_id, diagnostics, engine_payload_ref, engine_payload_sha256")
+    .select(
+      "id, tenant_id, source_url, normalized_payload, correlation_id, diagnostics, engine_payload_ref, engine_payload_sha256"
+    )
     .eq("id", ingestionId)
     .maybeSingle();
 
@@ -126,8 +132,16 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
     engine_payload_ref: (ingestion as any).engine_payload_ref ?? null,
   });
 
+  const brandOverride =
+    typeof opts?.brandOverride === "string" && opts.brandOverride.trim()
+      ? opts.brandOverride.trim()
+      : null;
+
   const seoInput: any = {
     ...(normalized ?? {}),
+    // allow UI-provided brand to be used deterministically (no hallucination)
+    __brand_override: brandOverride,
+
     engine_callback: engineLoad.ok ? engineLoad.engineCallback : null,
     engine_callback_meta: {
       bucket: ENGINE_PAYLOADS_BUCKET,
@@ -140,7 +154,9 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   };
 
   // Load canonical instructions once for lint traceability
-  const { text: instructionsText } = await loadCustomGptInstructionsWithInfo((ingestion as any).tenant_id ?? null);
+  const { text: instructionsText } = await loadCustomGptInstructionsWithInfo(
+    (ingestion as any).tenant_id ?? null
+  );
 
   const attempts: Array<{
     attempt: number;
@@ -158,10 +174,11 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
   let currentLint = lintSeoOutput({
     instructionsText: instructionsText ?? null,
-    seo_payload: buildLintSeoPayloadFromSeoResult(currentSeoResult),
+    seo_payload: buildLintSeoPayloadFromCandidate(currentSeoResult),
     description_html: String(currentSeoResult?.descriptionHtml ?? ""),
     features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
-    normalized_payload: normalized ?? null,
+    // pass normalized payload including override so linter can enforce brand rules
+    normalized_payload: seoInput,
   });
 
   attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
@@ -170,10 +187,7 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
   for (let attempt = 2; attempt <= 3; attempt++) {
     if (currentLint.ok) break;
 
-    const violations = [
-      ...(currentLint.blockers || []),
-      ...(currentLint.warnings || []),
-    ];
+    const violations = [...(currentLint.blockers || []), ...(currentLint.warnings || [])];
 
     currentSeoResult = await repairSeoModel({
       normalizedPayload: seoInput,
@@ -187,10 +201,10 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
 
     currentLint = lintSeoOutput({
       instructionsText: instructionsText ?? null,
-      seo_payload: buildLintSeoPayloadFromSeoResult(currentSeoResult),
+      seo_payload: buildLintSeoPayloadFromCandidate(currentSeoResult),
       description_html: String(currentSeoResult?.descriptionHtml ?? ""),
       features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
-      normalized_payload: normalized ?? null,
+      normalized_payload: seoInput,
     });
 
     attempts.push({ attempt, seoResult: currentSeoResult, lint: currentLint });
@@ -237,7 +251,10 @@ export async function runSeoForIngestion(ingestionId: string): Promise<{
         load_detail: (engineLoad as any).detail ?? null,
       },
 
-      // Autoheal/compliance diagnostics (new)
+      // record the UI brand override used (if any)
+      brand_override: brandOverride,
+
+      // Autoheal/compliance diagnostics
       compliance: {
         status: best.lint.ok ? "ok" : "needs_review",
         attempts: attempts.length,
