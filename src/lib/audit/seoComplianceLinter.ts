@@ -32,10 +32,49 @@ function sha256(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function safeSnippet(s: string, max = 240): string {
+function safeSnippet(s: string, max = 260): string {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
   if (!t) return "";
   return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
+function escapeRegex(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Basic HTML entity decoding (limited, deterministic) */
+function decodeHtmlEntities(s: string): string {
+  if (!s) return "";
+  const replacements: Record<string, string> = {
+    "&nbsp;": " ",
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+  };
+  let out = s;
+  for (const [k, v] of Object.entries(replacements)) out = out.replace(new RegExp(k, "gi"), v);
+  out = out.replace(/&#(\d+);/g, (_m, code) => {
+    try {
+      return String.fromCharCode(Number(code));
+    } catch {
+      return "";
+    }
+  });
+  return out;
+}
+
+/** Normalize HTML-like string to plain text for containment/order comparisons */
+function htmlToNormalizedText(s: any): string {
+  if (s === null || s === undefined) return "";
+  let t = String(s);
+  t = t.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, " ");
+  t = t.replace(/<[^>]+>/g, " ");
+  t = decodeHtmlEntities(t);
+  t = t.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return t;
 }
 
 /**
@@ -44,18 +83,17 @@ function safeSnippet(s: string, max = 240): string {
  * - NA / N.A. / N/A / N / A (with optional punctuation/parentheses).
  */
 const ALLOWED_PLACEHOLDER_TOKEN_RE =
-  /(^|\b|\()(\s*(not\s+applicable|n\s*\/\s*a|n\s*\.\s*a\s*\.|na)\s*)(\)|\b|$)/i;
+  /(^|\b|\()(\s*(not\s+applicable|n\s*\/\s*a|n\s*\.\s*a\s*\.|n\s*\.\s*a|n\s*\/\s*a\.|na)\s*)(\)|\b|$)/i;
 
 function isAllowedPlaceholderToken(match: string): boolean {
   const m = match.trim();
-  // If the matched token contains "not applicable" or NA variants, allow.
   return ALLOWED_PLACEHOLDER_TOKEN_RE.test(m);
 }
 
 /**
  * BANNED placeholders (blockers).
- * We intentionally DO NOT include "NA/N/A/Not Applicable" here.
- * We DO include "OK" per your note.
+ * - "OK" is blocked per your instruction.
+ * - NA/N/A/Not Applicable variants are explicitly allowed.
  */
 const BANNED_PLACEHOLDER_PATTERNS: Array<{ code: string; re: RegExp; example: string }> = [
   { code: "PLACEHOLDER_OK", re: /\bok\b/i, example: "OK" },
@@ -77,8 +115,6 @@ function findBannedPlaceholders(text: string): Array<{ code: string; match: stri
     let m: RegExpExecArray | null;
     while ((m = re.exec(t))) {
       const match = m[0] ?? "";
-      // Allow if the matched token is within allowed placeholder token patterns.
-      // (Example: "Not Applicable (N/A)" should not cause "OK" etc; but if "OK" appears it's banned.)
       if (isAllowedPlaceholderToken(match)) continue;
       hits.push({ code: p.code, match, index: m.index });
     }
@@ -100,45 +136,100 @@ function countPackagingRefs(h1: string): number {
   return n;
 }
 
-function indexOfRegex(hay: string, re: RegExp, fromIndex = 0): number {
-  const r = new RegExp(re.source, re.flags.replace("g", ""));
-  const slice = hay.slice(fromIndex);
-  const m = r.exec(slice);
-  return m ? fromIndex + (m.index ?? 0) : -1;
+/**
+ * Section enforcement (Option 1):
+ * - We do NOT look for heading text.
+ * - We enforce that descriptionHtml contains the section fragments in a fixed order.
+ */
+type SectionKey =
+  | "overview"
+  | "hook"
+  | "mainDescription"
+  | "featuresBenefits"
+  | "specifications"
+  | "internalLinks"
+  | "whyChoose"
+  | "manuals"
+  | "faqs";
+
+function getSections(seo_payload: any): any | null {
+  if (!seo_payload) return null;
+  if (seo_payload.sections && typeof seo_payload.sections === "object") return seo_payload.sections;
+  // Some stored payloads may wrap under seo_payload.seo + seo_payload.sections already; above covers.
+  return null;
 }
 
-/**
- * Avoid hardcoding exact heading text by matching "intent" patterns.
- * Still deterministic and transparent.
- */
-function validateSectionOrder(descriptionHtml: string): { ok: boolean; missing: string[]; outOfOrder: string[] } {
-  const html = descriptionHtml ?? "";
-  const required = [
-    { label: "Features and Benefits", re: /<h2[^>]*>[\s\S]*?features[\s\S]*?benefits[\s\S]*?<\/h2>/i },
-    { label: "Product Specifications", re: /<h2[^>]*>[\s\S]*?product[\s\S]*?specifications[\s\S]*?<\/h2>/i },
-    { label: "Why Choose", re: /<h2[^>]*>[\s\S]*?why[\s\S]*?(choose|love|this)[\s\S]*?<\/h2>/i },
-    { label: "FAQs", re: /<h2[^>]*>[\s\S]*?(frequently asked questions|faqs?)[\s\S]*?<\/h2>/i },
-  ];
+function findOrderedSectionsInDescription(params: {
+  descriptionHtml: string;
+  sections: any;
+  requiredOrder: Array<{ key: SectionKey; required: boolean }>;
+}): {
+  ok: boolean;
+  missing: string[];
+  notFoundInHtml: string[];
+  outOfOrder: string[];
+  positions: Record<string, number>;
+} {
+  const { descriptionHtml, sections, requiredOrder } = params;
 
   const missing: string[] = [];
+  const notFoundInHtml: string[] = [];
   const outOfOrder: string[] = [];
+  const positions: Record<string, number> = {};
 
-  let pos = 0;
-  for (const sec of required) {
-    const idx = indexOfRegex(html, sec.re, pos);
-    if (idx < 0) {
-      missing.push(sec.label);
+  const normDesc = htmlToNormalizedText(descriptionHtml);
+
+  let cursor = 0;
+  for (const item of requiredOrder) {
+    const raw = sections?.[item.key];
+
+    const exists =
+      typeof raw === "string"
+        ? raw.trim().length > 0
+        : item.key === "manuals"
+          ? raw === null || typeof raw === "string" // manuals can be null or string
+          : false;
+
+    if (!exists) {
+      if (item.required) missing.push(item.key);
+      // If it's optional and missing/null, that's fine.
+      positions[item.key] = -1;
       continue;
     }
-    if (idx < pos) outOfOrder.push(sec.label);
-    pos = idx + 1;
+
+    // manuals == null is allowed; if null, skip containment checks
+    if (item.key === "manuals" && raw === null) {
+      positions[item.key] = -2; // "present but intentionally null"
+      continue;
+    }
+
+    const normSection = htmlToNormalizedText(raw);
+    if (!normSection) {
+      if (item.required) missing.push(item.key);
+      positions[item.key] = -1;
+      continue;
+    }
+
+    const idx = normDesc.indexOf(normSection, cursor);
+    if (idx < 0) {
+      notFoundInHtml.push(item.key);
+      positions[item.key] = -1;
+      continue;
+    }
+
+    // Found in order
+    positions[item.key] = idx;
+    if (idx < cursor) outOfOrder.push(item.key);
+    cursor = idx + Math.max(1, normSection.length);
   }
 
-  return { ok: missing.length === 0 && outOfOrder.length === 0, missing, outOfOrder };
+  const ok = missing.length === 0 && notFoundInHtml.length === 0 && outOfOrder.length === 0;
+  return { ok, missing, notFoundInHtml, outOfOrder, positions };
 }
 
+/** Grounding v1: numeric+unit claims must be found in ground truth */
 function extractNumericUnitClaims(html: string): string[] {
-  const t = (html ?? "").replace(/<[^>]+>/g, " ");
+  const t = htmlToNormalizedText(html);
   const re =
     /\b\d+(?:\.\d+)?\s*(?:lb|lbs|oz|in|inch|inches|ft|cm|mm|m|kg|g|mg|ml|mL|l|L|°f|°c|%|psi)\b/gim;
   const hits = t.match(re) ?? [];
@@ -158,12 +249,32 @@ function buildGroundTruthText(normalizedPayload: any): string {
   const browsed = normalizedPayload.description_raw ?? normalizedPayload.browsed_text ?? "";
   if (typeof browsed === "string" && browsed.trim()) parts.push(browsed);
 
+  // engine_callback (if present) can help grounding too
+  const engineCb = normalizedPayload.engine_callback ?? null;
+  if (engineCb && typeof engineCb === "object") {
+    try {
+      parts.push(JSON.stringify(engineCb));
+    } catch {
+      // ignore
+    }
+  }
+
   return parts.join("\n---\n");
+}
+
+function normalizeBrandForRegex(brand: string): string {
+  return brand.trim().replace(/\s+/g, " ");
 }
 
 export function lintSeoOutput(params: {
   instructionsText: string | null;
+
+  /**
+   * IMPORTANT: pass the FULL stored seo_payload (including sections),
+   * not just seo_payload.seo, so we can enforce Option-1 ordering.
+   */
   seo_payload: any;
+
   description_html: string;
   features: any[];
   normalized_payload?: any;
@@ -174,7 +285,10 @@ export function lintSeoOutput(params: {
 
   const instructions_sha256 = params.instructionsText ? sha256(params.instructionsText) : null;
 
-  const seo = params.seo_payload?.seo ?? params.seo_payload ?? {};
+  const seoPayload = params.seo_payload ?? {};
+  const seo = seoPayload?.seo ?? seoPayload ?? {};
+  const sections = getSections(seoPayload);
+
   const h1 = String(seo?.h1 ?? "");
   const title = String(seo?.title ?? "");
   const metaDescription = String(seo?.metaDescription ?? "");
@@ -184,7 +298,10 @@ export function lintSeoOutput(params: {
   const html = String(params.description_html ?? "");
   const features = Array.isArray(params.features) ? params.features : [];
 
-  // H1
+  const normalizedPayload = params.normalized_payload ?? null;
+  const brand = typeof normalizedPayload?.brand === "string" ? normalizedPayload.brand.trim() : "";
+
+  // --- H1 checks
   if (!h1.trim()) {
     blockers.push({ severity: "blocker", code: "H1_MISSING", message: "Missing H1", field: "seo.h1" });
     checks.push({ key: "h1", label: "H1 present", status: "fail", detail: "seo.h1 is empty" });
@@ -204,6 +321,22 @@ export function lintSeoOutput(params: {
       checks.push({ key: "h1_len", label: "H1 length 90–110", status: "fail", detail: `len=${len}` });
     } else {
       checks.push({ key: "h1_len", label: "H1 length 90–110", status: "pass", detail: `len=${len}` });
+    }
+
+    // brand-fronted H1 (only enforce if we actually have a brand)
+    if (brand) {
+      const b = normalizeBrandForRegex(brand);
+      const re = new RegExp(`^${escapeRegex(b)}(?:\\b|\\s|\\-|–|—|:|\\|)`, "i");
+      if (!re.test(h1.trim())) {
+        blockers.push({
+          severity: "blocker",
+          code: "H1_NOT_BRAND_FRONTED",
+          message: `H1 must start with brand name (${brand}).`,
+          field: "seo.h1",
+          snippet: safeSnippet(h1),
+          evidence: { brand },
+        });
+      }
     }
 
     if (/[™®©]/.test(h1)) {
@@ -280,65 +413,104 @@ export function lintSeoOutput(params: {
     }
   }
 
-  // HTML checks
+  // --- HTML checks
   if (!html.trim()) {
     blockers.push({ severity: "blocker", code: "HTML_MISSING", message: "Missing HTML description", field: "description_html" });
     checks.push({ key: "html", label: "HTML description present", status: "fail", detail: "description_html is empty" });
   } else {
     checks.push({ key: "html", label: "HTML description present", status: "pass" });
 
-    const order = validateSectionOrder(html);
-    if (!order.ok) {
-      if (order.missing.length) {
-        blockers.push({
-          severity: "blocker",
-          code: "HTML_MISSING_REQUIRED_SECTIONS",
-          message: `HTML is missing required sections: ${order.missing.join(", ")}`,
-          field: "description_html",
-        });
-      }
-      if (order.outOfOrder.length) {
-        blockers.push({
-          severity: "blocker",
-          code: "HTML_SECTIONS_OUT_OF_ORDER",
-          message: `HTML sections appear out of order: ${order.outOfOrder.join(", ")}`,
-          field: "description_html",
-        });
+    // Option-1 enforcement based on section fragments + order (no heading text dependence)
+    if (!sections || typeof sections !== "object") {
+      blockers.push({
+        severity: "blocker",
+        code: "SECTIONS_MISSING",
+        message: "seo_payload.sections is missing; cannot validate required section ordering.",
+        field: "seo_payload.sections",
+      });
+    } else {
+      // Required order matches your schema order (plus manuals allowed to be null/string).
+      const requiredOrder: Array<{ key: SectionKey; required: boolean }> = [
+        { key: "overview", required: true },
+        { key: "hook", required: true },
+        { key: "mainDescription", required: true },
+        { key: "featuresBenefits", required: true },
+        { key: "specifications", required: true },
+        { key: "internalLinks", required: true },
+        { key: "whyChoose", required: true },
+        { key: "manuals", required: true }, // may be null but must exist per schema
+        { key: "faqs", required: true },
+      ];
+
+      const orderCheck = findOrderedSectionsInDescription({
+        descriptionHtml: html,
+        sections,
+        requiredOrder,
+      });
+
+      if (!orderCheck.ok) {
+        if (orderCheck.missing.length) {
+          blockers.push({
+            severity: "blocker",
+            code: "SECTIONS_MISSING_REQUIRED_FIELDS",
+            message: `Missing required sections fields: ${orderCheck.missing.join(", ")}`,
+            field: "seo_payload.sections",
+            evidence: { missing: orderCheck.missing },
+          });
+        }
+        if (orderCheck.notFoundInHtml.length) {
+          blockers.push({
+            severity: "blocker",
+            code: "SECTIONS_NOT_FOUND_IN_DESCRIPTION_HTML",
+            message: `Some section fragments are not present in descriptionHtml: ${orderCheck.notFoundInHtml.join(", ")}`,
+            field: "description_html",
+            evidence: { notFoundInHtml: orderCheck.notFoundInHtml, positions: orderCheck.positions },
+          });
+        }
+        if (orderCheck.outOfOrder.length) {
+          blockers.push({
+            severity: "blocker",
+            code: "SECTIONS_OUT_OF_ORDER",
+            message: `Section fragments appear out of order in descriptionHtml: ${orderCheck.outOfOrder.join(", ")}`,
+            field: "description_html",
+            evidence: { outOfOrder: orderCheck.outOfOrder, positions: orderCheck.positions },
+          });
+        }
       }
     }
 
-    // FAQs count heuristic (count <h3> after FAQ heading)
-    const faqsHeaderIdx = (html.match(/<h2[^>]*>[\s\S]*?(frequently asked questions|faqs?)\s*<\/h2>/i)?.index ?? -1);
-    if (faqsHeaderIdx >= 0) {
-      const after = html.slice(faqsHeaderIdx);
-      const qCount = (after.match(/<h3\b/gi) ?? []).length;
+    // FAQs count heuristic (still useful): count <h3> in the provided FAQ section fragment
+    if (sections && typeof sections?.faqs === "string" && sections.faqs.trim()) {
+      const qCount = (String(sections.faqs).match(/<h3\b/gi) ?? []).length;
       if (qCount < 5 || qCount > 7) {
         blockers.push({
           severity: "blocker",
           code: "FAQ_COUNT_OUT_OF_RANGE",
-          message: `FAQs must include 5–7 Q&A pairs; detected ~${qCount} <h3> questions.`,
-          field: "description_html",
+          message: `FAQs must include 5–7 Q&A pairs; detected ~${qCount} <h3> questions in sections.faqs.`,
+          field: "seo_payload.sections.faqs",
           evidence: { qCount },
         });
       }
     }
 
-    // Internal link count (site-relative only)
-    const internalLinks = (html.match(/<a\s+[^>]*href=["']\/[^"']+["'][^>]*>/gi) ?? []).length;
-    if (internalLinks !== 2) {
+    // Internal link count: count site-relative links in internalLinks fragment if present; fallback to full HTML
+    const internalLinksHtml =
+      sections && typeof sections?.internalLinks === "string" ? String(sections.internalLinks) : html;
+    const internalLinksCount = (internalLinksHtml.match(/<a\s+[^>]*href=["']\/[^"']+["'][^>]*>/gi) ?? []).length;
+    if (internalLinksCount !== 2) {
       blockers.push({
         severity: "blocker",
         code: "INTERNAL_LINKS_COUNT",
-        message: `Exactly 2 internal links are required; detected ${internalLinks}.`,
-        field: "description_html",
-        evidence: { internalLinks },
+        message: `Exactly 2 internal links are required; detected ${internalLinksCount}.`,
+        field: sections?.internalLinks ? "seo_payload.sections.internalLinks" : "description_html",
+        evidence: { internalLinksCount },
       });
     }
 
-    // Grounding v1
+    // Grounding v1: numeric+unit claims in descriptionHtml must be found in ground truth
     const claims = extractNumericUnitClaims(html);
     if (claims.length) {
-      const gt = buildGroundTruthText(params.normalized_payload);
+      const gt = buildGroundTruthText(normalizedPayload);
       const missing: string[] = [];
       for (const c of claims) {
         if (!gt || !gt.toLowerCase().includes(c.toLowerCase())) missing.push(c);
