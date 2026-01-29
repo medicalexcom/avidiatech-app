@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       requestedSteps.length ? requestedSteps : (modules ?? []).map((m: any) => m.module_name)
     );
 
-    // Soft gate flags (kept for logging/backwards compatibility, but NO LONGER used for gating)
+    // Soft gate flags (kept for logging only; do NOT gate pipeline)
     let auditPassedOrNotRun = true;
     let auditFailureDetails: any = null;
 
@@ -147,8 +147,11 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Soft gate policy DISABLED:
-      // We never skip downstream modules due to audit results.
+      /**
+       * IMPORTANT CHANGE:
+       * - Do NOT skip any module due to audit.
+       * - Audit may "fail"/needs_review, but pipeline must proceed.
+       */
       const shouldSkipDueToAudit = false;
 
       if (shouldSkipDueToAudit) {
@@ -374,7 +377,11 @@ Deno.serve(async (req) => {
 
           const auditOk = Boolean(json?.audit?.ok ?? json?.ok);
           if (!auditOk) {
-            // IMPORTANT: Audit never gates pipeline; record details but do not skip modules.
+            /**
+             * IMPORTANT CHANGE:
+             * - Audit module SHOULD be marked failed when needs_review (per your request),
+             *   but it must NOT gate/skip downstream modules or fail the pipeline.
+             */
             auditPassedOrNotRun = false;
             auditFailureDetails = {
               score: json?.audit?.score ?? json?.score ?? null,
@@ -389,10 +396,11 @@ Deno.serve(async (req) => {
                 status: "failed" satisfies ModuleStatus,
                 finished_at: new Date().toISOString(),
                 output_ref: key,
-                error: { message: "audit_needs_review", audit: auditFailureDetails },
+                error: { message: "audit_failed", audit: auditFailureDetails },
               })
               .eq("id", moduleId);
 
+            // Continue loop; downstream modules WILL still run (no skipping).
             continue;
           }
 
@@ -592,8 +600,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Final pipeline status:
-    // Audit never controls pipeline final status (informational only).
+    /**
+     * IMPORTANT CHANGE:
+     * - Audit never controls pipeline final status.
+     * - Pipeline is succeeded if we reached this point without an exception/early return.
+     */
     const finalStatus: PipelineRunStatus = "succeeded";
 
     await supabase
