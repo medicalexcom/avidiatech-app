@@ -17,7 +17,8 @@ import { lintSeoOutput } from "@/lib/audit/seoComplianceLinter";
  * UPDATED:
  * - Accepts popup brand override and carries it through:
  *     opts.brandOverride -> seoInput.__brand_override
- * - Lints using FULL seo_payload (seo + sections), required for Option-1 section ordering enforcement
+ * - Lints using STORE-READY seo_payload (mapSeoResultToStore) so SEO autoheal + audit agree
+ * - Lints with FULL seo_payload (seo + sections) for Option-1 section ordering enforcement
  */
 
 const ENGINE_PAYLOADS_BUCKET =
@@ -47,7 +48,11 @@ async function loadEngineCallbackJson(opts: {
 }) {
   const ref = opts.engine_payload_ref;
   if (!ref) {
-    return { ok: false as const, reason: "missing_engine_payload_ref", engineCallback: null };
+    return {
+      ok: false as const,
+      reason: "missing_engine_payload_ref",
+      engineCallback: null,
+    };
   }
 
   try {
@@ -80,14 +85,6 @@ async function loadEngineCallbackJson(opts: {
       engineCallback: null,
     };
   }
-}
-
-function buildLintSeoPayloadFromCandidate(candidate: any) {
-  // IMPORTANT: linter needs BOTH seo + sections for Option-1 enforcement.
-  return {
-    seo: candidate?.seo ?? null,
-    sections: candidate?.sections ?? null,
-  };
 }
 
 export async function runSeoForIngestion(
@@ -137,9 +134,9 @@ export async function runSeoForIngestion(
       ? opts.brandOverride.trim()
       : null;
 
+  // IMPORTANT: include __brand_override so linter can enforce brand-fronting without hallucination
   const seoInput: any = {
     ...(normalized ?? {}),
-    // allow UI-provided brand to be used deterministically (no hallucination)
     __brand_override: brandOverride,
 
     engine_callback: engineLoad.ok ? engineLoad.engineCallback : null,
@@ -172,22 +169,26 @@ export async function runSeoForIngestion(
     (ingestion as any).tenant_id || null
   );
 
-  let currentLint = lintSeoOutput({
-    instructionsText: instructionsText ?? null,
-    seo_payload: buildLintSeoPayloadFromCandidate(currentSeoResult),
-    description_html: String(currentSeoResult?.descriptionHtml ?? ""),
-    features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
-    // pass normalized payload including override so linter can enforce brand rules
-    normalized_payload: seoInput,
-  });
+  {
+    const storePayload = mapSeoResultToStore(currentSeoResult);
+    const currentLint = lintSeoOutput({
+      instructionsText: instructionsText ?? null,
+      seo_payload: storePayload,
+      description_html: String(currentSeoResult?.descriptionHtml ?? ""),
+      features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
+      normalized_payload: seoInput,
+    });
 
-  attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
+    attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
+  }
 
   // Attempts 2-3: repair if blockers exist
   for (let attempt = 2; attempt <= 3; attempt++) {
-    if (currentLint.ok) break;
+    const prev = attempts[attempts.length - 1];
+    if (!prev) break;
+    if (prev.lint.ok) break;
 
-    const violations = [...(currentLint.blockers || []), ...(currentLint.warnings || [])];
+    const violations = [...(prev.lint.blockers || []), ...(prev.lint.warnings || [])];
 
     currentSeoResult = await repairSeoModel({
       normalizedPayload: seoInput,
@@ -199,9 +200,10 @@ export async function runSeoForIngestion(
       violations,
     });
 
-    currentLint = lintSeoOutput({
+    const storePayload = mapSeoResultToStore(currentSeoResult);
+    const currentLint = lintSeoOutput({
       instructionsText: instructionsText ?? null,
-      seo_payload: buildLintSeoPayloadFromCandidate(currentSeoResult),
+      seo_payload: storePayload,
       description_html: String(currentSeoResult?.descriptionHtml ?? ""),
       features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
       normalized_payload: seoInput,
@@ -265,8 +267,11 @@ export async function runSeoForIngestion(
       },
 
       data_gaps: seoResult.data_gaps ?? [],
-      audit_score: typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
-      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts) ? seoResult.desc_audit.conflicts : [],
+      audit_score:
+        typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
+      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts)
+        ? seoResult.desc_audit.conflicts
+        : [],
     },
   };
 
