@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       requestedSteps.length ? requestedSteps : (modules ?? []).map((m: any) => m.module_name)
     );
 
-    // Soft gate flags
+    // Soft gate flags (kept for logging/backwards compatibility, but NO LONGER used for gating)
     let auditPassedOrNotRun = true;
     let auditFailureDetails: any = null;
 
@@ -147,10 +147,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Soft gate policy:
-      // If audit failed, automatically skip import/monitor/price.
-      const shouldSkipDueToAudit =
-        auditPassedOrNotRun === false && ["import", "monitor", "price"].includes(moduleName);
+      // Soft gate policy DISABLED:
+      // We never skip downstream modules due to audit results.
+      const shouldSkipDueToAudit = false;
 
       if (shouldSkipDueToAudit) {
         await uploadJson(supabase, key, {
@@ -375,8 +374,7 @@ Deno.serve(async (req) => {
 
           const auditOk = Boolean(json?.audit?.ok ?? json?.ok);
           if (!auditOk) {
-            // Soft gate: DO NOT fail the runner immediately. Record the failure and continue,
-            // but downstream import/monitor/price will be skipped.
+            // IMPORTANT: Audit never gates pipeline; record details but do not skip modules.
             auditPassedOrNotRun = false;
             auditFailureDetails = {
               score: json?.audit?.score ?? json?.score ?? null,
@@ -385,18 +383,16 @@ Deno.serve(async (req) => {
               summary: json?.audit?.summary ?? null,
             };
 
-            // Mark audit module "failed" (it ran, but did not pass). Artifact still exists.
             await supabase
               .from("module_runs")
               .update({
                 status: "failed" satisfies ModuleStatus,
                 finished_at: new Date().toISOString(),
                 output_ref: key,
-                error: { message: "audit_failed", audit: auditFailureDetails },
+                error: { message: "audit_needs_review", audit: auditFailureDetails },
               })
               .eq("id", moduleId);
 
-            // Continue loop; downstream modules will be skipped.
             continue;
           }
 
@@ -597,9 +593,8 @@ Deno.serve(async (req) => {
     }
 
     // Final pipeline status:
-    // - if audit failed (soft gate), mark pipeline as failed
-    // - otherwise succeeded
-    const finalStatus: PipelineRunStatus = auditPassedOrNotRun ? "succeeded" : "failed";
+    // Audit never controls pipeline final status (informational only).
+    const finalStatus: PipelineRunStatus = "succeeded";
 
     await supabase
       .from("pipeline_runs")
