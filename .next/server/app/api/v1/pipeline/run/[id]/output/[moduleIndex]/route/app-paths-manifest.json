@@ -1,3 +1,0 @@
-{
-  "/api/v1/pipeline/run/[id]/output/[moduleIndex]/route": "app/api/v1/pipeline/run/[id]/output/[moduleIndex]/route.js"
-}

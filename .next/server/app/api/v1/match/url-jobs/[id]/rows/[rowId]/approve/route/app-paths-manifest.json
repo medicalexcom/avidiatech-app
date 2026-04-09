@@ -1,3 +1,0 @@
-{
-  "/api/v1/match/url-jobs/[id]/rows/[rowId]/approve/route": "app/api/v1/match/url-jobs/[id]/rows/[rowId]/approve/route.js"
-}

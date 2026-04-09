@@ -1,3 +1,0 @@
-module.exports=[90780,a=>{"use strict";var b=a.i(87924),c=a.i(31583),d=a.i(98003),e=a.i(50944),f=a.i(72131);function g(){let a=(0,e.useSearchParams)(),g=a?.get("redirect")??a?.get("redirect_url")??"/dashboard",{isLoaded:h,isSignedIn:i}=(0,d.useUser)(),j=(0,e.useRouter)();return(0,f.useEffect)(()=>{h&&i&&j.replace(g)},[h,i,j,g]),(0,b.jsx)("main",{className:"flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12",children:(0,b.jsx)("div",{className:"w-full max-w-md",children:(0,b.jsx)(c.SignUp,{routing:"path",path:"/sign-up",afterSignUpUrl:g,signInUrl:"/sign-in"})})})}a.s(["default",()=>g])}];
-
-//# sourceMappingURL=src_app_sign-up_%5B%5B___index%5D%5D_page_tsx_a8ff669a._.js.map
