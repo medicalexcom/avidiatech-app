@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 44" width="200" height="44">
+  <!-- Icon: stylized data-flow A -->
+  <g transform="translate(0, 4)">
+    <!-- Left bar of A -->
+    <rect x="0" y="8" width="5" height="22" rx="2.5" fill="#06b6d4"/>
+    <!-- Right bar of A -->
+    <rect x="16" y="8" width="5" height="22" rx="2.5" fill="#06b6d4"/>
+    <!-- Top peak -->
+    <polygon points="10.5,0 21,8 0,8" fill="#0891b2"/>
+    <!-- Crossbar (data line) -->
+    <rect x="2" y="17" width="17" height="4" rx="2" fill="#22c55e"/>
+    <!-- Data dots on crossbar -->
+    <circle cx="6" cy="19" r="2" fill="#ffffff"/>
+    <circle cx="11" cy="19" r="2" fill="#ffffff"/>
+    <circle cx="16" cy="19" r="2" fill="#ffffff"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="30" y="30" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="21" font-weight="700" letter-spacing="-0.5" fill="#020617">Avidia</text>
+  <text x="101" y="30" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="21" font-weight="700" letter-spacing="-0.5" fill="#06b6d4">Tech</text>
+</svg>

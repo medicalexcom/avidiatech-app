@@ -1,0 +1,109 @@
+<!-- wp:kadence/rowlayout {"uniqueID":"392_cb943f-86","columns":1,"colLayout":"equal","maxWidth":600,"bgColor":"palette8","overlayBgImg":"https://www.avidiatech.com/wp-content/uploads/2021/04/bg-0.png","overlayBgImgAttachment":"fixed","overlayOpacity":70,"tabletPadding":[140,0,80,0],"bgColorClass":"theme-palette8","padding":[150,0,120,0],"mobilePadding":[120,20,50,20],"kbVersion":2} -->
+<!-- wp:kadence/column {"borderWidth":["","","",""],"uniqueID":"392_9b1604-f5","padding":[10,10,10,10],"kbVersion":2,"className":"inner-column-1"} -->
+<div class="wp-block-kadence-column kadence-column392_9b1604-f5 inner-column-1"><div class="kt-inside-inner-col"><!-- wp:kadence/advancedheading {"level":1,"uniqueID":"392_8d93bc-85","align":"center","lineType":"em","margin":["","",22.5,""],"tabletMargin":["","",17.5,""],"markBorder":"","markBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"tabletMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"mobileMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"fontHeight":[1,null,null],"fontHeightType":"em"} -->
+<h1 class="kt-adv-heading392_8d93bc-85 wp-block-kadence-advancedheading" data-kb-block="kb-adv-heading392_8d93bc-85">Support &amp; FAQ</h1>
+<!-- /wp:kadence/advancedheading --></div></div>
+<!-- /wp:kadence/column -->
+<!-- /wp:kadence/rowlayout -->
+
+<!-- wp:kadence/rowlayout {"uniqueID":"392_0b5c00-ad","columns":1,"colLayout":"equal","maxWidth":1140,"tabletPadding":[90,50,80,50],"inheritMaxWidth":true,"padding":[90,0,90,0],"mobilePadding":[70,20,60,20],"kbVersion":2} -->
+<!-- wp:kadence/column {"borderWidth":["","","",""],"uniqueID":"392_e71d18-45","padding":[0,0,0,0],"kbVersion":2,"className":"inner-column-1"} -->
+<div class="wp-block-kadence-column kadence-column392_e71d18-45 inner-column-1"><div class="kt-inside-inner-col"><!-- wp:kadence/rowlayout {"uniqueID":"392_34d2be-08","columns":1,"colLayout":"equal","maxWidth":600,"padding":[0,0,0,0],"kbVersion":2} -->
+<!-- wp:kadence/column {"borderWidth":["","","",""],"uniqueID":"392_29ccb1-e0","padding":[0,0,0,0],"kbVersion":2,"className":"inner-column-1"} -->
+<div class="wp-block-kadence-column kadence-column392_29ccb1-e0 inner-column-1"><div class="kt-inside-inner-col"><!-- wp:kadence/advancedheading {"uniqueID":"392_6baa01-c3","align":"center","lineType":"em","margin":["","",40,""],"markBorder":"","markBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"tabletMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"mobileMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"textTransform":"capitalize","fontHeight":[1,null,null],"fontHeightType":"em"} -->
+<h2 class="kt-adv-heading392_6baa01-c3 wp-block-kadence-advancedheading" data-kb-block="kb-adv-heading392_6baa01-c3">Frequently Asked Questions</h2>
+<!-- /wp:kadence/advancedheading -->
+
+<!-- wp:kadence/advancedheading {"uniqueID":"392_d5f539-7f","align":"center","margin":[0,0,60,0],"tabletMargin":[0,0,40,0],"markBorder":"","markBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"tabletMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"mobileMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"htmlTag":"p"} -->
+<p class="kt-adv-heading392_d5f539-7f wp-block-kadence-advancedheading" data-kb-block="kb-adv-heading392_d5f539-7f">Find quick answers about running modules, exports, trials, billing, and troubleshooting. If you’re stuck, contact us at info@avidiatech.com and include a product URL or a sample sheet.</p>
+<!-- /wp:kadence/advancedheading --></div></div>
+<!-- /wp:kadence/column -->
+<!-- /wp:kadence/rowlayout -->
+
+<!-- wp:kadence/rowlayout {"uniqueID":"392_eaf2e4-c5","tabletLayout":"row","collapseGutter":"none","columnGutter":"none","colLayout":"equal","maxWidth":1140,"inheritMaxWidth":true,"padding":[0,0,0,0],"kbVersion":2} -->
+<!-- wp:kadence/column {"borderWidth":["","","",""],"uniqueID":"392_f5d02f-9e","padding":[10,10,10,10],"margin":[0,20,0,0],"tabletMargin":[0,0,0,0],"kbVersion":2,"className":"inner-column-1"} -->
+<div class="wp-block-kadence-column kadence-column392_f5d02f-9e inner-column-1"><div class="kt-inside-inner-col"><!-- wp:kadence/accordion {"uniqueID":"392_11f3a8-69","paneCount":5,"openPane":3,"startCollapsed":true,"linkPaneCollapse":false,"contentBgColor":"palette9","contentBorderStyle":[{"top":["","",0],"right":["","",0],"bottom":["","",0],"left":["","",0],"unit":"px"}],"contentPadding":[30,30,40,30],"titleStyles":[{"size":[1.1,"",0.9],"sizeType":"em","lineHeight":[1.4,"",""],"lineType":"em","letterSpacing":"","family":"","google":"","style":"","weight":"bold","variant":"","subset":"","loadGoogle":true,"padding":[25,30,25,30],"marginTop":20,"color":"palette4","background":"palette8","border":["","","",""],"borderRadius":["","","",""],"borderWidth":["","","",""],"colorHover":"palette4","backgroundHover":"palette8","borderHover":["","","",""],"colorActive":"palette1","backgroundActive":"palette8","borderActive":["","","",""],"textTransform":"none"}],"titleBorder":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"titleBorderHover":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"titleBorderActive":[{"top":["palette9","",""],"right":["palette9","",""],"bottom":["palette9","",""],"left":["palette9","",""],"unit":"px"}],"titleBorderRadius":[0,0,0,0],"iconStyle":"arrow"} -->
+<div class="wp-block-kadence-accordion alignnone"><div class="kt-accordion-wrap kt-accordion-id392_11f3a8-69 kt-accordion-has-5-panes kt-active-pane-3 kt-accordion-block kt-pane-header-alignment-left kt-accodion-icon-style-arrow kt-accodion-icon-side-right" style="max-width:none"><div class="kt-accordion-inner-wrap" data-allow-multiple-open="true" data-start-open="none"><!-- wp:kadence/pane {"uniqueID":"392_c500ad-f1"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-1 kt-pane392_c500ad-f1"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">What does AvidiaTech do?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>AvidiaTech turns messy product pages and supplier files into clean, standardized outputs. You can extract product specifications, generate compliant descriptions, enforce SEO formatting and export normalized JSON plus page‑ready HTML.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":2,"uniqueID":"392_d1e528-54"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-2 kt-pane392_d1e528-54"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">What inputs can I use?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>You can start from a product URL, CSV or Excel spreadsheet or an API payload. If you’re unsure, send one product link and we’ll suggest the best module flow.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":3,"uniqueID":"392_45cab9-39"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-3 kt-pane392_45cab9-39"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">What do I get after a run?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>You get structured product data (normalized fields) plus formatted content suitable for product pages. Outputs are designed to be reviewed and then imported or published.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":4,"uniqueID":"392_3afdfa-30"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-4 kt-pane392_3afdfa-30"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">Can I run only one module (Extract or Describe or SEO)?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>Yes. You can run a single module when you only need extraction, copywriting or SEO enforcement, or chain them together for a full end‑to‑end pipeline.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":5,"uniqueID":"392_b6eb38-8f"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-5 kt-pane392_b6eb38-8f"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">Do you support Shopify / BigCommerce / WooCommerce?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>AvidiaTech is built around structured outputs you can map into your store’s import format. Tell us your platform and send a sample file; we’ll help you map fields correctly.<br></p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane --></div></div></div>
+<!-- /wp:kadence/accordion --></div></div>
+<!-- /wp:kadence/column -->
+
+<!-- wp:kadence/column {"id":2,"borderWidth":["","","",""],"uniqueID":"392_652a05-67","padding":[10,10,10,10],"margin":[0,0,0,20],"tabletMargin":[0,0,0,0],"kbVersion":2,"className":"inner-column-2"} -->
+<div class="wp-block-kadence-column kadence-column392_652a05-67 inner-column-2"><div class="kt-inside-inner-col"><!-- wp:kadence/accordion {"uniqueID":"392_b1b49e-d9","paneCount":10,"startCollapsed":true,"linkPaneCollapse":false,"contentBgColor":"palette9","contentBorderStyle":[{"top":["","",0],"right":["","",0],"bottom":["","",0],"left":["","",0],"unit":"px"}],"contentPadding":[30,30,40,30],"titleStyles":[{"size":[1.1,"",0.9],"sizeType":"em","lineHeight":[1.4,"",""],"lineType":"em","letterSpacing":"","family":"","google":"","style":"","weight":"bold","variant":"","subset":"","loadGoogle":true,"padding":[25,30,25,30],"marginTop":20,"color":"palette4","background":"palette8","border":["","","",""],"borderRadius":["","","",""],"borderWidth":["","","",""],"colorHover":"palette4","backgroundHover":"palette8","borderHover":["","","",""],"colorActive":"palette1","backgroundActive":"palette8","borderActive":["","","",""],"textTransform":"none"}],"titleBorder":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"titleBorderHover":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"titleBorderActive":[{"top":["palette9","",""],"right":["palette9","",""],"bottom":["palette9","",""],"left":["palette9","",""],"unit":"px"}],"titleBorderRadius":[0,0,0,0],"iconStyle":"arrow"} -->
+<div class="wp-block-kadence-accordion alignnone"><div class="kt-accordion-wrap kt-accordion-id392_b1b49e-d9 kt-accordion-has-10-panes kt-active-pane-0 kt-accordion-block kt-pane-header-alignment-left kt-accodion-icon-style-arrow kt-accodion-icon-side-right" style="max-width:none"><div class="kt-accordion-inner-wrap" data-allow-multiple-open="true" data-start-open="none"><!-- wp:kadence/pane {"id":6,"uniqueID":"392_cfd0e9-e0"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-6 kt-pane392_cfd0e9-e0"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">How does the free trial work?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>The free trial gives you full access to all modules for 14 days. Test AvidiaTech on real products; if it doesn’t fit your workflow, cancel any time before the trial ends.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":7,"uniqueID":"392_d378da-bc"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-7 kt-pane392_d378da-bc"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">Can I cancel anytime?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>Yes. You can cancel at any time from your billing settings. Your plan remains active until the end of the billing period.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":8,"uniqueID":"392_3170b4-29"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-8 kt-pane392_3170b4-29"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">Do you store my data or product URLs?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>We store what’s required to run the pipeline and show results in your dashboard (outputs, run history, and diagnostics). If you have stricter requirements, contact us and we’ll walk through options.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":10,"uniqueID":"392_241556-7a"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-10 kt-pane392_241556-7a"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">Why did my output look incomplete?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>Most issues come from missing source content, blocked pages, or inconsistent manufacturer formatting. Try a second URL from the same brand, or run Extract first to capture more structured inputs before Describe/SEO.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane -->
+
+<!-- wp:kadence/pane {"id":9,"uniqueID":"392_96c044-c4"} -->
+<div class="wp-block-kadence-pane kt-accordion-pane kt-accordion-pane-9 kt-pane392_96c044-c4"><div class="kt-accordion-header-wrap"><button class="kt-blocks-accordion-header kt-acccordion-button-label-show" type="button"><span class="kt-blocks-accordion-title-wrap"><span class="kt-blocks-accordion-title">How do I get help fast?</span></span><span class="kt-blocks-accordion-icon-trigger"></span></button></div><div class="kt-accordion-panel"><div class="kt-accordion-panel-inner"><!-- wp:paragraph -->
+<p>Email support with: the product URL (or file), what you expected, and a screenshot of the result. That usually cuts troubleshooting time dramatically.</p>
+<!-- /wp:paragraph --></div></div></div>
+<!-- /wp:kadence/pane --></div></div></div>
+<!-- /wp:kadence/accordion --></div></div>
+<!-- /wp:kadence/column -->
+<!-- /wp:kadence/rowlayout --></div></div>
+<!-- /wp:kadence/column -->
+<!-- /wp:kadence/rowlayout -->
+
+<!-- wp:kadence/rowlayout {"uniqueID":"392_c9dff3-f5","columns":1,"colLayout":"equal","maxWidth":600,"bgColor":"palette8","overlayBgImg":"https://www.avidiatech.com/wp-content/uploads/2021/04/bg-0.png","overlayOpacity":50,"tabletPadding":[70,40,70,40],"bgColorClass":"theme-palette8","padding":[80,0,80,0],"mobilePadding":[70,20,70,20],"kbVersion":2} -->
+<!-- wp:kadence/column {"borderWidth":["","","",""],"uniqueID":"392_e1f4c6-0f","padding":[10,10,10,10],"kbVersion":2,"className":"inner-column-1"} -->
+<div class="wp-block-kadence-column kadence-column392_e1f4c6-0f inner-column-1"><div class="kt-inside-inner-col"><!-- wp:kadence/advancedheading {"uniqueID":"392_790c84-ce","align":"center","lineType":"em","margin":["","",40,""],"markBorder":"","markBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"tabletMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"mobileMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"textTransform":"capitalize","fontHeight":[1,null,null],"fontHeightType":"em"} -->
+<h2 class="kt-adv-heading392_790c84-ce wp-block-kadence-advancedheading" data-kb-block="kb-adv-heading392_790c84-ce">Need help with a run?</h2>
+<!-- /wp:kadence/advancedheading -->
+
+<!-- wp:kadence/advancedheading {"uniqueID":"392_6004ae-3c","align":"center","margin":[0,0,20,0],"tabletMargin":[0,0,20,0],"markBorder":"","markBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"tabletMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"mobileMarkBorderStyles":[{"top":[null,"",""],"right":[null,"",""],"bottom":[null,"",""],"left":[null,"",""],"unit":"px"}],"htmlTag":"p"} -->
+<p class="kt-adv-heading392_6004ae-3c wp-block-kadence-advancedheading" data-kb-block="kb-adv-heading392_6004ae-3c">Send us a product URL (or a sample sheet) and tell us what you’re trying to achieve. We typically reply within 1 business day.</p>
+<!-- /wp:kadence/advancedheading -->
+
+<!-- wp:kadence/advancedbtn {"uniqueID":"392_d44c36-27","btns":[]} -->
+<div class="wp-block-kadence-advancedbtn kb-buttons-wrap kb-btns392_d44c36-27"><!-- wp:kadence/singlebtn {"uniqueID":"392_fb48c5-79","text":"Contact Support","link":"https://www.avidiatech.com/contact/","padding":[14,"",14,""],"margin":[20,0,0,0],"inheritStyles":"inherit","typography":[{"size":["","",""],"sizeType":"px","lineHeight":["","",""],"lineType":"","letterSpacing":["","",""],"letterType":"px","family":"","google":false,"style":"normal","weight":"regular","variant":"","subset":"","textTransform":"","loadGoogle":true}],"noCustomDefaults":true} /--></div>
+<!-- /wp:kadence/advancedbtn --></div></div>
+<!-- /wp:kadence/column -->
+<!-- /wp:kadence/rowlayout -->

@@ -1,0 +1,46 @@
+{
+  "name": "medx-ingest-api",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "dev": "NODE_ENV=development node server.js",
+    "postinstall": "npx playwright install && npm rebuild canvas",
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "@fortawesome/fontawesome-free": "6.7.2",
+    "@fortawesome/fontawesome-svg-core": "6.7.2",
+    "@fortawesome/free-brands-svg-icons": "6.7.2",
+    "@fortawesome/free-regular-svg-icons": "6.7.2",
+    "@fortawesome/free-solid-svg-icons": "6.7.2",
+    "@types/prismjs": "1.26.5",
+    "autoprefixer": "10.4.21",
+    "http-server": "14.1.1",
+    "image-size": "2.0.2",
+    "postcss": "8.5.6",
+    "pptxgenjs": "4.0.0",
+    "prismjs": "1.30.0",
+    "sharp": "0.34.1",
+    "tailwindcss": "4.1.10",
+    "ts-node": "10.9.2",
+    "typescript": "5.8.3",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^4.0.2",
+    "pdfjs-dist": "^3.10.111",
+    "canvas": "^2.11.1",
+    "playwright": "^1.39.0",
+    "playwright-extra": "^4.3.0",
+    "puppeteer-extra-plugin-stealth": "^2.11.1",
+    "googleapis": "^118.0.0",
+    "openai": "^4.7.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1"
+  }
+}
