@@ -1,0 +1,10 @@
+:root {
+  color-scheme: light;
+  /* Inter Variable is bundled locally via @fontsource-variable/inter.
+     This ensures the font works at build time without network access. */
+  --font-inter: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html.dark {
+  color-scheme: dark;
+}
