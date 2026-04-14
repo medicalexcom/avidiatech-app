@@ -1,0 +1,48 @@
+<svg viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvidiaTech">
+  <defs>
+    <linearGradient id="logo-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="55%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="logo-shimmer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Diamond mark (centered at 24,24 in 48x48 area) -->
+  <g transform="translate(0,0)">
+    <!-- Shadow layer -->
+    <rect x="15.4" y="15.4" width="17.2" height="17.2" rx="3"
+      transform="rotate(45 24 24)"
+      fill="rgba(99,102,241,0.22)"
+      filter="blur(4px)"
+    />
+    <!-- Diamond body -->
+    <rect x="7.6" y="7.6" width="32.8" height="32.8" rx="6"
+      transform="rotate(45 24 24)"
+      fill="url(#logo-grad)"
+    />
+    <!-- Inner highlight (top-left shimmer) -->
+    <rect x="7.6" y="7.6" width="32.8" height="32.8" rx="6"
+      transform="rotate(45 24 24)"
+      fill="url(#logo-shimmer)"
+    />
+    <!-- Chevrons (2 bold + 1 faded, pointing right) -->
+    <path d="M14 19L20 24L14 29" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M21 19L27 24L21 29" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M28 19L34 24L28 29" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Wordmark: "AvidiaTech" -->
+  <text
+    x="60"
+    y="29"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="21"
+    font-weight="700"
+    letter-spacing="-0.6"
+    fill="#0f172a"
+  >AvidiaTech</text>
+</svg>
