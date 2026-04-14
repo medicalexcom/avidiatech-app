@@ -1,0 +1,57 @@
+<svg viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AvidiaTech">
+  <defs>
+    <linearGradient id="nm-g" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#6366f1"/>
+      <stop offset="48%"  stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#e879f9"/>
+    </linearGradient>
+    <radialGradient id="nm-rg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#8b5cf6" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Neural Node mark (36×36) -->
+  <g transform="translate(6, 6)">
+    <!-- glow -->
+    <circle cx="18" cy="18" r="17.5" fill="url(#nm-rg)"/>
+    <!-- cross diagonals -->
+    <line x1="18.00" y1="7.00"  x2="18.00" y2="29.00" stroke="url(#nm-g)" stroke-width="0.80" stroke-opacity="0.22"/>
+    <line x1="27.53" y1="12.50" x2="8.47"  y2="23.50" stroke="url(#nm-g)" stroke-width="0.80" stroke-opacity="0.22"/>
+    <line x1="27.53" y1="23.50" x2="8.47"  y2="12.50" stroke="url(#nm-g)" stroke-width="0.80" stroke-opacity="0.22"/>
+    <!-- rim -->
+    <line x1="18.00" y1="7.00"  x2="27.53" y2="12.50" stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <line x1="27.53" y1="12.50" x2="27.53" y2="23.50" stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <line x1="27.53" y1="23.50" x2="18.00" y2="29.00" stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <line x1="18.00" y1="29.00" x2="8.47"  y2="23.50" stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <line x1="8.47"  y1="23.50" x2="8.47"  y2="12.50" stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <line x1="8.47"  y1="12.50" x2="18.00" y2="7.00"  stroke="url(#nm-g)" stroke-width="1.00" stroke-opacity="0.50" stroke-linecap="round"/>
+    <!-- spokes -->
+    <line x1="18.00" y1="18.00" x2="18.00" y2="7.00"  stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <line x1="18.00" y1="18.00" x2="27.53" y2="12.50" stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <line x1="18.00" y1="18.00" x2="27.53" y2="23.50" stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <line x1="18.00" y1="18.00" x2="18.00" y2="29.00" stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <line x1="18.00" y1="18.00" x2="8.47"  y2="23.50" stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <line x1="18.00" y1="18.00" x2="8.47"  y2="12.50" stroke="url(#nm-g)" stroke-width="1.20" stroke-opacity="0.78" stroke-linecap="round"/>
+    <!-- vertex nodes -->
+    <circle cx="18.00" cy="7.00"  r="2.34" fill="url(#nm-g)"/>
+    <circle cx="27.53" cy="12.50" r="2.34" fill="url(#nm-g)"/>
+    <circle cx="27.53" cy="23.50" r="2.34" fill="url(#nm-g)"/>
+    <circle cx="18.00" cy="29.00" r="2.34" fill="url(#nm-g)"/>
+    <circle cx="8.47"  cy="23.50" r="2.34" fill="url(#nm-g)"/>
+    <circle cx="8.47"  cy="12.50" r="2.34" fill="url(#nm-g)"/>
+    <!-- center hub -->
+    <circle cx="18.00" cy="18.00" r="3.17" fill="url(#nm-g)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text
+    x="52"
+    y="30"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="21"
+    font-weight="700"
+    letter-spacing="-0.6"
+    fill="#0f172a"
+  >AvidiaTech</text>
+</svg>
