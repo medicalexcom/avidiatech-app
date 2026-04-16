@@ -1,0 +1,71 @@
+-- Migration: Add default_profile_key to tenants table
+-- File: migrations/add_tenant_profile_key.sql
+-- 
+-- This migration adds the default_profile_key column to the tenants table
+-- to store each tenant's selected content generation profile.
+
+-- Add the default_profile_key column to tenants table
+ALTER TABLE tenants 
+ADD COLUMN default_profile_key TEXT DEFAULT 'medicalex.bigcommerce.longform';
+
+-- Add a comment to document the column
+COMMENT ON COLUMN tenants.default_profile_key IS 'Default content generation profile key for this tenant';
+
+-- Create an index for faster lookups (optional but recommended)
+CREATE INDEX IF NOT EXISTS idx_tenants_profile_key ON tenants(default_profile_key);
+
+-- Update existing tenants to use the default profile if they don't have one set
+-- This ensures backward compatibility
+UPDATE tenants 
+SET default_profile_key = 'medicalex.bigcommerce.longform' 
+WHERE default_profile_key IS NULL;
+
+-- Add a check constraint to ensure only valid profile keys are stored
+-- Note: You may want to update this list as you add more profiles
+ALTER TABLE tenants 
+ADD CONSTRAINT chk_valid_profile_key 
+CHECK (default_profile_key IN (
+  'medicalex.bigcommerce.longform',
+  'general.bigcommerce.longform'
+  -- Add more profile keys here as they become available
+));
+
+-- Optional: Add a trigger to log profile changes for audit purposes
+CREATE OR REPLACE FUNCTION log_tenant_profile_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.default_profile_key IS DISTINCT FROM NEW.default_profile_key THEN
+    -- Log the change (adjust table name as needed for your audit system)
+    INSERT INTO audit_log (
+      table_name,
+      record_id,
+      action,
+      old_value,
+      new_value,
+      changed_at,
+      changed_by
+    ) VALUES (
+      'tenants',
+      NEW.id,
+      'profile_change',
+      OLD.default_profile_key,
+      NEW.default_profile_key,
+      NOW(),
+      current_user
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Only create the trigger if the audit_log table exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_log') THEN
+    CREATE OR REPLACE TRIGGER tenant_profile_audit
+      AFTER UPDATE ON tenants
+      FOR EACH ROW
+      EXECUTE FUNCTION log_tenant_profile_change();
+  END IF;
+END
+$$;
