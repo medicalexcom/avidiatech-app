@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { saveIngestion, incrementUsageCounter, checkQuota } from "@/lib/supabaseServer";
 import type { DescribeRequest } from "@/components/describe/types";
-import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
+import { loadPromptProfile } from "@/lib/gpt/loadPromptProfile";
 import OpenAI from "openai";
 
 type AnyObj = Record<string, any>;
@@ -189,10 +189,13 @@ export async function POST(req: NextRequest) {
       // ignore
     }
 
-    const { text: instructions, source: instructionsSource } =
-      await loadCustomGptInstructionsWithInfo(tenantId);
+    // Load prompt profile with tenant configuration
+    const profile = await loadPromptProfile({ 
+      tenantId,
+      storeVars: { STORE_NAME: "Your Store" } // Default, can be customized per tenant
+    });
 
-    requireField(isNonEmptyString(instructions), "custom_gpt_instructions_missing_or_empty");
+    requireField(isNonEmptyString(profile.compiledPrompt), "custom_gpt_instructions_missing_or_empty");
 
     const packet = {
       name_raw: name,
@@ -223,7 +226,7 @@ export async function POST(req: NextRequest) {
       "4) The formatting/structure of the HTML content MUST follow the CUSTOM GPT INSTRUCTIONS.",
       "",
       "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
-      instructions.trim(),
+      profile.compiledPrompt.trim(),
     ].join("\n");
 
     const user = [
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
           rawPayload: {
             requestId,
             model: MODEL,
-            instruction_source: instructionsSource || null,
+            instruction_source: profile.profileKey,
             request: { name, shortDescription, brand: body.brand ?? null, specs: body.specs ?? null, format: body.format ?? null },
             error: String(err?.message || err),
             raw: safeSnippet(String(err?.raw || rawText || "")),
@@ -270,7 +273,7 @@ export async function POST(req: NextRequest) {
                   requestId,
                   model: MODEL,
                   raw_snippet: safeSnippet(String(err?.raw || rawText || "")),
-                  instruction_source: instructionsSource || null,
+                  instruction_source: profile.profileKey,
                 },
               }
             : {}),
@@ -313,7 +316,12 @@ export async function POST(req: NextRequest) {
       _debug: {
         requestId,
         model: MODEL,
-        instruction_source: instructionsSource || null,
+        instruction_source: profile.profileKey,
+        profile_config: {
+          h1_length: profile.h1Length,
+          meta_title_suffix: profile.metaTitleSuffix,
+          internal_links: profile.internalLinks
+        },
         mode: "json_schema_closed_objects_required_all_properties",
       },
     });
