@@ -335,3 +335,264 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
   }
 }
+        name: "AvidiaDescribeFull",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+
+          // IMPORTANT (OpenAI strict validator):
+          // required must include EVERY key in properties
+          required: ["descriptionHtml", "sections", "seo", "features", "data_gaps"],
+
+          properties: {
+            descriptionHtml: { type: "string" },
+
+            sections: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "overview",
+                "hook",
+                "mainDescription",
+                "featuresBenefits",
+                "specifications",
+                "internalLinks",
+                "whyChoose",
+                "manuals",
+                "faqs",
+              ],
+              properties: {
+                overview: { type: "string" },
+                hook: { type: "string" },
+                mainDescription: { type: "string" },
+                featuresBenefits: { type: "string" },
+                specifications: { type: "string" },
+                internalLinks: { type: "string" },
+                whyChoose: { type: "string" },
+                manuals: { type: "string" },
+                faqs: { type: "string" },
+              },
+            },
+
+            seo: {
+              type: "object",
+              additionalProperties: false,
+              required: ["h1", "title", "metaDescription"],
+              properties: {
+                h1: { type: "string" },
+                title: { type: "string" },
+                metaDescription: { type: "string" },
+              },
+            },
+
+            features: {
+              type: "array",
+              items: { type: "string" },
+            },
+
+            // REQUIRED (can be empty array)
+            data_gaps: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const res = await client.responses.create(body as any);
+  const rawText = extractTextFromResponses(res);
+
+  let json: AnyObj;
+  try {
+    json = JSON.parse(rawText);
+  } catch (e: any) {
+    const err: any = new Error("describe_invalid_json_from_responses_api");
+    err.raw = rawText;
+    throw err;
+  }
+
+  return { json, rawText };
+}
+
+export async function POST(req: NextRequest) {
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const debugOut =
+    process.env.DEBUG_DESCRIBE_MODEL_OUTPUT === "true" ||
+    process.env.NODE_ENV !== "production";
+
+  try {
+    const auth = safeGetAuth(req as any) as any;
+    if (!auth?.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const userId = auth.userId as string;
+    const tenantId = ((auth.actor as any)?.tenantId as string) || null;
+
+    const body = (await req.json().catch(() => null)) as DescribeRequest | null;
+    if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 422 });
+
+    const name = body.name?.trim();
+    const shortDescription = body.shortDescription?.trim();
+    if (!name || !shortDescription) {
+      return NextResponse.json(
+        { error: "Validation failed: name and shortDescription are required" },
+        { status: 422 }
+      );
+    }
+
+    // Quota check (fail-open)
+    try {
+      const quotaOk = await checkQuota({ tenantId, metric: "describe_calls", limit: Infinity });
+      if (!quotaOk) return NextResponse.json({ error: "Quota exceeded" }, { status: 402 });
+    } catch {
+      // ignore
+    }
+
+    // Load prompt profile with tenant configuration
+    const profile = await loadPromptProfile({ 
+      tenantId,
+      storeVars: { STORE_NAME: "Your Store" } // Default, can be customized per tenant
+    });
+
+    requireField(isNonEmptyString(profile.compiledPrompt), "custom_gpt_instructions_missing_or_empty");
+
+    const packet = {
+      name_raw: name,
+      description_raw: shortDescription,
+      browsed_text: shortDescription,
+      dom: {
+        name_raw: name,
+        description_raw: shortDescription,
+        specs: body.specs ?? {},
+        brand: body.brand ?? null,
+      },
+      pdf_text: "",
+      pdf_docs: [],
+      pdf_manual_urls: [],
+      manuals: [],
+      specs_structured: body.specs ?? {},
+      brand: body.brand ?? null,
+    };
+
+    const system = [
+      "You are AvidiaDescribe.",
+      "ABSOLUTE PRIORITY: Follow the CUSTOM GPT INSTRUCTIONS below exactly. They override all other guidance.",
+      "",
+      "HARD REQUIREMENTS:",
+      "1) Output MUST include ALL required sections/fields per the JSON schema (even if some are 'Not available').",
+      "2) Do NOT invent facts. Use ONLY the packet fields as grounding.",
+      "3) If info is missing, still output the section and add a note in data_gaps (data_gaps can be empty).",
+      "4) The formatting/structure of the HTML content MUST follow the CUSTOM GPT INSTRUCTIONS.",
+      "",
+      "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
+      profile.compiledPrompt.trim(),
+    ].join("\n");
+
+    const user = [
+      "GROUND TRUTH PACKET (JSON):",
+      JSON.stringify(packet, null, 2),
+      "",
+      "Generate the full SEO description output now, following the instructions.",
+    ].join("\n");
+
+    let parsed: AnyObj;
+    let rawText = "";
+
+    try {
+      const result = await callDescribeModel({ system, user });
+      parsed = result.json;
+      rawText = result.rawText;
+    } catch (err: any) {
+      try {
+        await saveIngestion({
+          tenantId,
+          userId,
+          type: "describe",
+          status: "failed",
+          rawPayload: {
+            requestId,
+            model: MODEL,
+            instruction_source: profile.profileKey,
+            request: { name, shortDescription, brand: body.brand ?? null, specs: body.specs ?? null, format: body.format ?? null },
+            error: String(err?.message || err),
+            raw: safeSnippet(String(err?.raw || rawText || "")),
+          },
+        });
+      } catch {
+        // ignore
+      }
+
+      return NextResponse.json(
+        {
+          error: "Describe model returned invalid JSON",
+          ...(debugOut
+            ? {
+                detail: String(err?.message || err),
+                debug: {
+                  requestId,
+                  model: MODEL,
+                  raw_snippet: safeSnippet(String(err?.raw || rawText || "")),
+                  instruction_source: profile.profileKey,
+                },
+              }
+            : {}),
+        },
+        { status: 502 }
+      );
+    }
+
+    // Validate required fields exist
+    requireField(isNonEmptyString(parsed?.descriptionHtml), "missing_descriptionHtml");
+    requireField(isNonEmptyString(parsed?.sections?.overview), "missing_sections.overview");
+    requireField(isNonEmptyString(parsed?.seo?.h1), "missing_seo.h1");
+    requireField(isNonEmptyString(parsed?.seo?.title), "missing_seo.title");
+    requireField(isNonEmptyString(parsed?.seo?.metaDescription), "missing_seo.metaDescription");
+    requireField(Array.isArray(parsed?.features), "missing_features_array");
+    requireField(Array.isArray(parsed?.data_gaps), "missing_data_gaps_array");
+
+    // Persist success
+    try {
+      await saveIngestion({
+        tenantId,
+        userId,
+        type: "describe",
+        status: "success",
+        normalizedPayload: parsed.normalizedPayload ?? null,
+        rawPayload: parsed ?? null,
+      });
+    } catch {
+      // ignore
+    }
+
+    try {
+      await incrementUsageCounter({ tenantId, metric: "describe_calls", incrementBy: 1 });
+    } catch {
+      // ignore
+    }
+
+    return NextResponse.json({
+      ...parsed,
+      _debug: {
+        requestId,
+        model: MODEL,
+        instruction_source: profile.profileKey,
+        profile_config: {
+          h1_length: profile.h1Length,
+          meta_title_suffix: profile.metaTitleSuffix,
+          internal_links: profile.internalLinks
+        },
+        mode: "json_schema_closed_objects_required_all_properties",
+      },
+    });
+  } catch (err: any) {
+    if (err?.code === "describe_invalid_model_output") {
+      return NextResponse.json(
+        { error: "describe_model_invalid_output", detail: err?.message || "invalid_output" },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json({ error: err?.message || "Unknown error" }, { status: 500 });
+  }
+}
