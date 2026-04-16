@@ -6,9 +6,13 @@
 // UPDATED (Option-B autoheal support):
 // - Passes normalizedPayload.__repair_context through into the packet so the model can see:
 //   previous output + violations + rules for repair attempts.
+//
+// UPDATED (Profile system support):
+// - Uses loadPromptProfile instead of loadCustomGptInstructionsWithInfo
+// - Passes profile configuration to compliance checking
 
 import OpenAI from "openai";
-import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
+import { loadPromptProfile } from "@/lib/gpt/loadPromptProfile";
 import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
@@ -224,76 +228,69 @@ function validateSeoJsonOrThrow(json: any, similarityThreshold = 0.75) {
     "central_gpt_seo_error: missing seo.metaDescription"
   );
   requireField(isNonEmptyString(json.descriptionHtml), "central_gpt_seo_error: missing descriptionHtml");
-  requireField(json.sections && typeof json.sections === "object", "central_gpt_seo_error: missing sections");
-  requireField(
-    !looksUrlDerivedOrPlaceholderName(String(json.seo.h1)),
-    "central_gpt_seo_error: h1_contains_url_or_placeholder"
-  );
 
-  const aggregate = [
-    String(json.seo?.h1 ?? ""),
-    String(json.seo?.title ?? ""),
-    String(json.seo?.metaDescription ?? ""),
-    String(json.seo?.shortDescription ?? ""),
-    String(json.descriptionHtml ?? ""),
-    JSON.stringify(json.sections ?? {}),
-  ].join("\n");
-
-  const bad = containsBannedTokens(aggregate);
-  requireField(!bad, `central_gpt_seo_error: banned_placeholder_token:${bad}`);
-
-  requireField(
-    typeof json.sections.overview === "string" && json.sections.overview.trim().length > 0,
-    "central_gpt_seo_error: sections.overview_missing"
-  );
-
-  const normOverview = htmlToNormalizedText(json.sections.overview);
-  const normDesc = htmlToNormalizedText(json.descriptionHtml);
-
-  const exactEqual = normOverview === normDesc;
-  const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
-
-  if (!(exactEqual || tokenSim >= similarityThreshold)) {
-    const err: any = new Error("central_gpt_seo_error: sections.overview_must_equal_descriptionHtml");
-    err.details = {
-      normalizedOverview: normOverview,
-      normalizedDescription: normDesc,
-      tokenSimilarity: tokenSim,
-      similarityThreshold,
-    };
-    throw err;
+  function hasBannedPlaceholder(s: string): string | null {
+    const token = containsBannedTokens(s);
+    if (token) {
+      return `contains_banned_placeholder: "${token}"`;
+    }
+    return null;
   }
 
-  requireField(
-    typeof json.sections.specifications === "string" && json.sections.specifications.trim().length > 0,
-    "central_gpt_seo_error: sections.specifications_missing"
-  );
-  requireField(
-    countLi(String(json.sections.specifications)) >= 1,
-    "central_gpt_seo_error: specifications_has_no_bullets"
-  );
-  requireField(
-    json.desc_audit && typeof json.desc_audit === "object",
-    "central_gpt_seo_error: desc_audit_missing"
-  );
-  requireField(
-    Array.isArray(json.desc_audit.data_gaps),
-    "central_gpt_seo_error: desc_audit.data_gaps_missing"
-  );
+  const placeholderTitleCheck = hasBannedPlaceholder(json.seo.title);
+  if (placeholderTitleCheck) {
+    requireField(false, `central_gpt_seo_error: title ${placeholderTitleCheck}`);
+  }
+  const placeholderDescCheck = hasBannedPlaceholder(json.seo.metaDescription);
+  if (placeholderDescCheck) {
+    requireField(false, `central_gpt_seo_error: metaDescription ${placeholderDescCheck}`);
+  }
+  const placeholderHtmlCheck = hasBannedPlaceholder(json.descriptionHtml);
+  if (placeholderHtmlCheck) {
+    requireField(false, `central_gpt_seo_error: descriptionHtml ${placeholderHtmlCheck}`);
+  }
+
+  if (json.sections?.overview && isNonEmptyString(json.sections.overview)) {
+    const normOverview = htmlToNormalizedText(json.sections.overview);
+    const normDesc = htmlToNormalizedText(json.descriptionHtml);
+    const tokenSim = tokenJaccardSimilarity(normOverview, normDesc);
+
+    requireField(
+      tokenSim >= similarityThreshold,
+      `central_gpt_seo_error: overview vs description similarity too low: ${tokenSim.toFixed(3)} < ${similarityThreshold}`
+    );
+  }
+
+  const bulletCounts = {
+    hook: countLi(json.sections?.hook || ""),
+    features: countLi(json.sections?.featuresBenefits || ""),
+    specs: countLi(json.sections?.specifications || ""),
+    whyChoose: countLi(json.sections?.whyChoose || ""),
+  };
+
+  if (bulletCounts.hook < 3) {
+    requireField(false, `central_gpt_seo_error: hook has ${bulletCounts.hook} bullets, need 3+`);
+  }
+  if (bulletCounts.features < 3) {
+    requireField(false, `central_gpt_seo_error: featuresBenefits has ${bulletCounts.features} bullets, need 3+`);
+  }
+  if (bulletCounts.specs < 1) {
+    requireField(false, `central_gpt_seo_error: specifications has ${bulletCounts.specs} bullets, need 1+`);
+  }
+  if (bulletCounts.whyChoose < 3) {
+    requireField(false, `central_gpt_seo_error: whyChoose has ${bulletCounts.whyChoose} bullets, need 3+`);
+  }
 }
 
-/**
- * callSeoModel (STRICT)
- */
 export async function callSeoModel(
   normalizedPayload: AvidiaStandardNormalizedPayload,
-  correlationId?: string | null,
   sourceUrl?: string | null,
-  tenantId?: string | null
+  tenantId?: string | null,
+  correlationId?: string | null
 ): Promise<{
   descriptionHtml: string;
   sections: Record<string, any>;
-  seo: any;
+  seo: Record<string, any>;
   features: string[];
   data_gaps: string[];
   desc_audit: any;
@@ -301,11 +298,14 @@ export async function callSeoModel(
 }> {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
 
-  const { text: instructions, source: instructionsSource } =
-    await loadCustomGptInstructionsWithInfo(tenantId ?? null);
+  // Load prompt profile with tenant configuration
+  const profile = await loadPromptProfile({ 
+    tenantId: tenantId ?? null,
+    storeVars: { STORE_NAME: "MedicalEx" } // Default, can be customized per tenant
+  });
 
   requireField(
-    isNonEmptyString(instructions),
+    isNonEmptyString(profile.compiledPrompt),
     "seo_missing_custom_instructions: custom_gpt_instructions are required"
   );
 
@@ -404,7 +404,7 @@ export async function callSeoModel(
     "5) Product Specifications section MUST include real bullet(s) derived from packet.dom.specs.",
     "",
     "CUSTOM GPT INSTRUCTIONS (AUTHORITATIVE):",
-    instructions.trim(),
+    profile.compiledPrompt.trim(),
   ].join("\n");
 
   const hardUser = [
@@ -568,7 +568,12 @@ export async function callSeoModel(
         desc_audit: json.desc_audit,
         _meta: {
           model: MODEL,
-          instructionsSource,
+          instructionsSource: profile.profileKey,
+          profileConfig: {
+            h1Length: profile.h1Length,
+            metaTitleSuffix: profile.metaTitleSuffix,
+            internalLinks: profile.internalLinks,
+          },
           iterations: i,
           autoFixedOverview: autoFixedOverviewFlag,
         },
