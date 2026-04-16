@@ -1,314 +1,280 @@
-import { getServiceSupabaseClient } from "@/lib/supabase";
+import { createSeoIngestionJob } from "@/lib/seo/seoIngestionQueue";
 import { callSeoModel } from "@/lib/seo/callSeoModel";
 import { repairSeoModel } from "@/lib/seo/repairSeoModel";
-import { mapSeoResultToStore } from "@/lib/seo/compatSeoMapping";
-import type { AvidiaStandardNormalizedPayload } from "@/lib/ingest/avidiaStandard";
-import { loadCustomGptInstructionsWithInfo } from "@/lib/gpt/loadInstructions";
 import { lintSeoOutput } from "@/lib/audit/seoComplianceLinter";
+import { loadPromptProfile } from "@/lib/gpt/loadPromptProfile";
+import { supabaseServiceRole } from "@/lib/supabaseServiceRole";
 
-/**
- * This module enriches SEO input with the *full ingest engine callback body* (if available),
- * and performs Option-B autoheal:
- * - Generate SEO output
- * - Deterministically lint against compliance rules
- * - If blockers, repair up to 2 more attempts (total 3 attempts)
- * - Persist best output even if still failing (status = needs_review), and DO NOT block pipeline
- *
- * UPDATED:
- * - Accepts popup brand override and carries it through:
- *     opts.brandOverride -> seoInput.__brand_override
- * - Lints using STORE-READY seo_payload (mapSeoResultToStore) so SEO autoheal + audit agree
- * - Lints with FULL seo_payload (seo + sections) for Option-1 section ordering enforcement
- */
+const DEFAULT_MAPPINGS = {
+  name_raw: null,
+  name: null,
+  description_raw: null,
+  pdf_text: "",
+  pdf_docs: [],
+  pdf_manual_urls: [],
+  browsed_text: null,
+  variant_matrix: null,
+  features_raw: [],
+  images: [],
+  specs: {},
+  brand: null,
+  sku: null,
+  category_path: null,
+  category_leaf: null,
+  source_url: null,
+  qrcode_text: null,
+  warranty_text: null,
+  manuals_list: [],
+  internal_links: [],
+};
 
-const ENGINE_PAYLOADS_BUCKET =
-  process.env.INGEST_ENGINE_PAYLOADS_BUCKET || "ingest-engine-payloads";
+function mapIngestionFieldToSeoInput(ingestion: any) {
+  const raw = ingestion.normalized_payload || {};
+  const out = { ...DEFAULT_MAPPINGS };
 
-function safeKeys(obj: any): string[] {
-  if (!obj || typeof obj !== "object") return [];
-  try {
-    return Object.keys(obj);
-  } catch {
-    return [];
-  }
-}
-
-function safeJsonParse(text: string) {
-  try {
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function loadEngineCallbackJson(opts: {
-  supabase: any;
-  ingestionId: string;
-  engine_payload_ref?: string | null;
-}) {
-  const ref = opts.engine_payload_ref;
-  if (!ref) {
-    return {
-      ok: false as const,
-      reason: "missing_engine_payload_ref",
-      engineCallback: null,
-    };
-  }
-
-  try {
-    const { data: blob, error } = await opts.supabase.storage
-      .from(ENGINE_PAYLOADS_BUCKET)
-      .download(ref);
-
-    if (error || !blob) {
-      return {
-        ok: false as const,
-        reason: "engine_payload_download_failed",
-        detail: String(error?.message ?? error ?? "unknown"),
-        engineCallback: null,
-      };
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== null && v !== undefined && Object.prototype.hasOwnProperty.call(out, k)) {
+      (out as any)[k] = v;
     }
-
-    const text = await blob.text();
-    const json = safeJsonParse(text);
-
-    if (!json) {
-      return { ok: false as const, reason: "engine_payload_not_json", engineCallback: null };
-    }
-
-    return { ok: true as const, engineCallback: json };
-  } catch (e: any) {
-    return {
-      ok: false as const,
-      reason: "engine_payload_download_threw",
-      detail: String(e?.message ?? e),
-      engineCallback: null,
-    };
   }
+
+  return out;
 }
 
-export async function runSeoForIngestion(
-  ingestionId: string,
-  opts?: { brandOverride?: string | null }
-): Promise<{
-  ingestionId: string;
-
-  // canonical
-  descriptionHtml: string;
-  sections: Record<string, any>;
-  seo: any;
-  features: string[];
-  data_gaps: string[];
-  desc_audit: any;
-  _meta?: any;
-
-  // legacy aliases
-  seo_payload: any;
-  description_html: string;
-}> {
-  const supabase = getServiceSupabaseClient();
-
-  const { data: ingestion, error: loadErr } = await supabase
-    .from("product_ingestions")
-    .select(
-      "id, tenant_id, source_url, normalized_payload, correlation_id, diagnostics, engine_payload_ref, engine_payload_sha256"
-    )
-    .eq("id", ingestionId)
-    .maybeSingle();
-
-  if (loadErr) throw new Error(`ingestion_load_failed: ${loadErr.message || String(loadErr)}`);
-  if (!ingestion) throw new Error("ingestion_not_found");
-
-  const normalized = (ingestion as any).normalized_payload as AvidiaStandardNormalizedPayload | any;
-  const startedAt = new Date().toISOString();
-
-  // Attempt to load full engine callback JSON (graceful fallback if missing)
-  const engineLoad = await loadEngineCallbackJson({
-    supabase,
-    ingestionId,
-    engine_payload_ref: (ingestion as any).engine_payload_ref ?? null,
-  });
-
-  const brandOverride =
-    typeof opts?.brandOverride === "string" && opts.brandOverride.trim()
-      ? opts.brandOverride.trim()
-      : null;
-
-  // IMPORTANT: include __brand_override so linter can enforce brand-fronting without hallucination
-  const seoInput: any = {
-    ...(normalized ?? {}),
-    __brand_override: brandOverride,
-
-    engine_callback: engineLoad.ok ? engineLoad.engineCallback : null,
-    engine_callback_meta: {
-      bucket: ENGINE_PAYLOADS_BUCKET,
-      ref: (ingestion as any).engine_payload_ref ?? null,
-      sha256: (ingestion as any).engine_payload_sha256 ?? null,
-      loaded: engineLoad.ok,
-      load_reason: engineLoad.ok ? null : (engineLoad as any).reason ?? "unknown",
-      top_level_keys: engineLoad.ok ? safeKeys(engineLoad.engineCallback) : [],
-    },
+function mapSeoResultToStore(seoResult: any) {
+  const def = {
+    name: "",
+    sku: "",
+    short_description: "",
+    description_html: "",
+    meta_title: "",
+    meta_description: "",
+    generated_product_url: "",
+    h1: "",
+    search_keywords: [],
+    features: [],
+    internal_links: [],
   };
-
-  // Load canonical instructions once for lint traceability
-  const { text: instructionsText } = await loadCustomGptInstructionsWithInfo(
-    (ingestion as any).tenant_id ?? null
-  );
-
-  const attempts: Array<{
-    attempt: number;
-    seoResult: any;
-    lint: ReturnType<typeof lintSeoOutput>;
-  }> = [];
-
-  // Attempt 1: initial generation
-  let currentSeoResult = await callSeoModel(
-    seoInput as any,
-    (ingestion as any).correlation_id || null,
-    (ingestion as any).source_url || null,
-    (ingestion as any).tenant_id || null
-  );
-
-  {
-    const storePayload = mapSeoResultToStore(currentSeoResult);
-    const currentLint = lintSeoOutput({
-      instructionsText: instructionsText ?? null,
-      seo_payload: storePayload,
-      description_html: String(currentSeoResult?.descriptionHtml ?? ""),
-      features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
-      normalized_payload: seoInput,
-    });
-
-    attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
-  }
-
-  // Attempts 2-3: repair if blockers exist
-  for (let attempt = 2; attempt <= 3; attempt++) {
-    const prev = attempts[attempts.length - 1];
-    if (!prev) break;
-    if (prev.lint.ok) break;
-
-    const violations = [...(prev.lint.blockers || []), ...(prev.lint.warnings || [])];
-
-    currentSeoResult = await repairSeoModel({
-      normalizedPayload: seoInput,
-      correlationId: (ingestion as any).correlation_id || null,
-      sourceUrl: (ingestion as any).source_url || null,
-      tenantId: (ingestion as any).tenant_id || null,
-      attempt,
-      previousOutput: currentSeoResult,
-      violations,
-    });
-
-    const storePayload = mapSeoResultToStore(currentSeoResult);
-    const currentLint = lintSeoOutput({
-      instructionsText: instructionsText ?? null,
-      seo_payload: storePayload,
-      description_html: String(currentSeoResult?.descriptionHtml ?? ""),
-      features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
-      normalized_payload: seoInput,
-    });
-
-    attempts.push({ attempt, seoResult: currentSeoResult, lint: currentLint });
-  }
-
-  // Choose best attempt: prefer "ok"; else lowest blocker count; then lowest warning count
-  const best = attempts
-    .slice()
-    .sort((a, b) => {
-      const aOk = a.lint.ok ? 1 : 0;
-      const bOk = b.lint.ok ? 1 : 0;
-      if (aOk !== bOk) return bOk - aOk;
-
-      const aBlock = (a.lint.blockers || []).length;
-      const bBlock = (b.lint.blockers || []).length;
-      if (aBlock !== bBlock) return aBlock - bBlock;
-
-      const aWarn = (a.lint.warnings || []).length;
-      const bWarn = (b.lint.warnings || []).length;
-      return aWarn - bWarn;
-    })[0];
-
-  const seoResult = best.seoResult;
-  const finishedAt = new Date().toISOString();
-
-  const diagnostics = (ingestion as any).diagnostics || {};
-  const updatedDiagnostics = {
-    ...diagnostics,
-    seo: {
-      ...(diagnostics.seo || {}),
-      status: "completed",
-      started_at: startedAt,
-      last_run_at: finishedAt,
-      instruction_source: seoResult?._meta?.instructionsSource ?? null,
-      model: seoResult?._meta?.model ?? null,
-      iterations: seoResult?._meta?.iterations ?? null,
-
-      engine_payload: {
-        bucket: ENGINE_PAYLOADS_BUCKET,
-        ref: (ingestion as any).engine_payload_ref ?? null,
-        sha256: (ingestion as any).engine_payload_sha256 ?? null,
-        loaded: engineLoad.ok,
-        load_reason: engineLoad.ok ? null : (engineLoad as any).reason ?? "unknown",
-        load_detail: (engineLoad as any).detail ?? null,
-      },
-
-      // record the UI brand override used (if any)
-      brand_override: brandOverride,
-
-      // Autoheal/compliance diagnostics
-      compliance: {
-        status: best.lint.ok ? "ok" : "needs_review",
-        attempts: attempts.length,
-        best_attempt: best.attempt,
-        blockers: best.lint.blockers ?? [],
-        warnings: best.lint.warnings ?? [],
-        meta: best.lint.meta ?? null,
-      },
-
-      data_gaps: seoResult.data_gaps ?? [],
-      audit_score:
-        typeof seoResult?.desc_audit?.score === "number" ? seoResult.desc_audit.score : null,
-      audit_conflicts: Array.isArray(seoResult?.desc_audit?.conflicts)
-        ? seoResult.desc_audit.conflicts
-        : [],
-    },
-  };
-
-  const seo_payload_to_store = mapSeoResultToStore(seoResult);
-
-  const { data: updated, error: updErr } = await supabase
-    .from("product_ingestions")
-    .update({
-      seo_payload: seo_payload_to_store,
-      description_html: seoResult.descriptionHtml,
-      features: seoResult.features,
-      seo_generated_at: finishedAt,
-      diagnostics: updatedDiagnostics,
-      updated_at: finishedAt,
-    })
-    .eq("id", ingestionId)
-    .select("id, seo_payload, description_html, features")
-    .maybeSingle();
-
-  if (updErr) throw new Error(`seo_persist_failed: ${updErr.message || String(updErr)}`);
-
-  const persistedSeoPayload = (updated as any)?.seo_payload ?? seo_payload_to_store;
-  const persistedHtml = (updated as any)?.description_html ?? seoResult.descriptionHtml;
-  const persistedFeatures = (updated as any)?.features ?? seoResult.features;
 
   return {
-    ingestionId,
-
-    descriptionHtml: persistedHtml,
-    sections: seoResult.sections ?? null,
-    seo: seoResult.seo ?? null,
-    features: persistedFeatures ?? [],
-    data_gaps: seoResult.data_gaps ?? [],
-    desc_audit: seoResult.desc_audit ?? null,
-    _meta: seoResult._meta ?? null,
-
-    seo_payload: persistedSeoPayload,
-    description_html: persistedHtml,
+    ...def,
+    name: String(seoResult?.seo?.h1 ?? "").trim(),
+    sku: String(seoResult?.sku ?? "").trim(),
+    short_description: String(seoResult?.seo?.shortDescription ?? "").trim(),
+    description_html: String(seoResult?.descriptionHtml ?? "").trim(),
+    meta_title: String(seoResult?.seo?.title ?? "").trim(),
+    meta_description: String(seoResult?.seo?.metaDescription ?? "").trim(),
+    generated_product_url: String(seoResult?.seo?.url ?? "").trim(),
+    h1: String(seoResult?.seo?.h1 ?? "").trim(),
+    search_keywords: Array.isArray(seoResult?.search_keywords) ? seoResult.search_keywords : [],
+    features: Array.isArray(seoResult?.features) ? seoResult.features : [],
+    internal_links: Array.isArray(seoResult?.internal_links) ? seoResult.internal_links : [],
   };
+}
+
+export async function runSeoForIngestion(ingestion: any): Promise<{ ok: boolean; result: any }> {
+  if (
+    !ingestion ||
+    !ingestion.id ||
+    ingestion.status !== "normalized" ||
+    !ingestion.normalized_payload
+  ) {
+    return { ok: false, result: `invalid_ingestion_for_seo: ${JSON.stringify(ingestion?.id)}` };
+  }
+
+  try {
+    const seoIngestionId = `${ingestion.id}-seo-${Date.now()}`;
+
+    // Auto-heal if name_raw looks like a URL or is empty.
+    const seoInput = mapIngestionFieldToSeoInput(ingestion);
+    if (
+      !seoInput.name_raw ||
+      String(seoInput.name_raw).toLowerCase().includes("http") ||
+      String(seoInput.name_raw).toLowerCase().includes("www.")
+    ) {
+      if (seoInput.description_raw && typeof seoInput.description_raw === "string") {
+        const firstLine = seoInput.description_raw.split("\n")[0]?.trim();
+        if (firstLine && firstLine.length < 300 && !firstLine.toLowerCase().includes("http")) {
+          seoInput.name_raw = firstLine;
+        }
+      }
+    }
+
+    console.info(
+      `[runSeoForIngestion] Starting for ingestion ${ingestion.id} (tenant: ${
+        (ingestion as any).tenant_id ?? "null"
+      })`
+    );
+
+    await supabaseServiceRole
+      .from("ingestions")
+      .update({ status: "generating_seo", seo_result: null, seo_attempts: [] })
+      .eq("id", ingestion.id)
+      .throwOnError();
+
+    const startedAt = Date.now();
+
+    // Update to use profile system with linter configuration
+    const profile = await loadPromptProfile({ 
+      tenantId: (ingestion as any).tenant_id ?? null,
+      storeVars: { STORE_NAME: "MedicalEx" } // Default, can be customized per tenant
+    });
+
+    // Profile metadata for the SEO result
+    const seoMeta = {
+      ingestion_id: ingestion.id,
+      seo_ingestion_id: seoIngestionId,
+      started_at: new Date(startedAt).toISOString(),
+      tenant_id: (ingestion as any).tenant_id ?? null,
+      profile_key: profile.profileKey,
+      profile_config: {
+        h1_length: profile.h1Length,
+        meta_title_suffix: profile.metaTitleSuffix,
+        internal_links: profile.internalLinks,
+        manuals_section: profile.manualsSection,
+      },
+    };
+
+    const attempts: Array<{
+      attempt: number;
+      seoResult: any;
+      lint: ReturnType<typeof lintSeoOutput>;
+    }> = [];
+
+    // Attempt 1: initial generation
+    let currentSeoResult = await callSeoModel(
+      seoInput as any,
+      (ingestion as any).source_url || null,
+      (ingestion as any).tenant_id || null,
+      (ingestion as any).correlation_id || null
+    );
+
+    {
+      const storePayload = mapSeoResultToStore(currentSeoResult);
+      
+      // Pass profile configuration to linter
+      const currentLint = lintSeoOutput(
+        {
+          instructionsText: profile.compiledPrompt ?? null,
+          seo_payload: storePayload,
+          description_html: String(currentSeoResult?.descriptionHtml ?? ""),
+          features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
+          normalized_payload: seoInput,
+        },
+        profile.compiledPrompt,
+        {
+          h1Length: profile.h1Length,
+          internalLinks: profile.internalLinks,
+          manualsSection: profile.manualsSection,
+          metaTitleSuffix: profile.metaTitleSuffix,
+          storeNameVar: profile.storeNameVar
+        }
+      );
+
+      attempts.push({ attempt: 1, seoResult: currentSeoResult, lint: currentLint });
+    }
+
+    // Attempts 2-3: repair if blockers exist
+    for (let attempt = 2; attempt <= 3; attempt++) {
+      const prev = attempts[attempts.length - 1];
+      if (!prev) break;
+      if (prev.lint.ok) break;
+
+      const violations = [...(prev.lint.blockers || []), ...(prev.lint.warnings || [])];
+
+      currentSeoResult = await repairSeoModel({
+        normalizedPayload: seoInput,
+        correlationId: (ingestion as any).correlation_id || null,
+        sourceUrl: (ingestion as any).source_url || null,
+        tenantId: (ingestion as any).tenant_id || null,
+        attempt,
+        previousOutput: currentSeoResult,
+        violations,
+      });
+
+      const storePayload = mapSeoResultToStore(currentSeoResult);
+      
+      // Pass profile configuration to linter for repair attempts too
+      const currentLint = lintSeoOutput(
+        {
+          instructionsText: profile.compiledPrompt ?? null,
+          seo_payload: storePayload,
+          description_html: String(currentSeoResult?.descriptionHtml ?? ""),
+          features: Array.isArray(currentSeoResult?.features) ? currentSeoResult.features : [],
+          normalized_payload: seoInput,
+        },
+        profile.compiledPrompt,
+        {
+          h1Length: profile.h1Length,
+          internalLinks: profile.internalLinks,
+          manualsSection: profile.manualsSection,
+          metaTitleSuffix: profile.metaTitleSuffix,
+          storeNameVar: profile.storeNameVar
+        }
+      );
+
+      attempts.push({ attempt, seoResult: currentSeoResult, lint: currentLint });
+
+      if (currentLint.ok) break;
+    }
+
+    const endedAt = Date.now();
+    const lastAttempt = attempts[attempts.length - 1];
+    const finalLint = lastAttempt?.lint;
+
+    const enrichedResult = {
+      ...currentSeoResult,
+      _meta: {
+        ...(currentSeoResult?._meta ?? {}),
+        ...seoMeta,
+        ended_at: new Date(endedAt).toISOString(),
+        duration_ms: endedAt - startedAt,
+        total_attempts: attempts.length,
+        final_lint: finalLint,
+        all_attempts: attempts.map((a) => ({
+          attempt: a.attempt,
+          lint_ok: a.lint.ok,
+          blockers: a.lint.blockers?.length ?? 0,
+          warnings: a.lint.warnings?.length ?? 0,
+          checks: a.lint.checks?.length ?? 0,
+        })),
+      },
+    };
+
+    console.info(
+      `[runSeoForIngestion] Completed ${attempts.length} attempts, final lint.ok=${finalLint?.ok} for ingestion ${ingestion.id}`
+    );
+
+    await supabaseServiceRole
+      .from("ingestions")
+      .update({
+        status: "seo_complete",
+        seo_result: enrichedResult,
+        seo_attempts: attempts.map((a) => a.seoResult),
+      })
+      .eq("id", ingestion.id)
+      .throwOnError();
+
+    // Create the background job for persistent storage
+    await createSeoIngestionJob(seoIngestionId, ingestion.id, enrichedResult);
+
+    return { ok: true, result: enrichedResult };
+  } catch (err: any) {
+    console.error("[runSeoForIngestion] Error:", err);
+
+    try {
+      await supabaseServiceRole
+        .from("ingestions")
+        .update({
+          status: "seo_failed",
+          seo_result: { error: String(err?.message || err) },
+        })
+        .eq("id", ingestion.id)
+        .throwOnError();
+    } catch (updateErr) {
+      console.error("[runSeoForIngestion] Failed to update ingestion with error status:", updateErr);
+    }
+
+    return { ok: false, result: String(err?.message || err) };
+  }
 }
