@@ -13,6 +13,7 @@
 
 import path from "path";
 import fs from "fs/promises";
+import { supabaseServiceRole } from "@/lib/supabaseServiceRole";
 
 export type InstrSource = "local";
 
@@ -54,20 +55,43 @@ let configCache: Map<string, ProfileConfig> = new Map();
 const DEFAULT_TTL = parseInt(process.env.RENDER_PROMPTS_TTL_SECONDS || "600", 10);
 const PROMPTS_DIR = path.join(process.cwd(), "tools", "render-engine", "prompts");
 
-/**
- * Get tenant's default profile key from Supabase
- * For now, returns null to use fallback. Implement when tenant table is updated.
- */
+/** Get tenant's default profile key from Supabase (`tenants.default_profile_key`). */
 async function getTenantDefaultProfile(tenantId?: string | null): Promise<string | null> {
-  // TODO: Implement Supabase query when default_profile_key column is added
-  // const { data } = await supabase
-  //   .from('tenants')
-  //   .select('default_profile_key')
-  //   .eq('id', tenantId)
-  //   .single();
-  // return data?.default_profile_key || null;
-  
-  return null; // Use fallback for now
+  if (!tenantId) return null;
+
+  try {
+    const { data, error } = await supabaseServiceRole
+      .from("tenants")
+      .select("default_profile_key")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("getTenantDefaultProfile: lookup failed, using fallback", {
+        tenantId,
+        message: error.message,
+      });
+      return null;
+    }
+
+    return typeof data?.default_profile_key === "string" && data.default_profile_key.trim()
+      ? data.default_profile_key.trim()
+      : null;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn("getTenantDefaultProfile: unexpected error, using fallback", {
+      tenantId,
+      error,
+    });
+    return null;
+  }
+}
+
+function buildProfileCacheKey(profileKey: string, storeVars?: Record<string, string>): string {
+  const entries = Object.entries(storeVars ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const varsKey = JSON.stringify(entries);
+  return `${profileKey}::${varsKey}`;
 }
 
 /**
@@ -146,7 +170,8 @@ export async function loadPromptProfile(params: {
 
   // Check cache first
   const now = Date.now();
-  const cached = profileCache.get(resolvedKey);
+  const cacheKey = buildProfileCacheKey(resolvedKey, params.storeVars);
+  const cached = profileCache.get(cacheKey);
   if (cached && (now - cached.fetchedAt) / 1000 < DEFAULT_TTL) {
     return cached.profile;
   }
@@ -208,7 +233,7 @@ export async function loadPromptProfile(params: {
     };
 
     // Cache result
-    profileCache.set(resolvedKey, { profile, fetchedAt: now });
+    profileCache.set(cacheKey, { profile, fetchedAt: now });
     
     return profile;
 
