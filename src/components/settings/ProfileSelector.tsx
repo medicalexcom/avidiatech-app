@@ -192,7 +192,7 @@ export function ProfileSelector({
                   >
                     {profile.key}
                     {profile.key === currentProfileKey && (
-                      <Badge variant="outline" className="ml-2">
+                      <Badge variant="neutral" className="ml-2">
                         Current
                       </Badge>
                     )}
