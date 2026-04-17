@@ -1,12 +1,5 @@
-/**
- * app/settings/page.tsx
- * 
- * Next.js page component that renders the tenant settings interface.
- * This would typically be placed in your app's settings or admin section.
- */
-
 import { Metadata } from "next";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import TenantSettingsPage from "@/components/settings/TenantSettingsPage";
 
@@ -16,22 +9,20 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  // Get authentication from Clerk
-  const { userId, sessionClaims } = auth();
+  const { userId, sessionClaims } = await auth();
 
-  // Redirect if not authenticated
   if (!userId) {
     redirect("/sign-in");
   }
 
-  // Extract tenant ID from session claims
-  // This assumes your Clerk configuration includes tenant information
-  // Adjust the path based on your actual session claims structure
-  const tenantId = (sessionClaims as any)?.tenant_id || 
-                  (sessionClaims as any)?.metadata?.tenantId ||
-                  (sessionClaims as any)?.publicMetadata?.tenantId;
+  const claims = (sessionClaims ?? {}) as Record<string, any>;
 
-  // If no tenant ID is available, show an error or redirect
+  const tenantId =
+    claims.tenant_id ||
+    claims.metadata?.tenantId ||
+    claims.publicMetadata?.tenantId ||
+    null;
+
   if (!tenantId) {
     return (
       <div className="container mx-auto py-8">
@@ -45,5 +36,5 @@ export default async function SettingsPage() {
     );
   }
 
-  return <TenantSettingsPage tenantId={tenantId} />;
+  return <TenantSettingsPage tenantId={String(tenantId)} />;
 }
