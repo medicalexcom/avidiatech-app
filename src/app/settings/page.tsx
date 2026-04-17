@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import TenantSettingsPage from "@/components/settings/TenantSettingsPage";
+import { getTenantContextForUser } from "@/lib/billing";
+import { extractEmailFromSessionClaims } from "@/lib/clerk-utils";
 
 export const metadata: Metadata = {
   title: "Tenant Settings | AvidiaTech",
@@ -17,11 +19,21 @@ export default async function SettingsPage() {
 
   const claims = (sessionClaims ?? {}) as Record<string, any>;
 
-  const tenantId =
+  let tenantId =
     claims.tenant_id ||
     claims.metadata?.tenantId ||
     claims.publicMetadata?.tenantId ||
     null;
+
+  if (!tenantId) {
+    try {
+      const userEmail = extractEmailFromSessionClaims(sessionClaims);
+      const context = await getTenantContextForUser({ userId, userEmail });
+      tenantId = context.tenantId;
+    } catch (error) {
+      console.warn("settings: tenant resolution via billing context failed", error);
+    }
+  }
 
   if (!tenantId) {
     return (
