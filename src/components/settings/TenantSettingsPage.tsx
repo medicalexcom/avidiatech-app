@@ -12,16 +12,20 @@ type CurrentProfileResponse = {
   profileKey?: string;
 };
 
-const AVAILABLE_PROFILES = [
-  {
-    key: "medicalex.bigcommerce.longform",
-    description: "MedicalEx medical equipment format",
-  },
-];
+type AvailableProfile = {
+  key: string;
+  description?: string;
+};
 
 export default function TenantSettingsPage({
   tenantId,
 }: TenantSettingsPageProps) {
+  const [availableProfiles, setAvailableProfiles] = useState<AvailableProfile[]>([
+    {
+      key: "medicalex.bigcommerce.longform",
+      description: "MedicalEx medical equipment format",
+    },
+  ]);
   const [currentProfileKey, setCurrentProfileKey] = useState(
     "medicalex.bigcommerce.longform"
   );
@@ -36,44 +40,57 @@ export default function TenantSettingsPage({
 
   const selectedProfile = useMemo(
     () =>
-      AVAILABLE_PROFILES.find((profile) => profile.key === selectedProfileKey) ??
-      AVAILABLE_PROFILES[0],
-    [selectedProfileKey]
+      availableProfiles.find((profile) => profile.key === selectedProfileKey) ??
+      availableProfiles[0],
+    [availableProfiles, selectedProfileKey]
   );
+
+  const canEditProfile = currentProfileKey !== "medicalex.bigcommerce.longform";
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadCurrentProfile() {
+    async function loadCurrentProfileAndOptions() {
       try {
         setIsLoading(true);
         setError("");
         setMessage("");
 
-        const response = await fetch(
-          `/api/v1/tenant/profile?tenantId=${encodeURIComponent(tenantId)}`,
-          {
+        const [profileRes, listRes] = await Promise.all([
+          fetch(`/api/v1/tenant/profile?tenantId=${encodeURIComponent(tenantId)}`, {
             method: "GET",
             credentials: "include",
             cache: "no-store",
-          }
-        );
+          }),
+          fetch("/api/v1/profiles", {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store",
+          }),
+        ]);
 
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
+        if (!profileRes.ok) {
+          const data = await profileRes.json().catch(() => ({}));
           throw new Error(data?.error || "Failed to load tenant profile");
         }
 
-        const data = (await response.json()) as CurrentProfileResponse;
+        const data = (await profileRes.json()) as CurrentProfileResponse;
+        const profileList = await listRes.json().catch(() => ({ profiles: [] }));
 
         if (cancelled) return;
 
         const nextProfile =
           data.profileKey || "medicalex.bigcommerce.longform";
 
+        const options: AvailableProfile[] =
+          Array.isArray(profileList?.profiles) && profileList.profiles.length
+            ? profileList.profiles
+            : availableProfiles;
+
         setCurrentProfileKey(nextProfile);
         setSelectedProfileKey(nextProfile);
         setTenantName(data.tenantName || "");
+        setAvailableProfiles(options);
       } catch (err: any) {
         if (cancelled) return;
         setError(err?.message || "Failed to load tenant profile");
@@ -84,7 +101,7 @@ export default function TenantSettingsPage({
       }
     }
 
-    void loadCurrentProfile();
+    void loadCurrentProfileAndOptions();
 
     return () => {
       cancelled = true;
@@ -164,9 +181,10 @@ export default function TenantSettingsPage({
                 id="default-profile"
                 value={selectedProfileKey}
                 onChange={(event) => setSelectedProfileKey(event.target.value)}
+                disabled={!canEditProfile}
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
               >
-                {AVAILABLE_PROFILES.map((profile) => (
+                {availableProfiles.map((profile) => (
                   <option key={profile.key} value={profile.key}>
                     {profile.key}
                   </option>
@@ -176,6 +194,11 @@ export default function TenantSettingsPage({
               <p className="text-sm text-muted-foreground">
                 {selectedProfile?.description || "No description available."}
               </p>
+              {!canEditProfile ? (
+                <p className="text-sm text-muted-foreground">
+                  MedicalEx tenant defaults are locked to preserve current production behavior.
+                </p>
+              ) : null}
 
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                 <div>
@@ -201,7 +224,7 @@ export default function TenantSettingsPage({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isSaving || selectedProfileKey === currentProfileKey}
+                disabled={isSaving || selectedProfileKey === currentProfileKey || !canEditProfile}
                 className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSaving ? "Saving..." : "Save profile"}

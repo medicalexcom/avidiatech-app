@@ -191,7 +191,8 @@ export async function POST(req: NextRequest) {
 
     const profile = await loadPromptProfile({
       tenantId,
-      storeVars: { STORE_NAME: "Your Store" },
+      profileKey: body.profileKey ?? null,
+      storeVars: { STORE_NAME: body.storeName?.trim() || "Your Store" },
     });
 
     requireField(

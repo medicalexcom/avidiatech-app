@@ -13,6 +13,7 @@
 
 import path from "path";
 import fs from "fs/promises";
+import { supabaseServiceRole } from "@/lib/supabaseServiceRole";
 
 export type InstrSource = "local";
 
@@ -47,6 +48,91 @@ interface ProfileConfig {
   tenants?: string[];
 }
 
+const BUILTIN_PROFILE_CONFIGS: Record<string, ProfileConfig> = {
+  "medicalex.bigcommerce.longform": {
+    key: "medicalex.bigcommerce.longform",
+    description: "MedicalEx canonical longform profile (backward-compatible default)",
+    useCanonicalFile: true,
+    canonicalFile: "custom_gpt_instructions-33.md",
+    schemaKey: "describeSchema.json",
+    linterKey: "medicalexBigcommerceSeo",
+    h1Length: { min: 90, max: 110 },
+    metaTitleSuffix: "| MedicalEx",
+    internalLinks: true,
+    manualsSection: true,
+    storeNameVar: "MedicalEx",
+    channels: ["bigcommerce"],
+    domains: ["medical"],
+    tenants: ["medicalex"],
+  },
+  "general.bigcommerce.longform": {
+    key: "general.bigcommerce.longform",
+    description: "General ecommerce longform profile for non-medical stores",
+    useCanonicalFile: false,
+    promptParts: [
+      "core/grounding.md",
+      "core/compliance.md",
+      "core/formatting.md",
+      "core/variants.md",
+      "channels/bigcommerce-longform.md",
+      "domains/general-ecommerce.md",
+    ],
+    schemaKey: "describeSchema.json",
+    linterKey: "generalBigcommerceSeo",
+    h1Length: { min: 60, max: 110 },
+    metaTitleSuffix: "| {{STORE_NAME}}",
+    internalLinks: false,
+    manualsSection: true,
+    storeNameVar: "{{STORE_NAME}}",
+    channels: ["bigcommerce"],
+    domains: ["general"],
+  },
+  "general.amazon.listing": {
+    key: "general.amazon.listing",
+    description: "General ecommerce Amazon listing profile",
+    useCanonicalFile: false,
+    promptParts: [
+      "core/grounding.md",
+      "core/compliance.md",
+      "core/formatting.md",
+      "core/variants.md",
+      "channels/amazon-listing.md",
+      "domains/general-ecommerce.md",
+    ],
+    schemaKey: "describeSchema.json",
+    linterKey: "generalAmazonListing",
+    h1Length: { min: 60, max: 200 },
+    metaTitleSuffix: "",
+    internalLinks: false,
+    manualsSection: false,
+    storeNameVar: "{{STORE_NAME}}",
+    channels: ["amazon"],
+    domains: ["general"],
+  },
+  "general.facebook.catalog": {
+    key: "general.facebook.catalog",
+    description: "General ecommerce Facebook catalog/shop profile",
+    useCanonicalFile: false,
+    promptParts: [
+      "core/grounding.md",
+      "core/compliance.md",
+      "core/formatting.md",
+      "core/variants.md",
+      "channels/facebook-catalog.md",
+      "domains/general-ecommerce.md",
+    ],
+    schemaKey: "describeSchema.json",
+    linterKey: "generalFacebookCatalog",
+    h1Length: { min: 40, max: 120 },
+    metaTitleSuffix: "",
+    internalLinks: false,
+    manualsSection: false,
+    storeNameVar: "{{STORE_NAME}}",
+    channels: ["facebook"],
+    domains: ["general"],
+  },
+};
+
 // Cache for compiled prompts and profile configs
 let profileCache: Map<string, { profile: PromptProfile; fetchedAt: number }> = new Map();
 let configCache: Map<string, ProfileConfig> = new Map();
@@ -54,20 +140,43 @@ let configCache: Map<string, ProfileConfig> = new Map();
 const DEFAULT_TTL = parseInt(process.env.RENDER_PROMPTS_TTL_SECONDS || "600", 10);
 const PROMPTS_DIR = path.join(process.cwd(), "tools", "render-engine", "prompts");
 
-/**
- * Get tenant's default profile key from Supabase
- * For now, returns null to use fallback. Implement when tenant table is updated.
- */
+/** Get tenant's default profile key from Supabase (`tenants.default_profile_key`). */
 async function getTenantDefaultProfile(tenantId?: string | null): Promise<string | null> {
-  // TODO: Implement Supabase query when default_profile_key column is added
-  // const { data } = await supabase
-  //   .from('tenants')
-  //   .select('default_profile_key')
-  //   .eq('id', tenantId)
-  //   .single();
-  // return data?.default_profile_key || null;
-  
-  return null; // Use fallback for now
+  if (!tenantId) return null;
+
+  try {
+    const { data, error } = await supabaseServiceRole
+      .from("tenants")
+      .select("default_profile_key")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("getTenantDefaultProfile: lookup failed, using fallback", {
+        tenantId,
+        message: error.message,
+      });
+      return null;
+    }
+
+    return typeof data?.default_profile_key === "string" && data.default_profile_key.trim()
+      ? data.default_profile_key.trim()
+      : null;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn("getTenantDefaultProfile: unexpected error, using fallback", {
+      tenantId,
+      error,
+    });
+    return null;
+  }
+}
+
+function buildProfileCacheKey(profileKey: string, storeVars?: Record<string, string>): string {
+  const entries = Object.entries(storeVars ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  const varsKey = JSON.stringify(entries);
+  return `${profileKey}::${varsKey}`;
 }
 
 /**
@@ -92,6 +201,11 @@ async function loadProfileConfig(profileKey: string): Promise<ProfileConfig> {
     configCache.set(profileKey, config);
     return config;
   } catch (error) {
+    const builtIn = BUILTIN_PROFILE_CONFIGS[profileKey];
+    if (builtIn) {
+      configCache.set(profileKey, builtIn);
+      return builtIn;
+    }
     throw new Error(`Failed to load profile config: ${profileKey} - ${error}`);
   }
 }
@@ -146,7 +260,8 @@ export async function loadPromptProfile(params: {
 
   // Check cache first
   const now = Date.now();
-  const cached = profileCache.get(resolvedKey);
+  const cacheKey = buildProfileCacheKey(resolvedKey, params.storeVars);
+  const cached = profileCache.get(cacheKey);
   if (cached && (now - cached.fetchedAt) / 1000 < DEFAULT_TTL) {
     return cached.profile;
   }
@@ -208,7 +323,7 @@ export async function loadPromptProfile(params: {
     };
 
     // Cache result
-    profileCache.set(resolvedKey, { profile, fetchedAt: now });
+    profileCache.set(cacheKey, { profile, fetchedAt: now });
     
     return profile;
 
@@ -276,10 +391,9 @@ export async function getAvailableProfiles(): Promise<{ key: string; description
     
     return profiles.sort((a, b) => a.key.localeCompare(b.key));
   } catch {
-    // Return default if profiles directory doesn't exist yet
-    return [
-      { key: "medicalex.bigcommerce.longform", description: "MedicalEx medical equipment format" }
-    ];
+    return Object.values(BUILTIN_PROFILE_CONFIGS)
+      .map((cfg) => ({ key: cfg.key, description: cfg.description }))
+      .sort((a, b) => a.key.localeCompare(b.key));
   }
 }
 

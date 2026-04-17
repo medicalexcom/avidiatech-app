@@ -33,7 +33,12 @@ export default function SignUpPage() {
         <div className="mb-8">
           <LogoStack />
         </div>
-        <SignUp routing="path" path="/sign-up" afterSignUpUrl={redirect} signInUrl="/sign-in" />
+        <SignUp
+          routing="path"
+          path="/sign-up"
+          fallbackRedirectUrl={redirect}
+          signInUrl="/sign-in"
+        />
         <p className="mt-6 text-center text-[12px] text-slate-400 dark:text-slate-500">
           By creating an account you agree to our{" "}
           <a href="/legal/terms" className="underline underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300">Terms</a>

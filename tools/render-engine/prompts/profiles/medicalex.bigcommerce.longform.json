@@ -1,0 +1,16 @@
+{
+  "key": "medicalex.bigcommerce.longform",
+  "description": "MedicalEx canonical longform profile (backward-compatible default)",
+  "useCanonicalFile": true,
+  "canonicalFile": "custom_gpt_instructions-33.md",
+  "schemaKey": "describeSchema.json",
+  "linterKey": "medicalexBigcommerceSeo",
+  "h1Length": { "min": 90, "max": 110 },
+  "metaTitleSuffix": "| MedicalEx",
+  "internalLinks": true,
+  "manualsSection": true,
+  "storeNameVar": "MedicalEx",
+  "channels": ["bigcommerce"],
+  "domains": ["medical"],
+  "tenants": ["medicalex"]
+}
