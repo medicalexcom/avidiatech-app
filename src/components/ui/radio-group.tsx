@@ -43,7 +43,7 @@ export function RadioGroup({
 }
 
 export interface RadioGroupItemProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "type"> {
   value: string;
 }
 
