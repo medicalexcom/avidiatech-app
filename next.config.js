@@ -37,6 +37,10 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Ensure prompt/profile artifacts are included in serverless output traces.
+  outputFileTracingIncludes: {
+    "/*": ["./tools/render-engine/prompts/**/*"],
+  },
   // Apply security headers to all routes
   async headers() {
     return [
