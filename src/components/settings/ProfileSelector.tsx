@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Check, Info } from "lucide-react";
 
 interface Profile {
   key: string;
@@ -144,8 +143,8 @@ export function ProfileSelector({
           <CardDescription>Loading available profiles...</CardDescription>
         </CardHeader>
 
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin" />
+        <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+          Loading...
         </div>
       </Card>
     );
@@ -170,9 +169,8 @@ export function ProfileSelector({
 
         {success && (
           <Alert className="border-green-200 bg-green-50">
-            <Check className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              Profile updated successfully!
+              Profile updated successfully.
             </AlertDescription>
           </Alert>
         )}
@@ -227,9 +225,8 @@ export function ProfileSelector({
         </RadioGroup>
 
         <div className="flex items-center justify-between border-t pt-4">
-          <div className="flex items-center text-sm text-muted-foreground">
-            <Info className="mr-2 h-4 w-4" />
-            Changes take effect immediately for new content generation
+          <div className="text-sm text-muted-foreground">
+            Changes take effect immediately for new content generation.
           </div>
 
           <Button
@@ -237,14 +234,7 @@ export function ProfileSelector({
             disabled={!hasChanges || saving}
             className="min-w-[100px]"
           >
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>
