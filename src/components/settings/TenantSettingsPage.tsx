@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useUser } from "@clerk/nextjs";
 
 type TenantSettingsPageProps = {
   tenantId: string;
+  canManageProfiles?: boolean;
 };
 
 type CurrentProfileResponse = {
@@ -20,9 +20,8 @@ type AvailableProfile = {
 
 export default function TenantSettingsPage({
   tenantId,
+  canManageProfiles = false,
 }: TenantSettingsPageProps) {
-  const { user } = useUser();
-
   const [availableProfiles, setAvailableProfiles] = useState<AvailableProfile[]>([
     {
       key: "medicalex.bigcommerce.longform",
@@ -48,22 +47,8 @@ export default function TenantSettingsPage({
     [availableProfiles, selectedProfileKey]
   );
 
-  // Owner bypass list, comma-separated in env.
-  // Example: NEXT_PUBLIC_PROFILE_ADMIN_EMAILS=owner@company.com,admin@company.com
-  const ownerEmails = useMemo(
-    () =>
-      (process.env.NEXT_PUBLIC_PROFILE_ADMIN_EMAILS || "")
-        .split(",")
-        .map((value) => value.trim().toLowerCase())
-        .filter(Boolean),
-    []
-  );
-
-  const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase() || "";
-  const hasOwnerBypass = ownerEmails.includes(userEmail);
-
   const canEditProfile =
-    hasOwnerBypass || currentProfileKey !== "medicalex.bigcommerce.longform";
+    canManageProfiles || currentProfileKey !== "medicalex.bigcommerce.longform";
 
   useEffect(() => {
     let cancelled = false;
@@ -97,7 +82,8 @@ export default function TenantSettingsPage({
 
         if (cancelled) return;
 
-        const nextProfile = data.profileKey || "medicalex.bigcommerce.longform";
+        const nextProfile =
+          data.profileKey || "medicalex.bigcommerce.longform";
 
         const options: AvailableProfile[] =
           Array.isArray(profileList?.profiles) && profileList.profiles.length
@@ -211,14 +197,13 @@ export default function TenantSettingsPage({
               <p className="text-sm text-muted-foreground">
                 {selectedProfile?.description || "No description available."}
               </p>
-
               {!canEditProfile ? (
                 <p className="text-sm text-muted-foreground">
                   MedicalEx tenant defaults are locked to preserve current production behavior.
                 </p>
-              ) : hasOwnerBypass ? (
+              ) : canManageProfiles ? (
                 <p className="text-sm text-muted-foreground">
-                  Owner override active for testing via NEXT_PUBLIC_PROFILE_ADMIN_EMAILS.
+                  Owner access enabled: you can test and switch profiles for QA.
                 </p>
               ) : null}
 
