@@ -11,6 +11,8 @@ export interface DescribeRequest {
   brand?: string;
   specs?: Record<string, string>;
   format?: DescribeFormat;
+  profileKey?: string;
+  storeName?: string;
 }
 
 export interface SeoFields {

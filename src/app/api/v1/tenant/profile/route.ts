@@ -11,7 +11,7 @@ import { supabaseServiceRole } from "@/lib/supabaseServiceRole";
 import { getAvailableProfiles } from "@/lib/gpt/loadPromptProfile";
 
 interface UpdateTenantProfileRequest {
-  tenantId: string;
+  tenantId?: string;
   profileKey: string;
 }
 
@@ -26,9 +26,12 @@ export async function POST(req: NextRequest) {
     const userId = auth.userId as string;
     const body = await req.json() as UpdateTenantProfileRequest;
 
-    if (!body.tenantId || !body.profileKey) {
+    const actorTenantId = ((auth.actor as any)?.tenantId as string) || null;
+    const resolvedTenantId = body.tenantId || actorTenantId;
+
+    if (!resolvedTenantId || !body.profileKey) {
       return NextResponse.json(
-        { error: "tenantId and profileKey are required" },
+        { error: "tenantId (or actor tenant) and profileKey are required" },
         { status: 400 }
       );
     }
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
     const tenantCheck = await supabaseServiceRole
       .from("tenants")
       .select("id, name")
-      .eq("id", body.tenantId)
+      .eq("id", resolvedTenantId)
       .single();
 
     if (tenantCheck.error || !tenantCheck.data) {
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest) {
         default_profile_key: body.profileKey,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", body.tenantId);
+      .eq("id", resolvedTenantId);
 
     if (updateResult.error) {
       console.error("Failed to update tenant profile:", updateResult.error);
@@ -93,11 +96,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Log the profile change for audit purposes
-    console.info(`Tenant ${body.tenantId} profile changed to ${body.profileKey} by user ${userId}`);
+    console.info(`Tenant ${resolvedTenantId} profile changed to ${body.profileKey} by user ${userId}`);
 
     return NextResponse.json({
       success: true,
-      tenantId: body.tenantId,
+      tenantId: resolvedTenantId,
       profileKey: body.profileKey,
       message: "Tenant profile updated successfully"
     });
@@ -120,11 +123,13 @@ export async function GET(req: NextRequest) {
     }
 
     const url = new URL(req.url);
-    const tenantId = url.searchParams.get("tenantId");
+    const tenantIdFromQuery = url.searchParams.get("tenantId");
+    const actorTenantId = ((auth.actor as any)?.tenantId as string) || null;
+    const tenantId = tenantIdFromQuery || actorTenantId;
 
     if (!tenantId) {
       return NextResponse.json(
-        { error: "tenantId query parameter is required" },
+        { error: "tenantId query parameter is required (or actor tenant must be available)" },
         { status: 400 }
       );
     }
