@@ -71,7 +71,6 @@ export async function POST(req: NextRequest) {
       .from("tenants")
       .update({
         default_profile_key: body.profileKey,
-        updated_at: new Date().toISOString(),
       })
       .eq("id", resolvedTenantId);
 
@@ -90,7 +89,11 @@ export async function POST(req: NextRequest) {
       }
       
       return NextResponse.json(
-        { error: "Failed to update tenant profile" },
+        {
+          error: "Failed to update tenant profile",
+          details: updateResult.error.message,
+          code: updateResult.error.code ?? null,
+        },
         { status: 500 }
       );
     }
