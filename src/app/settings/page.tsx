@@ -18,6 +18,8 @@ export default async function SettingsPage() {
   }
 
   const claims = (sessionClaims ?? {}) as Record<string, any>;
+  const userEmail = extractEmailFromSessionClaims(sessionClaims);
+  let canManageProfiles = false;
 
   let tenantId =
     claims.tenant_id ||
@@ -25,14 +27,16 @@ export default async function SettingsPage() {
     claims.publicMetadata?.tenantId ||
     null;
 
-  if (!tenantId) {
-    try {
-      const userEmail = extractEmailFromSessionClaims(sessionClaims);
-      const context = await getTenantContextForUser({ userId, userEmail });
-      tenantId = context.tenantId;
-    } catch (error) {
-      console.warn("settings: tenant resolution via billing context failed", error);
-    }
+  try {
+    const context = await getTenantContextForUser({
+      userId,
+      requestedTenantId: tenantId ?? undefined,
+      userEmail,
+    });
+    tenantId = context.tenantId;
+    canManageProfiles = context.role === "owner";
+  } catch (error) {
+    console.warn("settings: tenant resolution via billing context failed", error);
   }
 
   if (!tenantId) {
@@ -48,5 +52,10 @@ export default async function SettingsPage() {
     );
   }
 
-  return <TenantSettingsPage tenantId={String(tenantId)} />;
+  return (
+    <TenantSettingsPage
+      tenantId={String(tenantId)}
+      canManageProfiles={canManageProfiles}
+    />
+  );
 }
