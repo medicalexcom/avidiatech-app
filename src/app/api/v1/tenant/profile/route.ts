@@ -19,7 +19,7 @@ interface UpdateTenantProfileRequest {
 export async function POST(req: NextRequest) {
   try {
     // Verify authentication
-    const auth = safeGetAuth(req as any) as any;
+    const auth = safeGetAuth(req as any, { strict: process.env.NODE_ENV === "production" }) as any;
     if (!auth?.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -113,6 +113,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
+    if (error?.code === "auth_unavailable") {
+      return NextResponse.json({ error: "auth_unavailable" }, { status: 500 });
+    }
     console.error("Failed to update tenant profile:", error);
     return NextResponse.json(
       { error: error?.message || "Failed to update tenant profile" },
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     // Verify authentication
-    const auth = safeGetAuth(req as any) as any;
+    const auth = safeGetAuth(req as any, { strict: process.env.NODE_ENV === "production" }) as any;
     if (!auth?.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -162,6 +165,9 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error: any) {
+    if (error?.code === "auth_unavailable") {
+      return NextResponse.json({ error: "auth_unavailable" }, { status: 500 });
+    }
     console.error("Failed to get tenant profile:", error);
     return NextResponse.json(
       { error: error?.message || "Failed to get tenant profile" },
