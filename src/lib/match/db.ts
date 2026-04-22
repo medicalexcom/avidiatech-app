@@ -5,7 +5,10 @@ import { v4 as uuidv4 } from "uuid";
 export async function insertMatchRows(tenantId: string, jobId: string, rows: Omit<Partial<MatchRow>, "id" | "created_at" | "updated_at">[]) {
   if (!supabase) throw new Error("supabase not configured");
   const withIds = rows.map((r) => ({ id: uuidv4(), tenant_id: tenantId, job_id: jobId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...r }));
-  const { data, error } = await supabase.from("sku_url_matches").insert(withIds);
+  const { data, error } = await supabase
+    .from("sku_url_matches")
+    .insert(withIds)
+    .select("*");
   if (error) throw error;
   return data as any;
 }
