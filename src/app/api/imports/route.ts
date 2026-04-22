@@ -84,8 +84,7 @@ async function verifyDownload(relativePath: string) {
  * - verifies caller via Clerk (server-side)
  * - normalizes file_path to a relative path
  * - downloads the file (using service role) to verify existence
- * - attempts to create an import job row in a table named "imports" (if present)
- *   - if the "imports" table doesn't exist, it will return a synthetic jobId (UUID)
+ * - creates an import job row in a table named "imports"
  * - returns { ok: boolean, jobId: string|null, file_path: string, file_name, file_format, error? }
  *
  * This file is intended to be dropped into src/app/api/imports/route.ts and work with no edits:
@@ -135,8 +134,8 @@ export async function POST(req: Request) {
     const mapping = body.mapping ?? null;
     const platform = body.platform ?? null;
 
-    // Attempt to create a row in a table "imports" using the Supabase Admin (service role).
-    // If the table doesn't exist, return a synthetic jobId so the client can continue.
+    // Attempt to create a row in table "imports" using the Supabase Admin (service role).
+    // Persistence is required; this route must fail loudly when the row cannot be written.
     const insertPayload: any = {
       file_path: canonicalFilePath,
       file_name: fileName,
@@ -158,19 +157,17 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (insertError) {
-        // If the error indicates relation/table not found, fall through to synthetic jobId
-        console.warn("insert into imports failed, returning synthetic jobId", insertError.message || insertError);
-        const syntheticJobId = randomUUID();
+        console.error("insert into imports failed", insertError.message || insertError);
         return NextResponse.json(
           {
-            ok: true,
-            warning: "imports table not found or insert failed; returning synthetic jobId",
-            jobId: syntheticJobId,
+            ok: false,
+            error: "import_persist_failed",
+            detail: insertError.message || String(insertError),
             file_path: canonicalFilePath,
             file_name: fileName,
             file_format: fileFormat,
           },
-          { status: 200 }
+          { status: 500 }
         );
       }
 
@@ -198,20 +195,18 @@ export async function POST(req: Request) {
         { status: 200 }
       );
     } catch (errInsert: any) {
-      // Unexpected insert failure — return synthetic jobId but include error details
+      // Unexpected insert failure — do not return success without a persisted row.
       console.error("Unexpected insert error into imports table:", errInsert);
-      const syntheticJobId = randomUUID();
       return NextResponse.json(
         {
-          ok: true,
-          warning: "Could not create DB row for import; returning synthetic jobId",
-          jobId: syntheticJobId,
+          ok: false,
+          error: "import_persist_failed",
+          detail: String(errInsert?.message ?? errInsert),
           file_path: canonicalFilePath,
           file_name: fileName,
           file_format: fileFormat,
-          dbError: String(errInsert?.message ?? errInsert),
         },
-        { status: 200 }
+        { status: 500 }
       );
     }
   } catch (err: any) {

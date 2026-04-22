@@ -3,13 +3,17 @@ import type { Request as NodeRequest } from "node-fetch";
 /**
  * Clerk server helpers.
  *
- * Notes:
- * - Uses @clerk/nextjs/server on the server. No secrets are committed.
- * - Maps Clerk session -> app org id using tenancy helper if available.
- * - In production this is the canonical way to derive org_id from the authenticated session.
- *
- * TODO: If your Clerk org -> app tenant mapping differs, adjust mapClerkOrgToTenant() logic.
+ * Canonical behavior:
+ * - getClerkSession(req): returns basic Clerk identity from request.
+ * - getOrgFromClerkSession(req): returns INTERNAL tenant UUID when resolvable.
+ *   - If Clerk org id already looks like UUID, return as-is.
+ *   - Otherwise map orgId -> tenant id via tenancy helper.
  */
+
+function looksLikeUuid(v?: string | null): boolean {
+  if (!v) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
 
 export async function getClerkSession(req: Request) {
   try {
@@ -17,44 +21,47 @@ export async function getClerkSession(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const clerk = require("@clerk/nextjs/server");
     // getAuth can accept the request object in Next route handlers
-    const { userId, sessionId, orgId } = clerk.getAuth?.(req) ?? clerk.getAuth?.(req as unknown as NodeRequest) ?? {};
+    const { userId, sessionId, orgId } =
+      clerk.getAuth?.(req) ?? clerk.getAuth?.(req as unknown as NodeRequest) ?? {};
     if (!userId) return null;
 
-    // Try to return available basic info
     return { userId, sessionId, clerkOrgId: orgId ?? null };
-  } catch (err) {
+  } catch {
     // Clerk not configured / not available
     return null;
   }
 }
 
 /**
- * Map Clerk session -> application org id.
- * Attempt Clerk-first mapping; if you use a tenancy helper, call it here.
+ * Map Clerk session -> application tenant id (UUID).
  */
 export async function getOrgFromClerkSession(req: Request): Promise<string | null> {
   const sess = await getClerkSession(req);
   if (!sess) return null;
 
-  // If your Clerk org id is directly your app org id, return it:
-  if (sess.clerkOrgId) {
-    // OPTIONAL: if you store Clerk org id in your org row, use it directly.
-    return sess.clerkOrgId;
+  // If your Clerk org id is already the internal tenant UUID, return it directly.
+  if (looksLikeUuid(sess.clerkOrgId)) {
+    return sess.clerkOrgId as string;
   }
 
-  // Otherwise map Clerk user -> tenant/org via existing helper (if you have one)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const tenancy = require("../tenancy/getTenantIdFromClerkOrg");
-    if (tenancy && typeof tenancy.getTenantIdFromClerkOrg === "function") {
-      const mapped = await tenancy.getTenantIdFromClerkOrg(sess.userId);
-      if (mapped) return mapped;
+  // Map Clerk org id -> tenant id.
+  if (sess.clerkOrgId && sess.userId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const tenancy = require("../tenancy/getTenantIdFromClerkOrg");
+      const mapper = tenancy?.getOrCreateTenantIdFromClerkOrg;
+      if (typeof mapper === "function") {
+        const mapped = await mapper({
+          clerkOrgId: String(sess.clerkOrgId),
+          clerkUserId: String(sess.userId),
+        });
+        if (looksLikeUuid(mapped)) return mapped;
+      }
+    } catch {
+      // ignore mapping failure and fall through to null
     }
-  } catch (e) {
-    // ignore - fallback below
   }
 
-  // No mapped org found
   return null;
 }
 
