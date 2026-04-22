@@ -200,7 +200,6 @@ async function warnIfNonCanonicalUsageCountersSchema() {
     );
   }
 }
-
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
