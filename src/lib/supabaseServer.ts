@@ -177,6 +177,29 @@ function resolveUsageColumn(metric: string) {
   return USAGE_COLUMN_BY_METRIC[metric] ?? "ingestion_count";
 }
 
+let usageSchemaCheckDone = false;
+async function warnIfNonCanonicalUsageCountersSchema() {
+  if (usageSchemaCheckDone || !supabase) return;
+  usageSchemaCheckDone = true;
+  try {
+    const { error } = await supabase
+      .from("usage_counters")
+      .select("tenant_id, ingestion_count, seo_count, variants_count, match_count")
+      .limit(1);
+
+    if (error) {
+      console.warn(
+        "[usage_counters] Canonical schema check failed; run migration 2026-04-22_usage_counters_canonicalization.sql",
+        error.message
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[usage_counters] Canonical schema check raised exception; run migration 2026-04-22_usage_counters_canonicalization.sql",
+      err
+    );
+  }
+}
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
@@ -198,6 +221,7 @@ export async function incrementUsageCounter({
   }
 
   try {
+    await warnIfNonCanonicalUsageCountersSchema();
     // Canonical schema: one row per tenant with feature columns.
     const { data: existing, error: fetchErr } = await supabase
       .from("usage_counters")
@@ -279,6 +303,7 @@ export async function checkQuota(opts: {
   if (!tenantKey) return true;
 
   try {
+    await warnIfNonCanonicalUsageCountersSchema();
     const { data, error } = await supabase
       .from("usage_counters")
       .select(usageColumn)

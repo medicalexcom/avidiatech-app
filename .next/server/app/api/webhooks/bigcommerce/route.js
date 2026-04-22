@@ -1,0 +1,13 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/webhooks/bigcommerce/route.js")
+R.c("server/chunks/[root-of-the-server]__f085eff3._.js")
+R.c("server/chunks/[root-of-the-server]__7c26b66a._.js")
+R.c("server/chunks/node_modules_@supabase_supabase-js_dist_index_mjs_669a44bf._.js")
+R.c("server/chunks/node_modules_next_dist_23bfe24c._.js")
+R.c("server/chunks/[root-of-the-server]__8863c4a6._.js")
+R.c("server/chunks/node_modules_03467186._.js")
+R.c("server/chunks/[root-of-the-server]__34fd47d2._.js")
+R.c("server/chunks/node_modules_8fb563e7._.js")
+R.c("server/chunks/node_modules_next_f2da0d3e._.js")
+R.c("server/chunks/_next-internal_server_app_api_webhooks_bigcommerce_route_actions_44a94e7d.js")
+R.m(835219)
+module.exports=R.m(835219).exports

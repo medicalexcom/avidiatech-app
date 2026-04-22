@@ -1,0 +1,3 @@
+{
+  "/api/webhooks/bigcommerce/route": "app/api/webhooks/bigcommerce/route.js"
+}

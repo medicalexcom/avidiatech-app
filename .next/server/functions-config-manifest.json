@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/monitor/check": {},
+    "/api/monitor/events": {},
+    "/api/monitor/rules/[id]": {},
+    "/api/monitor/notifications": {},
+    "/api/monitor/rules": {},
+    "/api/monitor/watches/[id]": {},
+    "/api/monitor/watches": {},
+    "/api/imports": {},
+    "/api/v1/match/resolve-tenant": {},
+    "/api/v1/match/url-jobs/[id]/requeue": {},
+    "/api/v1/match/url-jobs/[id]": {},
+    "/api/upload-to-supabase": {},
+    "/api/v1/match/url-jobs": {},
+    "/api/v1/pipeline/internal/monitor": {},
+    "/api/v1/pipeline/internal/price": {},
+    "/api/v1/price/compute": {},
+    "/api/v1/price/approve": {},
+    "/api/v1/price/history": {},
+    "/api/v1/price/ingestions": {},
+    "/api/v1/price/push": {},
+    "/api/v1/match/url-jobs/[id]/rows/[rowId]/approve": {},
+    "/api/v1/match/url-jobs/[id]/start": {},
+    "/api/v1/match/url-jobs/[id]/rows": {},
+    "/api/v1/tenant/settings": {},
+    "/og": {}
+  }
+}

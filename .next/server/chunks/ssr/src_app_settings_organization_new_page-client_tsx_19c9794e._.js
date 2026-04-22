@@ -1,0 +1,3 @@
+module.exports=[92575,a=>{"use strict";var b=a.i(187924),c=a.i(572131),d=a.i(478164),e=a.i(898003),f=a.i(50944);function g(){let{isLoaded:a,isSignedIn:g}=(0,e.useUser)(),h=(0,f.useRouter)(),i="/settings/organization/new";return((0,c.useEffect)(()=>{a&&(g||h.replace(`/sign-in?redirect=${encodeURIComponent(i)}`))},[a,g,h,i]),a&&g)?(0,b.jsx)("main",{className:"flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12",children:(0,b.jsx)("div",{className:"w-full max-w-md",children:(0,b.jsx)(d.CreateOrganization,{afterCreateOrganizationUrl:"/dashboard/import"})})}):null}a.s(["default",()=>g])}];
+
+//# sourceMappingURL=src_app_settings_organization_new_page-client_tsx_19c9794e._.js.map

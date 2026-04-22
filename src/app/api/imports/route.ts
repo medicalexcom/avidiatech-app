@@ -61,13 +61,25 @@ async function verifyDownload(relativePath: string) {
     }
     // success
     return { ok: true, fileData };
-  } catch (err: any) {
+  } catch (err: unknown) {
     const attemptedUrl = `${(process.env.SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/${BUCKET}/${encodeURIComponent(
       relativePath
     )}`;
-    return { ok: false, attemptedUrl, error: String(err?.message ?? err) };
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, attemptedUrl, error: message };
   }
 }
+
+type ImportInsertPayload = {
+  file_path: string;
+  file_name: string;
+  file_format: string | null;
+  mapping: unknown;
+  platform: unknown;
+  status: "created";
+  uploaded_by: string;
+  created_at: string;
+};
 
 /**
  * Endpoint: POST /api/imports
@@ -99,12 +111,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => null);
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") {
       return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const incomingPath: string | undefined = body.file_path ?? body.path ?? body.filePath;
+    const incomingPath = (body.file_path ?? body.path ?? body.filePath) as string | undefined;
     if (!incomingPath) {
       return NextResponse.json({ ok: false, error: "Missing file_path in request body" }, { status: 400 });
     }
@@ -129,14 +141,16 @@ export async function POST(req: Request) {
 
     // Prepare payload for import job creation
     const canonicalFilePath = `${BUCKET}/${relativePath}`;
-    const fileName = body.file_name ?? relativePath.split("/").pop() ?? relativePath;
-    const fileFormat = body.file_format ?? fileName.split(".").pop() ?? null;
+    const bodyFileName = typeof body.file_name === "string" ? body.file_name : undefined;
+    const fileName = bodyFileName ?? relativePath.split("/").pop() ?? relativePath;
+    const bodyFileFormat = typeof body.file_format === "string" ? body.file_format : undefined;
+    const fileFormat = bodyFileFormat ?? fileName.split(".").pop() ?? null;
     const mapping = body.mapping ?? null;
     const platform = body.platform ?? null;
 
     // Attempt to create a row in table "imports" using the Supabase Admin (service role).
     // Persistence is required; this route must fail loudly when the row cannot be written.
-    const insertPayload: any = {
+    const insertPayload: ImportInsertPayload = {
       file_path: canonicalFilePath,
       file_name: fileName,
       file_format: fileFormat,
@@ -175,9 +189,9 @@ export async function POST(req: Request) {
       let jobId: string | null = null;
       if (inserted) {
         // Common id fields: id, job_id
-        jobId = (inserted as any).id ?? (inserted as any).job_id ?? null;
-        // If id is numeric, convert to string
-        if (jobId !== null && typeof jobId !== "string") jobId = String(jobId);
+        const row = inserted as Record<string, unknown>;
+        const rawId = (row.id as string | number | null | undefined) ?? (row.job_id as string | number | null | undefined) ?? null;
+        if (rawId !== null && rawId !== undefined) jobId = String(rawId);
       }
 
       // If no id field, generate a uuid and return it as jobId, but keep database row as authoritative
@@ -194,14 +208,15 @@ export async function POST(req: Request) {
         },
         { status: 200 }
       );
-    } catch (errInsert: any) {
+    } catch (errInsert: unknown) {
       // Unexpected insert failure — do not return success without a persisted row.
       console.error("Unexpected insert error into imports table:", errInsert);
+      const message = errInsert instanceof Error ? errInsert.message : String(errInsert);
       return NextResponse.json(
         {
           ok: false,
           error: "import_persist_failed",
-          detail: String(errInsert?.message ?? errInsert),
+          detail: message,
           file_path: canonicalFilePath,
           file_name: fileName,
           file_format: fileFormat,
@@ -209,8 +224,9 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("api/imports route error:", err);
-    return NextResponse.json({ ok: false, error: String(err?.message ?? err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

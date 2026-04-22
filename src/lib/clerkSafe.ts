@@ -8,7 +8,16 @@
  *
  * Usage: call safeGetAuth(req) INSIDE your request handlers (not at module top-level).
  */
-type SafeAuthResult = { userId?: string | null; sessionId?: string | null; actor?: any; authError?: "auth_unavailable" };
+type SafeAuthResult = {
+  userId?: string | null;
+  sessionId?: string | null;
+  actor?: unknown;
+  authError?: "auth_unavailable";
+};
+
+type ClerkAuthShape = {
+  getAuth?: (req: unknown) => { userId?: string | null; sessionId?: string | null; actor?: unknown };
+};
 
 function maybeThrowStrictAuthError(strict?: boolean): SafeAuthResult {
   if (strict) {
@@ -20,7 +29,7 @@ function maybeThrowStrictAuthError(strict?: boolean): SafeAuthResult {
 }
 
 export function safeGetAuth(
-  req: any,
+  req: unknown,
   opts?: { strict?: boolean }
 ): SafeAuthResult {
   // Quick short-circuit: if essential Clerk env is not present, avoid requiring Clerk.
@@ -32,7 +41,7 @@ export function safeGetAuth(
   try {
     // Require at runtime to avoid top-level Clerk initialization during build
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const clerk = require("@clerk/nextjs/server");
+    const clerk = require("@clerk/nextjs/server") as ClerkAuthShape;
     if (clerk && typeof clerk.getAuth === "function") {
       try {
         // getAuth expects the Next Request-like object in your handlers
