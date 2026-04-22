@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { safeGetAuth } from "@/lib/clerkSafe";
 import { supabaseServiceRole } from "@/lib/supabaseServiceRole";
 import { getAvailableProfiles } from "@/lib/gpt/loadPromptProfile";
+import { isOrgAdmin } from "@/lib/auth/isOrgAdmin";
 
 interface UpdateTenantProfileRequest {
   tenantId?: string;
@@ -47,9 +48,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check if user has permission to modify this tenant
-    // For now, we'll assume any authenticated user can modify their tenant
-    // In production, you'd want more granular permission checking
+    // Enforce role-based authorization for tenant writes
+    const admin = await isOrgAdmin(req as Request, resolvedTenantId);
+    if (!admin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const tenantCheck = await supabaseServiceRole
       .from("tenants")
       .select("id, name")
