@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { callRenderMatch } from "@/lib/match/bridge";
 import { insertMatchRows } from "@/lib/match/db";
 import { scoreCandidate } from "@/lib/match/scorer";
-import type { MatchInput } from "@/lib/match/types";
+import type { MatchInput, MatchRow } from "@/lib/match/types";
 
 export async function POST(req: NextRequest) {
   if (process.env.FEATURE_MATCH !== "true") {
@@ -70,14 +70,24 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const persisted: any[] = [];
+  const rowsToPersist: Array<{
+    sku: string;
+    brand_hint: string | null;
+    gtin: string | null;
+    candidate_url: string | null;
+    domain: string | null;
+    source: MatchRow["source"];
+    confidence: number;
+    status: "failed" | "candidate";
+    verify_checks: any;
+  }> = [];
   let candidateCount = 0;
 
   for (const r of results.results ?? []) {
     const input = r.input;
     const candidates = r.candidates ?? [];
     if (!candidates.length) {
-      const rows = [{
+      rowsToPersist.push({
         sku: input.sku,
         brand_hint: input.brand ?? null,
         gtin: input.gtin ?? null,
@@ -87,9 +97,7 @@ export async function POST(req: NextRequest) {
         confidence: 0,
         status: "failed" as const,
         verify_checks: { reason: "no-pattern-hit" }
-      }];
-      const inserted = await insertMatchRows(tenantId, jobId, rows);
-      persisted.push(...inserted);
+      });
       continue;
     }
 
@@ -103,21 +111,28 @@ export async function POST(req: NextRequest) {
         patternBase: typeof c.confidenceBase === "number" ? c.confidenceBase : 0.6
       });
       candidateCount++;
-      const rows = [{
+      const source: MatchRow["source"] =
+        c.source === "manual" || c.source === "search" || c.source === "pattern"
+          ? c.source
+          : "pattern";
+
+      rowsToPersist.push({
         sku: input.sku,
         brand_hint: input.brand ?? null,
         gtin: input.gtin ?? null,
         candidate_url: c.url,
         domain: c.domain,
-        source: c.source ?? "pattern",
+        source,
         confidence: finalScore,
         status: "candidate" as const,
         verify_checks: c.verify ?? null
-      }];
-      const inserted = await insertMatchRows(tenantId, jobId, rows);
-      persisted.push(...inserted);
+      });
     }
   }
+
+  const persisted = rowsToPersist.length
+    ? await insertMatchRows(tenantId, jobId, rowsToPersist)
+    : [];
 
   const metrics = { submitted: items.length, candidates: candidateCount, failed: 0, durationMs: results.durationMs ?? 0 };
   return NextResponse.json({ jobId, items: persisted, metrics });

@@ -5,10 +5,18 @@ import { extractEmailFromSessionClaims } from '@/lib/clerk-utils';
 
 /**
  * Endpoint for bulk file uploads. Accepts multipart/form-data with a single
- * file field named `file`. This route is a placeholder and should be
- * implemented to handle parsing of CSV/XLSX files and queuing ingestion jobs.
+ * file field named `file`.
+ *
+ * Feature-gated: this route is disabled unless ENABLE_V1_UPLOAD_ROUTE=true.
  */
 export async function POST(request: Request) {
+  if (process.env.ENABLE_V1_UPLOAD_ROUTE !== "true") {
+    return NextResponse.json(
+      { error: "feature_disabled", detail: "v1_upload_route_disabled" },
+      { status: 404 }
+    );
+  }
+
   const { userId, sessionClaims } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
