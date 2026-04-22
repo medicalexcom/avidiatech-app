@@ -36,7 +36,8 @@
       ]
     },
     "types": [
-      "node"
+      "node",
+      "jest"
     ],
     "plugins": [
       {
