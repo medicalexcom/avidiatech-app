@@ -38,7 +38,7 @@ describe("validateImportFile", () => {
     const result = await validateImportFile({ filePath: "test.csv", maxRows: 1 });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errorCode).toBe("too_many_rows");
+      expect((result as any).errorCode).toBe("too_many_rows");
     }
   });
 });
