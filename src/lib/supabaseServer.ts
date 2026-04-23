@@ -165,6 +165,42 @@ export async function saveIngestion({
 
 /* ---- Other helpers unchanged ---- */
 
+const USAGE_COLUMN_BY_METRIC: Record<string, "ingestion_count" | "seo_count" | "variants_count" | "match_count"> = {
+  describe_calls: "ingestion_count",
+  ingestion: "ingestion_count",
+  seo: "seo_count",
+  variants: "variants_count",
+  match: "match_count",
+};
+
+function resolveUsageColumn(metric: string) {
+  return USAGE_COLUMN_BY_METRIC[metric] ?? "ingestion_count";
+}
+
+let usageSchemaCheckDone = false;
+async function warnIfNonCanonicalUsageCountersSchema() {
+  if (usageSchemaCheckDone || !supabase) return;
+  usageSchemaCheckDone = true;
+  try {
+    const { error } = await supabase
+      .from("usage_counters")
+      .select("tenant_id, ingestion_count, seo_count, variants_count, match_count")
+      .limit(1);
+
+    if (error) {
+      console.warn(
+        "[usage_counters] Canonical schema check failed; run migration 2026-04-22_usage_counters_canonicalization.sql",
+        error.message
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[usage_counters] Canonical schema check raised exception; run migration 2026-04-22_usage_counters_canonicalization.sql",
+      err
+    );
+  }
+}
+
 export async function incrementUsageCounter({
   tenantId,
   metric = "describe_calls",
@@ -178,6 +214,7 @@ export async function incrementUsageCounter({
 
   const now = new Date().toISOString();
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
+  const usageColumn = resolveUsageColumn(metric);
 
   if (!tenantKey) {
     console.error("incrementUsageCounter blocked: missing tenantId and no GLOBAL_TENANT_ID configured");
@@ -185,42 +222,65 @@ export async function incrementUsageCounter({
   }
 
   try {
+    await warnIfNonCanonicalUsageCountersSchema();
+    // Canonical schema: one row per tenant with feature columns.
     const { data: existing, error: fetchErr } = await supabase
+      .from("usage_counters")
+      .select(`id, ${usageColumn}`)
+      .eq("tenant_id", tenantKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (!fetchErr) {
+      const current = Number((existing as any)?.[usageColumn] ?? 0);
+      const next = current + Number(incrementBy);
+
+      if ((existing as any)?.id) {
+        const { error: updateErr } = await supabase
+          .from("usage_counters")
+          .update({ [usageColumn]: next, updated_at: now })
+          .eq("id", (existing as any).id);
+        if (updateErr) throw updateErr;
+        return { ok: true, count: next, column: usageColumn };
+      }
+
+      const { error: insertErr } = await supabase.from("usage_counters").insert([{
+        tenant_id: tenantKey,
+        period_start: now,
+        [usageColumn]: Number(incrementBy),
+        created_at: now,
+        updated_at: now,
+      }]);
+      if (insertErr) throw insertErr;
+      return { ok: true, count: Number(incrementBy), column: usageColumn };
+    }
+
+    // Legacy fallback: row-per-metric table (metric/count columns).
+    const { data: legacyExisting, error: legacyFetchErr } = await supabase
       .from("usage_counters")
       .select("count")
       .eq("tenant_id", tenantKey)
       .eq("metric", metric)
       .limit(1)
       .maybeSingle();
+    if (legacyFetchErr) throw legacyFetchErr;
 
-    if (fetchErr) {
-      console.error("incrementUsageCounter: fetch error", fetchErr);
-      throw fetchErr;
-    }
-
-    if (existing && typeof existing.count !== "undefined") {
-      const newCount = Number(existing.count ?? 0) + Number(incrementBy);
+    if (legacyExisting && typeof legacyExisting.count !== "undefined") {
+      const newCount = Number(legacyExisting.count ?? 0) + Number(incrementBy);
       const { error: updateErr } = await supabase
         .from("usage_counters")
         .update({ count: newCount, updated_at: now })
         .eq("tenant_id", tenantKey)
         .eq("metric", metric);
-      if (updateErr) {
-        console.error("incrementUsageCounter: updateErr", updateErr);
-        throw updateErr;
-      }
-      return { ok: true, count: newCount };
-    } else {
-      const { data, error } = await supabase
-        .from("usage_counters")
-        .insert([{ tenant_id: tenantKey, metric, count: incrementBy, created_at: now, updated_at: now }])
-        .select("*");
-      if (error) {
-        console.error("incrementUsageCounter: insert error", error);
-        throw error;
-      }
-      return { ok: true, count: incrementBy };
+      if (updateErr) throw updateErr;
+      return { ok: true, count: newCount, column: "count" };
     }
+
+    const { error: insertErr } = await supabase
+      .from("usage_counters")
+      .insert([{ tenant_id: tenantKey, metric, count: incrementBy, created_at: now, updated_at: now }]);
+    if (insertErr) throw insertErr;
+    return { ok: true, count: Number(incrementBy), column: "count" };
   } catch (e) {
     console.error("incrementUsageCounter unexpected error", e);
     throw e;
@@ -240,10 +300,25 @@ export async function checkQuota(opts: {
   }
 
   const tenantKey = tenantId ?? GLOBAL_TENANT_ID;
+  const usageColumn = resolveUsageColumn(metric);
   if (!tenantKey) return true;
 
   try {
+    await warnIfNonCanonicalUsageCountersSchema();
     const { data, error } = await supabase
+      .from("usage_counters")
+      .select(usageColumn)
+      .eq("tenant_id", tenantKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error) {
+      const current = Number((data as any)?.[usageColumn] ?? 0);
+      return current < Number(limit);
+    }
+
+    // Legacy fallback
+    const { data: legacyData, error: legacyError } = await supabase
       .from("usage_counters")
       .select("count")
       .eq("tenant_id", tenantKey)
@@ -251,13 +326,13 @@ export async function checkQuota(opts: {
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.warn("checkQuota db error, failing open", error);
+    if (legacyError) {
+      console.warn("checkQuota db error, failing open", legacyError);
       return true;
     }
 
-    const current = Number((data as any)?.count ?? 0);
-    return current < Number(limit);
+    const legacyCurrent = Number((legacyData as any)?.count ?? 0);
+    return legacyCurrent < Number(limit);
   } catch (e) {
     console.warn("checkQuota unexpected error, failing open", e);
     return true;

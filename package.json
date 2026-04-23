@@ -8,6 +8,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx --max-warnings=0",
+    "test": "jest --runInBand",
     "build:workers": "node scripts/build-workers.js",
     "start": "next start",
     "smoke-extract": "ts-node -O '{\"module\":\"commonjs\"}' scripts/run-extract.ts",
@@ -53,12 +56,21 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^16.2.4",
     "@next/swc-wasm-nodejs": "^16.2.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.10.0",
     "@types/node-fetch": "^2.6.13",
     "@types/papaparse": "^5.2.6",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.2"

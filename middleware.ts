@@ -66,8 +66,31 @@ function getOwnerEmailsSet() {
   );
 }
 
+const SUBSCRIPTION_CACHE_TTL_MS = 60_000;
+const subscriptionCache = new Map<string, { value: boolean; expiresAt: number }>();
+
+function getCachedSubscriptionStatus(userId: string): boolean | null {
+  const hit = subscriptionCache.get(userId);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    subscriptionCache.delete(userId);
+    return null;
+  }
+  return hit.value;
+}
+
+function setCachedSubscriptionStatus(userId: string, value: boolean) {
+  subscriptionCache.set(userId, {
+    value,
+    expiresAt: Date.now() + SUBSCRIPTION_CACHE_TTL_MS,
+  });
+}
+
 async function userHasActiveSubscription(userId: string | null | undefined) {
   if (!userId) return false;
+
+  const cached = getCachedSubscriptionStatus(userId);
+  if (cached !== null) return cached;
 
   let clerkUser: any;
   try {
@@ -83,6 +106,7 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
       for (const e of clerkUser.emailAddresses) {
         if (e?.emailAddress && ownerEmails.has(String(e.emailAddress).toLowerCase())) {
           console.info("Owner detected by email list, bypassing Stripe:", e.emailAddress);
+          setCachedSubscriptionStatus(userId, true);
           return true;
         }
       }
@@ -96,6 +120,7 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     const publicMeta = (clerkUser?.publicMetadata as any) || {};
     if (privateMeta?.role === "owner" || publicMeta?.role === "owner") {
       console.info("Owner detected by Clerk metadata; bypassing Stripe for user:", userId);
+      setCachedSubscriptionStatus(userId, true);
       return true;
     }
   } catch (err) {
@@ -104,6 +129,7 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
 
   if (!stripe) {
     console.warn("Stripe key not set; treating as no subscription.");
+    setCachedSubscriptionStatus(userId, false);
     return false;
   }
 
@@ -126,19 +152,26 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
     }
   }
 
-  if (!customerId) return false;
+  if (!customerId) {
+    setCachedSubscriptionStatus(userId, false);
+    return false;
+  }
 
   try {
     const subs = await stripe.subscriptions.list({ customer: customerId, limit: 50 });
     if (subs.data && subs.data.length > 0) {
       for (const s of subs.data) {
-        if (s.status === "trialing" || s.status === "active") return true;
+        if (s.status === "trialing" || s.status === "active") {
+          setCachedSubscriptionStatus(userId, true);
+          return true;
+        }
       }
     }
   } catch (err) {
     console.warn("Stripe subscriptions lookup failed:", err);
   }
 
+  setCachedSubscriptionStatus(userId, false);
   return false;
 }
 
