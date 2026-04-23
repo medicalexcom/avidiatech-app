@@ -7,6 +7,7 @@ import { resolveTenantForInsert } from "@/lib/ingest/resolve-tenant";
 import { createWatchForIngestion } from "@/lib/monitor/hooks";
 import { resolveTenantIdForServerRequest } from "@/lib/tenancy/resolveTenantIdForServerRequest";
 import { checkRateLimit, getClientIP, rateLimitResponse } from "@/lib/ratelimit";
+import { internalAuthOk } from "@/lib/internalAuth";
 
 const INGEST_ENGINE_URL = process.env.INGEST_ENGINE_URL || "";
 const INGEST_SECRET = process.env.INGEST_SECRET || "";
@@ -68,27 +69,6 @@ function buildEffectiveOptions(body: any) {
   return { effectiveOptions, fullExtract, export_type };
 }
 
-/**
- * Determine whether the incoming request is an allowed internal call.
- * We accept either:
- *  - x-pipeline-secret === process.env.PIPELINE_INTERNAL_SECRET
- *  - x-service-api-key  === process.env.SERVICE_API_KEY
- *
- * This is intentionally permissive for internal automation; no user session is required.
- */
-function internalAuthOk(req: NextRequest) {
-  const providedPipeline = (req.headers.get("x-pipeline-secret") || "").trim();
-  const providedService = (req.headers.get("x-service-api-key") || "").trim();
-
-  const expectPipeline = (process.env.PIPELINE_INTERNAL_SECRET || "").trim();
-  const expectService = (process.env.SERVICE_API_KEY || "").trim();
-
-  if (expectPipeline && providedPipeline && providedPipeline === expectPipeline) return true;
-  if (expectService && providedService && providedService === expectService) return true;
-
-  return false;
-}
-
 async function isMonitorAllEnabledForTenant(tenantId: string): Promise<boolean> {
   // Default ON if anything goes wrong (per requirement)
   try {
@@ -111,12 +91,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // DEBUG: do NOT log secret. Log only header presence/length to verify request reaches handler.
-    console.log(
-      "[ingest-debug] x-service-api-key length:",
-      (req.headers.get("x-service-api-key") || "").length
-    );
-
     const isInternalRequest = internalAuthOk(req);
 
     // parse body (be permissive about content type)
