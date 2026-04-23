@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOrgFromRequest } from "@/lib/auth/getOrgFromRequest";
-import { throwIfNotAdmin, isOrgAdmin } from "@/lib/auth/isOrgAdmin";
+import { isOrgAdmin } from "@/lib/auth/isOrgAdmin";
 import { getServerSupabase } from "@/lib/supabase";
-
-
-/**
- * GET: list integrations for org (requires session)
- * POST: create integration (requires org admin)
- *
- * NOTE: This file contains temporary debug logs to diagnose 403/forbidden issues.
- * Do not log cookies or other sensitive values in production.
- */
 
 export async function GET(req: Request) {
   try {
@@ -27,30 +18,19 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    // quick diagnostics: note whether Cookie header present (do NOT log its value)
-    const hasCookie = Boolean(req.headers.get("cookie"));
-    console.debug("[integrations][debug] incoming POST - cookie present:", hasCookie);
-
     const orgId = await getOrgFromRequest(req);
-    console.debug("[integrations][debug] getOrgFromRequest returned:", orgId ?? "(null)");
-
     if (!orgId) {
-      console.debug("[integrations][debug] rejecting: no org context (likely missing session cookie)");
       return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 });
     }
 
-    // Check admin status (non-throwing check) and log result for debugging
     let adminOk = false;
     try {
       adminOk = await isOrgAdmin(req, orgId);
-      console.debug("[integrations][debug] isOrgAdmin returned:", adminOk);
-    } catch (e: any) {
-      console.debug("[integrations][debug] isOrgAdmin threw:", String(e?.message ?? e));
+    } catch {
+      adminOk = false;
     }
 
-    // Enforce admin check (existing behavior)
     if (!adminOk) {
-      console.debug("[integrations][debug] rejecting: not an admin for org:", orgId);
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
@@ -72,7 +52,6 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
-    console.debug("[integrations][debug] created integration id:", data?.id ?? "(none)");
     return NextResponse.json({ ok: true, integration: data });
   } catch (err: any) {
     const status = err?.status ?? 500;

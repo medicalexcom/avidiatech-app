@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import Stripe from "stripe";
 import { clerkMiddleware, clerkClient } from "@clerk/nextjs/server";
+import {
+  getInternalExpectedSecrets,
+  getInternalProvidedSecret,
+} from "@/lib/internalAuth";
 
 /* Normalize Clerk env var names before loading @clerk/nextjs/server. */
 (function normalizeClerkEnv() {
@@ -175,21 +179,6 @@ async function userHasActiveSubscription(userId: string | null | undefined) {
   return false;
 }
 
-/**
- * Internal bypass:
- * - bulk workers call with `x-service-api-key`
- * - pipeline-runner edge function calls internal endpoints with `x-pipeline-secret`
- *
- * Both must map to PIPELINE_INTERNAL_SECRET.
- */
-function getInternalProvidedSecret(req: NextRequest): string {
-  const a = stripAnsiAndTrim(req.headers.get("x-service-api-key") || "");
-  if (a) return a;
-  const b = stripAnsiAndTrim(req.headers.get("x-pipeline-secret") || "");
-  if (b) return b;
-  return "";
-}
-
 export default clerkMiddleware(async (auth, req: NextRequest) => {
   const pathname = req.nextUrl.pathname;
 
@@ -205,7 +194,8 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
 
   if (isProbePath) {
     const provided = getInternalProvidedSecret(req);
-    const expected = stripAnsiAndTrim(process.env.PIPELINE_INTERNAL_SECRET || "");
+    const expectedSecrets = getInternalExpectedSecrets();
+    const expected = expectedSecrets[0] || "";
     const marker = "middleware.ts::internal-bypass-probe::2026-01-03b";
 
     if (provided && !expected) {
@@ -217,7 +207,7 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
       return res;
     }
 
-    if (provided && expected && provided === expected) {
+    if (provided && expectedSecrets.includes(provided)) {
       const res = NextResponse.next();
       res.headers.set("x-mw-version", marker);
       res.headers.set("x-mw-provided-key-len", String(provided.length));
