@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { safeGetAuth } from "@/lib/clerkSafe";
+import { safeGetAuth, isAuthUnavailableError } from "@/lib/clerkSafe";
 import { isOwnerUser } from "@/lib/auth/isOwnerUser";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getServiceSupabaseClient } from "@/lib/supabase";
@@ -22,7 +22,7 @@ import { getServiceSupabaseClient } from "@/lib/supabase";
  */
 export async function GET(req: Request) {
   try {
-    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+    const { userId } = (safeGetAuth(req as any, { strict: process.env.NODE_ENV === "production" }) as { userId?: string | null }) || {};
     if (!userId) {
       return NextResponse.json({ active: false, status: "none", planName: null, isOwner: false, reason: "unauthenticated" });
     }
@@ -127,6 +127,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ active: false, status: "none", planName: null, isOwner: false, reason: "no_active_subscription" });
 
   } catch (err: any) {
+    if (isAuthUnavailableError(err)) {
+      return NextResponse.json({ error: "auth_unavailable" }, { status: 500 });
+    }
     console.error("[subscription/status] error:", err);
     return NextResponse.json({ active: false, status: "none", planName: null, isOwner: false, reason: "internal_error" }, { status: 500 });
   }

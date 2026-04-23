@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 // use safeGetAuth to avoid clerkMiddleware detection warnings in build/CI
-import { safeGetAuth } from "@/lib/clerkSafe";
+import { safeGetAuth, isAuthUnavailableError } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 import { translateProduct } from "@/lib/translate/translateProduct";
 import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
@@ -16,7 +16,7 @@ import { SUPPORTED_LANGUAGES } from "@/lib/translate/languageMap";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = (safeGetAuth(req as any) as any) ?? {};
+    const { userId } = (safeGetAuth(req as any, { strict: process.env.NODE_ENV === "production" }) as any) ?? {};
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ translations }, { status: 200 });
   } catch (err: any) {
+    if (isAuthUnavailableError(err)) {
+      return NextResponse.json({ error: "auth_unavailable" }, { status: 500 });
+    }
     console.error("translate route error", err);
     return NextResponse.json({ error: err?.message || "internal_error" }, { status: 500 });
   }

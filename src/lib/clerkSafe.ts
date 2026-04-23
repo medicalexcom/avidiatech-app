@@ -19,6 +19,10 @@ type ClerkAuthShape = {
   getAuth?: (req: unknown) => { userId?: string | null; sessionId?: string | null; actor?: unknown };
 };
 
+export function isAuthUnavailableError(err: unknown): boolean {
+  return Boolean(err && typeof err === "object" && (err as any).code === "auth_unavailable");
+}
+
 function maybeThrowStrictAuthError(strict?: boolean): SafeAuthResult {
   if (strict) {
     const err: any = new Error("auth_unavailable");

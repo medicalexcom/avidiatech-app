@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { safeGetAuth } from "@/lib/clerkSafe";
+import { safeGetAuth, isAuthUnavailableError } from "@/lib/clerkSafe";
 import { getServiceSupabaseClient } from "@/lib/supabase";
 
 /**
@@ -37,7 +37,7 @@ function resolvePriceId(plan: string, billing: string): string | undefined {
 
 export async function POST(req: Request) {
   try {
-    const { userId } = (safeGetAuth(req as any) as { userId?: string | null }) || {};
+    const { userId } = (safeGetAuth(req as any, { strict: process.env.NODE_ENV === "production" }) as { userId?: string | null }) || {};
     if (!userId) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
@@ -138,6 +138,9 @@ export async function POST(req: Request) {
       periodEnd,
     });
   } catch (err: any) {
+    if (isAuthUnavailableError(err)) {
+      return NextResponse.json({ error: "auth_unavailable" }, { status: 500 });
+    }
     console.error("update-plan error:", err);
     return NextResponse.json(
       { error: err?.message ?? "Failed to update plan" },
