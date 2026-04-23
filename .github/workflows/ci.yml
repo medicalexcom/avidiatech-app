@@ -8,6 +8,7 @@ env:
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  package.json
   build:
     runs-on: ubuntu-latest
     steps:
@@ -33,7 +34,7 @@ jobs:
         run: npm run test
 
       - name: Build
-        if: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' }}
+   
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
