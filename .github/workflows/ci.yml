@@ -6,7 +6,6 @@ on:
 
 env:
   NEXT_TELEMETRY_DISABLED: "1"
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_dummy"
 
 jobs:
   build:
@@ -34,4 +33,7 @@ jobs:
         run: npm run test
 
       - name: Build
+        if: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY != '' }}
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
